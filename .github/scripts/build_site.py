@@ -223,17 +223,26 @@ def pages(chapters):
 COPIES = {"docs/c4/model.json": "c4/model.json", "docs/c4/gen.py": None}
 
 
+TAG = re.compile(r"<[A-Za-z][^<>]*>")
+LINK_ATTR = re.compile(r"""(\s)(href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>]+))""", re.I)
+
+
 def rewrite_links(body, src, out, page_map):
+    """Check and rewrite every href and src attribute of every tag in the page body:
+    Markdown links and raw HTML alike, in double quotes, single quotes or none."""
     src_dir = posixpath.dirname(src)
     out_dir = posixpath.dirname(out)
 
     def fix(m):
-        href = html.unescape(m.group(2))
-        if re.match(r"^[a-z][a-z0-9+.-]*:", href) or href.startswith("#") or href.startswith("//"):
+        attr = m.group(2).lower()
+        raw = next(g for g in m.group(3, 4, 5) if g is not None)
+        href = html.unescape(raw).strip()
+        if re.match(r"^[a-z][a-z0-9+.-]*:", href, re.I) or href.startswith("#") or href.startswith("//"):
             return m.group(0)
         path, _, frag = href.partition("#")
+        path = path.partition("?")[0]
         target = posixpath.normpath(posixpath.join(src_dir, path))
-        if target.startswith(".."):
+        if target.startswith("..") or path.startswith("/"):
             raise BuildError("%s: link leaves the repository: %s" % (src, href))
         if not (ROOT / target).exists():
             raise BuildError("%s: broken link: %s" % (src, href))
@@ -241,14 +250,16 @@ def rewrite_links(body, src, out, page_map):
             new = posixpath.relpath(page_map[target], out_dir or ".")
         elif COPIES.get(target):
             new = posixpath.relpath(COPIES[target], out_dir or ".")
+        elif attr == "src":
+            new = "%s/raw/main/%s" % (REPO_URL, target)
         else:
             kind = "tree" if (ROOT / target).is_dir() else "blob"
             new = "%s/%s/main/%s" % (REPO_URL, kind, target)
         if frag:
             new += "#" + frag
-        return '%s"%s"' % (m.group(1), html.escape(new, quote=True))
+        return '%s%s="%s"' % (m.group(1), attr, html.escape(new, quote=True))
 
-    return re.sub(r'(<a\s[^>]*?href=)"([^"]*)"', fix, body)
+    return TAG.sub(lambda t: LINK_ATTR.sub(fix, t.group(0)), body)
 
 
 def render(src, out, page_map, after=""):
