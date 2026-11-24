@@ -1,0 +1,1 @@
+# relative/file.go<TAB>Func<TAB>rule-id<TAB>justification -- suppresses one detlint rule in one function; an unused line fails the gate

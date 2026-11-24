@@ -1,0 +1,5 @@
+# Packages the determinism lint (detlint) checks: one package pattern per line, relative to
+# the repository root, as detlint takes them ("internal/pool" or "internal/sim/...").
+# '#' lines and blank lines are ignored. A line whose directory does not exist is a gate
+# failure, so a typo cannot switch the lint off. Empty at chunk 0: no core exists yet.
+# The chunk that adds a core or simulator package adds its line here.

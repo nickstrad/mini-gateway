@@ -1,0 +1,32 @@
+# What the prose pass may change. Read by scripts/gate.sh at GATE_STAGE=final (check G2):
+# every path of `git diff --name-only --no-renames $GATE_PREPROSE HEAD` must match at least
+# one `allow` pattern and no `deny` pattern, or the check is red. The file is read from the
+# GATE_PREPROSE commit, not from the tree, so a prose pass cannot widen its own rules.
+#
+#   allow <pattern>      deny <pattern>
+# A pattern is an extended regular expression (bash `[[ =~ ]]`) matched against the path
+# relative to the repository root. {chunk} stands for the chunk folder the gate was given.
+# A deny always wins.
+
+# Go files: comments only. That nothing but comments changed is proved by astdiff in the
+# same check; astdiff does not read tools/, agent_work/, vendor/ or testdata folders, so Go
+# files there may not change at all.
+allow \.go$
+deny ^(tools|agent_work|vendor)/.*\.go$
+deny (^|/)(testdata|vendor)/
+
+# The book.
+allow ^book/
+
+# Markdown under docs/, except the diagrams and the generated contract documents (they
+# come from code and are held by tests: PLAN.md sections 7.7, 8.2 and 9). The chunk that
+# adds another generated document adds its line here.
+allow ^docs/.*\.md$
+deny ^docs/c4/
+deny ^docs/(error-contract|timeout-budget|capacity-table|reject-list|csv-schema|fleet-guarantees)\.md$
+
+allow ^README\.md$
+allow ^agent_work/chunks/{chunk}/PROSE-NOTES\.md$
+
+# The gate's own output: a final-stage result that was committed and is then rerun.
+allow ^agent_work/chunks/{chunk}/gate/result\.json$

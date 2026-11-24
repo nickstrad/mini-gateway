@@ -1,0 +1,21 @@
+# Build outputs
+/bin/
+/dist/
+*.test
+*.out
+*.prof
+
+# The built site
+/_site/
+
+# Gate logs: the result files beside them are committed, the logs are not
+agent_work/chunks/*/gate/*.log
+agent_work/ci/
+
+# Run records of the on-demand scripts
+/runs/
+
+.DS_Store
+
+# The markdown package scripts/site.sh fetches when Python has no pip
+/.cache/

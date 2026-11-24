@@ -1,0 +1,1 @@
+# relative/file.go<TAB>Func<TAB>rule-id<TAB>justification -- rule-id is unbuffered or unbounded-growth; an unused line fails the gate

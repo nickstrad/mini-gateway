@@ -1,0 +1,3 @@
+# test allowlist
+internal/shell/chans.go	allowed	unbuffered	a rendezvous is the point of this channel
+internal/shell/loops.go	Box.allowedGrowth	unbounded-growth	the caller bounds it

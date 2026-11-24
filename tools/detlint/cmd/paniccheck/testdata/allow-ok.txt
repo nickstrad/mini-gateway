@@ -1,0 +1,6 @@
+# file	func	justification
+
+internal/a/a.go	-	init invariant
+internal/a/a.go	F	negative input is a caller bug
+internal/a/a.go	T.M	invariant
+internal/a/a.go	G.Get	invariant

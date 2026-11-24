@@ -1,0 +1,2 @@
+# file	func	rule	justification
+allowed/a.go	Count	maprange	counting is order-insensitive

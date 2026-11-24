@@ -1,0 +1,40 @@
+name: CI
+
+# The fast set only (PLAN.md section 6.3): build, vet, the lints, and `go test -short` with
+# the race packages. No Docker, no DuckDB, no sweeps. The landing authority is the local
+# gate, scripts/gate.sh; what it adds is listed in scripts/ci-fast.sh.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    name: Fast set
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Build, lints and fast tests
+        run: scripts/ci-fast.sh
+      - name: Upload the result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-fast-result
+          path: |
+            agent_work/ci/gate/result.json
+            agent_work/ci/gate/*.log
+          if-no-files-found: ignore

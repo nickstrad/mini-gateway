@@ -1,0 +1,534 @@
+{
+  "tree_sha": "95a372f5b5061e5f0469b9aea8edafb998a1faf6",
+  "tree_dirty": false,
+  "started": "2026-11-24T23:43:00Z",
+  "seconds": 121,
+  "go_version": "go version go1.26.8 linux/amd64",
+  "clean_copy": {
+    "overall": "pass",
+    "counts_for_landing": true,
+    "skip_not_built": [
+      "G4 sweep",
+      "G5 fuzz",
+      "G6 tier-r",
+      "G7 csv",
+      "G8 gen-docs"
+    ]
+  },
+  "total": 51,
+  "caught": 51,
+  "missed": 0,
+  "all_caught": true,
+  "canaries": [
+    {
+      "id": "g0-gofmt",
+      "kind": "red",
+      "planted": "unformatted Go in a product package",
+      "gate": "G0",
+      "check": "gofmt",
+      "expect": "internal/canary/unformatted\\.go",
+      "outcome": "CAUGHT",
+      "detail": "red: ./internal/canary/unformatted.go"
+    },
+    {
+      "id": "g0-compile-error",
+      "kind": "red",
+      "planted": "a compile error in a product package",
+      "gate": "G0",
+      "check": "build",
+      "expect": "cannot use \"not a number\"",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/canary/broken.go:4:9: cannot use \"not a number\" (untyped string constant) as int value in return statement"
+    },
+    {
+      "id": "g0-vet",
+      "kind": "red",
+      "planted": "the same compile error, seen by go vet",
+      "gate": "G0",
+      "check": "vet",
+      "expect": "cannot use \"not a number\"",
+      "outcome": "CAUGHT",
+      "detail": "red: vet: internal/canary/broken.go:4:9: cannot use \"not a number\" (untyped string constant) as int value in return statement"
+    },
+    {
+      "id": "g0-untidy-gomod",
+      "kind": "red",
+      "planted": "a go.mod requirement that go mod tidy would remove",
+      "gate": "G0",
+      "check": "tidy",
+      "expect": "not tidy",
+      "outcome": "CAUGHT",
+      "detail": "red: go.mod or go.sum is not tidy (run go mod tidy)"
+    },
+    {
+      "id": "g0-tools-test",
+      "kind": "red",
+      "planted": "a failing test in the nested module tools/detlint",
+      "gate": "G0",
+      "check": "tools-test",
+      "expect": "PLANTED-TOOLS-FAILURE",
+      "outcome": "CAUGHT",
+      "detail": "red:     planted_test.go:6: PLANTED-TOOLS-FAILURE"
+    },
+    {
+      "id": "g1-wallclock",
+      "kind": "red",
+      "planted": "time.Now() in a package listed for detlint",
+      "gate": "G1",
+      "check": "detlint",
+      "expect": "clock\\.go:6:[0-9]+: wallclock",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/detcanary/clock.go:6:14: wallclock: use of time.Now"
+    },
+    {
+      "id": "g1-detlist-typo",
+      "kind": "red",
+      "planted": "det-packages.txt names a directory that does not exist",
+      "gate": "G1",
+      "check": "detlint",
+      "expect": "no such directory: internal/no-such-package",
+      "outcome": "CAUGHT",
+      "detail": "red: det-packages.txt: no such directory: internal/no-such-package"
+    },
+    {
+      "id": "g1-core-imports-wire",
+      "kind": "red",
+      "planted": "internal/pool imports internal/pgwire",
+      "gate": "G1",
+      "check": "importlint",
+      "expect": "internal/pool/pool\\.go:3:[0-9]+: deny",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/pool/pool.go:3:8: deny: \"github.com/nickstrad/mini-gateway/internal/pgwire\" may not be imported here (rules line 22: deny internal/pool/... i"
+    },
+    {
+      "id": "g1-engine-imports-adapter",
+      "kind": "red",
+      "planted": "internal/proxy imports an adapter under internal/obs/",
+      "gate": "G1",
+      "check": "importlint",
+      "expect": "internal/proxy/proxy\\.go:3:[0-9]+: deny",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/proxy/proxy.go:3:8: deny: \"github.com/nickstrad/mini-gateway/internal/obs/csv\" may not be imported here (rules line 25: deny internal/proxy/."
+    },
+    {
+      "id": "g1-pgproto-outside",
+      "kind": "red",
+      "planted": "pgproto3 imported outside the wire layer, the fake and the test clients",
+      "gate": "G1",
+      "check": "importlint",
+      "expect": "wire\\.go:3:[0-9]+: only",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/canary/wire.go:3:8: only: \"github.com/jackc/pgx/v5/pgproto3\" may be imported only by the packages of rules line 30: only github.com/jackc/pgx"
+    },
+    {
+      "id": "g1-third-party",
+      "kind": "red",
+      "planted": "a third-party import in test code",
+      "gate": "G1",
+      "check": "importlint",
+      "expect": "prop_test\\.go:3:[0-9]+: third-party",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/canary/prop_test.go:3:8: third-party: \"pgregory.net/rapid\" is outside the standard library and this module, and no `only` rule names it"
+    },
+    {
+      "id": "g1-second-require",
+      "kind": "red",
+      "planted": "a second go.mod requirement",
+      "gate": "G1",
+      "check": "importlint",
+      "expect": "go\\.mod:6:1: gomod: requirement github.com/google/uuid is not allowed",
+      "outcome": "CAUGHT",
+      "detail": "red: go.mod:6:1: gomod: requirement github.com/google/uuid is not allowed (allowed direct requirements: github.com/jackc/pgx/v5)"
+    },
+    {
+      "id": "g1-unbuffered-chan",
+      "kind": "red",
+      "planted": "an unbuffered channel in internal/shell",
+      "gate": "G1",
+      "check": "boundlint",
+      "expect": "mailbox\\.go:4:[0-9]+: unbuffered",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/shell/mailbox.go:4:9: unbuffered: make(chan) with no capacity: give it a named capacity, or allowlist it with the reason a rendezvous is want"
+    },
+    {
+      "id": "g1-literal-chan-cap",
+      "kind": "red",
+      "planted": "a channel capacity written as a number in internal/shell",
+      "gate": "G1",
+      "check": "boundlint",
+      "expect": "mailbox\\.go:4:[0-9]+: chan-cap",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/shell/mailbox.go:4:24: chan-cap: channel capacity 64 is neither a named constant nor a field of a config struct"
+    },
+    {
+      "id": "g1-unbounded-growth",
+      "kind": "red",
+      "planted": "a slice field appended to in a receive loop with no length check",
+      "gate": "G1",
+      "check": "boundlint",
+      "expect": "box\\.go:10:[0-9]+: unbounded-growth",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/shell/box.go:10:3: unbounded-growth: b.queue is appended to inside an unbounded loop, and this function never compares len(b.queue) with anyt"
+    },
+    {
+      "id": "g1-growth-through-pointer",
+      "kind": "red",
+      "planted": "a slice field appended to through a local pointer in an unbounded loop",
+      "gate": "G1",
+      "check": "boundlint",
+      "expect": "box\\.go:10:[0-9]+: unbounded-growth",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/shell/box.go:10:3: unbounded-growth: *q is appended to (through a pointer) inside an unbounded loop, and this function never compares len(*q)"
+    },
+    {
+      "id": "g1-growth-in-helper",
+      "kind": "red",
+      "planted": "an unbounded loop calling a method that appends to a slice field",
+      "gate": "G1",
+      "check": "boundlint",
+      "expect": "box\\.go:13:[0-9]+: unbounded-growth: the call of add",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/shell/box.go:13:3: unbounded-growth: the call of add inside an unbounded loop reaches box.go:8: b.queue is appended to, and neither that func"
+    },
+    {
+      "id": "g1-testdata-imports-wire",
+      "kind": "red",
+      "planted": "a package under internal/pool/testdata imports internal/pgwire",
+      "gate": "G1",
+      "check": "importlint",
+      "expect": "internal/pool/testdata/hidden/hidden\\.go:3:[0-9]+: deny",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/pool/testdata/hidden/hidden.go:3:8: deny: \"github.com/nickstrad/mini-gateway/internal/pgwire\" may not be imported here (rules line 22: deny i"
+    },
+    {
+      "id": "g1-testdata-imported",
+      "kind": "red",
+      "planted": "product Go imports a package in a testdata directory",
+      "gate": "G1",
+      "check": "importlint",
+      "expect": "internal/canary/reach\\.go:3:[0-9]+: testdata-import",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/canary/reach.go:3:8: testdata-import: \"github.com/nickstrad/mini-gateway/internal/pool/testdata/hidden\" is a package in a testdata directory:"
+    },
+    {
+      "id": "g1-panic",
+      "kind": "red",
+      "planted": "a panic that is not in the allow file",
+      "gate": "G1",
+      "check": "paniccheck",
+      "expect": "must\\.go:5:[0-9]+: panic",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/canary/must.go:5:3: panic: panic in Must is not in the allowlist (add: internal/canary/must.go\\tMust\\t<justification>)"
+    },
+    {
+      "id": "g2-comment",
+      "kind": "red",
+      "planted": "a comment in product Go at the build stage",
+      "gate": "G2",
+      "check": "comments",
+      "expect": "internal/canary/sub\\.go:3:1: comment",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/canary/sub.go:3:1: comment: comment is not a machine directive: // Sub is a planted comment."
+    },
+    {
+      "id": "g2-baseline-is-head",
+      "kind": "setup",
+      "planted": "a build-stage run whose comment baseline is HEAD",
+      "gate": "G2",
+      "check": "comments",
+      "expect": "HEAD is its own comment baseline",
+      "outcome": "CAUGHT",
+      "detail": "refused: gate: HEAD is its own comment baseline (this is main, or a branch with no commits of its own)."
+    },
+    {
+      "id": "g2-prose-changed-code",
+      "kind": "red",
+      "planted": "a code change between GATE_PREPROSE and HEAD at the final stage",
+      "gate": "G2",
+      "check": "astdiff",
+      "expect": "internal/canary/ok\\.go:[0-9]+:[0-9]+: astdiff",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/canary/ok.go:5:9: astdiff: code differs"
+    },
+    {
+      "id": "g2-prose-only",
+      "kind": "green",
+      "planted": "control: a prose pass that only added a comment passes the final stage",
+      "gate": "G2",
+      "check": "astdiff",
+      "expect": ".overall == \"pass\"",
+      "outcome": "CAUGHT",
+      "detail": "control held: .overall == \"pass\""
+    },
+    {
+      "id": "g2-prose-changed-script",
+      "kind": "red",
+      "planted": "a script changed between GATE_PREPROSE and HEAD at the final stage",
+      "gate": "G2",
+      "check": "astdiff",
+      "expect": "^scripts/bench\\.sh:1:1: prose-path",
+      "outcome": "CAUGHT",
+      "detail": "red: scripts/bench.sh:1:1: prose-path: changed between GATE_PREPROSE and HEAD, and the prose pass may not change this path (tools/lint-rules/prose-paths.tx"
+    },
+    {
+      "id": "g2-prose-changed-testdata",
+      "kind": "red",
+      "planted": "a testdata file changed between GATE_PREPROSE and HEAD at the final stage",
+      "gate": "G2",
+      "check": "astdiff",
+      "expect": "^internal/canary/testdata/input\\.txt:1:1: prose-path",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/canary/testdata/input.txt:1:1: prose-path: changed between GATE_PREPROSE and HEAD, and the prose pass may not change this path (tools/lint-ru"
+    },
+    {
+      "id": "g2-prose-changed-generated",
+      "kind": "red",
+      "planted": "a generated contract document changed between GATE_PREPROSE and HEAD at the final stage",
+      "gate": "G2",
+      "check": "astdiff",
+      "expect": "^docs/error-contract\\.md:1:1: prose-path",
+      "outcome": "CAUGHT",
+      "detail": "red: docs/error-contract.md:1:1: prose-path: changed between GATE_PREPROSE and HEAD, and the prose pass may not change this path (tools/lint-rules/prose-pa"
+    },
+    {
+      "id": "g2-comment-testdata",
+      "kind": "red",
+      "planted": "a comment in a Go file under testdata at the build stage",
+      "gate": "G2",
+      "check": "comments",
+      "expect": "internal/canary/testdata/fixture\\.go:3:1: comment",
+      "outcome": "CAUGHT",
+      "detail": "red: internal/canary/testdata/fixture.go:3:1: comment: comment is not a machine directive: // A planted comment in a fixture."
+    },
+    {
+      "id": "g2-foundation-with-product-go",
+      "kind": "setup",
+      "planted": "GATE_STAGE=foundation for c00-foundation while the tree holds product Go",
+      "gate": "G2",
+      "check": "comments",
+      "expect": "GATE_STAGE=foundation is refused: the tree holds product Go",
+      "outcome": "CAUGHT",
+      "detail": "refused: gate: GATE_STAGE=foundation is refused: the tree holds product Go (a .go file outside tools/ and agent_work/), so this is not chunk 0 any more: ./inte"
+    },
+    {
+      "id": "stale-result-removed",
+      "kind": "setup",
+      "planted": "a refused run (unknown GATE_STAGE) with an earlier result.json in its output folder",
+      "gate": "G2",
+      "check": "comments",
+      "expect": "GATE_STAGE must be build, final or foundation",
+      "outcome": "CAUGHT",
+      "detail": "refused: gate: GATE_STAGE must be build, final or foundation, got 'nonsense'"
+    },
+    {
+      "id": "g2-final-needs-preprose",
+      "kind": "setup",
+      "planted": "a final-stage run without GATE_PREPROSE",
+      "gate": "G2",
+      "check": "astdiff",
+      "expect": "needs GATE_PREPROSE",
+      "outcome": "CAUGHT",
+      "detail": "refused: gate: GATE_STAGE=final needs GATE_PREPROSE=<the last commit before the prose pass>"
+    },
+    {
+      "id": "g2-foundation-other-chunk",
+      "kind": "setup",
+      "planted": "GATE_STAGE=foundation for a chunk other than c00-foundation",
+      "gate": "G2",
+      "check": "comments",
+      "expect": "for the chunk c00-foundation only",
+      "outcome": "CAUGHT",
+      "detail": "refused: gate: GATE_STAGE=foundation is for the chunk c00-foundation only"
+    },
+    {
+      "id": "g3-failing-test",
+      "kind": "red",
+      "planted": "a failing test",
+      "gate": "G3",
+      "check": "unit",
+      "expect": "PLANTED-TEST-FAILURE",
+      "outcome": "CAUGHT",
+      "detail": "red:     planted_test.go:6: PLANTED-TEST-FAILURE"
+    },
+    {
+      "id": "g3-data-race",
+      "kind": "red",
+      "planted": "a data race in a package listed for the race detector",
+      "gate": "G3",
+      "check": "race",
+      "expect": "WARNING: DATA RACE",
+      "outcome": "CAUGHT",
+      "detail": "red: WARNING: DATA RACE"
+    },
+    {
+      "id": "g3-racelist-typo",
+      "kind": "red",
+      "planted": "race-packages.txt names a package that does not exist",
+      "gate": "G3",
+      "check": "race",
+      "expect": "matches no package",
+      "outcome": "CAUGHT",
+      "detail": "red: race-packages.txt: ./internal/no-such-package/... matches no package"
+    },
+    {
+      "id": "g4-marker-deleted",
+      "kind": "red",
+      "planted": "a not-built marker deleted while the script still says not built yet",
+      "gate": "G4",
+      "check": "sweep",
+      "expect": "a stage that exists cannot be skipped",
+      "outcome": "CAUGHT",
+      "detail": "red: GATE: the script says \"not built yet\" but scripts/.not-built/sweep does not exist: a stage that exists cannot be skipped"
+    },
+    {
+      "id": "g4-marker-restored",
+      "kind": "red",
+      "planted": "a not-built marker restored after a commit removed it",
+      "gate": "G4",
+      "check": "sweep",
+      "expect": "scripts/\\.not-built/sweep was removed in commit [0-9a-f]+ and is back",
+      "outcome": "CAUGHT",
+      "detail": "red: GATE: scripts/.not-built/sweep was removed in commit d2f289b and is back: a not-built marker may only ever be removed"
+    },
+    {
+      "id": "g4-marker-added",
+      "kind": "red",
+      "planted": "a not-built marker that the baseline commit does not have",
+      "gate": "G4",
+      "check": "markers",
+      "expect": "scripts/\\.not-built/new-stage is absent at the baseline commit",
+      "outcome": "CAUGHT",
+      "detail": "red: scripts/.not-built/new-stage is absent at the baseline commit 488f9acc216379ad39d130f0bb9d4eb2c86c720d and present now: a not-built marker may only ev"
+    },
+    {
+      "id": "g5-built-with-marker",
+      "kind": "red",
+      "planted": "a stage script that runs while its not-built marker still exists",
+      "gate": "G5",
+      "check": "fuzz",
+      "expect": "delete the marker",
+      "outcome": "CAUGHT",
+      "detail": "red: GATE: the script ran (exit 0) while scripts/.not-built/fuzz still exists; delete the marker in the commit that builds the script"
+    },
+    {
+      "id": "g6-built-stage-fails",
+      "kind": "red",
+      "planted": "a built stage (marker deleted) whose script fails",
+      "gate": "G6",
+      "check": "tier-r",
+      "expect": "PLANTED-STAGE-FAILURE",
+      "outcome": "CAUGHT",
+      "detail": "red: PLANTED-STAGE-FAILURE"
+    },
+    {
+      "id": "g9-broken-link",
+      "kind": "red",
+      "planted": "a broken link in a site page",
+      "gate": "G9",
+      "check": "site",
+      "expect": "broken link: no-such-page\\.md",
+      "outcome": "CAUGHT",
+      "detail": "red: build_site: docs/index.md: broken link: no-such-page.md"
+    },
+    {
+      "id": "g9-broken-html-link",
+      "kind": "red",
+      "planted": "a broken link in a single-quoted raw HTML anchor",
+      "gate": "G9",
+      "check": "site",
+      "expect": "broken link: no-such-page\\.md",
+      "outcome": "CAUGHT",
+      "detail": "red: build_site: docs/index.md: broken link: no-such-page.md"
+    },
+    {
+      "id": "g9-broken-img-src",
+      "kind": "red",
+      "planted": "a broken unquoted src attribute in raw HTML",
+      "gate": "G9",
+      "check": "site",
+      "expect": "broken link: no-such-picture\\.png",
+      "outcome": "CAUGHT",
+      "detail": "red: build_site: docs/index.md: broken link: no-such-picture.png"
+    },
+    {
+      "id": "g9-live-missing",
+      "kind": "red",
+      "planted": "a chapter marked live whose file is missing",
+      "gate": "G9",
+      "check": "site",
+      "expect": "chapter 1 is live but",
+      "outcome": "CAUGHT",
+      "detail": "red: build_site: book/manifest.json: chapter 1 is live but book/chapters/01-simulator-kernel.md is missing"
+    },
+    {
+      "id": "g9-planned-exists",
+      "kind": "red",
+      "planted": "a chapter file that exists while the manifest says planned",
+      "gate": "G9",
+      "check": "site",
+      "expect": "chapter 2 is planned but",
+      "outcome": "CAUGHT",
+      "detail": "red: build_site: book/manifest.json: chapter 2 is planned but book/chapters/02-simulated-world.md exists (set its status to live, or remove the file)"
+    },
+    {
+      "id": "g10-extra-fails",
+      "kind": "red",
+      "planted": "a failing gate/extra.sh",
+      "gate": "G10",
+      "check": "extra",
+      "expect": "PLANTED-EXTRA-FAILURE",
+      "outcome": "CAUGHT",
+      "detail": "red: PLANTED-EXTRA-FAILURE"
+    },
+    {
+      "id": "g10-extra-not-executable",
+      "kind": "red",
+      "planted": "a gate/extra.sh that is not executable",
+      "gate": "G10",
+      "check": "extra",
+      "expect": "not executable",
+      "outcome": "CAUGHT",
+      "detail": "red: agent_work/chunks/canary/gate/extra.sh exists but is not executable"
+    },
+    {
+      "id": "g10-extra-symlink",
+      "kind": "red",
+      "planted": "a gate/extra.sh that is a dangling symbolic link",
+      "gate": "G10",
+      "check": "extra",
+      "expect": "not a regular file",
+      "outcome": "CAUGHT",
+      "detail": "red: agent_work/chunks/canary/gate/extra.sh exists but is not a regular file (a symbolic link or a folder cannot be the chunk's extra check)"
+    },
+    {
+      "id": "dirty-tree-does-not-count",
+      "kind": "green",
+      "planted": "control: a full green run with an uncommitted file",
+      "gate": "all",
+      "check": "-",
+      "expect": "dirty_tree true, counts_for_landing false",
+      "outcome": "CAUGHT",
+      "detail": "green but does not count"
+    },
+    {
+      "id": "uncommitted-extra-does-not-count",
+      "kind": "green",
+      "planted": "control: a full green run whose gate/extra.sh is not committed",
+      "gate": "all",
+      "check": "-",
+      "expect": "G10 ran, dirty_tree true, counts_for_landing false",
+      "outcome": "CAUGHT",
+      "detail": "green but does not count"
+    },
+    {
+      "id": "partial-does-not-count",
+      "kind": "green",
+      "planted": "control: a green GATE_ONLY run on a clean tree",
+      "gate": "G0,G3",
+      "check": "-",
+      "expect": "partial true, counts_for_landing false",
+      "outcome": "CAUGHT",
+      "detail": "green but does not count"
+    }
+  ]
+}

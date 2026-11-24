@@ -35,7 +35,7 @@ Measured against PostgreSQL 17.11 with `agent_work/phase1/probes/pgwire/` (outpu
 
 ## Building the site on vm-1
 
-- The system Python on vm-1 has no `pip` and no `ensurepip`. To build the site locally, download the `Markdown` wheel from PyPI, unzip it into a scratch folder and set `PYTHONPATH` to it. CI installs it with `pip` as usual.
+- The system Python on vm-1 has no `pip` and no `ensurepip`. To build the site locally, download the `Markdown` wheel from PyPI, unzip it into a scratch folder and set `PYTHONPATH` to it. CI installs it with `pip` as usual. Since chunk 0 `scripts/site.sh` does this by itself (pinned wheel, cached in `.cache/pylib`); see [foundation-gates.md](foundation-gates.md).
 
 ## Flushed CSV metrics and DuckDB (observability amendment, 2026-11-24)
 

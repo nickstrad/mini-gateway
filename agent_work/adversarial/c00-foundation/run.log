@@ -1,0 +1,104 @@
+HELD missing-site: Missing site executable
+HELD missing-rules: Missing imports rule file
+HELD broken-tools: Lint tools cannot compile
+HELD dirty-tree: Full green dirty tree cannot count
+BROKEN dirty-extra: Uncommitted extra.sh must not produce clean landing evidence
+HELD marker-gone: Skeleton without its marker
+HELD marker-still-there: Built script with marker retained
+HELD built-fails: Built stage exits nonzero
+HELD silent-skip: Exit 3 with marker but without required text
+BROKEN resurrect-marker: Restore a marker after the stage was built
+HELD root-format: Unformatted Go in root
+HELD root-compile: Compile error in root
+HELD root-vet: Type-correct printf vet error in root
+HELD root-tidy: Unused requirement in root
+HELD nested-format: Unformatted Go in nested
+HELD nested-compile: Compile error in nested
+HELD nested-vet: Type-correct printf vet error in nested
+HELD nested-tidy: Unused requirement in nested
+HELD det-clock: Determinism: clock
+HELD det-goroutine: Determinism: goroutine
+HELD det-rand: Determinism: rand
+HELD det-map-order: Determinism: map-order
+HELD det-float: Determinism: float
+HELD import-pool: Adapter import in pool
+HELD import-admission: Adapter import in admission
+HELD import-coalesce: Adapter import in coalesce
+HELD import-retry: Adapter import in retry
+HELD import-work: Adapter import in work
+HELD import-proxy: Adapter import in proxy
+HELD import-dot: Import escape: dot
+HELD import-blank: Import escape: blank
+HELD import-tagged: Import escape: tagged
+HELD import-test: Import escape: test
+HELD import-cgo: Import escape: cgo
+HELD import-pgproto: Import escape: pgproto
+HELD import-vendor: Import escape: vendor
+HELD import-nested: Import escape: nested
+HELD import-skip-tools: Import escape: skip-tools
+HELD import-skip-agent: Import escape: skip-agent
+HELD import-skip-site: Import escape: skip-site
+BROKEN import-reachable-testdata: Explicitly imported core testdata package imports pgwire
+HELD gomod-replace: go.mod replace directive
+HELD gomod-tool: go.mod tool directive
+HELD gomod-require: go.mod require directive
+HELD bound-zero: Shell channel/growth: zero
+HELD bound-variable: Shell channel/growth: variable
+HELD bound-growth: Shell channel/growth: growth
+BROKEN bound-alias: Shell channel/growth: alias
+BROKEN bound-helper: Shell channel/growth: helper
+HELD comment-block: Build comment: block
+HELD comment-fake-directive: Build comment: fake-directive
+HELD comment-generated: Build comment: generated
+HELD comment-test: Build comment: test
+HELD comment-tagged: Build comment: tagged
+HELD comment-outside: Build comment: outside
+BROKEN comment-testdata: Build comment: testdata
+HELD prose-string: Final prose pass changes string
+HELD prose-reorder: Final prose pass changes reorder
+BROKEN prose-testdata: Final prose pass changes testdata
+HELD prose-gomod: Final prose pass changes gomod
+HELD prose-rename: Final prose pass changes rename
+BROKEN prose-script: Final prose pass changes script
+HELD foundation-other: Later chunk requests foundation stage
+BROKEN foundation-reuse: Product code passes when a later builder reuses c00-foundation identity
+HELD test-fail: Test failure: fail
+HELD test-panic: Test failure: panic
+HELD test-compile: Test failure: compile
+HELD test-testmain: Test failure: testmain
+HELD test-race: Listed race package writes concurrently
+HELD site-link: Broken relative link
+BROKEN site-html-link: Broken relative link in single-quoted raw HTML
+HELD site-live: Live chapter file missing
+HELD site-unlisted: Chapter file outside manifest
+HELD extra-fail: extra.sh fail
+HELD extra-noexec: extra.sh noexec
+HELD extra-interpreter: extra.sh interpreter
+BROKEN extra-dangling: Broken extra.sh symlink must fail closed
+HELD land-red: Landing rejects red
+HELD land-partial: Landing rejects partial
+HELD land-off-branch: Landing rejects off-branch
+HELD land-code-after: Landing rejects code-after
+HELD land-missing-review: Landing rejects missing-review
+HELD land-fail-review: Landing rejects fail-review
+HELD land-nits: Landing rejects nits
+HELD land-missing-adversarial: Landing rejects missing-adversarial
+HELD land-unrebased: Landing rejects unrebased
+HELD land-dirty-main: Landing rejects dirty-main
+BROKEN land-bypass: Landing rejects bypass
+BROKEN land-inconsistent-partial: Landing rejects inconsistent-partial
+BROKEN land-wrong-chunk: Landing rejects wrong-chunk
+BROKEN land-extra-after: Landing rejects extra-after
+HELD canary-wrong-lint: Canary rejects substitute lint failure
+HELD canary-wrong-test: Canary rejects substitute test failure
+HELD canary-wrong-compile: Canary rejects substitute compile failure
+HELD env-partial: Environment partial cannot count for landing
+HELD env-out: Environment out cannot count for landing
+HELD env-short: Environment short cannot count for landing
+HELD env-small-budget: Environment small-budget cannot count for landing
+HELD env-stage: Invalid/self-referential stage refused
+HELD env-only: Invalid/self-referential only refused
+HELD env-base: Invalid/self-referential base refused
+HELD env-preprose: Invalid/self-referential preprose refused
+BROKEN env-stale: Refused run must not leave an earlier landing result looking current
+HELD: 87  BROKEN: 16

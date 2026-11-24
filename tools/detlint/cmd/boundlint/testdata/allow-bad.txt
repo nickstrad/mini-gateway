@@ -1,0 +1,5 @@
+internal/shell/chans.go	allowed	unbuffered	a rendezvous is the point of this channel
+internal/shell/chans.go	Conn.channels	chan-cap	not allowed
+internal/shell/chans.go	nobody	unbuffered	stale
+internal/shell/chans.go	allowed	unbuffered	
+bad line

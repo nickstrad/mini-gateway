@@ -1,0 +1,6 @@
+# test rules
+module example.test/gw
+require github.com/jackc/pgx/v5
+deny internal/pool/... internal/work : internal/pgwire/... github.com/jackc/pgx/v5/pgproto3 internal/obs/... !internal/obs
+deny internal/proxy/... : internal/obs/... !internal/obs
+only github.com/jackc/pgx/v5/pgproto3 : internal/pgwire/... internal/sim/fakepg/... internal/testclient/...
