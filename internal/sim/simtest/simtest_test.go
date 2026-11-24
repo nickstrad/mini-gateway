@@ -2,6 +2,7 @@ package simtest
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -80,5 +81,80 @@ func TestReplayCommand(t *testing.T) {
 	}
 	if !strings.HasPrefix(got, "REPLAY: ") {
 		t.Fatal(got)
+	}
+}
+
+func TestSeedsDeduplicatePinnedAndSwept(t *testing.T) {
+	if _, ok, _ := Seed(); ok {
+		t.Skip("an explicit seed is set")
+	}
+	dir := t.TempDir()
+	_ = os.Mkdir(filepath.Join(dir, "testdata"), 0o755)
+	_ = os.WriteFile(filepath.Join(dir, "testdata", SeedsFile), []byte("3\n50\n3\n"), 0o644)
+	t.Chdir(dir)
+	t.Setenv("DST_SEEDS", "4")
+	t.Setenv("DST_SEED_BASE", "2")
+	if got := Seeds(t); !slices.Equal(got, []int64{3, 50, 2, 4, 5}) {
+		t.Fatalf("%v", got)
+	}
+	var ran []string
+	Sweep(t, func(t *testing.T, seed int64) { ran = append(ran, t.Name()) })
+	if len(ran) != 5 || !strings.HasSuffix(ran[0], "/seed=3") {
+		t.Fatalf("%v", ran)
+	}
+}
+
+func TestSeedFlagParsing(t *testing.T) {
+	var v seedValue
+	if v.String() != "" || v.Set("x") == nil {
+		t.Fatal("bad value")
+	}
+	if err := v.Set("-12"); err != nil || v.String() != "-12" {
+		t.Fatal(v.String())
+	}
+	var nilValue *seedValue
+	if nilValue.String() != "" {
+		t.Fatal("nil")
+	}
+}
+
+type fakeTB struct {
+	testing.TB
+	name string
+	logs []string
+}
+
+func (f *fakeTB) Helper()                 {}
+func (f *fakeTB) Name() string            { return f.name }
+func (f *fakeTB) Log(args ...any)         { f.logs = append(f.logs, fmt.Sprint(args...)) }
+func (f *fakeTB) Logf(s string, a ...any) { f.logs = append(f.logs, fmt.Sprintf(s, a...)) }
+
+func TestReportPrintsTailPinAndReplay(t *testing.T) {
+	s := run(11)
+	s.Fail(errors.New("boom"))
+	dir := t.TempDir()
+	t.Setenv("DST_ARTIFACTS", dir)
+	f := &fakeTB{name: "TestX/seed=11"}
+	Report(f, s)
+	if len(f.logs) != 1 {
+		t.Fatalf("%d log calls", len(f.logs))
+	}
+	out := f.logs[0]
+	for _, want := range []string{"seed: 11", "error: boom", "trace tail (10 of 10)", "PIN: echo '11 TestX/seed=11'", "artifact: ", "REPLAY: go test ./internal/sim/simtest -run '^TestX$/^seed=11$' -seed=11 -count=1"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in\n%s", want, out)
+		}
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if !strings.HasPrefix(lines[len(lines)-1], "REPLAY: ") {
+		t.Fatal("REPLAY is not the last line")
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 || !strings.HasSuffix(entries[0].Name(), "-seed11.trace.txt") {
+		t.Fatalf("artifact %v", entries)
+	}
+	Report(f, nil)
+	if len(f.logs) != 1 {
+		t.Fatal("nil sim reported")
 	}
 }

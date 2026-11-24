@@ -107,3 +107,35 @@ func TestUsageErrors(t *testing.T) {
 		t.Fatal("help")
 	}
 }
+
+func TestTraceOutputRepeatsAcrossProcesses(t *testing.T) {
+	a := runChild(t, "run", "echo-random-split", "-seed", "5", "-trace")
+	b := runChild(t, "run", "echo-random-split", "-seed", "5", "-trace")
+	if a != b {
+		t.Fatal("trace output differs between two processes")
+	}
+	lines := strings.Split(strings.TrimSpace(a), "\n")
+	if len(lines) < 100 {
+		t.Fatalf("only %d lines", len(lines))
+	}
+	for _, l := range lines[:len(lines)-4] {
+		if !strings.HasPrefix(l, "t=") {
+			t.Fatalf("not a trace record: %q", l)
+		}
+	}
+	plain := runChild(t, "run", "echo-random-split", "-seed", "5")
+	if !strings.HasSuffix(a, plain[strings.Index(plain, "\n")+1:]) {
+		t.Fatal("tracing changed the digests")
+	}
+}
+
+func TestEveryScenarioPassesFromTheCLI(t *testing.T) {
+	for _, sc := range simtoy.Scenarios() {
+		for _, seed := range []string{"1", "-4", "1000003"} {
+			code, out, errOut := runInProcess("run", sc.Name, "-seed", seed)
+			if code != 0 || !strings.Contains(out, "status=pass") {
+				t.Fatalf("%s seed %s: code %d\n%s\n%s", sc.Name, seed, code, out, errOut)
+			}
+		}
+	}
+}

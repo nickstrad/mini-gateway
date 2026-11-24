@@ -134,6 +134,8 @@ func (e *End) err() error {
 
 func (e *End) Buffered() int { return e.in().ready }
 
+func (e *End) Window() int { return e.out().window }
+
 func (e *End) Space() int {
 	p := e.out()
 	return p.window - len(p.buf)
@@ -314,7 +316,7 @@ func (c *Conn) maybeFinish() {
 	case cl == stClosed && sv == stClosed:
 		c.net.stats.open--
 		c.finish(ReasonGraceful)
-	case cl == stClosed && gone(sv) || sv == stClosed && gone(cl):
+	case cl == stClosed && gone(sv) || sv == stClosed && gone(cl) || gone(cl) && gone(sv):
 		reason := ReasonHalfOpen
 		if c.silent {
 			reason = ReasonSilent

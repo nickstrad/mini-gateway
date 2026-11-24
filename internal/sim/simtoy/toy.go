@@ -231,7 +231,7 @@ func (c *client) OnEvent(e *simnet.End, ev simnet.Event) {
 func (c *client) push() {
 	for c.line < len(c.lines) {
 		l := c.lines[c.line]
-		if space := c.e.Space(); space > 0 && space < len(l)-c.off {
+		if space := c.e.Space(); space > 0 && space < len(l)-c.off && space < c.e.Window() {
 			c.e.WaitWritable()
 			return
 		}
