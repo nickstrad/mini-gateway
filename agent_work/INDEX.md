@@ -45,8 +45,8 @@ Notes: `chunks/c00-foundation/NOTES.md`. Durable facts: `../docs/knowledge/found
 | `../scripts/ci-fast.sh` | The CI set (G0, G1, G3 with `-short`), run by `.github/workflows/ci.yml` and `make ci`. Run: `scripts/ci-fast.sh` | Fable | Green in 8 s on vm-1 (target under five minutes). Not yet run on GitHub: nothing is pushed from the builder's worktree |
 | `../scripts/gate-canaries.sh` | Tests the gate: plants one violation per check in a throwaway copy under `/tmp` and requires the right check to go red with the expected message. Run: `scripts/gate-canaries.sh` (`CANARY_ONLY=<id>,<id>` for a few) | Fable | 51 of 51 caught in 116 s (42 red, 5 refused with exit 2, 4 controls); `chunks/c00-foundation/gate/canaries.json` |
 | `../scripts/site.sh` | Builds the site locally; fetches the pinned `markdown` wheel into `.cache/pylib` when Python has no such package. Run: `scripts/site.sh [output-dir]` or `make site` | Fable | 18 pages built; runs as gate check G9 |
-| `../scripts/sweep.sh` | Skeleton: seed sweep, tier S (gate G4). Run: `SWEEP_SEEDS=200 RUN_DIR=<dir> scripts/sweep.sh` | Fable | Not built yet (exit 3); marker `scripts/.not-built/sweep`; built in chunk 1 |
-| `../scripts/fuzz.sh` | Skeleton: timed fuzzing of every target (gate G5). Run: `FUZZ_SECONDS=20 scripts/fuzz.sh` | Fable | Not built yet (exit 3); marker `fuzz` |
+| `../scripts/sweep.sh` | Seed sweep of every simulator scenario test (gate G4): `go test -run ^TestScenario ./...` with `DST_SEEDS`; reprints the first REPLAY line. Run: `SWEEP_SEEDS=200 RUN_DIR=<dir> scripts/sweep.sh` or `scripts/sweep.sh [-seeds N] [-run REGEXP]` | Fable (skeleton); built by Opus in chunk 1 | Chunk 1: 200 seeds x 11 toy scenarios green in 5 s; 1,000 seeds in 17 s. Found a real flaw in an ablation check while being built (seed 6), fixed |
+| `../scripts/fuzz.sh` | Timed fuzzing of every `func FuzzXxx` in the module (gate G5); no target found is a failure. Run: `FUZZ_SECONDS=20 scripts/fuzz.sh` | Fable (skeleton); built by Opus in chunk 1 | Chunk 1: 2 targets (`FuzzScheduleFromBytes`, `FuzzToySchedule`), 20 s each, green in 47 s |
 | `../scripts/tier-r.sh` | Skeleton: scenarios against the real binary and Postgres 17 in Docker (gate G6). Run: `RUN_DIR=<dir> scripts/tier-r.sh` | Fable | Not built yet (exit 3); marker `tier-r`; built in chunk 6 |
 | `../scripts/csv-assert.sh` | Skeleton: DuckDB assertions over flushed CSV files (gate G7). Run: `scripts/csv-assert.sh <run-dir>...` | Fable | Not built yet (exit 3); marker `csv-assert`; built in chunk 3 |
 | `../scripts/gen-docs.sh` | Skeleton: generated contract documents; `--check` diffs against the committed files (gate G8). Run: `scripts/gen-docs.sh [--check]` | Fable | Not built yet (exit 3); marker `gen-docs`; built in chunk 5 |
@@ -87,3 +87,13 @@ Build all: `BIN=$(mktemp -d); (cd tools/detlint && go build -o "$BIN" ./...)`. T
 | Path | Purpose and how to run | Author seat | What it proved / last result |
 | --- | --- | --- | --- |
 | `adversarial/c00-foundation/attack.sh` | 103 attacks on the gate, the lints, the site build and `orch/land.sh`, each in a throwaway clone under `/tmp/zgw-c00-adv/`. Run from the repository root: `agent_work/adversarial/c00-foundation/attack.sh [attack-id ...]`. It rewrites `RESULTS.md`, `evidence.json` and `STATE.md` beside it, so to try a change without touching them, run it in a scratch copy of the tree | Adversary seat | Before the repair round: 87 held, 16 broken (`RESULTS.md`). After it, run in a scratch copy of the repaired tree: 102 held, 1 broken (`foundation-reuse`: the gate now refuses with exit 2 where the attack expects a red G2); see "Repair round" in `chunks/c00-foundation/NOTES.md` |
+## Chunk 1 — simulator kernel (Opus, 2026-11-24)
+
+Notes: `chunks/c01-sim-kernel/NOTES.md`. Durable facts: `../docs/knowledge/sim-kernel.md`, `../docs/knowledge/sim-kernel-provenance.md`.
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../cmd/mgsim` | Runs a named simulator scenario outside `go test`; prints the trace and state digests and the REPLAY line. Run: `go run ./cmd/mgsim list`, `go run ./cmd/mgsim run <scenario> -seed N [-trace]` | Opus | All 11 toy scenarios pass; two processes print identical digests (`TestCrossProcessReplay`) |
+| `chunks/c01-sim-kernel/gate/extra.sh` | Gate G10 for chunk 1: every `mgsim list` scenario passes `TestScenario` on the pinned seeds, the planted-bug canary and the shrinker test pass, and two processes of the built `mgsim` agree for every scenario. Run: `agent_work/chunks/c01-sim-kernel/gate/extra.sh` | Opus | Green in 2 s |
+| `../internal/sim/simtoy/testdata/golden-digests.txt` | Golden trace and state digests of every toy scenario on the pinned seeds. Update after review: `go test ./internal/sim/simtoy -run TestGoldenDigests -update` | Opus | 55 lines (11 scenarios x 5 seeds) |
+
