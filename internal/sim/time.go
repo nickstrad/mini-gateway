@@ -37,6 +37,10 @@ func Later(t Time, d time.Duration) Time {
 	return t + Time(d)
 }
 
+func AddDurations(a, b time.Duration) time.Duration {
+	return Time(a).Add(b).Sub(0)
+}
+
 func Scaled(k int64, d time.Duration) time.Duration {
 	if k == 0 || d == 0 {
 		return 0

@@ -801,3 +801,20 @@ func TestLoopAgainstReferenceModel(t *testing.T) {
 		}
 	}
 }
+
+func TestAddDurationsSaturates(t *testing.T) {
+	cases := []struct{ a, b, want time.Duration }{
+		{math.MaxInt64, 1, math.MaxInt64},
+		{math.MaxInt64 - 100, 1000, math.MaxInt64},
+		{1, math.MaxInt64, math.MaxInt64},
+		{math.MinInt64, -1, math.MinInt64},
+		{-5, -math.MaxInt64, math.MinInt64},
+		{3, 4, 7},
+		{math.MaxInt64, math.MinInt64, -1},
+	}
+	for _, c := range cases {
+		if got := AddDurations(c.a, c.b); got != c.want {
+			t.Fatalf("AddDurations(%d, %d) = %d, want %d", c.a, c.b, got, c.want)
+		}
+	}
+}

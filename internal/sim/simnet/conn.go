@@ -2,6 +2,7 @@ package simnet
 
 import (
 	"io"
+	"math"
 	"math/rand/v2"
 	"time"
 
@@ -385,7 +386,14 @@ func (p *pipe) delay() time.Duration {
 	if l.Jitter <= 0 {
 		return l.Base
 	}
-	return l.Base + time.Duration(p.rng.Int64N(int64(l.Jitter)+1))
+	return sim.AddDurations(l.Base, p.jitter(l.Jitter))
+}
+
+func (p *pipe) jitter(bound time.Duration) time.Duration {
+	if bound == math.MaxInt64 {
+		return time.Duration(p.rng.Int64())
+	}
+	return time.Duration(p.rng.Int64N(int64(bound) + 1))
 }
 
 func (p *pipe) arrival() sim.Time {

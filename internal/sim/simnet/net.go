@@ -136,7 +136,7 @@ func (n *Net) Dial(to string, opts Options, h Handler) *End {
 	n.s.Trace(kindDial, id, lidx, 0, 0)
 	switch {
 	case l == nil || l.refuse:
-		at := c.pipes[up].delay() + c.pipes[down].delay()
+		at := sim.AddDurations(c.pipes[up].delay(), c.pipes[down].delay())
 		n.s.After(at, func() { c.refuse() })
 	case l.dialStall:
 		c.dialStalled = true
