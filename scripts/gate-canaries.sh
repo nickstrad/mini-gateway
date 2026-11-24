@@ -18,7 +18,9 @@
 #      committed, and the gate runs (limited with GATE_ONLY to the gate under test, to keep
 #      the run short). Kinds of canary:
 #        red     the gate exits 1, the named check has status "fail", its log matches
-#        setup   the gate refuses to run: exit 2 and the message on standard error matches
+#        setup   the gate refuses to run: exit 2 and the message on standard error matches.
+#                A stale result.json is put in the output folder first and must be gone
+#                afterwards: a refused run leaves no earlier result behind
 #        green   a control: the named check passes (and, where given, a result field holds)
 #      Each plant creates the minimal package it needs inside the copy.
 #
@@ -42,7 +44,7 @@ module=github.com/nickstrad/mini-gateway
 result_file=agent_work/chunks/c00-foundation/gate/canaries.json
 only=${CANARY_ONLY:-}
 sha=$(git rev-parse HEAD 2>/dev/null || echo unknown)
-dirty=false; [ -z "$(git status --porcelain --untracked-files=all | grep -v ' agent_work/chunks/c00-foundation/gate/' || true)" ] || dirty=true
+dirty=false; [ -z "$(git status --porcelain --untracked-files=all | grep -vE '^.. agent_work/chunks/c00-foundation/gate/(canaries|result)\.json$' || true)" ] || dirty=true
 
 # The site check needs the Python package `markdown`. Fetch it once here (scripts/site.sh
 # caches it in .cache/pylib) and point every run in the copy at that folder.
@@ -98,8 +100,10 @@ missed=0
 total=0
 res="$copy/agent_work/chunks/canary/gate/result.json"
 
-# run_gate <env assignments...>: run the gate in the copy for the chunk "canary".
-run_gate() { (cd "$copy" && env "$@" scripts/gate.sh canary) > "$work/gate.out" 2> "$work/gate.err"; }
+# run_gate <env assignments...>: run the gate in the copy for the chunk "canary" (a plant
+# may name another chunk in canary_chunk).
+canary_chunk=canary
+run_gate() { (cd "$copy" && env "$@" scripts/gate.sh "$canary_chunk") > "$work/gate.out" 2> "$work/gate.err"; }
 
 # verdict <id> <kind> <what was planted> <gate> <check> <expected> <outcome> <detail>
 verdict() {
@@ -120,10 +124,16 @@ canary() {
   selected "$id" || return 0
   reset_copy || { verdict "$id" "$kind" "$desc" "$gate" "$check" "$expect" MISSED "cannot reset the copy"; return; }
   canary_env=()
-  "$plant" || { verdict "$id" "$kind" "$desc" "$gate" "$check" "$expect" MISSED "the plant itself failed"; return; }
-  local rc=0 status log="$copy/agent_work/chunks/canary/gate/$gate-$check.log"
+  canary_chunk=canary
+  "$plant" || { canary_chunk=canary; verdict "$id" "$kind" "$desc" "$gate" "$check" "$expect" MISSED "the plant itself failed"; return; }
+  local rc=0 status log="$copy/agent_work/chunks/$canary_chunk/gate/$gate-$check.log"
+  local res="$copy/agent_work/chunks/$canary_chunk/gate/result.json"
   rm -f "$res"
+  if [ "$kind" = setup ]; then
+    mkdir -p "$(dirname "$res")" && echo '{"overall":"pass","counts_for_landing":true,"note":"stale result planted by the canary"}' > "$res"
+  fi
   run_gate GATE_ONLY="$gate" "$@" "${canary_env[@]}" || rc=$?
+  canary_chunk=canary
   case "$kind" in
     red)
       status=$(jq -r --arg g "$gate" --arg c "$check" '.checks[] | select(.gate == $g and .check == $c) | .status' "$res" 2>/dev/null || true)
@@ -135,7 +145,7 @@ canary() {
       else verdict "$id" "$kind" "$desc" "$gate" "$check" "$expect" CAUGHT "red: $(grep -Em1 -- "$expect" "$log" | cut -c1-150)"; fi ;;
     setup)
       if [ $rc != 2 ]; then verdict "$id" "$kind" "$desc" "$gate" "$check" "$expect" MISSED "gate exit $rc, want 2"
-      elif [ -e "$res" ]; then verdict "$id" "$kind" "$desc" "$gate" "$check" "$expect" MISSED "a result file was written by a refused run"
+      elif [ -e "$res" ]; then verdict "$id" "$kind" "$desc" "$gate" "$check" "$expect" MISSED "a result file is in the output folder after a refused run (the stale one survived, or one was written)"
       elif ! grep -Eq -- "$expect" "$work/gate.err"; then verdict "$id" "$kind" "$desc" "$gate" "$check" "$expect" MISSED "the refusal does not match the expected message"
       else verdict "$id" "$kind" "$desc" "$gate" "$check" "$expect" CAUGHT "refused: $(grep -Em1 -- "$expect" "$work/gate.err" | cut -c1-150)"; fi ;;
     green)
@@ -213,7 +223,46 @@ plant_prose_changed_code() {
   printf 'package canary\n\n// Add adds.\nfunc Add(a, b int) int {\n\treturn a + b + 1\n}\n' | put internal/canary/ok.go && commit "prose pass that also changed code"
 }
 plant_prose_only() {
-  printf 'package canary\n\n// Add returns the sum of a and b.\nfunc Add(a, b int) int {\n\treturn a + b\n}\n' | put internal/canary/ok.go && commit "prose pass"
+  printf 'package canary\n\n// Add returns the sum of a and b.\nfunc Add(a, b int) int {\n\treturn a + b\n}\n' | put internal/canary/ok.go \
+    && printf '\nA sentence from the prose pass.\n' >> "$copy/book/index.md" \
+    && printf '# Prose notes\n' | put agent_work/chunks/canary/PROSE-NOTES.md && commit "prose pass"
+}
+plant_prose_changed_script() {
+  printf '#!/bin/bash\nexit 0\n' > "$copy/scripts/bench.sh" && commit "prose pass that also changed a script"
+}
+plant_prose_changed_testdata() {
+  printf 'after\n' | put internal/canary/testdata/input.txt && commit "prose pass that also changed test data"
+}
+plant_prose_changed_generated() {
+  printf '# Error contract\n' | put docs/error-contract.md && commit "prose pass that also changed a generated contract document"
+}
+plant_comment_testdata() {
+  printf 'package fixture\n\n// A planted comment in a fixture.\nconst One = 1\n' | put internal/canary/testdata/fixture.go && commit plant
+}
+plant_testdata_import() {
+  printf 'package pgwire\n\nconst Version = 3\n' | put internal/pgwire/pgwire.go \
+    && printf 'package hidden\n\nimport "%s/internal/pgwire"\n\nconst Wire = pgwire.Version\n' "$module" | put internal/pool/testdata/hidden/hidden.go \
+    && printf 'package canary\n\nimport "%s/internal/pool/testdata/hidden"\n\nconst Wire = hidden.Wire\n' "$module" | put internal/canary/reach.go && commit plant
+}
+plant_growth_pointer() {
+  printf 'package shell\n\ntype Box struct {\n\tqueue []int\n}\n\nfunc (b *Box) Run() {\n\tq := &b.queue\n\tfor {\n\t\t*q = append(*q, 1)\n\t}\n}\n' | put internal/shell/box.go && commit plant
+}
+plant_growth_helper() {
+  printf 'package shell\n\ntype Box struct {\n\tqueue []int\n}\n\nfunc (b *Box) add() {\n\tb.queue = append(b.queue, 1)\n}\n\nfunc (b *Box) Run() {\n\tfor {\n\t\tb.add()\n\t}\n}\n' | put internal/shell/box.go && commit plant
+}
+plant_foundation_reuse() { canary_chunk=c00-foundation; }
+plant_marker_restored() {
+  rm "$copy/scripts/.not-built/sweep" && printf '#!/bin/bash\necho "sweep.sh: ran"\nexit 0\n' > "$copy/scripts/sweep.sh" && commit "build the sweep" \
+    && echo restored > "$copy/scripts/.not-built/sweep" && printf '#!/bin/bash\necho "sweep.sh: not built yet"\nexit 3\n' > "$copy/scripts/sweep.sh" && commit plant
+}
+plant_marker_added() { echo added > "$copy/scripts/.not-built/new-stage" && commit plant; }
+plant_extra_symlink() {
+  mkdir -p "$copy/agent_work/chunks/canary/gate" && ln -s missing.sh "$copy/agent_work/chunks/canary/gate/extra.sh" && commit plant
+}
+plant_broken_html_link() { printf "\n<a href='no-such-page.md'>the missing page</a>\n" >> "$copy/docs/index.md" && commit plant; }
+plant_broken_img_src() { printf '\n<img alt="missing" src=no-such-picture.png>\n' >> "$copy/docs/index.md" && commit plant; }
+plant_untracked_extra() {
+  printf '#!/bin/bash\nexit 0\n' | put agent_work/chunks/canary/gate/extra.sh && chmod +x "$copy/agent_work/chunks/canary/gate/extra.sh"
 }
 plant_nothing() { :; }
 plant_failing_test() {
@@ -261,24 +310,39 @@ canary g1-second-require   red "a second go.mod requirement" G1 importlint 'go\.
 canary g1-unbuffered-chan  red "an unbuffered channel in internal/shell" G1 boundlint 'mailbox\.go:4:[0-9]+: unbuffered' plant_unbuffered
 canary g1-literal-chan-cap red "a channel capacity written as a number in internal/shell" G1 boundlint 'mailbox\.go:4:[0-9]+: chan-cap' plant_literal_cap
 canary g1-unbounded-growth red "a slice field appended to in a receive loop with no length check" G1 boundlint 'box\.go:10:[0-9]+: unbounded-growth' plant_growth
+canary g1-growth-through-pointer red "a slice field appended to through a local pointer in an unbounded loop" G1 boundlint 'box\.go:10:[0-9]+: unbounded-growth' plant_growth_pointer
+canary g1-growth-in-helper red "an unbounded loop calling a method that appends to a slice field" G1 boundlint 'box\.go:13:[0-9]+: unbounded-growth: the call of add' plant_growth_helper
+canary g1-testdata-imports-wire red "a package under internal/pool/testdata imports internal/pgwire" G1 importlint 'internal/pool/testdata/hidden/hidden\.go:3:[0-9]+: deny' plant_testdata_import
+canary g1-testdata-imported red "product Go imports a package in a testdata directory" G1 importlint 'internal/canary/reach\.go:3:[0-9]+: testdata-import' plant_testdata_import
 canary g1-panic            red "a panic that is not in the allow file" G1 paniccheck 'must\.go:5:[0-9]+: panic' plant_panic
 canary g2-comment          red "a comment in product Go at the build stage" G2 comments 'internal/canary/sub\.go:3:1: comment' plant_comment GATE_STAGE=build
 canary g2-baseline-is-head setup "a build-stage run whose comment baseline is HEAD" G2 comments 'HEAD is its own comment baseline' plant_baseline_is_head GATE_STAGE=build
 canary g2-prose-changed-code red "a code change between GATE_PREPROSE and HEAD at the final stage" G2 astdiff 'internal/canary/ok\.go:[0-9]+:[0-9]+: astdiff' plant_prose_changed_code GATE_STAGE=final GATE_PREPROSE="$clean"
 canary g2-prose-only       green "control: a prose pass that only added a comment passes the final stage" G2 astdiff '.overall == "pass"' plant_prose_only GATE_STAGE=final GATE_PREPROSE="$clean"
+canary g2-prose-changed-script red "a script changed between GATE_PREPROSE and HEAD at the final stage" G2 astdiff '^scripts/bench\.sh:1:1: prose-path' plant_prose_changed_script GATE_STAGE=final GATE_PREPROSE="$clean"
+canary g2-prose-changed-testdata red "a testdata file changed between GATE_PREPROSE and HEAD at the final stage" G2 astdiff '^internal/canary/testdata/input\.txt:1:1: prose-path' plant_prose_changed_testdata GATE_STAGE=final GATE_PREPROSE="$clean"
+canary g2-prose-changed-generated red "a generated contract document changed between GATE_PREPROSE and HEAD at the final stage" G2 astdiff '^docs/error-contract\.md:1:1: prose-path' plant_prose_changed_generated GATE_STAGE=final GATE_PREPROSE="$clean"
+canary g2-comment-testdata red "a comment in a Go file under testdata at the build stage" G2 comments 'internal/canary/testdata/fixture\.go:3:1: comment' plant_comment_testdata GATE_STAGE=build
+canary g2-foundation-with-product-go setup "GATE_STAGE=foundation for c00-foundation while the tree holds product Go" G2 comments 'GATE_STAGE=foundation is refused: the tree holds product Go' plant_foundation_reuse GATE_STAGE=foundation
+canary stale-result-removed setup "a refused run (unknown GATE_STAGE) with an earlier result.json in its output folder" G2 comments 'GATE_STAGE must be build, final or foundation' plant_nothing GATE_STAGE=nonsense
 canary g2-final-needs-preprose setup "a final-stage run without GATE_PREPROSE" G2 astdiff 'needs GATE_PREPROSE' plant_nothing GATE_STAGE=final
 canary g2-foundation-other-chunk setup "GATE_STAGE=foundation for a chunk other than c00-foundation" G2 comments 'for the chunk c00-foundation only' plant_nothing GATE_STAGE=foundation
 canary g3-failing-test     red "a failing test" G3 unit 'PLANTED-TEST-FAILURE' plant_failing_test
 canary g3-data-race        red "a data race in a package listed for the race detector" G3 race 'WARNING: DATA RACE' plant_race
 canary g3-racelist-typo    red "race-packages.txt names a package that does not exist" G3 race 'matches no package' plant_racelist_typo
 canary g4-marker-deleted   red "a not-built marker deleted while the script still says not built yet" G4 sweep 'a stage that exists cannot be skipped' plant_marker_deleted
+canary g4-marker-restored  red "a not-built marker restored after a commit removed it" G4 sweep 'scripts/\.not-built/sweep was removed in commit [0-9a-f]+ and is back' plant_marker_restored
+canary g4-marker-added     red "a not-built marker that the baseline commit does not have" G4 markers 'scripts/\.not-built/new-stage is absent at the baseline commit' plant_marker_added
 canary g5-built-with-marker red "a stage script that runs while its not-built marker still exists" G5 fuzz 'delete the marker' plant_built_with_marker
 canary g6-built-stage-fails red "a built stage (marker deleted) whose script fails" G6 tier-r 'PLANTED-STAGE-FAILURE' plant_stage_fails
 canary g9-broken-link      red "a broken link in a site page" G9 site 'broken link: no-such-page\.md' plant_broken_link
+canary g9-broken-html-link red "a broken link in a single-quoted raw HTML anchor" G9 site 'broken link: no-such-page\.md' plant_broken_html_link
+canary g9-broken-img-src   red "a broken unquoted src attribute in raw HTML" G9 site 'broken link: no-such-picture\.png' plant_broken_img_src
 canary g9-live-missing     red "a chapter marked live whose file is missing" G9 site 'chapter 1 is live but' plant_live_missing
 canary g9-planned-exists   red "a chapter file that exists while the manifest says planned" G9 site 'chapter 2 is planned but' plant_planned_exists
 canary g10-extra-fails     red "a failing gate/extra.sh" G10 extra 'PLANTED-EXTRA-FAILURE' plant_extra_fails
 canary g10-extra-not-executable red "a gate/extra.sh that is not executable" G10 extra 'not executable' plant_extra_not_executable
+canary g10-extra-symlink   red "a gate/extra.sh that is a dangling symbolic link" G10 extra 'not a regular file' plant_extra_symlink
 
 # Controls on counts_for_landing: a full green run on a dirty tree must not count.
 if selected dirty-tree-does-not-count; then
@@ -288,6 +352,15 @@ if selected dirty-tree-does-not-count; then
     verdict dirty-tree-does-not-count green "control: a full green run with an uncommitted file" all - 'dirty_tree true, counts_for_landing false' CAUGHT "green but does not count"
   else
     verdict dirty-tree-does-not-count green "control: a full green run with an uncommitted file" all - 'dirty_tree true, counts_for_landing false' MISSED "gate exit $rc; $(jq -c '{overall, dirty_tree, counts_for_landing}' "$res" 2>/dev/null)"
+  fi
+fi
+if selected uncommitted-extra-does-not-count; then
+  reset_copy && plant_untracked_extra
+  rc=0; run_gate GATE_STAGE=build || rc=$?
+  if [ $rc = 0 ] && [ "$(jq -r '.overall + " " + (.dirty_tree|tostring) + " " + (.counts_for_landing|tostring) + " " + ([.checks[] | select(.gate == "G10") | .status] | join(","))' "$res")" = "pass true false pass" ]; then
+    verdict uncommitted-extra-does-not-count green "control: a full green run whose gate/extra.sh is not committed" all - 'G10 ran, dirty_tree true, counts_for_landing false' CAUGHT "green but does not count"
+  else
+    verdict uncommitted-extra-does-not-count green "control: a full green run whose gate/extra.sh is not committed" all - 'G10 ran, dirty_tree true, counts_for_landing false' MISSED "gate exit $rc; $(jq -c '{overall, dirty_tree, counts_for_landing}' "$res" 2>/dev/null)"
   fi
 fi
 if selected partial-does-not-count; then
