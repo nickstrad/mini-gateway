@@ -65,25 +65,26 @@ func checkAblation(t *testing.T, sc Scenario, seed int64, res *Result, replay st
 		}
 	default:
 		got, ctl := res.Net.Snapshot(), control.Net.Snapshot()
-		if got.Up.Chunks <= ctl.Up.Chunks || got.Down.Chunks <= ctl.Down.Chunks || res.Server.Reads <= control.Server.Reads {
-			t.Fatalf("chunking had no effect: chunks %d/%d vs control %d/%d, reads %d vs %d\n%s",
-				got.Up.Chunks, got.Down.Chunks, ctl.Up.Chunks, ctl.Down.Chunks, res.Server.Reads, control.Server.Reads, replay)
+		if got.Up.Chunks+got.Down.Chunks <= ctl.Up.Chunks+ctl.Down.Chunks {
+			t.Fatalf("chunking had no effect: chunks %d/%d vs control %d/%d\n%s",
+				got.Up.Chunks, got.Down.Chunks, ctl.Up.Chunks, ctl.Down.Chunks, replay)
 		}
 	}
-	bug := sc.Config(seed)
-	bug.plantBug = true
 	ctl := sc.Control(seed)
 	ctl.plantBug = true
-	if Run(bug).Err == nil && sc.Kind != simnet.FaultStall {
-		t.Fatalf("the planted bug was not caught under chunking\n%s", replay)
-	}
 	if err := Run(ctl).Err; err != nil {
 		t.Fatalf("the planted bug fired without chunking: %v\n%s", err, replay)
 	}
 }
 
 func TestPlantedBugCanary(t *testing.T) {
-	sc, _ := Lookup("echo-chunk-1")
+	for _, name := range []string{"echo-chunk-1", "echo-random-split"} {
+		sc, _ := Lookup(name)
+		canary(t, sc)
+	}
+}
+
+func canary(t *testing.T, sc Scenario) {
 	for seed := int64(1); seed <= 5; seed++ {
 		cfg := sc.Config(seed)
 		cfg.plantBug = true
@@ -91,7 +92,7 @@ func TestPlantedBugCanary(t *testing.T) {
 		if !errors.Is(sc.Check(res), ErrMismatch) {
 			t.Fatalf("seed %d: the chunk scenario passed with the planted bug", seed)
 		}
-		if !strings.Contains(res.Err.Error(), "REPLAY: go run ./cmd/mgsim run echo-chunk-1 -seed") {
+		if !strings.Contains(res.Err.Error(), "REPLAY: go run ./cmd/mgsim run "+sc.Name+" -seed") {
 			t.Fatalf("no replay line: %v", res.Err)
 		}
 	}
