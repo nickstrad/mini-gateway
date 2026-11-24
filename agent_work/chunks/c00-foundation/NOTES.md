@@ -31,7 +31,7 @@ round where the brief asks for it (`ci-fast.sh`, the tools' tests).
 
 | Command | Result | Time |
 | --- | --- | --- |
-| `GATE_STAGE=foundation scripts/gate.sh c00-foundation` | overall pass, `counts_for_landing` true, clean tree. 13 checks pass; G2 `skip-foundation`; G4 sweep, G5 fuzz, G6 tier-r, G7 csv, G8 gen-docs `skip-not-built`; G10 `skip-none` | 8 s |
+| `GATE_STAGE=foundation scripts/gate.sh c00-foundation` | overall pass, `counts_for_landing` true, clean tree. 14 checks pass (the new one is `G4 markers`); G2 `skip-foundation`; G4 sweep, G5 fuzz, G6 tier-r, G7 csv, G8 gen-docs `skip-not-built`; G10 `skip-none` | 6 s |
 | `scripts/gate-canaries.sh` | 51 of 51 CAUGHT: 42 red, 5 refused with exit 2, 4 controls. The clean copy was green and counted for landing first | 116 s |
 | `scripts/ci-fast.sh` | green | 7 s; target is under 300 s |
 | `make test`, `make chaos`, `make bench` | each fails: `make test: not built yet`, `make chaos: not built yet`, `bench.sh: not built yet` | under 1 s |

@@ -1,6 +1,6 @@
 {
   "chunk": "c00-foundation",
-  "sha": "7a19c14260a920c1ce3ff4358ebef55307a884da",
+  "sha": "4052e9061fc8a59ccc636cb43c91528eb31b2151",
   "dirty_tree": false,
   "stage": "foundation",
   "partial": false,
@@ -9,9 +9,9 @@
   "counts_for_landing": true,
   "go_version": "go version go1.26.8 linux/amd64",
   "duckdb_version": "v1.5.5 (Variegata) d8cdaa33fd",
-  "started": "2026-11-24T22:58:25Z",
-  "finished": "2026-11-24T22:58:33Z",
-  "seconds": 8,
+  "started": "2026-11-24T23:51:25Z",
+  "finished": "2026-11-24T23:51:31Z",
+  "seconds": 6,
   "comment_baseline": "none",
   "preprose_commit": "none",
   "short": false,
@@ -29,7 +29,7 @@
       "gate": "G0",
       "check": "tools",
       "status": "pass",
-      "seconds": 2,
+      "seconds": 1,
       "note": ""
     },
     {
@@ -57,14 +57,14 @@
       "gate": "G0",
       "check": "tools-vet",
       "status": "pass",
-      "seconds": 0,
+      "seconds": 1,
       "note": ""
     },
     {
       "gate": "G0",
       "check": "tools-test",
       "status": "pass",
-      "seconds": 4,
+      "seconds": 2,
       "note": ""
     },
     {
@@ -92,7 +92,7 @@
       "gate": "G1",
       "check": "boundlint",
       "status": "pass",
-      "seconds": 1,
+      "seconds": 0,
       "note": ""
     },
     {
@@ -122,6 +122,13 @@
       "status": "pass",
       "seconds": 0,
       "note": "race-packages.txt lists no package yet"
+    },
+    {
+      "gate": "G4",
+      "check": "markers",
+      "status": "pass",
+      "seconds": 1,
+      "note": "11 not-built markers, compared with baseline 90e417cf376cd36180073ede1d4eb00c5456d127 and the history of HEAD"
     },
     {
       "gate": "G4",
