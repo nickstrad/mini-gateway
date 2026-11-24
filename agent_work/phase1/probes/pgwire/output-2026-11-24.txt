@@ -1,0 +1,50 @@
+== A. pgproto3 message structs used sans-I/O (own framer, 1-byte feeds) ==
+  frontend msg 'Q' decoded: Query "SELECT 1"
+  frontend msg 'Q' decoded: Query "BEGIN; SELECT 2"
+  frontend msg 'X' decoded: Terminate
+  40 bytes fed one at a time -> 3 messages; leftover 0 bytes
+  backend msgs built and re-decoded: 'E' code=53000, 'Z' TxStatus='I' (a proxy-made error reply is 32 bytes)
+== B. real Postgres ==
+-- B0 startup and SCRAM-SHA-256 done with the standard library (crypto/pbkdf2, hmac, sha256) plus pgproto3 message types
+  startup: AuthenticationSASL[SCRAM-SHA-256] -> SASLContinue -> SASLFinal(server signature verified) -> AuthenticationOk -> BackendKeyData -> ReadyForQuery('I'); 14 ParameterStatus messages
+-- B1 one Query message, two statements, no COMMIT: is the connection free afterwards?
+  Query "BEGIN; SELECT 1"                  => CommandComplete(BEGIN), first row="1", DataRow x1 (1 bytes), CommandComplete(SELECT 1), ReadyForQuery('T')
+-- B2 an error inside the open transaction, then ROLLBACK
+  Query "SELECT 1/0"                       => ErrorResponse(ERROR 22012: division by zero), ReadyForQuery('E')
+  Query "ROLLBACK"                         => CommandComplete(ROLLBACK), ReadyForQuery('I')
+-- B3 one Query message with two statements: one reply unit, two result sets
+  Query "SELECT 1; SELECT 2"               => first row="1", DataRow x1 (1 bytes), CommandComplete(SELECT 1), first row="2", DataRow x1 (1 bytes), CommandComplete(SELECT 1), ReadyForQuery('I')
+-- B4 three Query messages in one write (pipelined, as if from three clients); the middle one fails
+  Query "SELECT 'a'"                       => first row="a", DataRow x1 (1 bytes), CommandComplete(SELECT 1), ReadyForQuery('I')
+  Query "SELECT 1/0"                       => ErrorResponse(ERROR 22012: division by zero), ReadyForQuery('I')
+  Query "SELECT 'c'"                       => first row="c", DataRow x1 (1 bytes), CommandComplete(SELECT 1), ReadyForQuery('I')
+-- B5 two Query messages in one write; the first opens a transaction
+  Query "BEGIN"                            => CommandComplete(BEGIN), ReadyForQuery('T')
+  Query "SELECT txid_current() IS NOT NULL" => first row="t", DataRow x1 (1 bytes), CommandComplete(SELECT 1), ReadyForQuery('T')
+-- B5 cleanup
+  Query "ROLLBACK"                         => CommandComplete(ROLLBACK), ReadyForQuery('I')
+-- B6 session state outlives the transaction that set it
+  Query "SET statement_timeout = 1234"     => CommandComplete(SET), ReadyForQuery('I')
+  Query "SET application_name = 'tenant-a'" => CommandComplete(SET), ParameterStatus(application_name=tenant-a), ReadyForQuery('I')
+  Query "SHOW statement_timeout"           => first row="1234ms", DataRow x1 (6 bytes), CommandComplete(SHOW), ReadyForQuery('I')
+-- B6 cleanup with DISCARD ALL
+  Query "DISCARD ALL"                      => CommandComplete(DISCARD ALL), ParameterStatus(application_name=), ReadyForQuery('I')
+  Query "SHOW statement_timeout"           => first row="0", DataRow x1 (1 bytes), CommandComplete(SHOW), ReadyForQuery('I')
+-- B7 empty query string
+  Query ""                                 => EmptyQueryResponse, ReadyForQuery('I')
+-- B8 reply size is set by the data, not the request
+  Query "SELECT repeat('x', 100) FROM generate_series(1, 200000)" => DataRow x200000 (20000000 bytes), CommandComplete(SELECT 200000), ReadyForQuery('I')
+-- B9 backend terminated while a query is in flight (second connection calls pg_terminate_backend)
+--    (killer connection)
+  Query "SELECT pg_terminate_backend(69)"  => first row="t", DataRow x1 (1 bytes), CommandComplete(SELECT 1), ReadyForQuery('I')
+  Query "SELECT pg_sleep(30)"              => ErrorResponse(FATAL 57P01: terminating connection due to administrator command), stream ended: EOF, no ReadyForQuery
+-- B10 a read already running does not see a write that commits while it runs (statement snapshot)
+--    setup
+  Query "DROP TABLE IF EXISTS mg_probe; CREATE TABLE mg_probe(v int); INSERT INTO mg_probe VALUES (1)" => NoticeResponse, CommandComplete(DROP TABLE), CommandComplete(CREATE TABLE), CommandComplete(INSERT 0 1), ReadyForQuery('I')
+--    (writer, during the read)
+  Query "UPDATE mg_probe SET v = 2"        => CommandComplete(UPDATE 1), ReadyForQuery('I')
+  write acknowledged 12 ms after it was sent, while the read was still running
+  the in-flight read returned v=1 AFTER the write of v=2 was acknowledged
+--    a read started after the write
+  Query "SELECT v FROM mg_probe"           => first row="2", DataRow x1 (1 bytes), CommandComplete(SELECT 1), ReadyForQuery('I')
+  Query "DROP TABLE mg_probe"              => CommandComplete(DROP TABLE), ReadyForQuery('I')
