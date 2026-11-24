@@ -37,15 +37,17 @@ func TestImportRules(t *testing.T) {
 		"internal/pool/pool.go:7: only",
 		"internal/pool/pool_test.go:4: deny",
 		"internal/pool/tagged.go:5: deny",
+		"internal/pool/testdata/hidden/h.go:3: deny",
 		"internal/proxy/p.go:5: deny",
+		"internal/proxy/reach.go:3: testdata-import",
 		"internal/tools:1: layout",
 		"sub/go.mod:1: nested-module",
 	}
 	if got := short(fs); !slices.Equal(got, want) {
 		t.Errorf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
-	if files != 11 {
-		t.Errorf("checked %d files, want 11", files)
+	if files != 13 {
+		t.Errorf("checked %d files, want 13", files)
 	}
 }
 

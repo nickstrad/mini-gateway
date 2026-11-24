@@ -207,9 +207,16 @@ func stdlib(path string) bool {
 }
 
 // skipDir names the directories below the root that hold no product or test code of the
-// root module.
+// root module. A testdata directory is not one of them: the go tool leaves it out of
+// "./...", but a package in it can still be imported by its full path, so its files are
+// read like any other and importing it is itself a finding (testdata-import).
 func skipDir(name string) bool {
-	return report.SkipDir(name) || name == "_site"
+	return name != "testdata" && (report.SkipDir(name) || name == "_site")
+}
+
+// inTestdata reports whether an import path has an element named testdata.
+func inTestdata(path string) bool {
+	return strings.Contains("/"+path+"/", "/testdata/")
 }
 
 func run(root, rulesPath string) ([]report.Finding, int, error) {
@@ -242,7 +249,7 @@ func run(root, rulesPath string) ([]report.Finding, int, error) {
 		rel = filepath.ToSlash(rel)
 		if d.IsDir() {
 			if p != root && skipDir(d.Name()) {
-				if strings.Contains(rel, "/") && d.Name() != "testdata" && d.Name() != ".git" {
+				if strings.Contains(rel, "/") && d.Name() != ".git" {
 					out = append(out, report.Finding{Path: rel, Line: 1, Col: 1, Rule: "layout", Msg: "a directory named " + d.Name() + " below the top level is skipped by the comment, panic and import checks; rename it"})
 				}
 				return filepath.SkipDir
@@ -296,6 +303,9 @@ func run(root, rulesPath string) ([]report.Finding, int, error) {
 				}
 			}
 			local := path == r.module || strings.HasPrefix(path, r.module+"/")
+			if local && inTestdata(path) {
+				add("testdata-import", fmt.Sprintf("%q is a package in a testdata directory: gofmt, the test run and the determinism, panic and bound lints leave testdata out, so nothing may import it", path))
+			}
 			if !named && !local && !stdlib(path) {
 				add("third-party", fmt.Sprintf("%q is outside the standard library and this module, and no `only` rule names it", path))
 			}
