@@ -1,14 +1,19 @@
-# PLAN — mini-gateway (Phase 1 proposal)
+# PLAN — mini-gateway
 
-Operational document, written by the Fable orchestrator on 2026-11-24 for Nick's approval.
-**Status: PROPOSAL. Nothing below is authorized to be built until Nick approves it in chat.**
-**Amended 2026-11-24** with Nick's observability amendment (CSV flush, DuckDB analysis, the OTLP → Collector → Prometheus chain). It changes sections 6.5, 7.1, 7.4, 7.6–7.9 and 11, chunks 3–16, and the tables in sections 14, 16 and 17. The chunk list, the chunk order and the open questions in section 18 are unchanged.
+Operational document, written by the Fable orchestrator on 2026-11-24.
+**Status: APPROVED by Nick on 2026-11-24, as amended by his rulings on the eight questions the proposal asked (section 18). Building starts on Nick's go — the Phase 2 launch. Nothing is built before it.**
+
+Two amendments are folded into the text below, so it reads as one settled plan:
+
+- **Observability amendment (2026-11-24):** the CSV flush, DuckDB analysis and the OTLP → Collector → Prometheus chain (sections 6.5, 7.1, 7.4, 7.6–7.9 and 11).
+- **Nick's rulings on section 18 (2026-11-24,** `/root/briefs/zgateway-section18-rulings.md`**).** Neon reviews Opus on this project; coalescing is strict by default with relaxed selectable; **the batching chunk is dropped**; tenant = the startup user name over one database role; **client-facing TLS is included** (verdict and evidence in section 3.1) with SCRAM-SHA-256 as the authentication mechanism; the *Release It!* book is mined before the pool chunk; the size is approved; the end-to-end wording is approved. **The plan is now 16 chunks after the foundation.** The proposal's chunk 12 (batching) is gone and its chunks 13–17 are now chunks 12–16; anything written before these rulings (the done marker's first part, commit messages) uses the old numbers.
+
 The diagrams that go with it are in [docs/c4/](docs/c4/README.md); both are published for review at
 https://nickstrad.github.io/mini-gateway/.
 
 Inputs, in order of authority:
 
-1. Nick's 14 steering answers of 2026-11-24 (`/root/briefs/zgateway-steering-answers.md`). They govern.
+1. Nick's 14 steering answers of 2026-11-24 (`/root/briefs/zgateway-steering-answers.md`) and his 8 rulings on this plan of the same day (`/root/briefs/zgateway-section18-rulings.md`). They govern; where a ruling changes a steering answer (batching, answer 11), the ruling is the later word.
 2. The observability / horizontal-scale / *Release It!* note (`/root/briefs/zgateway-observability-scale-releaseit-note.md`) and the seat ruling (`/root/briefs/zgateway-seat-ruling.md`). Also the observability amendment of 2026-11-24 (`/root/briefs/zgateway-observability-csv-duckdb-amendment.md`), which extends steering answer 13 and does not replace it.
 3. The spec, [docs/project-source.md](docs/project-source.md).
 4. [INFLUENCES.md](INFLUENCES.md) — 100 influences and 18 conflicts. Written before the steering, with Redis as its working assumption. Where it disagrees with the steering, the steering wins; every such override is listed in section 2.
@@ -17,11 +22,12 @@ Evidence gathered in this phase (all in the repository):
 
 | What | Where | Used in |
 | --- | --- | --- |
-| Probe against a real Postgres 17: startup with SCRAM, transaction status bytes, pipelining, session state, kill mid-query, statement snapshots | `agent_work/phase1/probes/pgwire/` (`main.go`, `output-2026-11-24.txt`) | sections 4, 9, chunks 4–6, 11, 12 |
+| Probe against a real Postgres 17: startup with SCRAM, transaction status bytes, pipelining, session state, kill mid-query, statement snapshots | `agent_work/phase1/probes/pgwire/` (`main.go`, `output-2026-11-24.txt`) | sections 4, 9, chunks 4–6, 11 |
 | Evaluation of the object-store simulator, from its code | `agent_work/phase1/research/q8-object-store-simulator-evaluation.md` | section 5 |
 | *Release It!* notes mined for the build plan | `agent_work/phase1/research/release-it-mining.md` | section 10 and the landing gate |
+| TLS cost probe: `psql` and `pgbench` through a standard-library TLS-terminating relay in front of Postgres 17, TLS on either leg, handshake cost | `agent_work/phase1/probes/pgtls/` (`main.go`, `output-2026-11-24.txt`) | section 3.1, chunks 4 and 6 |
 
-Contents: 1 what we build · 2 steering and overrides · 3 design decisions · 4 backend-interface verdict (steering answer 1) · 5 simulator evaluation (steering answer 8) · 6 testing architecture · 7 observability architecture · 8 horizontal scale · 9 error, timeout and capacity contracts · 10 *Release It!* mapping · 11 benchmarking · 12 build flow and landing gate · 13 the chunks · 14 scenario-to-chunk table · 15 the book · 16 risks · 17 out of scope and follow-ups · 18 open questions for Nick.
+Contents: 1 what we build · 2 steering and overrides · 3 design decisions (3.1: the TLS verdict) · 4 backend-interface verdict (steering answer 1) · 5 simulator evaluation (steering answer 8) · 6 testing architecture · 7 observability architecture · 8 horizontal scale · 9 error, timeout and capacity contracts · 10 *Release It!* mapping · 11 benchmarking · 12 build flow and landing gate · 13 the chunks · 14 scenario-to-chunk table · 15 the book · 16 risks · 17 out of scope and follow-ups · 18 Nick's rulings (the decision record).
 
 ---
 
@@ -31,18 +37,17 @@ Contents: 1 what we build · 2 steering and overrides · 3 design decisions · 4
 
 In one process it has these parts:
 
-- **Wire layer.** Reads and writes Postgres messages (simple-query subset only) using the `pgproto3` package for message encoding. Handles client startup and authentication, proxy-to-database startup and authentication, tracks whether each client is inside a transaction, and classifies each statement (allowed or rejected; read-only or not; can it share a result; can it be batched).
+- **Wire layer.** Reads and writes Postgres messages (simple-query subset only) using the `pgproto3` package for message encoding. Handles client startup and authentication, proxy-to-database startup and authentication, tracks whether each client is inside a transaction, and classifies each statement (allowed or rejected; read-only or not; can it share a result). Clients may connect over TLS, which the proxy terminates; the connection to the database can use TLS too. Login is SCRAM-SHA-256 on both sides.
 - **Pool.** A hard-capped set of database connections. A connection is lent to a client for one transaction and returns when the database reports the transaction has ended.
 - **Admission.** One bounded queue per tenant, with two selectable rules for shedding stale work (the "Fail at Scale" queue-timeout rule and the CoDel paper's control law), newest-first service while overloaded, round-robin between tenants with a fair share that binds only when the database is saturated, an adaptive limit on concurrent database work (AIMD), and an optional per-tenant rate gate (GCRA) in front.
 - **Coalescer.** Identical read-only statements that arrive together share one database round trip. Writes are never shared.
-- **Batcher.** When a database connection frees up and several single-statement requests are already waiting, they can be written to it in one go. No timer.
 - **Retry policy.** An interface with two policies: off (the default), and "retry once, only if nothing reached the database, within a 10% budget".
 - **Observability.** Every part keeps counters and gauges and returns them from `Snapshot()`. That snapshot is the one raw export. One collector reads the snapshots, and adapters behind one interface turn its output into Prometheus text, JSON, CSV files flushed to disk, a log line and (last) an OTLP push that reaches Prometheus through an OpenTelemetry Collector. No part knows which adapters exist. Tests assert on the flushed CSV files, with DuckDB for the SQL, so no metrics server has to run during testing.
 - **Simulator.** A deterministic, single-threaded test harness with a virtual clock, simulated byte-stream connections, a fake Postgres and simulated clients. It is built first and everything else is proved in it before it is proved against a real Postgres.
 
 Scope fixed by the steering: Postgres only in v1; simple-query protocol only; transaction pooling; session-level features rejected rather than pinned; no cache; no replicas; no run-time coordination between proxy instances; N instances supported through a static fleet configuration.
 
-Not in v1 (details in section 17): the extended query protocol (Parse/Bind/Execute), TLS, `COPY`, replication, connection pinning, caching, read replicas, hedging, a second backend protocol, coordinated fleet state.
+Not in v1 (details in section 17): the extended query protocol (Parse/Bind/Execute), batching (several clients' statements pipelined onto one connection), TLS channel binding and client certificates, `COPY`, replication, connection pinning, caching, read replicas, hedging, a second backend protocol, coordinated fleet state.
 
 ---
 
@@ -60,22 +65,22 @@ Not in v1 (details in section 17): the extended query protocol (Parse/Bind/Execu
 | 8 | Evaluate the object-store simulator first | Section 5 | Replaces the recommendation's flat "re-implement in-repo" with an evidence-based decision (which ends in nearly the same place, with named files copied). |
 | 9 | Simple-query subset, transaction pooling, reject list, `pgproto3` from pgx/v5 | Chunks 4–6; the one allowed external dependency | **Overrides** the recommendation (RESP2 allow-list) and section 6's "external modules of any kind" exclusion — for the codec only. |
 | 10 | No promotions | Nothing promoted. folly's rule (F3) stays what it was: a gauge and a simulator-only comparison arm. P12 stays out. | none |
-| 11 | GCRA as outer gate; AIMD in v1; timer-free batching | Chunks 10 and 12. **Note:** INFLUENCES conflict C3 said a Postgres variant "has no micro-batching". The steering keeps batching, so section 3 (decision D9) defines what it honestly means for Postgres; it is flagged in open question 3. | Overrides C3's "no micro-batching in B". |
-| 12 | Retry policy behind an interface, default OFF | Chunk 13 | **Overrides** the recommendation (retry on by default). |
-| 13 | Full snapshot observability, OTLP exporter last. Amended 2026-11-24: CSV flush as a testing path, DuckDB over the flushed files, OTLP → Collector → Prometheus as the production path | Section 7 (7.7–7.9 for the amendment); section 6.5; chunk 16 is the last build chunk | none |
-| 14 | Per-instance enforcement, static fleet config, graceful drain | Section 8; chunk 14 | none |
+| 11 | GCRA as outer gate; AIMD in v1; timer-free batching | GCRA and AIMD: chunk 10. **Batching: dropped from v1 by Nick's ruling 3 of 2026-11-24.** The answer was given when the backend was Redis; under Postgres it would have meant pipelining several clients' statements onto one connection. What the probe showed about pipelining stays in section 4.1 as evidence (decision D9). | None for batching now: conflict C3's "a Postgres variant has no micro-batching" stands again. |
+| 12 | Retry policy behind an interface, default OFF | Chunk 12 | **Overrides** the recommendation (retry on by default). |
+| 13 | Full snapshot observability, OTLP exporter last. Amended 2026-11-24: CSV flush as a testing path, DuckDB over the flushed files, OTLP → Collector → Prometheus as the production path | Section 7 (7.7–7.9 for the amendment); section 6.5; chunk 15 is the last build chunk | none |
+| 14 | Per-instance enforcement, static fleet config, graceful drain | Section 8; chunk 13 | none |
 
-Two entries in INFLUENCES.md were written in Redis terms and are translated here, not overridden: F30's "RESP has no Retry-After" becomes "a distinct SQLSTATE per refusal", and its "`MGET` width caps" becomes reply-size and batch-width caps.
+Two entries in INFLUENCES.md were written in Redis terms and are translated here, not overridden: F30's "RESP has no Retry-After" becomes "a distinct SQLSTATE per refusal", and its "`MGET` width caps" becomes reply-size caps.
 
 ---
 
 ## 3. Design decisions this plan makes
 
-Each is a decision of this proposal, open to Nick's veto. "Ours" marks a design not taken from a source.
+Each is a decision of this plan. "Ours" marks a design not taken from a source. D6, D9, D10 and D13 were put to Nick as questions; they are written here as he ruled on 2026-11-24 (section 18).
 
 **D1 — One single-threaded engine per proxy instance.** All decisions (pool, queues, coalescer, limits) are made by one sans-I/O state machine: events in (bytes from a client, bytes from the database, a connection opened or closed, the clock reached a deadline), actions out (write these bytes, open a connection, close one, wake me at time T). In production a thin shell of goroutines does the socket reads and writes and posts events to the engine through bounded mailboxes. In the simulator the same engine is driven directly by the event loop. So the code that decides is the same code in both, and the replay law covers it. This is the shape PgBouncer uses (one event loop). Cost: one instance uses one core for decisions; more throughput means more instances, which is the deployment section 8 supports anyway.
 
-**D2 — Cores are pure and protocol-free.** `internal/pool`, `internal/admission`, `internal/coalesce`, `internal/batch`, `internal/retry` take `now` as an argument, return actions, hold no goroutines, locks, channels, wall clock or floating point, and import nothing from the wire layer. A lint enforces it (section 6.3). Integer forms are used where sources use floats: the CoDel control law's `interval/√count` uses the integer reciprocal-square-root step the Linux implementation uses; AIMD's ×0.9 is `limit*9/10`; histograms are integer buckets.
+**D2 — Cores are pure and protocol-free.** `internal/pool`, `internal/admission`, `internal/coalesce`, `internal/retry` take `now` as an argument, return actions, hold no goroutines, locks, channels, wall clock or floating point, and import nothing from the wire layer. A lint enforces it (section 6.3). Integer forms are used where sources use floats: the CoDel control law's `interval/√count` uses the integer reciprocal-square-root step the Linux implementation uses; AIMD's ×0.9 is `limit*9/10`; histograms are integer buckets.
 
 **D3 — One queue, not two.** A request waits in exactly one place: its tenant's admission queue. The dispatcher releases a request only when a database connection can be lent to it, so there is no second, hidden wait inside the pool (mansio's finding P14: callers must be budgeted below the pool or the excess waits invisibly).
 
@@ -83,19 +88,56 @@ Each is a decision of this proposal, open to Nick's veto. "Ours" marks a design 
 
 **D5 — At most one request per client connection inside the proxy.** The shell does not read a client's next message until the reply to the previous one has been written. Unread requests stay in the socket, which is the back pressure. A reply streams through a bounded per-client buffer; when it fills, the proxy stops reading that database connection; if the client stays stuck past the write deadline the client is dropped and the database connection goes through the dirty-connection table (D7).
 
-**D6 — Tenant = the `user` in the client's startup message, looked up in a static table.** The proxy authenticates clients itself (SCRAM-SHA-256, or trust for tests). All pooled connections log in to Postgres as one configured role on one database, which is what makes them interchangeable. Per-tenant database roles would need one pool per role (PgBouncer's model) and are a documented seam, not v1. Open question 4.
+**D6 — Tenant = the `user` in the client's startup message, looked up in a static table (decided, ruling 4).** The proxy authenticates clients itself with SCRAM-SHA-256; the table holds each tenant's SCRAM verifier (salt, iteration count, stored key, server key), never a password. All pooled connections log in to Postgres as one configured role on one database, which is what makes them interchangeable. The consequence is stated in the book: Postgres sees one role, so per-tenant privileges and row-level security by role do not exist behind this proxy; the tenant is an admission and accounting identity. Per-tenant database roles need one pool per role (PgBouncer's model) and are a recorded later seam (section 17, follow-up 5), not v1.
 
 **D7 — Destroy on doubt.** A database connection is reused only when it is known idle and clean: last status byte `I`, no unread bytes, no session parameter changed. When a client vanishes mid-statement the proxy asks Postgres to cancel, waits a bounded time for the end of the reply, rolls back if a transaction was open, and reuses the connection only if that all succeeded; otherwise it closes it (Odyssey's dirty-connection table, I3). Any protocol surprise closes the connection.
 
 **D8 — Session state is rejected, with a second line of defence.** The classifier refuses the session-level features on the reject list (section 9.4). Because a lexer cannot see everything (a function can change a setting), the wire layer also watches for a `ParameterStatus` message arriving during a client's turn — the probe shows Postgres sends one when a reported setting changes — and marks that connection dirty. An optional `DISCARD ALL` on every release is a config switch whose cost is measured, not a default.
 
-**D9 — Batching means pipelining, and only where it is provably safe (ours).** The probe shows that several `Query` messages written to one Postgres connection in one write are answered in order, each with its own end-of-reply marker, and that an error in one does not affect the next. It also shows the hazard: if one of them opens a transaction, the next one runs inside it. So a request may be batched only if the classifier proves it is a single statement that is not transaction control, and its client is outside a transaction. When a connection frees up, the dispatcher takes what is already queued and eligible, up to `max_batch`, and writes it in one go; replies are split at the end-of-reply markers. If any marker comes back with a status other than idle, the connection is poisoned: closed, and the remaining members of the batch get the "may have been applied" error. No timer exists. Because batch members wait behind each other on one connection, batching trades latency for fewer round trips; it ships config-selectable and **off by default** until its own benchmark shows a gain (open question 3).
+**D9 — No batching in v1 (decided, ruling 3).** The proposal defined batching for Postgres as pipelining: writing several clients' independent single-statement requests to one free connection in one write. Nick dropped it. In v1 a database connection carries one lease at a time and the proxy never writes a second client's request to it before the first one's reply has ended. Nothing else in the plan depended on batching. What the probe learned about pipelining is kept as evidence (section 4.1, row 7): Postgres answers pipelined `Query` messages in order and isolates their errors, but a statement that opens a transaction captures the ones behind it — which is why batching would have needed the classifier and a poison rule. The dropped design is in git history (commit `5c83fe6`: decision D9 and chunk 12) if a later measurement ever argues for it (section 17, follow-up 6).
 
-**D10 — Coalescing shares only what is provably a read, and by default never returns data older than the request (ours).** A statement is coalescable when the classifier proves: one statement, outside a transaction, begins with `SELECT`, no locking clause, no `INTO`, no data-changing keyword anywhere, and every function it calls is on a small allow-list of functions known not to have side effects or per-call results. The key is the exact statement text. Two join modes, selectable: **strict** (default) — a request never joins a read that is already running on the database; it joins the next one, which starts when the running one finishes, so its result is never older than its own arrival; **relaxed** — a request joins the running read. The probe shows why this matters: a read already running returned the old value after a concurrent write had been acknowledged, so relaxed mode can break "read your own write" for a moment. Strict costs up to one extra service time of latency; under a 1,000-request burst both modes send 1–2 reads to the database. Followers take no queue slot and no connection. Errors are shared. The waiter set and the buffered reply are capped. A flight runs under its own deadline and is cancelled only when every waiter has left. Open question 2.
+**D10 — Coalescing shares only what is provably a read, and by default never returns data older than the request (ours; decided, ruling 2).** A statement is coalescable when the classifier proves: one statement, outside a transaction, begins with `SELECT`, no locking clause, no `INTO`, no data-changing keyword anywhere, and every function it calls is on a small allow-list of functions known not to have side effects or per-call results. The key is the exact statement text. Two join modes, selectable: **strict** (default) — a request never joins a read that is already running on the database; it joins the next one, which starts when the running one finishes, so its result is never older than its own arrival; **relaxed** — a request joins the running read. The probe shows why this matters: a read already running returned the old value after a concurrent write had been acknowledged, so relaxed mode can break "read your own write" for a moment. Strict costs up to one extra service time of latency; under a 1,000-request burst both modes send 1–2 reads to the database. Followers take no queue slot and no connection. Errors are shared. The waiter set and the buffered reply are capped. A flight runs under its own deadline and is cancelled only when every waiter has left. **Decided (ruling 2):** strict is the default, relaxed is selectable by config, and both are measured — every hot-key and read-your-own-write scenario of chunk 11 and headline benchmark 2 report both modes side by side.
 
 **D11 — Errors are ordinary Postgres error replies with a contract.** Every refusal or failure the proxy itself produces is an `ErrorResponse` with a documented SQLSTATE, followed by the correct end-of-reply marker, and one generated table says for each: was anything sent to the database, and may a write have been applied (section 9.1).
 
 **D12 — Health and stats never touch the data path.** The engine publishes a snapshot copy at a fixed interval; the admin listener (health, stats, metrics) serves that copy from its own goroutines and its own port. It cannot wait on the pool, a queue or the engine.
+
+**D13 — The proxy terminates client TLS; SCRAM-SHA-256 is the authentication mechanism (decided, ruling 5).** A client may open with an `SSLRequest`; the proxy answers `S`, completes a TLS handshake with its own certificate, and then reads the startup message inside TLS. The connection from the proxy to Postgres uses TLS when configured. TLS is a property of the byte stream under the engine: the engine and the cores see the same bytes with or without it. Authentication is SCRAM-SHA-256 on both legs — Postgres's own default — with trust available only as an explicitly named test setting, never a default. Section 3.1 has the verdict, the evidence and the exact scope.
+
+### 3.1 Ruling 5 — client-facing TLS: verdict and evidence
+
+Nick's ruling: include TLS if it is not too hard; SCRAM is the auth default; state the verdict with its evidence.
+
+**Verdict: INCLUDE in v1.** Client-facing TLS termination, and TLS on the database leg as a config choice, cost an estimated 350 lines of product code — under 2% of the build — with no new dependency and no new chunk. It is built as a named part of chunk 4 (the request exchange before startup, as a state machine) and a named part of chunk 6 (the handshake on real sockets, config, certificates, tier R). The evidence for "not hard" is below; nothing in it argues for deferring.
+
+The evidence is a probe written for this ruling, `agent_work/phase1/probes/pgtls/` (output beside it): a TLS-terminating relay on the Go standard library in front of a throwaway Postgres 17 container, driven by the stock `psql` and `pgbench` 16.15 on vm-1, with Go 1.26.8. Together with the first probe (`probes/pgwire/`) and the design in sections 3 and 4:
+
+| # | Finding | Evidence | What it means for the cost |
+| --- | --- | --- | --- |
+| 1 | **The exchange before startup has to be built anyway.** | libpq's default is `sslmode=prefer`: it sends an `SSLRequest` first. Probe run 3: a proxy answering `N` gets a plaintext retry from a default `psql`, and "server does not support SSL, but SSL was required" from `sslmode=require`. The proposal already listed "TLS and GSS requests answered no" in chunk 4. | TLS adds one branch to an existing state machine (answer `S`, then upgrade), not a new protocol phase. |
+| 2 | **The TLS-specific code is small and all standard library.** | The probe's TLS-specific code is 59 lines: the client leg (read the 8-byte request, answer, `tls.Server`, handshake) and the database leg (send `SSLRequest`, read one byte, `tls.Client`). Only `crypto/tls` and `crypto/x509`. | `go.mod` keeps its single requirement. The product version adds config, certificate loading, counters and error rows: about 350 lines in all (breakdown below). |
+| 3 | **Stock clients work through it.** | Run 1: `psql` with `sslmode=require`, with `sslmode=verify-full` against the probe's own CA, and with the default `prefer` all connect over TLS 1.3 (`TLS_AES_128_GCM_SHA256`); `sslmode=disable` still connects in plaintext on the same port; `pgbench -S -M simple`, 4 clients × 200 transactions over TLS: 800 of 800 processed, 0 failed. | No client-side work and no protocol surprises in the simple-query subset. |
+| 4 | **The database leg is the same few lines.** | Run 2: with the relay speaking TLS to Postgres, `pg_stat_ssl` for the session shows `ssl = true`, `TLSv1.3`. | "Backend leg per config" is a mode switch, not a design. |
+| 5 | **TLS sits under the engine.** | Design: the engine's database seam is already a byte transport with two implementations (section 4.2), and the shell owns the sockets (decision D1). In the probe, everything after the handshake is the same relay code for TLS and plaintext connections. | The engine, the cores, the replay law and the simulator's byte streams do not change. Handshakes run on shell goroutines, never on the engine's thread. In the simulator a handshake is an event with an outcome, not cryptography. |
+| 6 | **A TLS-terminating proxy must do authentication itself — and this one already does.** | Run 2: when the relay passes Postgres's own SCRAM exchange through, a default `psql` fails with "SCRAM channel binding check failed": Postgres (itself on TLS) offered `SCRAM-SHA-256-PLUS`, and the client bound the exchange to the relay's certificate, not the server's. | No cost: decision D6 has the proxy run SCRAM itself on each leg, so there is nothing to pass through. One concrete requirement for chunk 4's SCRAM server, seen in run 1: a client on TLS that is offered only `SCRAM-SHA-256` sends the GS2 header `y,,` where a plaintext client sends `n,,`. The server must accept both, verify the matching `c=` value (`eSws` or `biws`), and must not advertise the `-PLUS` mechanism. |
+| 7 | **Bytes smuggled in before the handshake are refused if the request is read exactly.** | Run 1, last case: an `SSLRequest` and a plaintext startup message sent in one write. The relay reads exactly 8 bytes from the socket with no buffer, answers `S`, and the handshake fails on the leftover bytes ("first record does not look like a TLS handshake"); the connection is closed. This is the class of bug behind CVE-2021-23214 in Postgres itself. | A rule for the shell, with a test: nothing is buffered across the upgrade. In the engine's state machine: any byte after an accepted `SSLRequest` and before the handshake result is a protocol violation. |
+| 8 | **Handshake CPU is bounded and off the decision path.** | Probe run 4, 300 full TLS 1.3 handshakes over loopback, client and server halves in one process (so an upper bound for the proxy's half), with the host under load (load average 24): 3.3 ms of CPU each with an ECDSA P-256 certificate, 6.1 ms with RSA 2048. Against real `psql`, handshakes took 3–17 ms of wall time on the same loaded host. | A reconnection storm of 500 TLS clients costs at most about 1.6 CPU-seconds of handshakes with an ECDSA certificate, spread over shell goroutines and admitted through the existing cap on clients in startup (section 9.3). The proxy's SCRAM server side is a few HMACs; the costly key derivation is the client's. The per-statement cost of record encryption is not claimed here; chunk 14 measures it as a TLS-on against TLS-off arm. |
+
+**What v1 includes.**
+
+| Part | v1 |
+| --- | --- |
+| Client leg | `client_tls.mode`: `off` (answer `N`; the default when no certificate is configured), `allow` (answer `S`; plaintext clients are still accepted), `require` (a plaintext startup message is refused with `FATAL 28000`). `client_tls.cert_file`, `client_tls.key_file`. TLS 1.2 minimum. Config validation fails closed when a mode other than `off` has no readable certificate and key. The tier R setup and the example config run with `require` and a test CA generated at test time. |
+| Database leg | `backend_tls.mode`: `disable` (the default), `require` (encrypt, do not verify), `verify-full` (verify against `backend_tls.ca_file` and the server name) — libpq's names for the same behaviours. A database that answers `N` when TLS is required, or fails verification, is a connect failure of its own class and counts toward the breaker. |
+| Authentication | SCRAM-SHA-256 on both legs, with the GS2 rule of finding 6. Trust is an explicitly named test setting. No md5. |
+| Cancel requests | A cancel arrives on a new connection through the same pre-startup exchange, so it is accepted in plaintext or after an upgrade, as Postgres accepts it. No extra work. |
+| Deadlines and caps | One deadline (client startup, 5 s) covers the request exchange, the handshake and authentication; the database connect deadline (2 s) includes the handshake. Handshakes in progress count against the cap on clients in startup. |
+| Observability | Wire snapshot: pre-startup requests by kind and answer, handshakes completed and failed by reason, client connections by TLS version, plaintext refused. Database-leg TLS failures appear in connect failures by class. |
+| Fleet | Per connection, so it survives at N instances; every instance loads the same certificate. |
+
+**What v1 leaves out, and what a client sees.** Channel binding (`SCRAM-SHA-256-PLUS`): a client set to `channel_binding=require` refuses to connect, by its own check (probe run 1); the default `prefer` works. Client certificates. Direct TLS negotiation without an `SSLRequest` (new in Postgres 17 clients as an option; not the default). Reloading a certificate without a restart — rotation is a rolling restart with drain (chunk 13). GSS encryption (answered `N`). TLS on the admin listener.
+
+**Size and where it lands.** The pre-startup state machine, the GS2 handling and the simulator's handshake events, in chunk 4: about 100 lines. The shell's exact read and upgrade on both legs, about 110 lines; config, certificate loading and validation, about 90; counters, the error-contract and timeout rows, about 50 — in chunk 6: about 250 lines. Chunk 4 grows from ~1,400 to ~1,500 lines and chunk 6 from ~2,200 to ~2,450. It is not a chunk of its own because its two halves live in packages those chunks create, and because building it with them means the first real-socket run of the proxy (chunk 6, tier R) already speaks TLS, instead of plumbing it in later.
 
 ---
 
@@ -117,7 +159,7 @@ The obvious generic interface is `Do(request) → response` on a pooled connecti
 | 4 | **Errors are in-band and carry transaction state.** | Probe B4: an error reply is followed by a normal end-of-reply marker, and the next pipelined query runs fine. Probe A: a proxy-made error is an `ErrorResponse` plus a marker whose status byte must match what the client believes. | That an error is a Go `error`. Here the proxy must write a protocol-correct reply, and choose the status byte. |
 | 5 | **Failure after forwarding has no reply at all.** | Probe B9: a backend killed mid-query sent `FATAL 57P01` and then the stream ended with no end-of-reply marker. | That a failed call returns an error value. The proxy must decide what the client is told when the answer is "unknown" (section 9.1). |
 | 6 | **Session state lives on the connection and outlives the transaction.** | Probe B6: `SET statement_timeout` in one exchange was still in force in a later one; `SET application_name` also triggered an unsolicited `ParameterStatus` message. | That connections are interchangeable by construction. For Postgres they are interchangeable only because the proxy rejects or scrubs session state. |
-| 7 | **Sharing a connection between clients is legal only for some requests.** | Probe B4 (safe: three independent queries pipelined) against probe B5 (unsafe: the second query ran inside the first one's transaction). | That batching is a property of the pool. Here it depends on what the statement is. |
+| 7 | **Sharing a connection between clients is legal only for some requests.** | Probe B4 (safe: three independent queries pipelined) against probe B5 (unsafe: the second query ran inside the first one's transaction). | That requests from different clients may be put on one connection freely. Here it would depend on what each statement is. v1 never does it (batching was dropped, decision D9); the row stays because a generic interface would still have to answer it. |
 | 8 | **Sharing a result needs to know what the statement does and when its snapshot was taken.** | Probe B10: a read in flight returned `v=1` after a write of `v=2` had been acknowledged 12 ms after being sent. | That a "key" and a "read" flag come with the request. For SQL both are the output of a classifier, and "compatible consistency" is a timing rule. |
 | 9 | **Connecting is a multi-step conversation.** | Probe B0: startup → `AuthenticationSASL` → two SCRAM round trips → 14 `ParameterStatus` messages → key data → ready. | That `Dial` returns a usable connection. Here "connecting" is a state machine with its own timeouts and failure classes, and it is the thing the creation-rate cap limits. |
 | 10 | **Cancelling uses a second connection.** | Protocol documentation; the key arrives in `BackendKeyData` (probe B0). | That cancellation is a context. |
@@ -134,7 +176,7 @@ Evidence on the codec (steering answer 9), same probe:
 
 | Seam | What it is | Why it is honest | How it is held |
 | --- | --- | --- | --- |
-| **Work vocabulary** (`internal/work`) | Small plain types the cores are written against: tenant id, a unit of work with its class (reject / start a lease / continue a lease / answer locally), an optional share key, a batchable flag, and an outcome (connection released clean / still held / dirty; reached the database or not; error class). | The cores are exercised in the simulator by a synthetic workload that produces these types directly, before any Postgres code exists (chunks 7–13 each have such a test). That is a second producer of the vocabulary inside v1. | Import lint: the core packages may not import `pgproto3` or `internal/pgwire`. |
+| **Work vocabulary** (`internal/work`) | Small plain types the cores are written against: tenant id, a unit of work with its class (reject / start a lease / continue a lease / answer locally), an optional share key, and an outcome (connection released clean / still held / dirty; reached the database or not; error class). | The cores are exercised in the simulator by a synthetic workload that produces these types directly, before any Postgres code exists (chunks 7–12 each have such a test). That is a second producer of the vocabulary inside v1. | Import lint: the core packages may not import `pgproto3` or `internal/pgwire`. |
 | **Backend transport** (`internal/proxy`: `Dialer`, byte-stream connection events) | Open a byte stream to the database, bytes in, bytes out, closed. No Postgres knowledge. | Two real implementations in v1: TCP in the shell, the simulated network in the harness. | Both run the same e2e scenarios (section 6.2). |
 | **Wire boundary** (`internal/pgwire`) | Everything that knows Postgres: framing, both session state machines, the classifier, the error table. It turns bytes into work units and outcomes into bytes. | It is concrete Postgres code, not an interface. A second protocol would be a sibling package producing the same work vocabulary. | Import lint: only `internal/pgwire`, the simulator's fake Postgres and the test clients import `pgproto3`. |
 
@@ -218,12 +260,12 @@ Testing is the main deliverable of this project, and the simulator lands before 
 - **Faults come from outside.** Faults are injected in the fake Postgres, the simulated network and the simulated clients — never through a test-only branch inside a core.
 - **The harness tests itself.** A fault on one connection leaves traffic on another unaffected; a cleared fault leaves behaviour identical to a never-faulted run; a planted bug in the toy is caught.
 - **Counters must move.** A test that tolerates an error must also require a success; a scenario must show its subject was exercised (non-zero counters), so a dead feature cannot pass.
-- **End-to-end with every chunk.** The harness lands with the first runnable system (chunk 6) and every later chunk adds its scenarios in both tiers. The final chunks are never the first end-to-end run. Section 14 has the table.
+- **End-to-end with every chunk.** The harness lands with the first runnable system (chunk 6) and every later chunk adds its scenarios in both tiers. The final chunks are never the first end-to-end run. Section 14 has the table. Nick approved this rule on 2026-11-24 (ruling 8: "yes I want e2e incrementally built throughout as a form of integration testing throughout"), and with it the flow-guide wording draft (`/root/briefs/flow-guide-e2e-wording-draft.md`), which Twin applies to the flow guide.
 
 ### 6.3 Gates and where they run
 
 - **CI runs fast tests only** (target: under five minutes): build, vet, the lints, unit and property tests with a small fixed budget, the pinned simulator seeds, shell tests with `-race`, fuzz seed corpora as plain tests. No Docker, no sweeps.
-- **On-demand scripts** (in `scripts/`, indexed in `agent_work/INDEX.md`): `sweep.sh` (hundreds of seeds per scenario), `fuzz.sh` (timed fuzzing per target), `race-long.sh`, `soak.sh` (long steady-state run), `tier-r.sh` (real Postgres scenarios), `bench.sh`, `csv-assert.sh` (SQL assertions over flushed CSV files with DuckDB, section 6.5), `obs-chain.sh` (the Collector and Prometheus chain check, chunk 16).
+- **On-demand scripts** (in `scripts/`, indexed in `agent_work/INDEX.md`): `sweep.sh` (hundreds of seeds per scenario), `fuzz.sh` (timed fuzzing per target), `race-long.sh`, `soak.sh` (long steady-state run), `tier-r.sh` (real Postgres scenarios), `bench.sh`, `csv-assert.sh` (SQL assertions over flushed CSV files with DuckDB, section 6.5), `obs-chain.sh` (the Collector and Prometheus chain check, chunk 15).
 - **The local landing gate is the landing authority**, not CI: it runs the chunk's full list including the sweep and tier R, writes a machine-readable result, and fails closed.
 - **Lints:** the determinism lint on core packages; an import lint (cores cannot import the wire layer or `pgproto3`; nothing outside the wire layer, the fake and the test clients imports `pgproto3`; `go.mod` has exactly one requirement); a bounded-channel lint for the shell (no unbuffered-forever or unbounded structures without a named cap).
 - **Makefile:** `make test` (the CI set), `make chaos` (the named chaos scenarios, tier S, then tier R if Docker is present), `make bench` (section 11). Each exists from chunk 0 and fails with "not built yet" until its chunk lands, so a green target is never a stub.
@@ -256,18 +298,17 @@ DuckDB is a tool run over files after a run. It is not in `go.mod`, no Go packag
 | Chunk | Flow | Assertions on the flushed files | Otherwise needs |
 | --- | --- | --- | --- |
 | 3 | Chunk 2 baseline scenarios, tier S | The flush machinery itself: golden header for schema version 1; byte-identical files for one seed; the round trip. First SQL: the fake Postgres peaked at 500 connections for 500 clients; 1,000 identical reads were 1,000 database reads; workload sent = intended. Self-tests: a planted wrong number, an empty input and an unknown schema version each make the runner fail | — |
-| 4, 5 | Wire-level scenarios, tier S | Startup failures by reason = startup faults injected by kind. Reject list: classifier rejects = statements sent, and the fake Postgres statement count is 0 | `sum by (reason)` over a scrape |
+| 4, 5 | Wire-level scenarios, tier S | Startup failures by reason = startup faults injected by kind, including the TLS request exchange (requests by kind and answer = requests sent; handshake failures = handshake faults injected). Reject list: classifier rejects = statements sent, and the fake Postgres statement count is 0 | `sum by (reason)` over a scrape |
 | 6 | Every walking-skeleton scenario, tiers S and R | Conservation per instance from exported counters: accepted = completed + failed + shed, with queued and in flight at 0 in the final flush. Proxy completed = workload completed (two components, one query). Error-contract counts by row = faults injected. First use against the real binary: the proxy runs with `obs.csv.dir` set and the same SQL files run on its files | `increase()` over the run per outcome |
 | 7 | Hard cap, reconnection storm, cold start, database restart | Over every flush: pool open + connecting ≤ cap, and the fake's connection peak ≤ cap. Storm: database connections flat while the baseline run (joined by scenario and seed) shows refusals. Dials per interval ≤ the creation limit, from differences between flushes. Recovery: completed-per-interval returns to its pre-fault level after the restart. Headline 1 is the output of a query | `max_over_time`, `rate()`, and two separate runs kept in one Prometheus |
 | 8 | Anti-bufferbloat per mode; 10× overload; head-to-head | Queue-wait percentiles computed from the bucket rows, per mode and load. Depth of the run of length T equals depth at 4T. Sheds by reason. **The head-to-head table in the book is one query's output** over the runs of every arm and load | `histogram_quantile` over `rate()` of buckets, per arm |
 | 9 | Noisy neighbour; many tenants, one flooder; held transactions | Per-tenant totals: the quiet tenant's completed count equals its count in the run where it is alone (tier S, a join of two runs) or exceeds 99% (tier R). The flooder's share of all shedding > 95%. With 10,000 tenants every tenant has its own rows, which the bounded Prometheus label cannot show | `sum by (tenant)`, and a tenant label that is capped at 32 |
 | 10 | Noisy neighbour + backend stall; limit against queue rule | The limit gauge over time: no increase between the stall's start and recovery; decreases by cause; number of direction changes under the stated bound. Rate-gate refusals per tenant = `53M02` count | `changes()`, `delta()` over a window |
 | 11 | Hot key; cancel; read-your-own-write | Database reads for the burst: ≤ 2 with the coalescer, 1,000 in the ablation arm (a join of two arms). Flights + hits = shareable reads. Waiters-per-flight totals | A comparison across two runs |
-| 12 | Batching off against on | Round trips and in-batch wait percentiles per arm, at low load and at saturation. This query's output decides the default | `histogram_quantile` per arm |
-| 13 | Retry storm; no statement applied twice | In every window of the run: retries ≤ 10% of first attempts plus the floor, from differences between flushes. Statements reaching the database bounded against the ablation arm. Writes applied in the fake = distinct writes sent | `increase()` ratios over sliding windows |
-| 14 | Three-instance set; drain; steady state | Fleet totals as sums over the three instances' rows: connections ≤ fleet budget, hot-key reads ≤ 3. The SQL sum and bucket merge must equal the output of the `obs` merge function, which checks the merge laws with a second implementation. Size gauges at three points level off. Requests cut mid-answer during drain = 0 | `sum without (instance)`, `histogram_quantile` over merged buckets |
-| 15 | `make bench`, `make chaos`, soak | Every benchmark run flushes at each publish interval. The validity gate (achieved rate within 2% of intended), per-arm medians and spread over the interleaved runs, the A/A noise floor, and the three headline tables are SQL over the per-run files (section 11). The "what is slow?" acceptance test is also answered by a query on the files | A Prometheus retaining every run, with a label per run and arm |
-| 16 | The production chain, tier R on demand | The flushed files are the reference: what Prometheus holds after the OTLP → Collector → Prometheus chain must equal what DuckDB reads from the CSV files of the same run (section 7.9) | This is the one flow that does run a live Prometheus |
+| 12 | Retry storm; no statement applied twice | In every window of the run: retries ≤ 10% of first attempts plus the floor, from differences between flushes. Statements reaching the database bounded against the ablation arm. Writes applied in the fake = distinct writes sent | `increase()` ratios over sliding windows |
+| 13 | Three-instance set; drain; steady state | Fleet totals as sums over the three instances' rows: connections ≤ fleet budget, hot-key reads ≤ 3. The SQL sum and bucket merge must equal the output of the `obs` merge function, which checks the merge laws with a second implementation. Size gauges at three points level off. Requests cut mid-answer during drain = 0 | `sum without (instance)`, `histogram_quantile` over merged buckets |
+| 14 | `make bench`, `make chaos`, soak | Every benchmark run flushes at each publish interval. The validity gate (achieved rate within 2% of intended), per-arm medians and spread over the interleaved runs, the A/A noise floor, and the three headline tables are SQL over the per-run files (section 11). The "what is slow?" acceptance test is also answered by a query on the files | A Prometheus retaining every run, with a label per run and arm |
+| 15 | The production chain, tier R on demand | The flushed files are the reference: what Prometheus holds after the OTLP → Collector → Prometheus chain must equal what DuckDB reads from the CSV files of the same run (section 7.9) | This is the one flow that does run a live Prometheus |
 
 What the files cannot do: an assertion on flushed gauges sees the system at the flush instants only. Bounds that must hold at every event (the connection cap, for one) stay as simulator invariants; the components also export high-water marks so that a sampled view cannot miss a peak.
 
@@ -298,7 +339,7 @@ adapters          Prometheus text │ JSON stats │ CSV flush to disk │ log l
 2. **One collector.** `internal/obs` walks the components of an instance and assembles one instance snapshot (with the instance id, build and config fingerprint). The engine publishes it at a fixed interval; readers get the last published copy (decision D12). The test-side actors (the fake Postgres, the simulated workload, the load generator) hand their snapshots to a collector in the same way, so their numbers reach the same adapters.
 3. **Adapters read only the collector's output.** Elsewhere this plan calls them exporters; the words mean the same thing. All implement one small interface (take an instance snapshot, produce output) and pass one conformance test. The set: Prometheus text; JSON stats; the **CSV flush** (section 7.7), which is also the testing path; a structured one-line log; and, last, the hand-written **OTLP/HTTP push**, the proxy's end of the production chain to Prometheus (section 7.9). Adding an adapter touches no component. All standard library.
 
-The rule is enforced, not only stated: each adapter is its own package under `internal/obs/`, the import lint forbids any core and the engine from importing one, and no telemetry or database library can be imported anywhere (`go.mod` keeps its one requirement). Chunk 16's gate checks that adding the last adapter changed no component file.
+The rule is enforced, not only stated: each adapter is its own package under `internal/obs/`, the import lint forbids any core and the engine from importing one, and no telemetry or database library can be imported anywhere (`go.mod` keeps its one requirement). Chunk 15's gate checks that adding the last adapter changed no component file.
 
 Across instances, aggregation belongs to whoever reads the adapters' output: counters and gauges sum, histograms merge, ratios are recomputed from merged counters and never averaged. `internal/obs` ships the merge function, and the multi-instance scenarios use it.
 
@@ -324,11 +365,11 @@ Prometheus gets low-cardinality labels only: component, outcome, reason, mode, a
 
 | Area | In v1 | Out, and why |
 | --- | --- | --- |
-| Integration points | Per side (client, database): bytes, messages, connects, connect failures by class, time waiting on the database per statement | Per-statement-text metrics — unbounded cardinality |
+| Integration points | Per side (client, database): bytes, messages, connects, connect failures by class, TLS handshakes by outcome, time waiting on the database per statement | Per-statement-text metrics — unbounded cardinality |
 | Throughput | Accepted, completed, failed, rejected, shed — per component and per tenant | |
 | Back pressure and queues | Depth, capacity, **age of the oldest item**, queue-wait histogram, rule state (standing queue, dropping), LIFO on/off, sheds by reason | |
 | Connections | Open, idle, lent, connecting, creation rate, exhaustion events, closes by reason (idle, lifetime, dirty, error), breaker state and transitions | |
-| Contention | Coalescer: flights, hits, waiters per flight, cancellations, overflows. Batcher: batch-size histogram, poison events. Shell mailbox depth | Lock-wait timing — the engine has no locks; mailbox wait is the opt-in equivalent |
+| Contention | Coalescer: flights, hits, waiters per flight, cancellations, overflows. Shell mailbox depth | Lock-wait timing — the engine has no locks; mailbox wait is the opt-in equivalent |
 | Fairness | Per tenant: in flight, share, shed share, rate-gate refusals | |
 | Retries | Attempts, budget level, budget exhaustions | |
 | Status and errors | Counts by error-contract row (SQLSTATE and class), latency histograms per tenant × outcome | |
@@ -340,7 +381,7 @@ Each chunk states what its mechanism does to the health mapping.
 
 ### 7.6 Landing gate item
 
-A chunk that adds or changes a component does not land without: its `Snapshot()`; its mapping in every exporter that exists at that point, including its rows in the CSV metric registry (section 7.7); a test showing its counters move and conservation holds; a CSV-flush assertion for each of its end-to-end scenarios (section 6.5); its row in the coverage table; its health rule. Acceptance test of the whole (chunk 15): add latency to the database below every timeout and answer "what is slow?" from the stats surface alone; then stop the database and time how long until health says `degraded`.
+A chunk that adds or changes a component does not land without: its `Snapshot()`; its mapping in every exporter that exists at that point, including its rows in the CSV metric registry (section 7.7); a test showing its counters move and conservation holds; a CSV-flush assertion for each of its end-to-end scenarios (section 6.5); its row in the coverage table; its health rule. Acceptance test of the whole (chunk 14): add latency to the database below every timeout and answer "what is slow?" from the stats surface alone; then stop the database and time how long until health says `degraded`.
 
 ### 7.7 The CSV flush adapter and its schema (version 1)
 
@@ -359,7 +400,7 @@ The CSV adapter flushes snapshots to files on disk. It has two purposes: evidenc
 | `flush_seq` | integer | Publish sequence number of the snapshot, from 0. In the simulator all instances publish at the same virtual instants, so equal values mean the same instant |
 | `t_ns` | integer | Nanoseconds since the run began on the driver's clock: virtual time in tier S, the monotonic clock in tier R. The adapter stamps it; the snapshot itself still carries no time |
 | `instance` | text | Instance id |
-| `component` | text | `pool`, `admission`, `coalescer`, `batcher`, `retry`, `wire`, `classifier`, `engine`, `obs`; and from the test side `fakepg`, `workload`, `loadgen`, `simnet` |
+| `component` | text | `pool`, `admission`, `coalescer`, `retry`, `wire`, `classifier`, `engine`, `obs`; and from the test side `fakepg`, `workload`, `loadgen`, `simnet` |
 | `metric` | text | A name from the metric registry (below) |
 | `kind` | text | `counter` (cumulative since start, never decreases) or `gauge` (value at the snapshot) |
 | `tenant`, `outcome`, `reason`, `mode` | text | The label columns of section 7.4, always present, empty when a metric does not use one. The tenant column is **not** bounded here: every tenant has its own rows |
@@ -429,7 +470,7 @@ component Snapshot() → collector → OTLP adapter ──OTLP/HTTP JSON push─
 - **Collector.** Receives OTLP over HTTP, batches, and exposes the metrics on a Prometheus endpoint, with resource attributes turned into labels so that `instance` survives. The fleet view is then a sum over `instance` in Prometheus, the same merge rule as everywhere else.
 - **Prometheus.** Scrapes the Collector. The Collector exposing an endpoint for Prometheus to scrape is chosen over the Collector writing to Prometheus by remote write because it needs no extra Prometheus flags; either satisfies the chain.
 - **Cardinality.** Unchanged from section 7.4: Prometheus sees component, outcome, reason, mode and the bounded tenant label. Per-tenant detail stays in the snapshot, JSON and CSV.
-- **Runnable, not only drawn.** Chunk 16 ships a docker-compose dev setup for the Collector and Prometheus leg (`deploy/obs-dev/`, started with `make obs-up`), and a check that runs a scenario through the whole chain and compares Prometheus with the CSV flush of the same run. Details are in chunk 16.
+- **Runnable, not only drawn.** Chunk 15 ships a docker-compose dev setup for the Collector and Prometheus leg (`deploy/obs-dev/`, started with `make obs-up`), and a check that runs a scenario through the whole chain and compares Prometheus with the CSV flush of the same run. Details are in chunk 15.
 - **The Prometheus text endpoint stays** (`/metrics` on the admin port) for a direct scrape, for `curl`, and for setups with no Collector. The two routes carry the same metric names and labels, checked by a test, and one Prometheus should use one of them, not both.
 
 ---
@@ -462,7 +503,7 @@ Validation at load, failing closed: every per-instance value is at least 1; rema
 | Rate gate (GCRA) | **Multiplies**; divided by N in config; still weak if a tenant is unevenly spread | Per-instance state | Same scenario |
 | Retry budget | Ratio **survives**; the bucket floor **multiplies** and is divided by N | N instances each ≤ 10% is a fleet ≤ 10% | Retry-storm scenario at 3 instances |
 | Adaptive limit (AIMD) | **Survives** | N independent AIMD loops on one bottleneck is the case Chiu and Jain analysed; each reads database latency itself | Backend stall at 3 instances: sum of limits and convergence |
-| Batching, coalescing safety, error contract | **Survive** | Local to a connection or an instance | — |
+| Coalescing safety, error contract, TLS | **Survive** | Local to a connection or an instance; every instance loads the same certificate | — |
 | Metrics | Per instance; merged outside | Section 7.1 | Merge test |
 | Loss of an instance | Survivors receive its clients as a reconnection burst | Chain reaction (*Release It!*) | One of three killed at 80% load: survivors shed, do not queue; the fleet connection bound holds |
 
@@ -470,7 +511,7 @@ The weakened and conditional rows are measured exactly in the simulator (three e
 
 ### 8.3 Graceful drain
 
-On SIGTERM an instance: reports `degraded (draining)` on health; stops accepting new client connections; answers new work from idle clients with the drain error (pre-forward, safe to retry elsewhere); lets transactions in progress finish, bounded by the statement deadline plus one second; closes idle database connections as they free up; exits. Health and stats stay answerable throughout. Every component has a `draining` input and its own refusal class from its first chunk; chunk 14 only sequences them. Failure accounting for a restart has three classes — refused fast, timed out, cut mid-answer — and the target for the third is zero.
+On SIGTERM an instance: reports `degraded (draining)` on health; stops accepting new client connections; answers new work from idle clients with the drain error (pre-forward, safe to retry elsewhere); lets transactions in progress finish, bounded by the statement deadline plus one second; closes idle database connections as they free up; exits. Health and stats stay answerable throughout. Every component has a `draining` input and its own refusal class from its first chunk; chunk 13 only sequences them. Failure accounting for a restart has three classes — refused fast, timed out, cut mid-answer — and the target for the third is zero.
 
 ---
 
@@ -478,7 +519,7 @@ On SIGTERM an instance: reports `degraded (draining)` on health; stops accepting
 
 Three of these are **generated from code by a test and held by that test**, so the document cannot drift from the behaviour: `docs/error-contract.md`, `docs/timeout-budget.md`, `docs/capacity-table.md`. They start in chunk 5 or 6 and gain rows with each chunk.
 
-### 9.1 Error contract (initial proposal; codes are fixed in chunk 5)
+### 9.1 Error contract (initial table; codes are fixed in chunk 5)
 
 "Pre-forward" means no byte of the request reached the database. Private SQLSTATE subclasses (`M..`) sit inside standard classes so drivers map them sensibly.
 
@@ -489,6 +530,8 @@ Three of these are **generated from code by a test and held by that test**, so t
 | Database marked down (breaker open) | `ERROR 53M03` | No | No | Yes, later |
 | Coalescer waiter cap or shared-reply cap exceeded | `ERROR 53M04` | No (for this caller) | No | Yes |
 | Instance draining | `ERROR 53M05`, then the connection is closed when idle | No | No | Yes, on another instance |
+| Plaintext startup message while `client_tls.mode` is `require` | `FATAL 28000`, client connection closed | No | No | No — set the client's `sslmode` |
+| TLS handshake failed or timed out | Client connection closed; no Postgres message can be sent | No | No | Caller's choice |
 | Feature on the reject list; extended-protocol message | `ERROR 0A000` (feature not supported) | No | No | No — change the client |
 | Cancelled while queued | `ERROR 57014` | No | No | Caller's choice |
 | Database connection lost or reply timed out after a statement classified read-only was sent, outside a transaction | `ERROR 08006`, connection stays usable | Yes | No, as classified | Yes |
@@ -498,7 +541,7 @@ Three of these are **generated from code by a test and held by that test**, so t
 | Reply already partly sent to the client when the database connection failed | Client connection closed — never a short reply that looks complete | Yes | Per the rows above | Per the rows above |
 | An error from Postgres itself | Passed through unchanged | Yes | As Postgres says | As Postgres says |
 
-The proxy's own retry (chunk 13) may act only on a failure where the "reached the database" column is "No" for certain — for example a lent connection found dead before the first byte was written.
+The proxy's own retry (chunk 12) may act only on a failure where the "reached the database" column is "No" for certain — for example a lent connection found dead before the first byte was written.
 
 ### 9.2 Timeout budget (initial values, each marked "initial" and tuned by a named experiment)
 
@@ -506,13 +549,13 @@ Every wait is bounded and an inner wait always ends before the outer one. Config
 
 | Wait | Initial | Ends with |
 | --- | --- | --- |
-| Client startup and authentication | 5 s | Connection closed |
+| Client startup: the TLS request exchange, the TLS handshake and authentication, together | 5 s | Connection closed |
 | Client mid-message read (a partial message) | 5 s | Connection closed |
 | Client idle between transactions | 10 min | Connection closed |
 | Client idle inside a transaction | 5 s | Rollback, `25P03` |
 | Queue wait | Set by the queue rule (interval 100 ms, target 5 ms; both configurable and to be reasoned against database service time) | `53M01` |
 | Waiting for a connection | None separate — it is the queue wait (D3) | — |
-| Database connect, including authentication | 2 s | Counts toward the breaker |
+| Database connect, including the TLS handshake when configured, and authentication | 2 s | Counts toward the breaker |
 | Database statement (send to end of reply) | 30 s | Cancel, then the dirty-connection table; `08006`/`08007` |
 | Coalesced flight | Same as the statement deadline; outlives any single waiter | Shared error |
 | Cancel and clean-up of a dirty connection | 1 s | Connection closed |
@@ -521,17 +564,17 @@ Every wait is bounded and an inner wait always ends before the outer one. Config
 
 ### 9.3 Capacity table
 
-One row per bounded thing: what it protects, its capacity and config key, what happens when it is full, its deadline, its gauge. Initial rows: client connections; clients in startup (a separate cap, Odyssey's idea — it is the client-side half of the reconnection storm); database connections; connections being opened; per-tenant queue; total queued; coalescer flights; waiters per flight; shared-reply bytes; batch size; per-client reply buffer; shell mailboxes; active-tenant states; concurrent cancels. A parse-time check asserts the gates in front of the pool sum to something the pool can serve.
+One row per bounded thing: what it protects, its capacity and config key, what happens when it is full, its deadline, its gauge. Initial rows: client connections; clients in startup (a separate cap, Odyssey's idea — it is the client-side half of the reconnection storm); database connections; connections being opened; per-tenant queue; total queued; coalescer flights; waiters per flight; shared-reply bytes; per-client reply buffer; shell mailboxes; active-tenant states; concurrent cancels. A parse-time check asserts the gates in front of the pool sum to something the pool can serve.
 
 ### 9.4 Reject list (transaction pooling; derived from RDS Proxy's pinning triggers, I27, and PgBouncer's and Hyperdrive's transaction-mode tables)
 
-Rejected with `0A000` before anything is sent: session `SET` and `RESET` (but `SET LOCAL` inside a transaction is allowed); `PREPARE`, `EXECUTE`, `DEALLOCATE`; `LISTEN`, `UNLISTEN`; `DECLARE … WITH HOLD`; temporary tables; session advisory-lock functions; `DISCARD`; `LOAD`; `COPY`; every extended-protocol message; startup parameters that differ from the pool's fixed session settings (other than `application_name`, which is accepted and ignored). The classifier is a lexer (strings, dollar quotes, comments), not a SQL parser, and is deliberately conservative: when it cannot tell, a statement is still forwarded but is never shared or batched. Limits are stated in the book: a function or view can hide session changes or side effects; D8's second line of defence catches reported settings only.
+Rejected with `0A000` before anything is sent: session `SET` and `RESET` (but `SET LOCAL` inside a transaction is allowed); `PREPARE`, `EXECUTE`, `DEALLOCATE`; `LISTEN`, `UNLISTEN`; `DECLARE … WITH HOLD`; temporary tables; session advisory-lock functions; `DISCARD`; `LOAD`; `COPY`; every extended-protocol message; startup parameters that differ from the pool's fixed session settings (other than `application_name`, which is accepted and ignored). The classifier is a lexer (strings, dollar quotes, comments), not a SQL parser, and is deliberately conservative: when it cannot tell, a statement is still forwarded but is never shared. Limits are stated in the book: a function or view can hide session changes or side effects; D8's second line of defence catches reported settings only.
 
 ---
 
 ## 10. *Release It!* mapping
 
-Source: Nick's notes at `/root/Software/book-notes/books/release-it/` — a teaching project ("litefleet": 18 planted flaws fixed over 12 lessons, plus 8 review procedures), read in full for the lessons and procedures. **Limits:** the notes are secondhand; the book itself was not read (the PDF is on Drive, which this run could not reach); the knowledge store has no *Release It!* entry (ten searches, all recorded as misses). The notes do not contain the book's material on pooled connections going dead silently (firewall idle timeouts, half-open sockets); that gap is open question 6. Full mining report with citations: `agent_work/phase1/research/release-it-mining.md`.
+Source: Nick's notes at `/root/Software/book-notes/books/release-it/` — a teaching project ("litefleet": 18 planted flaws fixed over 12 lessons, plus 8 review procedures), read in full for the lessons and procedures. **Limits:** the notes are secondhand; the book itself was not read in Phase 1; the knowledge store has no *Release It!* entry (ten searches, all recorded as misses). The notes do not contain the book's material on pooled connections going dead silently (firewall idle timeouts, half-open sockets). **Decided (ruling 6):** the book is consulted for exactly that before the pool chunk builds. The PDF is on vm-1 at `/root/briefs/release-it-book.pdf`; the mining step, its output and its place in the order are in chunk 7. Full mining report with citations: `agent_work/phase1/research/release-it-mining.md`.
 
 The notes' rule for a pattern: it is four decisions — where it sits, what numbers it needs, what the caller gets when it trips, which signal shows it tripped. Every protective mechanism in a chunk brief is written as that four-part row.
 
@@ -539,20 +582,20 @@ The notes' rule for a pattern: it is four decisions — where it sits, what numb
 
 | Pattern | Verdict | Where it lands |
 | --- | --- | --- |
-| Timeouts | **Adopt.** One generated budget table, inner before outer, checked at config load. "First-byte deadline ≥ longest legitimate work." Cancellation must be real: measure how late work stops after its deadline. | Section 9.2; starts in chunk 6, grows in 7, 8, 11, 14 |
+| Timeouts | **Adopt.** One generated budget table, inner before outer, checked at config load. "First-byte deadline ≥ longest legitimate work." Cancellation must be real: measure how late work stops after its deadline. | Section 9.2; starts in chunk 6, grows in 7, 8, 11, 13 |
 | Fail fast | **Adopt.** Fixed order per request: parse and classify → reject list → draining → breaker → rate gate → coalescer join → queue → lease. Each refusal has its own error and counter. | Chunks 5, 6, 7, 8, 10 |
 | Circuit breaker | **Adapt.** Exactly one: the database-down state on the pool, with a connect lockout. Only connection-class failures count; SQL errors never do. Half-open admits one trial. "A breaker without a fallback just fails faster" is accepted on purpose: with no cache, the fast pre-forward error is the fallback. No per-tenant or per-statement breakers. | Chunk 7 |
 | Bulkheads | **Adapt.** Per tenant, soft: a share that binds under saturation. The partition unit is the tenant from the first queue chunk (the notes found the unit was the decisive choice). It bounds database concurrency, not database CPU, and the book says so. **Adopt hard** for one thing: health and stats never draw on the data path (D12). | Chunks 6 (health path), 8, 9 |
-| Shed load | **Adopt.** Already the core. Added from the notes: measure the cost of a refusal; health and metrics are never shed. | Chunks 8–10, 15 |
+| Shed load | **Adopt.** Already the core. Added from the notes: measure the cost of a refusal; health and metrics are never shed. | Chunks 8–10, 14 |
 | Handshaking | **Adapt.** Postgres has no `Retry-After`; the handshake is a distinct SQLSTATE per refusal plus three-state health. | Chunks 5, 6 |
 | Create back pressure | **Adopt.** One request per client inside the proxy; unread requests stay in the socket; bounded reply buffers (D5). | Chunk 6 |
-| Steady state | **Adopt.** Every chunk brief has a row: what grows here, what removes it, which gauge shows the level. A tenant-churn soak asserts every size gauge levels off (three-point growth method). | Every chunk; the soak in chunk 14 |
-| Governor | **Adopt.** Floor, ceiling, maximum step and minimum interval on the adaptive limit; the retry budget; the creation-rate cap; hysteresis on the LIFO switch. A test drives each with a pathological signal. | Chunks 7, 8, 10, 13 |
+| Steady state | **Adopt.** Every chunk brief has a row: what grows here, what removes it, which gauge shows the level. A tenant-churn soak asserts every size gauge levels off (three-point growth method). | Every chunk; the soak in chunk 13 |
+| Governor | **Adopt.** Floor, ceiling, maximum step and minimum interval on the adaptive limit; the retry budget; the creation-rate cap; hysteresis on the LIFO switch. A test drives each with a pathological signal. | Chunks 7, 8, 10, 12 |
 | Test harness | **Adopt.** It is Commit 0. Taken from the notes: the assertion shape (error class + elapsed time within budget + bounded resources), the harness self-test, and the fault catalog below. | Chunks 1, 2 |
-| Let it crash | **Reject as a mechanism; keep as a scenario and as "destroy on doubt".** The proxy holds no durable state. | Chunk 14 (instance kill); D7 |
+| Let it crash | **Reject as a mechanism; keep as a scenario and as "destroy on doubt".** The proxy holds no durable state. | Chunk 13 (instance kill); D7 |
 | Decoupling middleware | **Reject.** Accept-now-deliver-later contradicts honest "may have been applied" errors. | — |
 | Transparency | **Adopt** as section 7. | Chunk 3 and every chunk |
-| Graceful drain | **Adopt.** Section 8.3. | Reserved from chunk 6; sequenced in chunk 14 |
+| Graceful drain | **Adopt.** Section 8.3. | Reserved from chunk 6; sequenced in chunk 13 |
 
 ### 10.2 Insights that changed the order or added steps
 
@@ -591,7 +634,7 @@ The reviewer of every chunk answers these, in writing, for the code in that chun
 
 ### 10.4 Fault catalog for the simulator (from the notes' 22 named fault modes plus the spec's list)
 
-Database side: refuses connections; accepts and never answers (at startup; after a query — the second is "a byte reached the database"); connect stalls; slow first byte (the spec's 150–200 ms stall); slow trickle of rows; fragmented delivery down to one byte, including inside a message header; reset before, during and after a reply and mid-transaction; garbage bytes and impossible lengths; a non-Postgres reply; a reply that ends without its end marker; very large rows and very many rows; unexpected state at checkout; unexpected `ParameterStatus`; killed (all connections reset at once), frozen (sockets open, nothing moves), restarted cold; `max_connections` reached; latency sitting exactly at a timeout boundary; some connections slow and others fine; half-open (peer gone, no reset seen); asymmetric latency. Client side: sends half a message and stops; stops reading replies; disconnects while queued, mid-statement, mid-transaction, while a coalesced waiter; reconnects in a burst; retries aggressively; sends a cancel. Load: open-loop arrival above capacity.
+Database side: refuses connections; answers `N` to a TLS request, or presents a certificate that fails verification, when the proxy requires TLS; accepts and never answers (at startup; after a query — the second is "a byte reached the database"); connect stalls; slow first byte (the spec's 150–200 ms stall); slow trickle of rows; fragmented delivery down to one byte, including inside a message header; reset before, during and after a reply and mid-transaction; garbage bytes and impossible lengths; a non-Postgres reply; a reply that ends without its end marker; very large rows and very many rows; unexpected state at checkout; unexpected `ParameterStatus`; killed (all connections reset at once), frozen (sockets open, nothing moves), restarted cold; `max_connections` reached; latency sitting exactly at a timeout boundary; some connections slow and others fine; half-open (peer gone, no reset seen); asymmetric latency. Client side: sends a TLS request and then stalls; fails the TLS handshake; sends plaintext bytes after a TLS request; sends a second TLS request after the upgrade; sends half a message and stops; stops reading replies; disconnects while queued, mid-statement, mid-transaction, while a coalesced waiter; reconnects in a burst; retries aggressively; sends a cancel. Load: open-loop arrival above capacity.
 
 ---
 
@@ -609,9 +652,10 @@ Apollo's post describes three gates (is the run valid, do repeats agree, did the
 - **Calibration** first: measure the real backend's capacity open-loop, write it to a file, and express every scenario as a fraction of it.
 - **Headlines are exact counts**, with latency percentiles second: database connections under 500 clients (measured, stated as clients ÷ pool — the spec's "19×" and "~15×" are labelled as a model, not our result); database reads per hot-key burst with and without coalescing; shed attribution by tenant; goodput. Then the quiet tenant's p99 under a noisy neighbour, unprotected FIFO against the full admission stack, in both CoDel modes.
 - Every run flushes its snapshots (proxy and load generator) to CSV at each publish interval (section 7.7). The report — the validity gate, medians and spread per arm, the A/A noise floor, the headline tables — is a set of SQL files run by DuckDB over the per-run files (sections 6.5 and 7.8). This replaces the in-repo median/spread script the first draft of this plan proposed. DuckDB is a tool the benchmark scripts need, like Docker; it is not a dependency of the Go module. Results are also emitted in Go benchmark text format so `benchstat` can read them.
+- **TLS on against TLS off** is one arm pair of the connection benchmark and of the reconnection storm (section 3.1, finding 8): the cost per statement and per reconnect is reported, with the A/A floor beside it.
 - The scripts ship in the repository so a reader can re-run them on real hardware.
 
-**Deliverable Nick added (steering answer 7): the trade-offs write-up.** A book chapter, "How much to trust these numbers" (source `book/chapters/…-benchmark-trade-offs.md`, Neon's prose from evidence gathered in chunk 15; also linked from the README). It must cover:
+**Deliverable Nick added (steering answer 7): the trade-offs write-up.** A book chapter, "How much to trust these numbers" (source `book/chapters/…-benchmark-trade-offs.md`, Neon's prose from evidence gathered in chunk 14; also linked from the README). It must cover:
 
 | Part | Content |
 | --- | --- |
@@ -625,13 +669,13 @@ Apollo's post describes three gates (is the run valid, do repeats agree, did the
 
 ## 12. Build flow and the landing gate
 
-### 12.1 Seats (from the seat ruling)
+### 12.1 Seats (from the seat ruling, as confirmed by ruling 1)
 
 | Seat | Role |
 | --- | --- |
 | **Fable** (orchestrator) | Writes each chunk's brief as a file, dispatches, runs the gates and the adversarial harnesses, final acceptance, lands (merge to main and push), keeps STATE.md, `agent_work/INDEX.md` and the C4 set current. Builds chunk 0 (scripts, CI, site — no product logic). |
 | **Opus** | Writes the Go product code and its tests — logic only, no comments or prose. A fresh agent in its own worktree per chunk; chunks in the same wave run concurrently. |
-| **Neon** (via Antigravity `agy`; OpenCode/OpenRouter only as a recorded fallback) | Reviews Opus's work (see open question 1), and writes **all** reader-facing prose — the book chapter, code comments, README, site copy, C4 explanatory text — once, late, per chunk, from the final verified evidence including every narrowed claim. |
+| **Neon** (via Antigravity `agy`; OpenCode/OpenRouter only as a recorded fallback) | **Reviews Opus's work** — every chunk, verdict PASS / NITS / FAIL, by a fresh agent. Decided by ruling 1: on this project the seat ruling governs over the global rule that only Fable reviews Opus builds; it is a project-scoped exception and the global rule is unchanged elsewhere. Neon also writes **all** reader-facing prose — the book chapter, code comments, README, site copy, C4 explanatory text — once, late, per chunk, from the final verified evidence including every narrowed claim. The review and the prose pass are separate fresh agents. |
 | **Astra** (`gpt-6-astra`) | Writes adversarial harnesses that try to break each chunk's stated claims; Fable runs them and records held / broken counts. |
 | Arbitration | A second FAIL, or a builder/reviewer standoff, goes to a top seat outside the build/review pair with the diff and both verdicts. |
 
@@ -641,8 +685,8 @@ Before each wave the orchestrator checks the usage gauges of every pool it is ab
 
 1. Fable writes the brief (purpose, deliverables, claims to be attacked, tests, snapshot obligations, the four-part row per mechanism, the steady-state row, files it may touch).
 2. A fresh Opus agent builds in its own worktree, tests first, with one planted-bug canary per chunk. Headless; exit file and log under `/root/runs/`.
-3. Review (verdict PASS / NITS / FAIL). In parallel, a fresh Astra agent writes the adversarial harness from the brief's claims, not from the code.
-4. One repair round by a fresh Opus agent, then re-review. A second FAIL goes to arbitration.
+3. Review by a fresh Neon agent through `agy` (verdict PASS / NITS / FAIL). In parallel, a fresh Astra agent writes the adversarial harness from the brief's claims, not from the code.
+4. One repair round by a fresh Opus agent, then re-review by Neon. A second FAIL goes to arbitration.
 5. Fable runs the local landing gate and the adversarial harness; claims that broke are fixed or narrowed in writing.
 6. Neon's prose pass, once, with the final evidence.
 7. Fable checks the C4 set against the code, lands, verifies the chapter is live on Pages, updates STATE.md.
@@ -658,9 +702,9 @@ A chunk lands only when all of these hold:
 4. The replay law holds for every scenario it adds.
 5. Lints pass (determinism, imports, bounds); `go.mod` still has one requirement.
 6. Generated contract documents are regenerated and their tests pass.
-7. Review verdict PASS, or NITS closed.
+7. Neon's review verdict PASS, or NITS closed.
 8. Adversarial results recorded: held and broken counts; every break fixed or the claim narrowed in writing.
-9. The *Release It!* checklist (section 10.3) answered by the reviewer; each mechanism has its four-part row and its steady-state row.
+9. The *Release It!* checklist (section 10.3) answered by the reviewer (Neon); each mechanism has its four-part row and its steady-state row.
 10. The multiplies / weakens / survives row for anything it adds (section 8.2).
 11. C4 diagrams match the code (a stale diagram is a defect).
 12. Neon's chapter is live on Pages and listed in the book's contents.
@@ -670,7 +714,7 @@ A chunk lands only when all of these hold:
 
 ## 13. The chunks
 
-Seventeen chunks after the foundation, each sized for one fresh builder. Sizes are rough product-code estimates, excluding tests; chunks marked ×2 add a mechanism and are budgeted at up to twice the estimate (section 10.2, item 12).
+Sixteen chunks after the foundation (ruling 7: size approved as amended), each sized for one fresh builder. Sizes are rough product-code estimates, excluding tests; chunks marked ×2 add a mechanism and are budgeted at up to twice the estimate (section 10.2, item 12).
 
 ### 13.1 Order and what can run together
 
@@ -691,20 +735,21 @@ Chunk 6  Walking skeleton (first end-to-end system; the e2e harness lands here)
    │
    ├── Chunk 9   Fairness                  ┐
    ├── Chunk 11  Coalescer                 ├ wave C
-   └── Chunk 13  Retry policy              ┘
+   └── Chunk 12  Retry policy              ┘
    │
-   ├── Chunk 10  Adaptive limit and rate gate   ┐ wave D
-   └── Chunk 12  Batching                       ┘
+Chunk 10  Adaptive limit and rate gate   (after chunk 9: it sets the limit the dispatcher enforces)
    │
-Chunk 14  Fleet configuration and graceful drain
-Chunk 15  Benchmarks and the trade-offs write-up
-Chunk 16  OTLP push exporter   (last build chunk)
-Chunk 17  Book finish          (assembly and polish only)
+Chunk 13  Fleet configuration and graceful drain
+Chunk 14  Benchmarks and the trade-offs write-up
+Chunk 15  OTLP push exporter   (last build chunk)
+Chunk 16  Book finish          (assembly and polish only)
 ```
+
+One step sits beside the chunks: the *Release It!* mining note (ruling 6) is written before chunk 7's brief, while wave A and chunk 6 build. It is described in chunk 7.
 
 Chunks in a wave build concurrently in separate worktrees and land one at a time; the engine's stage seams (set in chunk 6) keep their edits to `internal/proxy` small and separate. The `internal/sim` API is frozen after chunk 2; later chunks change it only through a change request to the orchestrator.
 
-For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; review per open question 1; adversarial Astra; prose Neon; gate, C4 and landing Fable), and "Landing" means the common gate of section 12.3 plus the chunk's own criteria.
+For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; review Neon; adversarial Astra; prose Neon; gate, C4 and landing Fable), and "Landing" means the common gate of section 12.3 plus the chunk's own criteria.
 
 ---
 
@@ -770,13 +815,13 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Purpose.** Speaking Postgres on both sides: taking a client through startup and login, and logging the proxy in to the database, as pure state machines that cope with bytes arriving in any fragments.
 
-**Deliverables.** `internal/pgwire`: the incremental framer (with a maximum message size); the client-facing session machine — TLS and GSS requests answered "no", startup message, tenant lookup by user, SCRAM-SHA-256 server side and trust, the parameter-status set, proxy-issued key data, cancel-request recognition, termination; the database-facing session machine — startup, SCRAM client side, collecting server parameters, key data, ready; SCRAM as pure functions shared with the simulator's fake and test clients; the query-cycle tracker that follows a reply to its end marker and reports the status byte, unsolicited messages and protocol surprises. Unknown but well-framed message types on the database side are passed through, not rejected.
+**Deliverables.** `internal/pgwire`: the incremental framer (with a maximum message size); the client-facing session machine — **the exchange before startup** (an `SSLRequest` answered `S` or `N` by `client_tls.mode`, a GSS encryption request answered `N`, at most one upgrade, any byte between an accepted `SSLRequest` and the handshake result a violation, a "start TLS" action out and a handshake-result event in; section 3.1), startup message, refusal of a plaintext startup when TLS is required, tenant lookup by user, SCRAM-SHA-256 server side accepting the GS2 headers `n,,` and `y,,` and never offering `-PLUS`, trust as a named test setting, the parameter-status set, proxy-issued key data, cancel-request recognition, termination; the database-facing session machine — the proxy's own `SSLRequest` when `backend_tls.mode` asks for one (an `N` answer is a connect failure), startup, SCRAM client side, collecting server parameters, key data, ready; SCRAM as pure functions shared with the simulator's fake and test clients; the query-cycle tracker that follows a reply to its end marker and reports the status byte, unsolicited messages and protocol surprises. Unknown but well-framed message types on the database side are passed through, not rejected.
 
-**Tests.** Golden bytes for every message we produce; every-chunking tests (a conversation split at every byte boundary gives the same events); fuzzing of the framer and both machines (no panic, bounded memory); SCRAM against the RFC 7677 test vector and against real Postgres (tier R); wrong password, unknown user, wrong database give the right fatal errors. e2e for this chunk, in the simulator: a simulated client completes startup through the two machines wired back-to-back to the fake Postgres, under one-byte delivery and under each startup-phase fault (accept and silence, reset mid-handshake, garbage), each ending in the expected error class within its deadline. CSV-flush assertion: startup failures by reason in the wire snapshot equal the startup faults injected by kind.
+**Tests.** Golden bytes for every message we produce; every-chunking tests (a conversation split at every byte boundary gives the same events); fuzzing of the framer and both machines (no panic, bounded memory); SCRAM against the RFC 7677 test vector and against real Postgres (tier R); wrong password, unknown user, wrong database give the right fatal errors. The exchange before startup, for every `client_tls.mode`: a default-style client (TLS request first), a plaintext client, a GSS request then a TLS request, a second TLS request after the upgrade, bytes sent early, a handshake that fails and one that never finishes; SCRAM with each GS2 header. e2e for this chunk, in the simulator: a simulated client completes startup through the two machines wired back-to-back to the fake Postgres, under one-byte delivery and under each startup-phase fault (accept and silence, reset mid-handshake, garbage), each ending in the expected error class within its deadline. In the simulator a TLS handshake is an event with an outcome (completed, failed, stalled), not cryptography; real `crypto/tls` runs first in chunk 6. CSV-flush assertion: startup failures by reason in the wire snapshot equal the startup faults injected by kind, and TLS requests by kind and answer equal the requests sent.
 
-**Observability.** Wire snapshot: startups begun, completed and failed by reason; authentication failures; messages and bytes by direction; protocol violations; oversized messages.
+**Observability.** Wire snapshot: startups begun, completed and failed by reason; pre-startup requests by kind and answer; TLS handshakes completed and failed by reason; plaintext refused; authentication failures; messages and bytes by direction; protocol violations; oversized messages.
 
-**Landing.** Fidelity against Postgres 17 for startup; determinism lint passes on the machines. Size: ~1,400 lines, ×2.
+**Landing.** Fidelity against Postgres 17 for startup, including its answers to a TLS request with `ssl` on and off; determinism lint passes on the machines. Size: ~1,500 lines (about 100 of them the TLS exchange), ×2.
 
 ---
 
@@ -784,9 +829,9 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Purpose.** Deciding, from the text of a statement, what the proxy may do with it — and fixing in generated, tested tables what the proxy tells a client when it refuses or fails.
 
-**Deliverables.** In `internal/pgwire`: the SQL lexer (strings, escape strings, dollar quotes, comments, identifiers, statement splitting); the classifier producing a work unit — reject (with reason), transaction control, read-only-provable, coalescable (with key), batchable; the reject list of section 9.4; the function allow-list. `internal/work`: the vocabulary types. The error table as code, with the generator and test for `docs/error-contract.md`; builders for every proxy-made reply (error plus the correct end marker; the discard-until-sync rule for extended-protocol messages). The reject-list document generated the same way.
+**Deliverables.** In `internal/pgwire`: the SQL lexer (strings, escape strings, dollar quotes, comments, identifiers, statement splitting); the classifier producing a work unit — reject (with reason), transaction control, read-only-provable, coalescable (with key); the reject list of section 9.4; the function allow-list. `internal/work`: the vocabulary types. The error table as code, with the generator and test for `docs/error-contract.md`; builders for every proxy-made reply (error plus the correct end marker; the discard-until-sync rule for extended-protocol messages). The reject-list document generated the same way.
 
-**Tests.** A classifier corpus (several hundred statements with expected classes, including hostile ones: keywords inside strings and comments, dollar-quoted bodies, data-changing common table expressions, locking clauses, multi-statement messages). Property: classification is identical for every way of padding with whitespace and comments. Conservative-by-construction test: any statement the lexer cannot fully tokenise is never coalescable or batchable. Differential test against real Postgres (tier R): every statement classed "transaction control: no" leaves status `I`; every statement classed read-only-provable leaves the fake's and the real table's write log unchanged. Fuzz: no panic. e2e for this chunk: each reject-list feature sent by a simulated client through the wire machines gets `0A000` and nothing reaches the fake Postgres (its statement counter stays zero). CSV-flush assertion: classifier rejects equal statements sent, and the fake Postgres statement count is 0.
+**Tests.** A classifier corpus (several hundred statements with expected classes, including hostile ones: keywords inside strings and comments, dollar-quoted bodies, data-changing common table expressions, locking clauses, multi-statement messages). Property: classification is identical for every way of padding with whitespace and comments. Conservative-by-construction test: any statement the lexer cannot fully tokenise is never coalescable. Differential test against real Postgres (tier R): every statement classed "transaction control: no" leaves status `I`; every statement classed read-only-provable leaves the fake's and the real table's write log unchanged. Fuzz: no panic. e2e for this chunk: each reject-list feature sent by a simulated client through the wire machines gets `0A000` and nothing reaches the fake Postgres (its statement counter stays zero). CSV-flush assertion: classifier rejects equal statements sent, and the fake Postgres statement count is 0.
 
 **Observability.** Classifier counters: statements by class, rejects by reason, unclassifiable. Error-contract counters keyed by row.
 
@@ -798,13 +843,13 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Purpose.** The first complete proxy: a client connects, runs statements and transactions, and gets correct answers through the proxy, in the simulator and against a real Postgres. Deliberately plain — a small fixed set of database connections and a bounded first-come queue — but with every seam the later chunks plug into.
 
-**Deliverables.** `internal/proxy`: the engine (decision D1) with its stage seams — classify, gate, coalesce, queue, lease, forward, release — each a small interface with a pass-through implementation; the transaction-lease lifecycle (lend on first statement, hold while status is `T` or `E`, release on `I`); reply relay with bounded buffers and back pressure both ways (D5); the dirty-connection rule in its simplest form (close on doubt); the "reached the database?" fact recorded for every failure; the `draining` input reserved. `internal/shell`: listeners, per-connection reader and writer goroutines, bounded mailboxes, deadlines on every socket operation, the admin listener on its own port serving health, JSON stats and Prometheus from the published snapshot. `internal/config`: the config file, validation, the fleet block (parsed; division used from chunk 7). `cmd/mini-gateway`. `cmd/loadgen` in its first form (open-loop, intended-send-time, one workload). `test/e2e`: the scenario harness for tier S and tier R, with the Docker setup for Postgres 17. `docs/timeout-budget.md` and `docs/capacity-table.md` generators. `docs/extension-seams.md`. The fault × path matrix, first rows.
+**Deliverables.** `internal/proxy`: the engine (decision D1) with its stage seams — classify, gate, coalesce, queue, lease, forward, release — each a small interface with a pass-through implementation; the transaction-lease lifecycle (lend on first statement, hold while status is `T` or `E`, release on `I`); reply relay with bounded buffers and back pressure both ways (D5); the dirty-connection rule in its simplest form (close on doubt); the "reached the database?" fact recorded for every failure; the `draining` input reserved. `internal/shell`: listeners, per-connection reader and writer goroutines, bounded mailboxes, deadlines on every socket operation, **TLS on both legs** (section 3.1: the pre-startup request read as exactly 8 bytes with nothing buffered across the upgrade, `crypto/tls` server side for clients and client side for the database, the handshake inside the startup and connect deadlines, certificate loading), the admin listener on its own port serving health, JSON stats and Prometheus from the published snapshot. `internal/config`: the config file, validation, the `client_tls` and `backend_tls` blocks (fail closed on a missing or unreadable certificate), the fleet block (parsed; division used from chunk 7). `cmd/mini-gateway`. `cmd/loadgen` in its first form (open-loop, intended-send-time, one workload). `test/e2e`: the scenario harness for tier S and tier R, with the Docker setup for Postgres 17. `docs/timeout-budget.md` and `docs/capacity-table.md` generators. `docs/extension-seams.md`. The fault × path matrix, first rows.
 
-**Tests.** e2e, both tiers: *results through the proxy equal results direct* (same workload, same seed); *transaction integrity* — with many clients running interleaved multi-statement transactions over few connections, no statement of one client ever runs on a connection inside another client's transaction (checked from the fake's log, exactly; this is the core safety property of transaction pooling); *fragmentation* — one-byte delivery on both sides changes nothing; *reject list end-to-end*; *client vanishes mid-statement and mid-transaction* — the connection is not reused dirty; *database killed mid-statement* — the client gets the row of the error contract the matrix predicts; *slow reader* — bounded memory, proxy stops reading the database. Shell tests under `synctest` and `-race`: no goroutine left after any teardown path; mailboxes never exceed their cap. `psql` and `pgbench -S`-style simple-protocol smoke runs against the real binary (tier R). **CSV flush in the harness:** from this chunk every scenario in both tiers flushes and runs the round-trip check (section 6.5); the real binary runs with `obs.csv.dir` set, so tier R numbers are read from files with no metrics server. SQL assertions: conservation per instance; proxy completed = workload completed; error-contract counts by row = faults injected.
+**Tests.** e2e, both tiers: *results through the proxy equal results direct* (same workload, same seed); *transaction integrity* — with many clients running interleaved multi-statement transactions over few connections, no statement of one client ever runs on a connection inside another client's transaction (checked from the fake's log, exactly; this is the core safety property of transaction pooling); *fragmentation* — one-byte delivery on both sides changes nothing; *reject list end-to-end*; *client vanishes mid-statement and mid-transaction* — the connection is not reused dirty; *database killed mid-statement* — the client gets the row of the error contract the matrix predicts; *slow reader* — bounded memory, proxy stops reading the database. Shell tests under `synctest` and `-race`: no goroutine left after any teardown path; mailboxes never exceed their cap. `psql` and `pgbench -S`-style simple-protocol smoke runs against the real binary (tier R). **TLS, tier R and shell tests** (real `crypto/tls`, a test CA generated at test time with the standard library): `psql` with `sslmode=require` and `verify-full` through the proxy, and `sslmode=disable` refused with `28000` under `require`; the database leg under each `backend_tls.mode` against a Postgres with `ssl=on`, checked in `pg_stat_ssl`, with a wrong CA giving a connect failure of its class; plaintext bytes smuggled in with the TLS request close the connection; a client that stalls mid-handshake is closed at the startup deadline with no goroutine left; the whole tier R suite of this chunk runs with client TLS on. **CSV flush in the harness:** from this chunk every scenario in both tiers flushes and runs the round-trip check (section 6.5); the real binary runs with `obs.csv.dir` set, so tier R numbers are read from files with no metrics server. SQL assertions: conservation per instance; proxy completed = workload completed; error-contract counts by row = faults injected.
 
-**Observability.** Engine snapshot: clients connected, in startup, in transaction; requests by stage and outcome; statement-time histogram (database send to end of reply); relay buffer high-water; the three-state health (only `ok` / `failed` rules so far, plus "database unreachable → degraded").
+**Observability.** Engine snapshot: clients connected, in startup, in transaction; requests by stage and outcome; statement-time histogram (database send to end of reply); relay buffer high-water; client connections by TLS version; the three-state health (only `ok` / `failed` rules so far, plus "database unreachable → degraded").
 
-**Landing.** The first chapter that shows a working system. Timeout nesting validated at load. This is an integration-shaped chunk: sized large, with arbitration budget. Size: ~2,200 lines, ×2.
+**Landing.** The first chapter that shows a working system. Timeout nesting validated at load. This is an integration-shaped chunk: sized large, with arbitration budget. Size: ~2,450 lines (about 250 of them TLS, config and certificates), ×2.
 
 ---
 
@@ -812,13 +857,15 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Purpose.** The connection pool that is the point of the project: a hard cap that holds under a storm, a limit on how fast connections are opened, and sane handling of connections that go bad.
 
+**Step before the build: mine the book (ruling 6).** Before the brief for this chunk is written, a fresh agent dispatched by Fable reads *Release It!* itself — `/root/briefs/release-it-book.pdf` on vm-1 (SHA-256 `d4818e6417c5277123f11fd2d2adeff67505ae5b35999247023da26a2c8bd6cc`) — for the material Nick's notes lack: pooled connections that die without either end being told (firewall and NAT idle-timeout drops, half-open sockets), how the book says to detect them (keepalives, checks before reuse, dead-connection detection), and what it says about waits at checkout. The output is one short note, `docs/knowledge/release-it-pooled-connections.md`, with page references, in four parts: what the book says; each point mapped to the deliverable, test or fault-catalog entry of this chunk that already covers it; every gap, written as a concrete change to this chunk's brief (a fault mode, a timeout, a config default, a counter); and points not adopted, with the reason. Fable folds the gaps into the brief and into sections 9.2, 10.3 and 10.4 where they change, and indexes the note in `agent_work/INDEX.md`. The brief cites the note, and the builder is not dispatched without it. The step runs while wave A and chunk 6 build, so it delays nothing. What the note is checked against is this chunk's present cover of those failures, taken from the spec's list: the half-open and frozen-database faults, idle timeout and lifetime with jitter, and the check before reuse after long idle.
+
 **Deliverables.** `internal/pool` core: accounting with open + connecting ≤ cap; a cap on concurrent connects and a creation rate (not PgBouncer's one-at-a-time); idle timeout and maximum lifetime with jitter (no synchronized expiry); check before reuse after long idle; the single breaker — database-down detection from connection-class failures, connect lockout, one trial when half-open, immediate `53M03` while open; the full dirty-connection table (cancel, bounded wait, rollback, reuse or close); the idle-in-transaction deadline; client-issued cancel requests mapped to the lent connection, with a cap on concurrent cancels; the separate cap on clients in startup; fleet division of the connection and creation-rate budgets. Wiring into the engine's lease stage.
 
-**Tests.** Core property tests against a reference model with synthetic work units (no Postgres types). e2e, both tiers unless noted: **hard connection cap** — 1,000 simultaneous client connects, open + connecting never exceeds the cap (exact, simulator); **reconnection storm** — 500 clients dropped and reconnecting within 50 ms, database connections stay flat at the pool size, against the chunk 2 baseline where the database refuses clients; **slow consumer / half-open** — clients that stop reading are torn down at the write deadline and no connection leaks; **cold start** — empty pool, full load at time zero: dial rate ≤ the cap; **synchronized lifetimes** — no dial spike; **database restart** — breaker opens, requests cost O(1) with no dial, one trial, recovery without a dogpile, goodput returns; **idle-in-transaction** client is rolled back and its connection reused; **cancel** reaches the right statement and never another client's. Ablation: with the creation-rate cap off, the cold-start scenario exceeds the bound. Headline benchmark 1 (tier R): database connections under 500 clients, direct against proxy. CSV-flush assertions: open + connecting ≤ cap in every flush and the fake's connection peak ≤ cap; storm against the baseline run as a join; dials per interval ≤ the creation limit; completed-per-interval recovers after the restart.
+**Tests.** Core property tests against a reference model with synthetic work units (no Postgres types). e2e, both tiers unless noted: **hard connection cap** — 1,000 simultaneous client connects, open + connecting never exceeds the cap (exact, simulator); **reconnection storm** — 500 clients dropped and reconnecting within 50 ms, database connections stay flat at the pool size, against the chunk 2 baseline where the database refuses clients (tier R runs it with client TLS on, so the handshakes are part of the storm and the cap on clients in startup is shown to bound them); **slow consumer / half-open** — clients that stop reading are torn down at the write deadline and no connection leaks; **cold start** — empty pool, full load at time zero: dial rate ≤ the cap; **synchronized lifetimes** — no dial spike; **database restart** — breaker opens, requests cost O(1) with no dial, one trial, recovery without a dogpile, goodput returns; **idle-in-transaction** client is rolled back and its connection reused; **cancel** reaches the right statement and never another client's. Ablation: with the creation-rate cap off, the cold-start scenario exceeds the bound. Headline benchmark 1 (tier R): database connections under 500 clients, direct against proxy. CSV-flush assertions: open + connecting ≤ cap in every flush and the fake's connection peak ≤ cap; storm against the baseline run as a join; dials per interval ≤ the creation limit; completed-per-interval recovers after the restart.
 
 **Observability.** Pool snapshot: open, idle, lent, connecting; creation rate; closes by reason; exhaustion events; breaker state and transitions; dirty-table outcomes; cancels; lease-time histogram. Health: `degraded` while the breaker is open.
 
-**Landing.** The spec's pool invariants; section 8.2 rows for cap and creation rate. Size: ~1,500 lines, ×2.
+**Landing.** The spec's pool invariants; section 8.2 rows for cap and creation rate; the mining note exists and every gap it names is closed in the code or declined in writing. Size: ~1,500 lines, ×2.
 
 ---
 
@@ -868,31 +915,17 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Purpose.** Turning a stampede of identical reads into one or two database reads — without ever sharing a write, and without one caller's cancellation hurting another.
 
-**Deliverables.** `internal/coalesce`: the flight table keyed by statement text; leader and followers; the two join modes of decision D10 (strict by default); a flight deadline independent of every waiter; waiter reference counting — the database work is cancelled only when the last waiter leaves; a caller that has left gets its own error even if a result arrives at that moment; a cap on waiters per flight (`53M04` past it) and on the shared reply's size (past it, followers are refused and the key is not shared again for a while — a bounded, expiring list); shared errors; followers take no queue slot and no connection but are counted per tenant; entries removed on completion. Wiring into the engine's coalesce stage; the reply is stored once as the database's message bytes and each recipient gets its own end marker. Config: `off | auto | hinted` (hinted = only statements carrying an opt-in comment) and the scope of the key.
+**Deliverables.** `internal/coalesce`: the flight table keyed by statement text; leader and followers; the two join modes of decision D10 (strict by default, relaxed selectable — ruling 2); a flight deadline independent of every waiter; waiter reference counting — the database work is cancelled only when the last waiter leaves; a caller that has left gets its own error even if a result arrives at that moment; a cap on waiters per flight (`53M04` past it) and on the shared reply's size (past it, followers are refused and the key is not shared again for a while — a bounded, expiring list); shared errors; followers take no queue slot and no connection but are counted per tenant; entries removed on completion. Wiring into the engine's coalesce stage; the reply is stored once as the database's message bytes and each recipient gets its own end marker. Config: `off | auto | hinted` (hinted = only statements carrying an opt-in comment) and the scope of the key.
 
 **Tests.** Property tests on the flight table with synthetic units. e2e: **at most one in-flight read per key** (exact, simulator); **writes are never coalesced** — every write in the workload appears in the fake's write log exactly once; **cancel 99 of 100** — the 100th waiter gets a valid reply; **all 100 cancel** — the database work is cancelled and the connection handled by the dirty table; **viral hot key** (spec suite 2) — 1,000 concurrent identical reads with 50 ms database latency: 1–2 database reads, p99 near one service time in relaxed mode and near two in strict mode, both reported; **read-your-own-write** — a client that writes then reads the same key never gets the old value in strict mode, and the same scenario shows the window in relaxed mode; statements inside transactions are never shared; a slow follower does not delay the others; shared error on a failed flight, with no re-drive stampede. Ablation: coalescer off gives 1,000 reads. Headline benchmark 2 (tier R): database reads and p99 under Zipf skew (exponent stated; the spec's "99/1" restated as what the generator actually produces) with and without coalescing. CSV-flush assertions: database reads for the burst ≤ 2 against 1,000 in the ablation arm (a join of two arms); flights + hits = shareable reads.
 
 **Observability.** Flights started, hits, waiters-per-flight histogram, cancellations (waiter and flight), overflows by cap, shared errors, table size; opt-in per-key hotness. Per tenant: coalesced hits.
 
-**Landing.** The spec's three coalescing invariants; section 8.2 row "weakens to N" prepared for measurement in chunk 14. Size: ~1,100 lines, ×2.
+**Landing.** The spec's three coalescing invariants; section 8.2 row "weakens to N" prepared for measurement in chunk 13. Size: ~1,100 lines, ×2.
 
 ---
 
-### Chunk 12 — Batching
-
-**Purpose.** Saving round trips when work is already waiting: sending several independent single-statement requests to a free database connection in one write. No timer, and never at the risk of one client's statement running in another's transaction.
-
-**Deliverables.** `internal/batch`: the take rule (when a connection frees up, take what is queued and eligible, up to `max_batch` and `max_bytes`; one item with nothing else waiting goes alone at once); eligibility from the classifier (decision D9); in-order reply splitting at end markers; the poison rule (any non-idle status ends the batch: connection closed, remaining members get `08007` or `08006` by class); accounting — each member counts toward its tenant's in-flight and the adaptive limit; time spent behind earlier members of a batch is recorded separately and is not queue wait. Config: `off` (default) / `on`. Wiring into the dispatcher and the forward stage.
-
-**Tests.** Property tests: batch ≤ caps; replies matched to requesters in order; with one request in the system, enqueue-to-write is zero on the virtual clock. e2e: **batch safety** — across seeds and workloads mixing transactions and single statements, no statement ever runs inside another client's transaction (the chunk 6 integrity check, now with batching on); **the hazard, planted** — a fake-Postgres fault that returns a non-idle status mid-batch: the connection is closed and no later member's reply is delivered as if clean; an error in one member does not affect the others; a member's client vanishing mid-batch; fairness still holds with batching on. Ablation and measurement: round trips and latency with batching off against on, at low load (no added latency) and at saturation, in the simulator and tier R — the result decides the default, and "no gain on a local socket" is an acceptable, reported outcome. CSV-flush assertions: round trips and in-batch wait percentiles per arm; the query's output is the evidence for the default.
-
-**Observability.** Batch-size histogram, batched share of requests, in-batch wait histogram, poison events, ineligible reasons.
-
-**Landing.** The safety property over a sweep; the measured trade stated in numbers. Size: ~800 lines, ×2.
-
----
-
-### Chunk 13 — Retry policy
+### Chunk 12 — Retry policy
 
 **Purpose.** Making sure the proxy never turns a partial outage into a retry storm — its own retries are a deliberate, budgeted choice that is off unless switched on.
 
@@ -906,7 +939,7 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 ---
 
-### Chunk 14 — Fleet configuration and graceful drain
+### Chunk 13 — Fleet configuration and graceful drain
 
 **Purpose.** Running three proxies in front of one database honestly: measuring what gets weaker, proving what holds, and shutting an instance down without cutting anyone off.
 
@@ -920,11 +953,11 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 ---
 
-### Chunk 15 — Benchmarks and the trade-offs write-up
+### Chunk 14 — Benchmarks and the trade-offs write-up
 
 **Purpose.** The proof a reader can re-run: one command each for tests, chaos and benchmarks, and an honest account of how far the numbers can be trusted.
 
-**Deliverables.** `cmd/loadgen` complete (workload profiles: fan-in, Zipf, noisy neighbour, storm; calibration mode; 3-significant-digit histograms; "could not send" count). `scripts/bench.sh` and `make bench`: calibration file, A/A run, interleaved runs, validity gate, the in-repo stats report, verdicts including "inconclusive", a CSV flush per run and Go-benchmark-format output; the report's SQL files under `test/analysis/bench/` (validity gate, medians and spread per arm, A/A noise floor, headline tables), run by DuckDB over the per-run files. `make chaos` running every named scenario. The three headline tables regenerated under the full method. The observability acceptance test (section 7.6). The long-budget runs: sweeps, soak, timed fuzzing, `-race` long. Evidence pack for Neon: every number with its kind and its confidence row. README proof section. **The trade-offs chapter** (section 11).
+**Deliverables.** `cmd/loadgen` complete (workload profiles: fan-in, Zipf, noisy neighbour, storm; TLS on or off; calibration mode; 3-significant-digit histograms; "could not send" count). `scripts/bench.sh` and `make bench`: calibration file, A/A run, interleaved runs, validity gate, the in-repo stats report, verdicts including "inconclusive", a CSV flush per run and Go-benchmark-format output; the report's SQL files under `test/analysis/bench/` (validity gate, medians and spread per arm, A/A noise floor, headline tables), run by DuckDB over the per-run files. `make chaos` running every named scenario. The three headline tables regenerated under the full method. The TLS-on against TLS-off arms (section 11). The observability acceptance test (section 7.6). The long-budget runs: sweeps, soak, timed fuzzing, `-race` long. Evidence pack for Neon: every number with its kind and its confidence row. README proof section. **The trade-offs chapter** (section 11).
 
 **Tests.** The load generator's own: samples = intended sends; a stalled server shows in the corrected latency; achieved-rate gate rejects a throttled run. The A/A run reports "no difference". Bounded memory and no goroutine growth under a sustained 10× overload on the real binary. The report queries are tested on recorded run directories: a throttled run is rejected by the validity query; an A/A pair gives "no difference"; a planted difference above the margin is found. The "what is slow?" acceptance test is answered once from the stats surface and once by a query on the flushed files.
 
@@ -934,7 +967,7 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 ---
 
-### Chunk 16 — OTLP push exporter (last build chunk)
+### Chunk 15 — OTLP push exporter (last build chunk)
 
 **Purpose.** The final adapter, and with it the production path: snapshots → collector → OTLP push → OpenTelemetry Collector → Prometheus (section 7.9). It also shows the snapshot design paying off: a new way to ship metrics is added without touching any component. It stays the last build chunk and the last observability chunk.
 
@@ -972,7 +1005,7 @@ services:
 
 ---
 
-### Chunk 17 — Book finish
+### Chunk 16 — Book finish
 
 **Purpose.** Assembly and polish only. The chapters already exist and are live; this chunk makes them one book.
 
@@ -993,35 +1026,36 @@ Every scenario has one owning chunk — the first chunk in which it can run — 
 | Fake Postgres fidelity script | section 6.2 | 2 | S+R | extended by 4, 5 |
 | CSV flush: schema version 1, round trip, byte-identical files; baseline counts asserted with DuckDB; the assertion runner's self-tests | observability amendment | 3 | S | every scenario from chunk 6 on flushes and adds its SQL assertions (section 6.5) |
 | Startup and authentication under fragmentation and faults | spec 4.1 | 4 | S, R | — |
+| The TLS request exchange in every mode, with its faults (handshake as a simulated event) | ruling 5 | 4 | S | 6 |
+| Real TLS on both legs: `psql` over TLS through the proxy, verified database leg, smuggled bytes, stalled handshake | ruling 5 | 6 | R, synctest | 7 (storm with TLS on), 14 (TLS on/off arms) |
 | Reject list end-to-end | steering 9 | 5 (wire-level), 6 (through the proxy) | S, R | — |
 | Results through the proxy equal results direct | ours | 6 | S, R | every later chunk (with its feature on) |
-| Transaction integrity (no cross-client interleaving) | ours | 6 | S, R | 7, 12, 14 |
+| Transaction integrity (no cross-client interleaving) | ours | 6 | S, R | 7, 13 |
 | Client vanishes mid-statement / mid-transaction | spec 4.1 | 6 | S, R | 7 (full dirty table) |
-| Database killed mid-statement; error-contract rows | spec 2.4 | 6 | S, R | 13 (matrix complete) |
-| Hard connection cap, 1,000 simultaneous connects | spec 4.2 | 7 | S, R | 14 (×3) |
-| **Reconnection storm** | spec 4.3 (1) | 7 | S, R | 14 (split across 3) |
+| Database killed mid-statement; error-contract rows | spec 2.4 | 6 | S, R | 12 (matrix complete) |
+| Hard connection cap, 1,000 simultaneous connects | spec 4.2 | 7 | S, R | 13 (×3) |
+| **Reconnection storm** | spec 4.3 (1) | 7 | S, R | 13 (split across 3) |
 | **Slow consumer / half-open drain** | spec 4.3 (4) | 7 | S, R | — |
-| Cold start; synchronized lifetimes; database restart and recovery | *Release It!* | 7 | S, R | 14 |
-| Headline 1: database connections, direct vs proxy | spec 4.4 | 7 | R | 15 (full method) |
+| Cold start; synchronized lifetimes; database restart and recovery | *Release It!* | 7 | S, R | 13 |
+| Headline 1: database connections, direct vs proxy | spec 4.4 | 7 | R | 14 (full method) |
 | CoDel anti-bufferbloat, per mode; head-to-head table | spec 4.2, steering 3 | 8 | S, R | 10 |
-| Bounded memory under 10× overload | spec 4.2 | 8 | S | 15 (real binary, sustained) |
-| Goroutine count returns to baseline | spec 4.2 | 6 (shell tests) | synctest, R | 15 |
-| Noisy-neighbour fairness | spec 4.2 | 9 | S, R | 10, 14 |
-| **Noisy neighbour + backend stall** | spec 4.3 (3) | 10 | S, R | 14 |
-| Headline 3: quiet tenant p99, FIFO vs full stack | spec 4.4 | 10 | R | 15 |
-| At most one in-flight read per key; writes never coalesced; cancel 99 of 100 | spec 4.2 | 11 | S, R | 14 |
-| **Viral hot-key stampede** | spec 4.3 (2) | 11 | S, R | 14 (3 coalescers) |
-| Read-your-own-write under coalescing, both join modes | ours | 11 | S, R | — |
-| Headline 2: database reads and p99 under skew | spec 4.4 | 11 | R | 15 |
-| Batch safety; planted poison | ours | 12 | S, R | 14 |
-| **Retry-storm amplification** | spec 4.3 (5) | 13 | S, R | 14 |
-| No statement applied twice | spec 2.4 | 13 | S | — |
-| Three-instance set: storm, hot key, pinned tenant, stall, instance kill | steering 14 | 14 | S, R (storm and kill) | 15 |
-| Rolling restart with drain | steering 14 | 14 | S, R | — |
-| Steady state under tenant churn | *Release It!* | 14 | S | 15 (long) |
-| Observability acceptance ("what is slow?") | *Release It!* | 15 | R | — |
-| Collector down does not affect the data path | steering 13 | 16 | S, R | — |
-| The chain check: Prometheus, fed through OTLP and the Collector, agrees with the CSV flush of the same run | observability amendment | 16 | R (compose setup) | — |
+| Bounded memory under 10× overload | spec 4.2 | 8 | S | 14 (real binary, sustained) |
+| Goroutine count returns to baseline | spec 4.2 | 6 (shell tests) | synctest, R | 14 |
+| Noisy-neighbour fairness | spec 4.2 | 9 | S, R | 10, 13 |
+| **Noisy neighbour + backend stall** | spec 4.3 (3) | 10 | S, R | 13 |
+| Headline 3: quiet tenant p99, FIFO vs full stack | spec 4.4 | 10 | R | 14 |
+| At most one in-flight read per key; writes never coalesced; cancel 99 of 100 | spec 4.2 | 11 | S, R | 13 |
+| **Viral hot-key stampede**, both join modes | spec 4.3 (2), ruling 2 | 11 | S, R | 13 (3 coalescers) |
+| Read-your-own-write under coalescing, both join modes | ours, ruling 2 | 11 | S, R | — |
+| Headline 2: database reads and p99 under skew, both join modes | spec 4.4 | 11 | R | 14 |
+| **Retry-storm amplification** | spec 4.3 (5) | 12 | S, R | 13 |
+| No statement applied twice | spec 2.4 | 12 | S | — |
+| Three-instance set: storm, hot key, pinned tenant, stall, instance kill | steering 14 | 13 | S, R (storm and kill) | 14 |
+| Rolling restart with drain | steering 14 | 13 | S, R | — |
+| Steady state under tenant churn | *Release It!* | 13 | S | 14 (long) |
+| Observability acceptance ("what is slow?") | *Release It!* | 14 | R | — |
+| Collector down does not affect the data path | steering 13 | 15 | S, R | — |
+| The chain check: Prometheus, fed through OTLP and the Collector, agrees with the CSV flush of the same run | observability amendment | 15 | R (compose setup) | — |
 
 The five suites the spec names (bold) are each owned by the chunk that builds their subject; none waits for the benchmark chunk.
 
@@ -1036,7 +1070,7 @@ The book is the learning artifact. Neon writes one chapter per chunk, once, late
 | 1 | 1 | A world that repeats: the simulator kernel |
 | 2 | 2 | A fake Postgres and hostile clients |
 | 3 | 3 | Numbers without a framework: snapshots, a collector, exporters |
-| 4 | 4 | Speaking Postgres: startup, login, fragments |
+| 4 | 4 | Speaking Postgres: TLS or not, startup, login, fragments |
 | 5 | 5 | What a statement is allowed to do: classification and the error contract |
 | 6 | 6 | The first working proxy, and lending connections by the transaction |
 | 7 | 7 | The pool: a hard cap, a creation rate, and connections that go bad |
@@ -1044,12 +1078,11 @@ The book is the learning artifact. Neon writes one chapter per chunk, once, late
 | 9 | 9 | Fairness that binds only when it must |
 | 10 | 10 | Letting the database set the limit |
 | 11 | 11 | One read for a thousand callers |
-| 12 | 12 | Batching without a timer |
-| 13 | 13 | Retries, off by default |
-| 14 | 14 | Three proxies, one database: what multiplies, weakens and survives |
-| 15 | 15 | How much to trust these numbers (the trade-offs write-up) |
-| 16 | 16 | Adding an exporter without touching a component |
-| — | 17 | Preface, topic map, assembly |
+| 12 | 12 | Retries, off by default |
+| 13 | 13 | Three proxies, one database: what multiplies, weakens and survives |
+| 14 | 14 | How much to trust these numbers (the trade-offs write-up) |
+| 15 | 15 | Adding an exporter without touching a component |
+| — | 16 | Preface, topic map, assembly |
 
 Chunk 0 has no chapter (the front page only). Titles are placeholders for Neon.
 
@@ -1063,8 +1096,9 @@ Chunk 0 has no chapter (the front page only). Titles are placeholders for Neon.
 | Mechanism chunks run about 2× | *Release It!* notes | ×2 marks; split rule: a builder that passes ~2,000 lines of product code stops and asks the orchestrator to split |
 | The classifier is wrong about a statement | It is a lexer without the catalog | Conservative by construction; allow-list for functions; `hinted` mode; the differential test against real Postgres; limits stated in the book |
 | The fake Postgres drifts from the real one | A fake is a model | Fidelity script in both tiers; every scenario also runs in tier R |
-| The single-threaded engine is a throughput ceiling | Decision D1 | Measured and stated in chunk 15; instances are the scaling unit; not hidden |
-| Batching shows no gain | Local sockets make round trips cheap | Off by default; "no gain" is a reportable result |
+| The single-threaded engine is a throughput ceiling | Decision D1 | Measured and stated in chunk 14; instances are the scaling unit; not hidden |
+| TLS handshakes add CPU to a reconnection storm | Section 3.1, finding 8: up to about 3 ms of CPU per handshake on this VM | Handshakes run on shell goroutines and count against the cap on clients in startup; the tier R storm runs with TLS on (chunk 7); the cost is a measured arm in chunk 14 |
+| Neon both reviews the code and writes the prose | Ruling 1 | Separate fresh agents for review and prose; Astra's adversarial harness is written from the brief, not from the code or the review; Fable runs the gate and holds final acceptance; arbitration goes outside the build/review pair |
 | The control-law mode behaves badly under heavy open-loop overload | Phase 0 toy: queue grew without bound | It is bounded by the queue's hard capacity; the head-to-head table says plainly what each mode does |
 | Wave merges conflict in `internal/proxy` | Several chunks wire into one engine | Stage seams fixed in chunk 6; chunks in a wave land one at a time and the later one rebases |
 | Shared-VM noise | 4 shared vCPUs | Section 11; exact counts as headlines |
@@ -1073,13 +1107,13 @@ Chunk 0 has no chapter (the front page only). Titles are placeholders for Neon.
 | Neon or another pool runs out mid-wave | Subscription limits | Gauge check before each wave; recorded fallback route for Neon |
 | vm-1 Claude sign-in expires Nov 25–28 | STATE.md | Owner: Nick/Twin; everything resumes from files |
 
-Total estimate: about 19,000–21,000 lines of product code before the ×2 allowances, and at least as much test code. It is a larger build than the spec's "2–3 weeks" for Variant B, because the steering adds two CoDel modes, the full observability system, the fleet work and batching to a Postgres proxy. If that is too much, the cheapest cuts, in order, are: chunk 12 (batching), the GCRA half of chunk 10, tier R for the three-instance scenarios. None is cut in this proposal.
+**Size (decided, ruling 7: go as proposed, as amended).** Sixteen chunks after the foundation. The estimate is about 18,500–20,500 lines of product code before the ×2 allowances, and at least as much test code: the proposal's 19,000–21,000, less about 800 for the dropped batching chunk, plus about 350 for TLS. It is a larger build than the spec's "2–3 weeks" for Variant B, because the steering adds two CoDel modes, the full observability system and the fleet work to a Postgres proxy. No cuts are applied. The proposal's list of possible cuts is retired: its first candidate, batching, was dropped by ruling 3, and the other two (the GCRA half of chunk 10, tier R for the three-instance scenarios) stay in.
 
 ---
 
 ## 17. Out of scope for v1, and follow-ups
 
-**Out of v1:** the extended query protocol; TLS on either side; `COPY`; replication connections; `LISTEN`/`NOTIFY`; connection pinning; per-tenant database roles or several databases; caching; read replicas, hedging, outlier detection, shuffle sharding; a second backend protocol; run-time coordination between instances; a balancer, discovery or membership; the OpenTelemetry SDK; DuckDB as a library or anywhere in the proxy; Parquet or any second file format for the flush; dashboards and alert rules on top of Prometheus; a SQL parser; md5 password authentication.
+**Out of v1:** the extended query protocol; batching or pipelining several clients' statements onto one database connection (ruling 3); SCRAM channel binding (`SCRAM-SHA-256-PLUS`), client certificates, direct TLS negotiation, certificate reload without a restart and TLS on the admin listener (section 3.1); `COPY`; replication connections; `LISTEN`/`NOTIFY`; connection pinning; per-tenant database roles or several databases; caching; read replicas, hedging, outlier detection, shuffle sharding; a second backend protocol; run-time coordination between instances; a balancer, discovery or membership; the OpenTelemetry SDK; DuckDB as a library or anywhere in the proxy; Parquet or any second file format for the flush; dashboards and alert rules on top of Prometheus; a SQL parser; md5 password authentication.
 
 **Follow-ups after the project, not part of v1:**
 
@@ -1087,18 +1121,25 @@ Total estimate: about 19,000–21,000 lines of product code before the ×2 allow
 2. **A polymorphic protocol interface**, extracted against a real second protocol (Valkey/RESP is the candidate Nick named), using `docs/extension-seams.md` (section 4.2).
 3. Pinning with a hard cap, as the alternative to rejecting session features.
 4. Coordinated fleet budgets, as the alternative to static division.
+5. **Per-tenant database roles** (the seam recorded by ruling 4): one pool per role, so that Postgres privileges can differ by tenant. It changes the pool's key, the fleet division and the fairness accounting, which is why it is not v1.
+6. Batching by pipelining, only if a later measurement argues for it; the dropped design is in commit `5c83fe6` (decision D9).
+7. Channel binding and client certificates on the client leg.
 
 ---
 
-## 18. Open questions for Nick
+## 18. Nick's rulings (the decision record)
 
-1. **Who reviews Opus's code on this project?** The project seat ruling (2026-11-24) says Neon reviews Opus. The standing global rule (2026-11-11) says Opus builds are reviewed only by Fable. This plan writes "review" without naming the seat until you say which applies here. (Either way Neon writes the prose and Fable does final acceptance.)
-2. **Coalescing join mode default (D10).** Strict (never older than the request; hot-key p99 near two service times) or relaxed (p99 near one, the spec's "near 50 ms", with a brief read-your-own-write gap)? Proposed: strict by default, relaxed selectable, both measured.
-3. **Batching under Postgres (D9).** Your answer 11 kept timer-free batching; it was written when the backend was Redis. For Postgres it means pipelining independent single-statement requests onto one connection. Proposed: build it (chunk 12), off by default until its benchmark shows a gain. Or drop chunk 12.
-4. **Tenant identity (D6).** Tenant = the startup `user`, checked by the proxy; all pooled connections use one database role. Acceptable for v1, with per-tenant roles as a seam?
-5. **Client-facing extras in v1:** no TLS; SCRAM-SHA-256 and trust only; client cancel requests supported. Agree?
-6. ***Release It!* gap.** Your notes do not include the book's material on pooled connections dying silently (firewall idle timeouts, half-open sockets), which matters for chunk 7. The plan covers those faults from the spec's own list. If you want the book consulted first, the PDF is on Drive and the Drive connector is not authorized for this session — it needs authorizing in the claude.ai connector settings, or the PDF placed on vm-1.
-7. **Size.** Seventeen chunks, roughly 20,000 lines of product code. Go as proposed, or apply cuts from section 16?
-8. **Still unrecorded from Phase 0:** approval of the "end-to-end with every chunk" wording draft (`/root/briefs/flow-guide-e2e-wording-draft.md`). The plan follows the rule as standing.
+The proposal ended with eight open questions. Nick ruled on all of them on 2026-11-24 (`/root/briefs/zgateway-section18-rulings.md`), which approved the proposal as amended. Nothing here is open. Each ruling is written into the section named in the last column; this table is the record of what was asked and decided.
 
-On approval, the first step is chunk 0, then the simulator. Until then nothing is built.
+| # | Question | Status | Ruling (Nick, 2026-11-24) | Where it is applied |
+| --- | --- | --- | --- | --- |
+| 1 | Who reviews Opus's code on this project: Neon (project seat ruling) or Fable only (global rule of 2026-11-11)? | **DECIDED 2026-11-24** | Neon reviews Opus on this project, through Antigravity `agy`. The project seat ruling governs here; it is a project-scoped exception and the global Fable-only rule stands elsewhere. Astra's adversarial role stands. | Sections 12.1–12.3; every chunk's seats (section 13.1); `/root/briefs/zgateway-seat-ruling.md` |
+| 2 | Coalescing: default to "a request never gets data older than itself" (strict) or "join the read already running" (relaxed)? | **DECIDED 2026-11-24** | The proposal is adopted: strict by default, relaxed selectable, both measured. | Decision D10; chunk 11; section 14 |
+| 3 | Batching under Postgres (pipelining onto one connection): build it off by default, or drop the chunk? | **DECIDED 2026-11-24** | Drop the chunk. Timer-free batching and pipelining are out of v1. | Decision D9; section 2, row 11; the chunk list (16 chunks, renumbered); sections 14–17 |
+| 4 | Tenant identity: the client's startup user name, checked by the proxy, over one shared database role? | **DECIDED 2026-11-24** | The proposal is adopted. Per-tenant roles are recorded as a later seam. | Decision D6; section 17, follow-up 5 |
+| 5 | Client-facing extras: no TLS, SCRAM-SHA-256 and trust only, cancel requests supported? | **DECIDED 2026-11-24** | "I'd like to do TLS if not too hard but default to SCRAM if that's more common or normal." SCRAM-SHA-256 is the authentication mechanism. TLS: assess the real cost with evidence and include it if the cost is small. **Verdict of the assessment: INCLUDE** — about 350 lines, no new dependency, no new chunk. | Decision D13 and section 3.1 (verdict and evidence); chunks 4 and 6; sections 9.1, 9.2, 10.4, 11, 14 |
+| 6 | Consult the *Release It!* book itself for pooled connections dying silently, before the pool chunk? | **DECIDED 2026-11-24** | Yes. The PDF is on vm-1 at `/root/briefs/release-it-book.pdf`. Consult it before the pool chunk builds and record what it changes: a step in the plan, not a someday note. | Chunk 7 (the step before the build); section 10; output `docs/knowledge/release-it-pooled-connections.md` |
+| 7 | Size: 17 chunks and roughly 20,000 lines — go as proposed or cut? | **DECIDED 2026-11-24** | Go as proposed, minus the dropped batching chunk: 16 chunks after the foundation. | Section 13; section 16 (size) |
+| 8 | Approval of the "end-to-end with every chunk" wording draft | **DECIDED 2026-11-24** | Approved. "Yes I want e2e incrementally built throughout as a form of integration testing throughout." The flow-guide draft wording (`/root/briefs/flow-guide-e2e-wording-draft.md`) is approved. | Section 6.2 (the rule); section 14 (the table) |
+
+The first step on Nick's go is chunk 0, then the simulator (chunks 1 and 2). Until that go, nothing is built.
