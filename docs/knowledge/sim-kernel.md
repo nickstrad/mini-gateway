@@ -29,6 +29,11 @@ with its test, and the exact fault semantics are in
   value with a `uint64` code (no closure allocation). Events at one instant run in
   scheduling order. Nothing is ever called synchronously by the network: every
   notification is its own event.
+- Time arithmetic saturates: `Time.Add`, `Time.Sub`, `sim.Later`, `sim.AddDurations` and
+  `sim.Scaled`. Never add two `time.Duration` values from configuration with `+` (a wrapped
+  negative delay is clamped to now and fires at once), and never pass `bound+1` to
+  `Int64N` for a user-supplied bound (it panics at `math.MaxInt64`); simnet's `pipe.jitter`
+  shows the pattern.
 - Timers: `Timer` is a value; `Cancel()` removes it from the heap and reports whether it
   was pending. `MarkBackground()` exempts a timer from the quiesce check and from
   `RunUntilQuiet`.
