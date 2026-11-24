@@ -1,0 +1,6 @@
+# Pinned regression seeds for the simtoy scenarios: one seed per line, then an optional note.
+1
+2
+3
+7
+42
