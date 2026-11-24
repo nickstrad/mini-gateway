@@ -75,7 +75,9 @@ var directive = regexp.MustCompile(`^//go:(build|embed|generate|noinline)( |$)`)
 
 // run checks every .go file under root (or under the given paths, relative
 // to root; a path may also name a single file). Directories named
-// agent_work, .git, testdata, vendor and tools are skipped.
+// agent_work, .git, vendor and tools are skipped. A testdata directory is
+// NOT skipped: Go fixtures of product packages follow the comment rule too
+// (the fixtures of the tools themselves sit under tools/, which is skipped).
 func run(root string, paths []string) ([]report.Finding, error) {
 	if len(paths) == 0 {
 		paths = []string{"."}
@@ -92,7 +94,7 @@ func run(root string, paths []string) ([]report.Finding, error) {
 				return err
 			}
 			if d.IsDir() {
-				if path != start && report.SkipDir(d.Name()) {
+				if path != start && d.Name() != "testdata" && report.SkipDir(d.Name()) {
 					return filepath.SkipDir
 				}
 				return nil

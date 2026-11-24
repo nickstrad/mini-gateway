@@ -33,9 +33,10 @@ func TestNocomments(t *testing.T) {
 			"output_test.go:4: comment",
 			"output_test.go:5: comment",
 			"sub/sub.go:3: comment",
+			"sub/testdata/x.go:1: comment",
 		}},
 		{name: "explicit path limits the walk", root: "testdata/dirty", paths: []string{"sub"},
-			want: []string{"sub/sub.go:3: comment"}},
+			want: []string{"sub/sub.go:3: comment", "sub/testdata/x.go:1: comment"}},
 		{name: "explicit file", root: "testdata/dirty", paths: []string{"nolint.go"},
 			want: []string{"nolint.go:4: comment"}},
 	}
