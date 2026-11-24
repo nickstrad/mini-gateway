@@ -60,7 +60,7 @@ func (n *Net) applyKind(f sim.Fault) bool {
 	switch f.Kind {
 	case FaultRefuse, FaultDialStall, FaultSilence:
 		l := n.listener(f.Target)
-		if l == nil {
+		if l == nil || l.closed {
 			return false
 		}
 		l.set(f.Kind, true)
@@ -94,12 +94,12 @@ func (n *Net) clear(f sim.Fault) error {
 	ok := false
 	switch kind {
 	case FaultRefuse, FaultDialStall, FaultSilence:
-		if l := n.listener(f.Target); l != nil {
+		if l := n.listener(f.Target); l != nil && !l.closed {
 			l.set(kind, false)
 			ok = true
 		}
 	case FaultStall, FaultChunk:
-		if c := n.conn(f.Target); c != nil && !c.done {
+		if c := n.conn(f.Target); c != nil && !c.done && c.accepted {
 			for d := range c.pipes {
 				if kind == FaultStall {
 					c.pipes[d].unstall()
