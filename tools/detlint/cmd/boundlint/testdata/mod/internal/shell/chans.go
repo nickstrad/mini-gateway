@@ -50,3 +50,15 @@ type named chan int
 func namedType() named {
 	return make(named)
 }
+
+type pipe = chan int
+
+type mailbox chan int
+
+func aliased() (pipe, mailbox) {
+	return make(pipe), make(mailbox, 3)
+}
+
+func wrapped(n int) chan int {
+	return make(chan int, n)
+}

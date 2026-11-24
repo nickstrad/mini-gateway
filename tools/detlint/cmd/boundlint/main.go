@@ -278,7 +278,7 @@ func run(root, allowPath string, args []string) (*result, error) {
 		res.pkgs++
 		res.files += len(files)
 		info := &types.Info{Types: map[ast.Expr]types.TypeAndValue{}, Uses: map[*ast.Ident]types.Object{},
-			Selections: map[*ast.SelectorExpr]*types.Selection{}}
+			Defs: map[*ast.Ident]types.Object{}, Selections: map[*ast.SelectorExpr]*types.Selection{}}
 		path := module
 		if rel != "." {
 			path = module + "/" + rel
@@ -289,9 +289,23 @@ func run(root, allowPath string, args []string) (*result, error) {
 				add(te.Pos, "", "typecheck", te.Msg)
 			}
 		}}
-		conf.Check(path, fset, files, info)
+		tpkg, _ := conf.Check(path, fset, files, info)
+		decls := map[*types.Func]*ast.FuncDecl{}
 		for _, f := range files {
-			c := &checker{info: info, file: f}
+			for _, d := range f.Decls {
+				if fd, ok := d.(*ast.FuncDecl); ok && fd.Body != nil {
+					if fn, ok := info.Defs[fd.Name].(*types.Func); ok {
+						decls[fn] = fd
+					}
+				}
+			}
+		}
+		where := func(pos token.Pos) string {
+			p := fset.Position(pos)
+			return fmt.Sprintf("%s:%d", filepath.Base(p.Filename), p.Line)
+		}
+		for _, f := range files {
+			c := &checker{info: info, file: f, pkg: tpkg, decls: decls, where: where}
 			c.report = func(pos token.Pos, ruleID, msg string) {
 				if allowable[ruleID] {
 					p := fset.Position(pos)
@@ -322,6 +336,9 @@ func run(root, allowPath string, args []string) (*result, error) {
 type checker struct {
 	info   *types.Info
 	file   *ast.File
+	pkg    *types.Package
+	decls  map[*types.Func]*ast.FuncDecl
+	where  func(token.Pos) string
 	report func(pos token.Pos, ruleID, msg string)
 }
 
@@ -444,37 +461,163 @@ func (c *checker) field(e ast.Expr) (*ast.SelectorExpr, bool) {
 	return sel, ok && s.Kind() == types.FieldVal
 }
 
-// checkLoop looks through the body of an unbounded loop for growth of a struct field.
-func (c *checker) checkLoop(decl ast.Decl, body *ast.BlockStmt) {
-	grow := func(target ast.Expr, how string) {
-		text := types.ExprString(unparen(target))
-		if c.lenChecked(decl, text) {
-			return
+// deref removes parentheses and pointer dereferences, and says whether it removed a
+// dereference.
+func deref(e ast.Expr) (ast.Expr, bool) {
+	star := false
+	for {
+		switch x := e.(type) {
+		case *ast.ParenExpr:
+			e = x.X
+			continue
+		case *ast.StarExpr:
+			e, star = x.X, true
+			continue
 		}
-		c.report(target.Pos(), "unbounded-growth", fmt.Sprintf("%s %s inside an unbounded loop, and this function never compares len(%s) with anything", text, how, text))
+		return e, star
 	}
-	mapField := func(e ast.Expr) (ast.Expr, bool) {
-		ix, ok := unparen(e).(*ast.IndexExpr)
+}
+
+// growth is one place where something that outlives a loop iteration gets longer.
+type growth struct {
+	pos  token.Pos
+	text string       // the target as written, without outer parentheses
+	what string       // "x.f is appended to", ...
+	obj  types.Object // the struct field or package variable; nil when it is not known
+}
+
+// fresh returns the local variables of body that are certainly not an alias of anything
+// else: declared in body by `:=` or `var`, and every value ever assigned to them is a
+// make(...) call or a composite literal (or nothing: a nil map).
+func (c *checker) fresh(body ast.Node) map[types.Object]bool {
+	declared := map[types.Object]bool{}
+	tainted := map[types.Object]bool{}
+	own := func(e ast.Expr) bool {
+		switch x := unparen(e).(type) {
+		case *ast.CompositeLit:
+			return true
+		case *ast.CallExpr:
+			return c.builtin(x.Fun, "make")
+		}
+		return false
+	}
+	obj := func(e ast.Expr) types.Object {
+		id, ok := unparen(e).(*ast.Ident)
 		if !ok {
-			return nil, false
+			return nil
 		}
-		sel, ok := c.field(ix.X)
-		if !ok {
-			return nil, false
+		if o := c.info.Defs[id]; o != nil {
+			declared[o] = true
+			return o
 		}
-		t := c.info.TypeOf(sel)
-		if t == nil {
-			return nil, false
-		}
-		_, isMap := t.Underlying().(*types.Map)
-		return sel, isMap
+		return c.info.Uses[id]
 	}
 	ast.Inspect(body, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.AssignStmt:
 			for i, lhs := range x.Lhs {
-				if m, ok := mapField(lhs); ok {
-					grow(m, "gets a map entry")
+				o := obj(lhs)
+				if o == nil {
+					continue
+				}
+				if len(x.Lhs) != len(x.Rhs) || !own(x.Rhs[i]) {
+					tainted[o] = true
+				}
+			}
+		case *ast.ValueSpec:
+			for i, id := range x.Names {
+				o := c.info.Defs[id]
+				if o == nil {
+					continue
+				}
+				declared[o] = true
+				if len(x.Values) != 0 && (len(x.Values) != len(x.Names) || !own(x.Values[i])) {
+					tainted[o] = true
+				}
+			}
+		case *ast.UnaryExpr:
+			if x.Op == token.AND {
+				if id, ok := unparen(x.X).(*ast.Ident); ok {
+					if o := c.info.Uses[id]; o != nil {
+						tainted[o] = true
+					}
+				}
+			}
+		}
+		return true
+	})
+	for o := range tainted {
+		delete(declared, o)
+	}
+	return declared
+}
+
+// target decides whether growing e (the left side of an append assignment, or the map of
+// an insertion when isMap) can outlive the loop iteration. It can when e is
+//   - a struct field, reached directly or through a dereference;
+//   - anything reached through a pointer dereference (*p, whatever p is);
+//   - a package-level variable;
+//   - for a map: any variable that is not in fresh (a parameter, a copy of a field, a
+//     function result: a map value is a reference, so it may be an alias of a field).
+//
+// A local slice variable is not a target: appending to a copy of a slice header does not
+// lengthen the original.
+func (c *checker) target(e ast.Expr, isMap bool, fresh map[types.Object]bool) (what string, obj types.Object, ok bool) {
+	base, star := deref(e)
+	if sel, isField := c.field(base); isField {
+		return "", c.info.Selections[sel].Obj(), true
+	}
+	if star {
+		return " (through a pointer)", nil, true
+	}
+	id, isIdent := base.(*ast.Ident)
+	if !isIdent {
+		return "", nil, false
+	}
+	v, isVar := c.info.Uses[id].(*types.Var)
+	if !isVar {
+		return "", nil, false
+	}
+	if c.pkg != nil && v.Parent() == c.pkg.Scope() {
+		return " (a package variable)", v, true
+	}
+	if isMap && !fresh[v] {
+		return " (a map this function did not make, so it may be a struct field under another name)", nil, true
+	}
+	return "", nil, false
+}
+
+// growths lists the growth sites directly in body (function literals included) and the
+// calls in body to functions and methods declared in this package.
+func (c *checker) growths(body ast.Node, fresh map[types.Object]bool) (sites []growth, calls []*ast.CallExpr) {
+	mapOf := func(e ast.Expr) (ast.Expr, bool) {
+		ix, ok := unparen(e).(*ast.IndexExpr)
+		if !ok {
+			return nil, false
+		}
+		t := c.info.TypeOf(ix.X)
+		if t == nil {
+			return nil, false
+		}
+		if _, isMap := t.Underlying().(*types.Map); !isMap {
+			return nil, false
+		}
+		return ix.X, true
+	}
+	add := func(e ast.Expr, isMap bool, how string) {
+		what, obj, ok := c.target(e, isMap, fresh)
+		if !ok {
+			return
+		}
+		text := types.ExprString(unparen(e))
+		sites = append(sites, growth{pos: e.Pos(), text: text, what: text + " " + how + what, obj: obj})
+	}
+	ast.Inspect(body, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.AssignStmt:
+			for i, lhs := range x.Lhs {
+				if m, ok := mapOf(lhs); ok {
+					add(m, true, "gets a map entry")
 					continue
 				}
 				if len(x.Lhs) != len(x.Rhs) {
@@ -484,26 +627,125 @@ func (c *checker) checkLoop(decl ast.Decl, body *ast.BlockStmt) {
 				if !ok || !c.builtin(call.Fun, "append") {
 					continue
 				}
-				if sel, ok := c.field(lhs); ok {
-					grow(sel, "is appended to")
-				}
+				add(lhs, false, "is appended to")
 			}
 		case *ast.IncDecStmt:
-			if m, ok := mapField(x.X); ok {
-				grow(m, "gets a map entry")
+			if m, ok := mapOf(x.X); ok {
+				add(m, true, "gets a map entry")
+			}
+		case *ast.CallExpr:
+			if c.callee(x) != nil {
+				calls = append(calls, x)
 			}
 		}
 		return true
 	})
+	return sites, calls
+}
+
+// callee returns the declaration a call statically names, when it is a function or
+// method declared in this package; nil otherwise (builtins, conversions, other packages,
+// interface methods, function values).
+func (c *checker) callee(call *ast.CallExpr) *types.Func {
+	fun := unparen(call.Fun)
+	for {
+		switch x := fun.(type) {
+		case *ast.IndexExpr:
+			fun = unparen(x.X)
+			continue
+		case *ast.IndexListExpr:
+			fun = unparen(x.X)
+			continue
+		}
+		break
+	}
+	var id *ast.Ident
+	switch x := fun.(type) {
+	case *ast.Ident:
+		id = x
+	case *ast.SelectorExpr:
+		id = x.Sel
+	default:
+		return nil
+	}
+	fn, ok := c.info.Uses[id].(*types.Func)
+	if !ok {
+		return nil
+	}
+	fn = fn.Origin()
+	if c.decls[fn] == nil {
+		return nil
+	}
+	return fn
+}
+
+// reach lists the growth sites of fn and of every function of this package it calls,
+// directly or not, that the function holding the site does not length-check itself.
+func (c *checker) reach(fn *types.Func, seen map[*types.Func]bool, out *[]growth) {
+	if seen[fn] {
+		return
+	}
+	seen[fn] = true
+	fd := c.decls[fn]
+	sites, calls := c.growths(fd.Body, c.fresh(fd))
+	for _, s := range sites {
+		if !c.lenChecked(fd, s.text) {
+			*out = append(*out, s)
+		}
+	}
+	for _, call := range calls {
+		c.reach(c.callee(call), seen, out)
+	}
+}
+
+// checkLoop looks through the body of an unbounded loop for growth of something that
+// outlives an iteration, in the body itself and in the functions of this package it calls.
+func (c *checker) checkLoop(decl ast.Decl, body *ast.BlockStmt) {
+	sites, calls := c.growths(body, c.fresh(decl))
+	for _, s := range sites {
+		if c.lenChecked(decl, s.text) {
+			continue
+		}
+		c.report(s.pos, "unbounded-growth", fmt.Sprintf("%s inside an unbounded loop, and this function never compares len(%s) with anything", s.what, s.text))
+	}
+	for _, call := range calls {
+		fn := c.callee(call)
+		var far []growth
+		c.reach(fn, map[*types.Func]bool{}, &far)
+		for _, s := range far {
+			if s.obj != nil && c.lenCheckedObj(decl, s.obj) {
+				continue
+			}
+			c.report(call.Pos(), "unbounded-growth", fmt.Sprintf("the call of %s inside an unbounded loop reaches %s: %s, and neither that function nor this one compares its length with anything", fn.Name(), c.where(s.pos), s.what))
+			break
+		}
+	}
 }
 
 // lenChecked reports whether the declaration holds a comparison one side of which is
 // len(<text>).
-func (c *checker) lenChecked(decl ast.Decl, text string) bool {
+func (c *checker) lenChecked(decl ast.Node, text string) bool {
+	return c.compares(decl, func(arg ast.Expr) bool { return types.ExprString(unparen(arg)) == text })
+}
+
+// lenCheckedObj reports whether the declaration holds a comparison one side of which is
+// len(x), x being the struct field or variable obj however it is spelled.
+func (c *checker) lenCheckedObj(decl ast.Node, obj types.Object) bool {
+	return c.compares(decl, func(arg ast.Expr) bool {
+		base, _ := deref(arg)
+		if sel, ok := c.field(base); ok {
+			return c.info.Selections[sel].Obj() == obj
+		}
+		id, ok := base.(*ast.Ident)
+		return ok && c.info.Uses[id] == obj
+	})
+}
+
+func (c *checker) compares(decl ast.Node, match func(ast.Expr) bool) bool {
 	found := false
 	isLen := func(e ast.Expr) bool {
 		call, ok := unparen(e).(*ast.CallExpr)
-		return ok && len(call.Args) == 1 && c.builtin(call.Fun, "len") && types.ExprString(unparen(call.Args[0])) == text
+		return ok && len(call.Args) == 1 && c.builtin(call.Fun, "len") && match(call.Args[0])
 	}
 	ast.Inspect(decl, func(n ast.Node) bool {
 		if b, ok := n.(*ast.BinaryExpr); ok {
