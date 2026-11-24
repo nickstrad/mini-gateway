@@ -1,13 +1,13 @@
 # Phase 1 findings (2026-11-24)
 
-Durable facts found while writing the Phase 1 proposal. Evidence paths are relative to the repository root.
+Durable facts found while writing the Phase 1 proposal. Evidence paths are relative to the repository root. The TLS findings made when Nick's rulings were applied are in [tls-cost-assessment.md](tls-cost-assessment.md).
 
 ## Postgres wire behaviour that the design depends on
 
 Measured against PostgreSQL 17.11 with `agent_work/phase1/probes/pgwire/` (output beside it).
 
 - One `Query` message can leave a transaction open: `BEGIN; SELECT 1` ends with status byte `T`. Whether a connection is free is known only from the reply's `ReadyForQuery`.
-- Several `Query` messages written in one write are answered in order, each with its own `ReadyForQuery`; an error in one does not affect the next. But a query pipelined after a `BEGIN` runs inside that transaction. Pipelining different clients' statements is safe only when each is provably a single statement that is not transaction control.
+- Several `Query` messages written in one write are answered in order, each with its own `ReadyForQuery`; an error in one does not affect the next. But a query pipelined after a `BEGIN` runs inside that transaction. Pipelining different clients' statements is safe only when each is provably a single statement that is not transaction control. (v1 does not pipeline: batching was dropped by Nick's ruling 3 of 2026-11-24.)
 - `SET` outlives the exchange that issued it. A change to a reported setting (for example `application_name`) makes the server send an unsolicited `ParameterStatus`, which can be used to detect a connection that is no longer clean. `DISCARD ALL` resets it.
 - A backend terminated mid-query sends `FATAL 57P01` and then the stream ends with no `ReadyForQuery`.
 - A read already running does not see a write that commits while it runs, even though the writer has been acknowledged. Joining a request to a read that is already running can therefore return data older than the request.
@@ -40,6 +40,10 @@ Measured against PostgreSQL 17.11 with `agent_work/phase1/probes/pgwire/` (outpu
 ## Flushed CSV metrics and DuckDB (observability amendment, 2026-11-24)
 
 - vm-1 has the DuckDB command-line tool 1.5.5 at `/root/.local/bin/duckdb`. Nick named DuckDB 2.0 for this project; the plan pins the version in chunk 3.
+
+## Chunk numbers changed on 2026-11-24
+
+- Nick's ruling 3 dropped the batching chunk. The proposal's chunk 12 is gone and its chunks 13–17 are now 12–16 (retry 12, fleet and drain 13, benchmarks 14, OTLP 15, book finish 16). Commit messages and run records written before commit "plan: apply Nick's section 18 rulings" use the old numbers. The C4 pages were renumbered too: retry is 10, simulator 11, observability 12.
 - The schema of PLAN.md section 7.7 was tried on sample files with DuckDB 1.5.5. `read_csv(getvariable('csv_dir') || '/**/metrics.csv', header = true, columns = {...})` works with the path taken from a variable set by `SET VARIABLE`, and a glob reads many run directories as one table.
 - With explicit column types, an empty text field is read as NULL, not as the empty string. `views.sql` has to turn label columns back into `''` (for example with `coalesce`), or comparisons such as `reason = ''` silently match nothing.
 - A sum over a BIGINT column comes back as a 128-bit integer (`HUGEINT`); integer comparisons such as `100 * a <= 95 * b` need no casts.

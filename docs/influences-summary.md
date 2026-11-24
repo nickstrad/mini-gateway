@@ -46,7 +46,7 @@ Across all of them: the snapshot metrics pattern from *Backpressure in Microserv
 | 8 | Simulator | Evaluate the object-store simulator first, with evidence | Changed the process |
 | 9 | Protocol scope | Simple-query subset, transaction pooling, session features rejected, `pgproto3` as the one external package | Reshaped by 1 |
 | 10 | Promote parked items | None | No |
-| 11 | Reshape core items | GCRA as an outer gate, AIMD in v1, batching without a timer | No |
+| 11 | Reshape core items | GCRA as an outer gate, AIMD in v1, batching without a timer (batching was later dropped from v1 by Nick's ruling of 2026-11-24) | No |
 | 12 | Proxy retries | A policy behind an interface, **off by default** | Yes — the list had it on |
 | 13 | Observability | The full snapshot system, OTLP push exporter last | No |
 | 14 | Horizontal scale | Per-instance enforcement with a static fleet config, measured at three instances, graceful drain | No |

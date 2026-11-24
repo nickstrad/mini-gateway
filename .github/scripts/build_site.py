@@ -95,7 +95,7 @@ PAGE = """<!doctype html>
 <main>
 {banner}{toc}{body}
 </main>
-<footer class="site">Phase 1 proposal for review. Source: <a href="{repo}">{repo}</a></footer>
+<footer class="site">Plan approved 2026-11-24; nothing built yet. Source: <a href="{repo}">{repo}</a></footer>
 {script}</body>
 </html>
 """

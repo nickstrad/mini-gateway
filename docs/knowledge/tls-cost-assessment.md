@@ -1,0 +1,21 @@
+# TLS cost assessment (Nick's ruling 5, 2026-11-24)
+
+Question: is client-facing TLS termination cheap enough to include in v1? **Verdict: include it.** The full reasoning and scope are in PLAN.md section 3.1; this note keeps the facts that will matter to whoever builds chunks 4 and 6. Evidence: `agent_work/phase1/probes/pgtls/` (source and `output-2026-11-24.txt`), run against a throwaway `postgres:17` container with `psql` and `pgbench` 16.15 and Go 1.26.8.
+
+## Facts
+
+- **The exchange before startup is needed with or without TLS.** libpq's default `sslmode=prefer` sends an 8-byte `SSLRequest` (length 8, code 80877103) before the startup message. Answer `N` and a default client retries in plaintext on the same connection; a client with `sslmode=require` gives up with "server does not support SSL, but SSL was required". A GSS encryption request (code 80877104) is the same shape and is answered `N`.
+- **Terminating TLS is about 60 lines on the standard library.** Client leg: read exactly 8 bytes, write `S`, `tls.Server(conn, cfg).Handshake()`, carry on reading the startup message from the TLS connection. Database leg: write an `SSLRequest`, read one byte, expect `S`, `tls.Client(...)`. The probe's TLS-specific code is 59 lines. No module beyond `crypto/tls` and `crypto/x509`.
+- **Stock clients work.** `psql` with `sslmode=require`, with `verify-full` against the probe's CA, and with the default `prefer` connected over TLS 1.3 (`TLS_AES_128_GCM_SHA256`). `sslmode=disable` still connected in plaintext on the same port. `pgbench -S -M simple` over TLS, 4 clients × 200 transactions: 800 of 800, no failures.
+- **Read the request unbuffered.** The probe reads the 8 bytes straight from the socket. When a client sends an `SSLRequest` and plaintext bytes in one write, the leftover bytes reach the TLS handshake, which fails ("first record does not look like a TLS handshake"), and the connection is closed. A buffered reader here would hold plaintext bytes that the code might later treat as if they had arrived inside TLS — the bug class of CVE-2021-23214.
+- **SCRAM cannot be passed through a TLS-terminating proxy.** With TLS on both legs and Postgres's own SCRAM exchange relayed, a default `psql` fails with "SCRAM channel binding check failed": the server offered `SCRAM-SHA-256-PLUS` and the client bound the exchange to the relay's certificate. The proxy must run SCRAM itself on each leg, which the plan already does (decision D6).
+- **The GS2 header differs by transport.** A client on TLS that is offered only `SCRAM-SHA-256` (no `-PLUS`) starts its first message with `y,,` ("I support channel binding but you did not offer it"); a plaintext client sends `n,,`. A SCRAM server must accept both and check that the client's final message carries the matching `c=` value: `eSws` for `y,,`, `biws` for `n,,`. It must not advertise `SCRAM-SHA-256-PLUS` unless it implements channel binding.
+- **`channel_binding=require` cannot connect** to a server that does not offer `-PLUS`: the client refuses on its own ("channel binding is required, but server did not offer an authentication method that supports channel binding"). The default, `prefer`, connects. This is a stated limit of v1.
+- **Handshake cost.** 300 full TLS 1.3 handshakes over loopback, client and server halves in one process, host load average 24: 3.3 ms CPU each with an ECDSA P-256 certificate, 6.1 ms with RSA 2048. These are upper bounds for the server's half, on a busy shared VM. Use an ECDSA certificate in tests and examples.
+- **The official `postgres:17` image can serve TLS for tests with no certificate work:** `-c ssl=on -c ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem -c ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key`. The certificate is self-signed, so `verify-full` tests need a certificate of our own; `pg_stat_ssl` shows whether a session is encrypted.
+
+## Not tested by the probe
+
+- Cancel requests arriving after a TLS upgrade (newer libpq can send them encrypted). The design handles them in the same pre-startup exchange; chunk 4 tests it.
+- Direct TLS negotiation (`sslnegotiation=direct`, Postgres 17 clients, not the default). Out of v1.
+- The per-statement cost of record encryption. Chunk 14 measures it as a TLS-on against TLS-off arm.
