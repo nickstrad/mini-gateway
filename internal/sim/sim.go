@@ -211,7 +211,7 @@ func (s *Sim) Step() (bool, error) {
 	}
 	if e.at > s.now {
 		s.now = e.at
-		s.sameInstant = 0
+		s.sameInstant = 1
 	} else {
 		s.sameInstant++
 		if s.sameInstant > s.maxSameInstant {
@@ -243,6 +243,7 @@ func (s *Sim) RunUntil(t Time) error {
 	}
 	if s.err == nil && s.now < t {
 		s.now = t
+		s.sameInstant = 0
 	}
 	return s.err
 }

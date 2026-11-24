@@ -828,3 +828,41 @@ func TestTraceTailOfZeroOrNegativeIsEmpty(t *testing.T) {
 		}
 	}
 }
+
+func TestMaxSameInstantIsTheSameBoundAtZeroAndLater(t *testing.T) {
+	for _, start := range []Time{0, 3} {
+		f := New(Config{Seed: 9, MaxSameInstant: 5})
+		ran := 0
+		for i := 0; i < 5; i++ {
+			f.At(start, func() { ran++ })
+		}
+		if err := f.RunUntilQuiet(); err != nil || ran != 5 {
+			t.Fatalf("start %d: five events at one instant: ran %d, %v", start, ran, err)
+		}
+		g := New(Config{Seed: 9, MaxSameInstant: 5})
+		ran = 0
+		for i := 0; i < 6; i++ {
+			g.At(start, func() { ran++ })
+		}
+		if err := g.RunUntilQuiet(); !errors.Is(err, ErrTimeFrozen) || ran != 5 {
+			t.Fatalf("start %d: six events at one instant: ran %d, %v", start, ran, err)
+		}
+	}
+}
+
+func TestMaxSameInstantRestartsWhenRunUntilMovesTheClock(t *testing.T) {
+	f := New(Config{Seed: 9, MaxSameInstant: 5})
+	ran := 0
+	for i := 0; i < 4; i++ {
+		f.At(3, func() { ran++ })
+	}
+	if err := f.RunUntil(10); err != nil || f.Now() != 10 {
+		t.Fatalf("now %d, %v", f.Now(), err)
+	}
+	for i := 0; i < 5; i++ {
+		f.At(10, func() { ran++ })
+	}
+	if err := f.RunUntilQuiet(); err != nil || ran != 9 {
+		t.Fatalf("ran %d, %v", ran, err)
+	}
+}
