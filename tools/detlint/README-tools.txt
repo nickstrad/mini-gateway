@@ -108,9 +108,13 @@ Paths in findings are relative to -root (or to the trees, for astdiff).
 
 2. nocomments -root DIR [-baseline OLD] [PATH...]
    PATHs relative to DIR (dirs or single files); default ".". Skips dirs named
-   agent_work .git testdata vendor tools (anywhere below the start path; astdiff and
-   paniccheck skip the same names, and importlint reports a directory named agent_work,
-   tools or vendor below the top level, so the skip cannot hide product code).
+   agent_work .git vendor tools (anywhere below the start path; importlint reports a
+   directory named agent_work, tools or vendor below the top level, so the skip cannot
+   hide product code). A testdata directory is NOT skipped: a Go fixture of a product
+   package follows the comment rule like any other file, and one that does not parse is a
+   [parse] finding (name a fixture that must not parse something other than .go). The
+   fixtures of these tools sit under tools/, which is skipped as a whole. astdiff and
+   paniccheck still skip agent_work .git testdata vendor tools.
    Allowed: comments matching exactly ^//go:(build|embed|generate|noinline)( |$), where a
    //go:build line must also sit before the package clause; "// Output:" / "// Unordered
    output:" comment groups inside the body of an Example* func in a _test.go file.
@@ -123,7 +127,7 @@ Paths in findings are relative to -root (or to the trees, for astdiff).
    Example: $BIN/nocomments -root .
 
 3. astdiff TREE_A TREE_B
-   Every .go file (same dir exclusions as nocomments) must exist in both and have identical
+   Every .go file (dirs named agent_work .git testdata vendor tools are skipped) must exist in both and have identical
    ASTs ignoring positions and comments (formatting-only changes pass). Significant comments
    must match in text, order and placement: //go:* lines, // +build lines, //line and /*line,
    //export, //extern, the cgo preamble (the whole comment group documenting import "C",
@@ -135,6 +139,11 @@ Paths in findings are relative to -root (or to the trees, for astdiff).
    go.mod, go.sum, go.work, go.work.sum, or with extension .c .cc .cxx .cpp .m .h .hh .hpp
    .hxx .f .F .for .f90 .s .S .sx .swig .swigcxx .syso. All other non-Go files (.txt, .md,
    embedded data, ...) are ignored.
+   LIMIT, and what covers it: astdiff says nothing about files it ignores or skips (test
+   data, scripts, rules files, Go under testdata or tools). At GATE_STAGE=final the gate
+   therefore also lists `git diff --name-only --no-renames GATE_PREPROSE HEAD` and makes
+   every path outside tools/lint-rules/prose-paths.txt a finding ([prose-path], in the
+   same G2 astdiff log). That file is read from the GATE_PREPROSE commit.
    Rule [astdiff], one finding per differing file (first difference); added/removed files and
    differing byte-compared files reported at :1:1.
    LIMIT: where a node's children overlap in source range (a method's receiver lies inside
@@ -171,8 +180,11 @@ Paths in findings are relative to -root (or to the trees, for astdiff).
    Enforces the import rules of PLAN.md section 6.3 and the go.mod requirement rule. The
    rules live in tools/lint-rules/imports.txt so a later chunk extends them without a code
    change. Every .go file under DIR is read with parser.ImportsOnly, whatever its build
-   tags, test files included; directories named agent_work .git testdata vendor tools
-   _site are skipped. A package is the directory a file is in; rules about a package that
+   tags, test files included; directories named agent_work .git vendor tools _site are
+   skipped. A testdata directory is read like any other: the go tool leaves it out of
+   "./..." but a package in it can be imported by its full path, so its files obey the
+   deny, only and third-party rules of the package path they sit at, and importing one is
+   a finding of its own ([testdata-import]). A package is the directory a file is in; rules about a package that
    does not exist yet match nothing and are silent.
    Rules file, one directive per line ('#' and blank lines ignored; a file that does not
    parse is exit 2, not a finding):
@@ -206,7 +218,16 @@ Paths in findings are relative to -root (or to the trees, for astdiff).
                    "indirect lines only if go mod tidy produces them".
    [nested-module] a go.mod below the root outside the skipped directories (its tree is
                    then not read).
-   [layout]        a directory named agent_work, tools or vendor below the top level.
+   [layout]        a directory named agent_work, tools, vendor or _site below the top
+                   level (below a testdata directory too).
+   [testdata-import] an import, in any file, of a package of this module whose path has
+                   an element named testdata. gofmt, go vet, the test run, detlint,
+                   paniccheck and boundlint all leave testdata directories out; this
+                   finding is what makes that safe, because code there can then not be
+                   reached from product or test code.
+                   LIMIT: importlint reads import declarations only. Code that is not
+                   imported but run (`go run ./internal/x/testdata/tool` from a script or
+                   a go:generate line) is not seen by it.
    [parse]         a file whose package clause or import block does not parse (imports that
                    did parse are still checked).
    Example: $BIN/importlint -root . -rules tools/lint-rules/imports.txt
@@ -215,7 +236,11 @@ Paths in findings are relative to -root (or to the trees, for astdiff).
    The bounded-channel lint for the goroutine shell (internal/shell/...). PKGDIR as for
    detlint ("dir/..." recurses; missing directories are skipped silently). Non-test files
    only: a test may use a rendezvous channel. Each package is type-checked with go/types
-   (this module from source, the standard library through the source importer).
+   (this module from source, the standard library through the source importer). Types are
+   judged by their underlying type, so an alias (`type pipe = chan int`) or a named
+   channel type is a channel, and a make(chan) inside a helper or a constructor is checked
+   where it is written: `func mk(n int) chan T { return make(chan T, n) }` is a [chan-cap]
+   finding at the make, since n is not a named constant.
    Summary on stderr: "boundlint: checked N files in M packages".
    Rules:
    [unbuffered]  make(chan T) with no capacity, or with a capacity that is a constant equal
@@ -231,18 +256,55 @@ Paths in findings are relative to -root (or to the trees, for astdiff).
                  variable copied from a config field and a function result are all findings.
    [unbounded-growth]  inside the body of a `for` statement with no condition (`for { }`,
                  `for ;; post { }`) or of a `for ... range` over a channel, at any depth
-                 (function literals included): an assignment `x.f = append(...)` (any
-                 assignment whose left side is a struct field and whose matching right side
-                 is a call of the builtin append), or an assignment or ++/-- to `x.f[k]`
-                 where x.f is a struct field of map type -- unless the enclosing top-level
-                 function contains a comparison (< <= > >= == !=) one side of which is
-                 len(x.f), with x.f spelled the same way. Allowlistable.
-                 LIMIT: the comparison only has to exist in the function; the lint does not
-                 prove that it guards the insertion. A length check in a helper
-                 (`if b.full()`) is not seen: allowlist the function and say where the bound
-                 is. Growth through a local alias (q := &b.queue), through a method call
-                 (b.queue.Push), in a loop with a condition, or in a function the loop calls
-                 is not seen.
+                 (function literals included), a GROWTH SITE with no length check.
+                 A growth site is an assignment whose right side is a call of the builtin
+                 append (`T = append(...)`), or an assignment or ++/-- to `T[k]` where T has
+                 map type, and whose target T, after removing parentheses and pointer
+                 dereferences, is one of:
+                 (a) a struct field `x.f`;
+                 (b) anything reached through a dereference (`*p`, `(*p)[k]`), whatever p
+                     is: a local `p := &b.queue`, a parameter, a field of pointer type;
+                 (c) a package-level variable;
+                 (d) for a map only: a variable the function did not make itself. A local
+                     is "made here" when it is declared in the function with := or var,
+                     every value ever assigned to it is a make(...) call or a composite
+                     literal, and its address is never taken. A parameter, a copy of a
+                     field (`m := b.seen`) and a function result are not, because a map
+                     value is a reference and may be a field under another name.
+                 A local slice variable is not a target: appending to a copy of a slice
+                 header does not lengthen the original.
+                 The length check: the enclosing top-level function contains a comparison
+                 (< <= > >= == !=) one side of which is len(T), T spelled the same way.
+                 CALLS: a call in the loop body that statically names a function or method
+                 declared in the same package (generic or not, also behind `go` or
+                 `defer`) is followed, through any depth of such calls. Every growth site
+                 in the bodies reached counts as inside the loop unless the function
+                 holding it has the length check for it, or the target is a field or a
+                 package variable and the function holding the loop compares len() of
+                 that same field or variable, however it is spelled there. The finding is
+                 reported at the call, names the place reached, and is allowed by an
+                 allow line for the function holding the loop.
+                 Allowlistable.
+                 LIMITS, exactly:
+                 - the comparison only has to exist in the function; the lint does not
+                   prove that it guards the insertion. A length check hidden in a helper
+                   (`if b.full()`) is not seen: allowlist the function and say where the
+                   bound is.
+                 - a call is followed only when the callee is known statically and is
+                   declared in the same package. Not followed: a call through an interface
+                   or a function value (a variable holding a func or a method value, a
+                   func field, a func parameter), and a call into another package, the
+                   standard library included (container/list, a helper package's Push).
+                 - growth that is not append or a map insertion is not seen: writing to a
+                   bytes.Buffer or strings.Builder, a linked list, `s = s[:len(s)+1]`,
+                   copying into a larger slice.
+                 - a slice element (`x.rows[i] = append(x.rows[i], v)`) and a local slice
+                   variable declared outside the loop are not targets.
+                 - a loop with a condition (`for !done { }`, `for i := 0; ; i++` counts as
+                   unbounded, `for cond { }` does not), a `range` over anything but a
+                   channel, recursion without a loop, and a goroutine started once per
+                   request are not unbounded loops for this rule.
+                 - test files are not read.
    [buildtag]    a non-test .go file the default build leaves out (its channels cannot be
                  checked).   [typecheck] [parse]: as for detlint.
    -allow lines: relative/file.go<TAB>Func<TAB>rule-id<TAB>justification, as for detlint,
