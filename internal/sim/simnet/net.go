@@ -1,6 +1,7 @@
 package simnet
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -150,13 +151,14 @@ func (n *Net) Dial(to string, opts Options, h Handler) *End {
 
 func (n *Net) quiesce() error {
 	st := &n.stats
+	var errs []error
 	if st.open != 0 || st.connecting != 0 {
-		return fmt.Errorf("%d connections open, %d connecting", st.open, st.connecting)
+		errs = append(errs, fmt.Errorf("%d connections open, %d connecting", st.open, st.connecting))
 	}
 	if st.dir[up].InFlight != 0 || st.dir[down].InFlight != 0 {
-		return fmt.Errorf("bytes in flight: up %d, down %d", st.dir[up].InFlight, st.dir[down].InFlight)
+		errs = append(errs, fmt.Errorf("bytes in flight: up %d, down %d", st.dir[up].InFlight, st.dir[down].InFlight))
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func (n *Net) conservation() error {
