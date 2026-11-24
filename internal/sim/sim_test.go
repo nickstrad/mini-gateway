@@ -818,3 +818,13 @@ func TestAddDurationsSaturates(t *testing.T) {
 		}
 	}
 }
+
+func TestTraceTailOfZeroOrNegativeIsEmpty(t *testing.T) {
+	s := New(Config{Seed: 1})
+	s.Trace(K("toy.add"), 1, 2, 3, 4)
+	for _, n := range []int{0, -1, math.MinInt} {
+		if len(s.TraceTail(n)) != 0 || len(s.LogTail(n)) != 0 {
+			t.Fatalf("tail %d not empty", n)
+		}
+	}
+}

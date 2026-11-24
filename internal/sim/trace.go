@@ -90,6 +90,9 @@ func (t *trace) add(r Record) {
 func (t *trace) ringLen() int { return len(t.ring) }
 
 func (t *trace) tail(n int) []Record {
+	if n <= 0 {
+		return nil
+	}
 	if n > len(t.ring) {
 		n = len(t.ring)
 	}
