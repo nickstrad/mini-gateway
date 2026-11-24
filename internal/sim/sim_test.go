@@ -468,3 +468,336 @@ func TestKernelSnapshotCountersMove(t *testing.T) {
 		t.Fatalf("scheduled %d != fired %d + cancelled %d + queued %d", end.Scheduled, end.Fired, end.Cancelled, end.HeapLen)
 	}
 }
+
+func TestTimerHandleSemantics(t *testing.T) {
+	s := New(Config{Seed: 1})
+	var zero Timer
+	if zero.Pending() || zero.Cancel() || zero.When() != 0 {
+		t.Fatal("zero timer")
+	}
+	zero.MarkBackground()
+	tm := s.After(10, func() {})
+	if !tm.Pending() || tm.When() != 10 {
+		t.Fatal("pending timer")
+	}
+	tm.MarkBackground()
+	tm.MarkBackground()
+	if s.Snapshot().BackgroundTimers != 1 {
+		t.Fatal("background counted twice")
+	}
+	if !tm.Cancel() || s.Snapshot().BackgroundTimers != 0 {
+		t.Fatal("cancel of a background timer")
+	}
+	fired := s.After(5, func() {})
+	_ = s.RunUntilQuiet()
+	if fired.Pending() || fired.Cancel() {
+		t.Fatal("fired timer still cancellable")
+	}
+}
+
+func TestRunUntilQuietIgnoresOnlyBackground(t *testing.T) {
+	s := New(Config{Seed: 1})
+	ticks := 0
+	var tick func()
+	tick = func() {
+		ticks++
+		s.After(10, tick).MarkBackground()
+	}
+	s.After(0, tick).MarkBackground()
+	done := false
+	s.After(35, func() { done = true })
+	if err := s.RunUntilQuiet(); err != nil {
+		t.Fatal(err)
+	}
+	if !done || ticks != 4 || s.Now() != 35 {
+		t.Fatalf("done %v ticks %d now %d", done, ticks, s.Now())
+	}
+	if err := s.CheckQuiesce(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type countHandler struct {
+	codes []uint64
+}
+
+func (h *countHandler) OnEvent(code uint64) { h.codes = append(h.codes, code) }
+
+func TestHandlerEventsCarryTheirCode(t *testing.T) {
+	s := New(Config{Seed: 1})
+	h := &countHandler{}
+	s.AtHandler(5, h, 7)
+	s.AfterHandler(3, h, 9)
+	s.AtHandler(5, h, 8).Cancel()
+	_ = s.RunUntilQuiet()
+	if !slices.Equal(h.codes, []uint64{9, 7}) {
+		t.Fatalf("codes %v", h.codes)
+	}
+}
+
+func TestFailIsStickyAndFirstWins(t *testing.T) {
+	s := New(Config{Seed: 1})
+	first := errors.New("first")
+	s.Fail(nil)
+	s.Fail(first)
+	s.Fail(errors.New("second"))
+	if s.Err() != first {
+		t.Fatal("first error lost")
+	}
+	if _, err := s.Step(); err != first {
+		t.Fatal("step ran after a failure")
+	}
+	if s.RunUntil(100) != first || s.Now() != 0 {
+		t.Fatal("clock moved after a failure")
+	}
+	if s.Verify() != first || s.CheckInvariants() != first {
+		t.Fatal("verify")
+	}
+}
+
+func TestReplayLines(t *testing.T) {
+	if got := DefaultReplay("echo", -3); got != "REPLAY: go run ./cmd/mgsim run echo -seed -3" {
+		t.Fatal(got)
+	}
+	if !strings.Contains(DefaultReplay("", 5), "seed 5") {
+		t.Fatal("no scenario")
+	}
+	s := New(Config{Seed: 2, Scenario: "x"})
+	s.SetReplay("REPLAY: other")
+	if s.Replay() != "REPLAY: other" || s.Seed() != 2 {
+		t.Fatal("SetReplay")
+	}
+}
+
+func TestRegistriesAreBounded(t *testing.T) {
+	s := New(Config{Seed: 1})
+	var err error
+	for i := 0; i <= MaxRegistrations && err == nil; i++ {
+		err = s.RegisterInvariant("i", func() error { return nil })
+	}
+	if !errors.Is(err, ErrRegistryFull) || !errors.Is(s.Err(), ErrRegistryFull) {
+		t.Fatalf("got %v", err)
+	}
+	s = New(Config{Seed: 1})
+	err = nil
+	for i := 0; i <= MaxFaultKinds && err == nil; i++ {
+		err = s.RegisterFaultKind(FaultKind(i), "k", func(Fault) error { return nil })
+	}
+	if !errors.Is(err, ErrRegistryFull) {
+		t.Fatalf("fault kinds: %v", err)
+	}
+}
+
+func TestFaultApplyErrorFailsTheRun(t *testing.T) {
+	s := New(Config{Seed: 1})
+	bad := errors.New("cannot apply")
+	_ = s.RegisterFaultKind(2, "bad", func(Fault) error { return bad })
+	s.InjectAt(Fault{At: 4, Kind: 2, Target: 1})
+	err := s.RunUntilQuiet()
+	var fe *FaultError
+	if !errors.As(err, &fe) || !errors.Is(err, bad) || fe.Fault.At != 4 {
+		t.Fatalf("got %v", err)
+	}
+	if !strings.Contains(err.Error(), "fault kind 2 target 1 at 4") {
+		t.Fatal(err.Error())
+	}
+}
+
+func TestKindAndRecordFormatting(t *testing.T) {
+	if K("abcdefghijk").String() != "abcdefgh" || K("").String() != "" {
+		t.Fatal("kind truncation")
+	}
+	r := Record{At: 5, Kind: K("net.wr"), A: 1, B: -2, C: 3, D: 4}
+	if r.String() != "t=5 net.wr 1 -2 3 4" {
+		t.Fatal(r.String())
+	}
+	d := Digests{}
+	if !strings.HasPrefix(d.String(), "trace=0000") || len(d.Trace.String()) != 64 {
+		t.Fatal(d.String())
+	}
+	if Time(5).String() != "5ns" || Time(5).Add(3) != 8 || Time(5).Sub(8) != -3 {
+		t.Fatal("time helpers")
+	}
+}
+
+func TestTraceRingKeepsTheLastRecordsInOrder(t *testing.T) {
+	for _, ring := range []int{1, 3, 8, 100} {
+		s := New(Config{Seed: 1, TraceRing: ring})
+		for i := 0; i < 50; i++ {
+			s.Trace(K("x"), int64(i), 0, 0, 0)
+		}
+		tail := s.TraceTail(ring)
+		want := min(ring, 50)
+		if len(tail) != want {
+			t.Fatalf("ring %d: %d records", ring, len(tail))
+		}
+		for i, r := range tail {
+			if r.A != int64(50-want+i) {
+				t.Fatalf("ring %d: record %d is %d", ring, i, r.A)
+			}
+		}
+		if len(s.TraceTail(2)) != min(2, want) {
+			t.Fatal("short tail")
+		}
+	}
+	big := New(Config{Seed: 1, TraceRing: MaxTraceRing * 4})
+	if cap(big.trace.ring) != MaxTraceRing {
+		t.Fatal("ring not bounded")
+	}
+}
+
+func TestTraceDigestCoversEveryField(t *testing.T) {
+	base := Record{At: 1, Kind: K("k"), A: 2, B: 3, C: 4, D: 5}
+	digest := func(r Record) Digest {
+		s := New(Config{Seed: 1})
+		s.trace.add(r)
+		return s.TraceDigest()
+	}
+	ref := digest(base)
+	for i := 0; i < 6; i++ {
+		r := base
+		switch i {
+		case 0:
+			r.At++
+		case 1:
+			r.Kind = K("j")
+		case 2:
+			r.A++
+		case 3:
+			r.B++
+		case 4:
+			r.C++
+		case 5:
+			r.D++
+		}
+		if digest(r) == ref {
+			t.Fatalf("field %d not in the digest", i)
+		}
+	}
+}
+
+func TestStateDigestFollowsRegistrationOrder(t *testing.T) {
+	mk := func(order []string) Digest {
+		s := New(Config{Seed: 1})
+		for _, name := range order {
+			name := name
+			s.RegisterState(name, func(w StateSink) { w.String(name); w.Int(int64(len(name))) })
+		}
+		return s.StateDigest()
+	}
+	if mk([]string{"a", "bb"}) == mk([]string{"bb", "a"}) {
+		t.Fatal("order ignored")
+	}
+	if mk([]string{"a", "bb"}) != mk([]string{"a", "bb"}) {
+		t.Fatal("not a function")
+	}
+}
+
+func TestShrinkEdgeCases(t *testing.T) {
+	if out := Shrink(nil, func([]Fault) bool { return true }); len(out) != 0 {
+		t.Fatal("empty")
+	}
+	in := []Fault{{Kind: 1}, {Kind: 2}}
+	out := Shrink(in, func(f []Fault) bool { return true })
+	if len(out) != 0 || len(in) != 2 {
+		t.Fatal("always-failing predicate should shrink to nothing without touching the input")
+	}
+	out = Shrink(in, func(f []Fault) bool { return len(f) == 2 })
+	if len(out) != 2 {
+		t.Fatal("nothing removable")
+	}
+}
+
+func TestScheduleWindowAndArguments(t *testing.T) {
+	sp := Space{Kinds: []FaultKind{4}, Targets: 3, Start: 1000, Window: 65536, MaxArg1: 255, MaxArg2: 0}
+	sched := ScheduleFromBytes([]byte{0, 5, 0xff, 0xff, 0, 7, 9, 9, 0, 1, 0, 0, 1, 0}, sp)
+	if len(sched) != 2 {
+		t.Fatalf("%d faults", len(sched))
+	}
+	if sched[0].At != 1000 || sched[1].At != 1000+65535 {
+		t.Fatalf("times %d %d", sched[0].At, sched[1].At)
+	}
+	if sched[1].Target != 2 || sched[1].Arg1 != 7 || sched[1].Arg2 != 0 || sched[0].Arg1 != 256%256 {
+		t.Fatalf("%+v", sched)
+	}
+	big := ScheduleFromBytes([]byte{0, 0, 0xff, 0xff}, Space{Kinds: []FaultKind{1}, Window: MaxTime})
+	if big[0].At < 0 {
+		t.Fatal("window overflowed")
+	}
+}
+
+type modelTimer struct {
+	at        Time
+	id        int
+	cancelled bool
+	fired     bool
+}
+
+func TestLoopAgainstReferenceModel(t *testing.T) {
+	for seed := int64(0); seed < int64(propSeeds(t)); seed++ {
+		s := New(Config{Seed: seed})
+		r := s.Stream("model")
+		var model []*modelTimer
+		var handles []Timer
+		var fired []int
+		for op := 0; op < 300; op++ {
+			switch k := r.IntN(10); {
+			case k < 5:
+				id := len(model)
+				at := s.Now() + Time(r.IntN(40))
+				m := &modelTimer{at: at, id: id}
+				model = append(model, m)
+				handles = append(handles, s.At(at, func() {
+					m.fired = true
+					fired = append(fired, id)
+				}))
+			case k < 7 && len(model) > 0:
+				i := r.IntN(len(model))
+				want := !model[i].cancelled && !model[i].fired
+				if handles[i].Cancel() != want {
+					t.Fatalf("seed %d: Cancel of %d returned %v", seed, i, !want)
+				}
+				if want {
+					model[i].cancelled = true
+				}
+			default:
+				until := s.Now() + Time(r.IntN(30))
+				var due []*modelTimer
+				for _, m := range model {
+					if !m.cancelled && !m.fired && m.at <= until {
+						due = append(due, m)
+					}
+				}
+				slices.SortStableFunc(due, func(a, b *modelTimer) int { return int(a.at - b.at) })
+				before := len(fired)
+				if err := s.RunUntil(until); err != nil {
+					t.Fatal(err)
+				}
+				got := fired[before:]
+				if len(got) != len(due) {
+					t.Fatalf("seed %d: fired %d, model %d", seed, len(got), len(due))
+				}
+				for j, m := range due {
+					if got[j] != m.id {
+						t.Fatalf("seed %d: fired %v, model order differs at %d", seed, got, j)
+					}
+				}
+				if s.Now() != until {
+					t.Fatalf("seed %d: clock at %d, want %d", seed, s.Now(), until)
+				}
+			}
+		}
+		pending := int64(0)
+		for i, m := range model {
+			if !m.cancelled && !m.fired {
+				pending++
+				if !handles[i].Pending() || handles[i].When() != m.at {
+					t.Fatalf("seed %d: timer %d not pending at %d", seed, i, m.at)
+				}
+			}
+		}
+		if s.Snapshot().PendingTimers != pending {
+			t.Fatalf("seed %d: %d pending, model %d", seed, s.Snapshot().PendingTimers, pending)
+		}
+	}
+}

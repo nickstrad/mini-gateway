@@ -197,3 +197,106 @@ func TestConservationNamesTheSideThatIsOff(t *testing.T) {
 		t.Fatalf("gauge %+v", g)
 	}
 }
+
+func TestGenericRangesForBytesAndCounts(t *testing.T) {
+	h, err := NewHistogram(1, 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for v := int64(1); v <= 255; v++ {
+		h.Record(v)
+	}
+	for bp := int64(1); bp <= BasisPoints; bp += 37 {
+		q := h.Quantile(bp)
+		rank := (255*bp + BasisPoints - 1) / BasisPoints
+		if q != max(rank, 1) {
+			t.Fatalf("exact range: bp %d got %d want %d", bp, q, rank)
+		}
+	}
+	counts, _ := NewHistogram(0, 1000)
+	counts.RecordN(1000, 3)
+	counts.RecordN(5, 0)
+	counts.RecordN(5, -2)
+	if counts.Count() != 3 || counts.Quantile(5000) != 1000 {
+		t.Fatalf("count %d q %d", counts.Count(), counts.Quantile(5000))
+	}
+}
+
+func TestQuantileArgumentClamped(t *testing.T) {
+	h := NewDurationHistogram()
+	h.Record(5000)
+	h.Record(9_000_000)
+	if h.Quantile(-5) != h.Quantile(0) || h.Quantile(20_000) != h.Quantile(BasisPoints) {
+		t.Fatal("out-of-range quantile not clamped")
+	}
+	if h.Quantile(0) < 5000 || h.Quantile(0) > 5000+5000/ErrorBoundDenom {
+		t.Fatal(h.Quantile(0))
+	}
+}
+
+func TestBucketsIterationStopsEarlyAndSnapshotCopies(t *testing.T) {
+	h := NewDurationHistogram()
+	for _, v := range []int64{2000, 3000, 4_000_000, 4_000_001, 50_000_000_000} {
+		h.Record(v)
+	}
+	n := 0
+	for range h.Buckets() {
+		n++
+		if n == 2 {
+			break
+		}
+	}
+	if n != 2 {
+		t.Fatal("early stop")
+	}
+	snap := h.Snapshot()
+	if snap.Count != 5 || snap.Min != 2000 || snap.Max != 50_000_000_000 || snap.Lo != DurationLo || snap.Hi != DurationHi {
+		t.Fatalf("%+v", snap)
+	}
+	if len(snap.Buckets) != 4 {
+		t.Fatalf("%d buckets: %+v", len(snap.Buckets), snap.Buckets)
+	}
+	h.Record(7000)
+	if len(snap.Buckets) != 4 || snap.Count != 5 {
+		t.Fatal("snapshot shares state with the histogram")
+	}
+	prev := int64(-1)
+	for _, b := range snap.Buckets {
+		if b.Lo <= prev {
+			t.Fatal("buckets out of order")
+		}
+		prev = b.Hi
+	}
+}
+
+func TestMergeIntoEmptyAndFromEmpty(t *testing.T) {
+	a := NewDurationHistogram()
+	b := NewDurationHistogram()
+	b.Record(10_000)
+	b.Record(-1)
+	if err := a.Merge(NewDurationHistogram()); err != nil || a.Count() != 0 {
+		t.Fatal("merge of empty")
+	}
+	if err := a.Merge(b); err != nil {
+		t.Fatal(err)
+	}
+	if a.Count() != 2 || a.ClampedLow() != 1 || a.Snapshot().Min != DurationLo || a.Snapshot().Max != 10_000 {
+		t.Fatalf("%+v", a.Snapshot())
+	}
+}
+
+func TestDurationHistogramFootprint(t *testing.T) {
+	h := NewDurationHistogram()
+	if bytes := h.BucketCount() * 8; bytes > 27_000 {
+		t.Fatalf("%d bytes of buckets", bytes)
+	}
+	if bucketIndex(DurationHi) >= bucketIndex(MaxValue) {
+		t.Fatal("range")
+	}
+}
+
+func TestConserveWithNoParts(t *testing.T) {
+	if Conserve(T("x", 0)) != nil || Conserve(T("x", 1)) == nil {
+		t.Fatal("empty parts")
+	}
+}
