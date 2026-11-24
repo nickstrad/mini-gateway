@@ -198,6 +198,7 @@ func (e *End) Close() error {
 	e.readClosed = true
 	e.state = stClosed
 	e.in().discardAll()
+	e.in().unblock()
 	e.in().epoch++
 	e.c.maybeFinish()
 	return nil
