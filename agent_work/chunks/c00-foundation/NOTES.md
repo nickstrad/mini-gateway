@@ -148,6 +148,7 @@ result, `CANARY_ONLY=g3-failing-test` reported MISSED. The change was reverted.
 
 ## Left for the orchestrator
 
+- `main` moved while this chunk was built (it is at `90e417c`; this branch starts from `72dc559`, which is not on `main`). `land.sh` wants the branch rebased on `main`; a rebase changes the commit ids, so rerun `GATE_STAGE=foundation scripts/gate.sh c00-foundation` on the rebased tip (8 s) and commit the new `result.json`. The builder did not rebase: the brief says not to merge.
 - Land with `LAND_NO_REVIEW=1 agent_work/orch/land.sh c00-foundation work/c00-foundation <message-file>`.
 - After the push: the first CI run, and `agent_work/orch/pages-check.sh <sha> "" book/index.html`.
 - STATE.md and PLAN.md were not edited (the brief forbids it).
