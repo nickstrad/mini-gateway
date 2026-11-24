@@ -132,17 +132,25 @@ func TestLinesLongerThanTheWindow(t *testing.T) {
 }
 
 func TestServerPendingEchoIsBounded(t *testing.T) {
-	o := BaseOptions()
-	o.Window = 1 << 20
-	o.Down.Latency.Base = 0
-	res := Run(Config{Seed: 1, Options: o, Clients: 1, Lines: 1, MaxLine: MaxPending + 10, Deadline: 10 * DefaultDeadline})
-	if res.Err != nil {
-		t.Fatal(res.Err)
+	const seed, maxLine = 1, 4 * MaxPending
+	first := 1 + sim.New(sim.Config{Seed: seed}).Stream("simtoy/client/0").IntN(maxLine)
+	if first <= MaxPending {
+		t.Fatalf("seed %d gives a first line of %d bytes, not above MaxPending", seed, first)
 	}
-	if res.Server.Resets != 0 && res.Outcomes[0] != OutcomeReset {
+	o := BaseOptions()
+	o.Window = MaxPending
+	o.Down.Latency.Base = 0
+	res := Run(Config{Seed: seed, Options: o, Clients: 1, Lines: 1, MaxLine: maxLine, Deadline: 100 * DefaultDeadline})
+	if res.Err != nil || res.Quiesce != nil {
+		t.Fatal(res.Err, res.Quiesce)
+	}
+	if res.Outcomes[0] != OutcomeReset {
 		t.Fatalf("outcome %s", res.Outcomes[0])
 	}
-	if res.Server.Echoed > MaxPending {
-		t.Fatalf("echoed %d", res.Server.Echoed)
+	if r := res.Net.Snapshot().Closed.Reset; r != 1 {
+		t.Fatalf("closed by reset %d", r)
+	}
+	if res.Server.Echoed != 0 || res.Server.Lines != 0 {
+		t.Fatalf("echoed %d lines %d", res.Server.Echoed, res.Server.Lines)
 	}
 }

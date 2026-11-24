@@ -347,6 +347,10 @@ func (sc *serverConn) take(b []byte) {
 	sc.pieces++
 	for _, ch := range b {
 		sc.line = append(sc.line, ch)
+		if len(sc.out)+len(sc.line) > MaxPending {
+			sc.overflow()
+			return
+		}
 		if ch != '\n' {
 			continue
 		}
@@ -356,11 +360,6 @@ func (sc *serverConn) take(b []byte) {
 		}
 		sc.w.server.Lines++
 		sc.w.s.Trace(kindEcho, sc.e.ID(), int64(len(echo)), 0, 0)
-		if len(sc.out)+len(echo) > MaxPending {
-			sc.closed = true
-			_ = sc.e.Reset()
-			return
-		}
 		sc.out = append(sc.out, echo...)
 		sc.line = sc.line[:0]
 		sc.pieces = 1
@@ -369,6 +368,11 @@ func (sc *serverConn) take(b []byte) {
 		sc.pieces = 0
 	}
 	sc.flush()
+}
+
+func (sc *serverConn) overflow() {
+	sc.closed = true
+	_ = sc.e.Reset()
 }
 
 func (sc *serverConn) flush() {
