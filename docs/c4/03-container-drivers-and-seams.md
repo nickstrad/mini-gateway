@@ -19,7 +19,6 @@ flowchart TB
     C_ADM["Admission<br/>internal/admission"]
     C_POOL["Pool<br/>internal/pool"]
     C_COAL["Coalescer<br/>internal/coalesce"]
-    C_BATCH["Batcher<br/>internal/batch"]
     C_RETRY["Retry policy<br/>internal/retry"]
   end
   C_SHELL -->|1| C_ENGINE
@@ -30,16 +29,15 @@ flowchart TB
   C_ADM -->|6| C_WORK
   C_POOL -->|7| C_WORK
   C_COAL -->|8| C_WORK
-  C_BATCH -->|9| C_WORK
-  C_RETRY -->|10| C_WORK
-  C_SIM -->|11| PGPROTO3
-  C_E2E -->|12| C_SIM
-  C_E2E -->|13| C_SHELL
-  C_E2E -->|14| PG
-  DEVELOPER -->|15| C_SIM
-  DEVELOPER -->|16| C_E2E
-  C_SIM -->|17| C_WORK
-  C_SHELL -->|18| PG
+  C_RETRY -->|9| C_WORK
+  C_SIM -->|10| PGPROTO3
+  C_E2E -->|11| C_SIM
+  C_E2E -->|12| C_SHELL
+  C_E2E -->|13| PG
+  DEVELOPER -->|14| C_SIM
+  DEVELOPER -->|15| C_E2E
+  C_SIM -->|16| C_WORK
+  C_SHELL -->|17| PG
 ```
 
 ## Elements
@@ -49,14 +47,13 @@ flowchart TB
 | Developer or reader | person | Runs simulator scenarios from a seed, replays a failure from its printed REPLAY line, runs make test / chaos / bench. |
 | Simulator harness | container, test code | internal/sim, internal/sim/simnet, fakepg, workload, simtest, cmd/mgsim. A deterministic single-threaded world: virtual clock, simulated byte streams, a fake Postgres, simulated clients, faults, replay. Test code; built before any proxy code. |
 | End-to-end suite and load generator | container, test code | test/e2e and cmd/loadgen. Each scenario is written once and runs on the simulator (tier S) and on the real binary against a real Postgres (tier R). The load generator is open-loop. |
-| Shell and binary | container | cmd/mini-gateway and internal/shell. Listeners, one reader and one writer goroutine per connection, bounded mailboxes, a deadline on every socket operation, the admin listener on its own port, signal handling. Makes no decisions: it posts events to the engine and performs the actions the engine returns. |
+| Shell and binary | container | cmd/mini-gateway and internal/shell. Listeners, one reader and one writer goroutine per connection, bounded mailboxes, a deadline on every socket operation, TLS on both legs with crypto/tls (it answers a client's TLS request, upgrades the socket and buffers nothing across the upgrade), the admin listener on its own port, signal handling. Makes no decisions: it posts events to the engine and performs the actions the engine returns. |
 | Engine | container | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code. |
 | Wire layer | container | internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the statement classifier, the error contract. The only product package that imports pgproto3. |
-| Work vocabulary | container | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, batchable flag, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
+| Work vocabulary | container | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
 | Admission | container | internal/admission. Rate gate, per-tenant queues with two selectable queue rules, adaptive LIFO, round-robin dispatcher with shares that bind under saturation, adaptive concurrency limit. |
 | Pool | container | internal/pool. Hard-capped database connections, creation limiter, leases per transaction, the one breaker, the dirty-connection table. |
 | Coalescer | container | internal/coalesce. Identical provably-read-only statements share one database read. Never writes. |
-| Batcher | container | internal/batch. Timer-free: when a connection frees up, eligible queued single statements go out in one write. Off by default. |
 | Retry policy | container | internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached the database, within a 10% budget. |
 | pgproto3 (from pgx/v5) | softwareSystem, external | Go package github.com/jackc/pgx/v5/pgproto3: Postgres wire message structs with Encode and Decode. The one external dependency, used for message encoding only. |
 | Postgres | softwareSystem, external | One ordinary Postgres server. Sees at most the fleet's connection budget, all logged in as one role. |
@@ -73,13 +70,12 @@ flowchart TB
 | 6 | Admission | Work vocabulary | Written against these types only | Go types |
 | 7 | Pool | Work vocabulary | Written against these types only | Go types |
 | 8 | Coalescer | Work vocabulary | Written against these types only | Go types |
-| 9 | Batcher | Work vocabulary | Written against these types only | Go types |
-| 10 | Retry policy | Work vocabulary | Written against these types only | Go types |
-| 11 | Simulator harness | pgproto3 (from pgx/v5) | The fake Postgres and the simulated clients speak real wire bytes | Go import, test code |
-| 12 | End-to-end suite and load generator | Simulator harness | Tier S: runs each scenario on the simulator | Go test |
-| 13 | End-to-end suite and load generator | Shell and binary | Tier R: runs the real binary and drives it with test clients and open-loop load | Process, Postgres wire protocol |
-| 14 | End-to-end suite and load generator | Postgres | Tier R: starts a real Postgres 17 container and checks its state | Docker, Postgres wire protocol |
-| 15 | Developer or reader | Simulator harness | Runs a scenario from a seed; replays a failure | cmd/mgsim, go test |
-| 16 | Developer or reader | End-to-end suite and load generator | make test, make chaos, make bench | make |
-| 17 | Simulator harness | Work vocabulary | Synthetic workloads drive the cores directly, with no Postgres code | Go types, test code |
-| 18 | Shell and binary | Postgres | Opens the pooled connections and moves their bytes | Postgres wire protocol, TCP |
+| 9 | Retry policy | Work vocabulary | Written against these types only | Go types |
+| 10 | Simulator harness | pgproto3 (from pgx/v5) | The fake Postgres and the simulated clients speak real wire bytes | Go import, test code |
+| 11 | End-to-end suite and load generator | Simulator harness | Tier S: runs each scenario on the simulator | Go test |
+| 12 | End-to-end suite and load generator | Shell and binary | Tier R: runs the real binary and drives it with test clients and open-loop load | Process, Postgres wire protocol |
+| 13 | End-to-end suite and load generator | Postgres | Tier R: starts a real Postgres 17 container and checks its state | Docker, Postgres wire protocol |
+| 14 | Developer or reader | Simulator harness | Runs a scenario from a seed; replays a failure | cmd/mgsim, go test |
+| 15 | Developer or reader | End-to-end suite and load generator | make test, make chaos, make bench | make |
+| 16 | Simulator harness | Work vocabulary | Synthetic workloads drive the cores directly, with no Postgres code | Go types, test code |
+| 17 | Shell and binary | Postgres | Opens the pooled connections and moves their bytes | Postgres wire protocol; TCP, TLS by config |

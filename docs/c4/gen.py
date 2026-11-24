@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-REVISION = "target-phase1-2026-11-24-obs-amendment"
+REVISION = "target-approved-2026-11-24-rulings"
 SRC = ["plan"]
 
 E = {}      # id -> element
@@ -80,8 +80,9 @@ person("developer", "Developer or reader",
        "Runs simulator scenarios from a seed, replays a failure from its printed REPLAY line, runs make test / chaos / bench.")
 system("gw", "mini-gateway",
        "A proxy that speaks the Postgres wire protocol (simple-query subset) in front of one Postgres: a hard-capped "
-       "connection pool lent per transaction, per-tenant admission with two CoDel modes, read coalescing, timer-free "
-       "batching, an off-by-default retry policy, snapshot observability. Runs as N independent instances.",
+       "connection pool lent per transaction, per-tenant admission with two CoDel modes, read coalescing, an "
+       "off-by-default retry policy, snapshot observability. Terminates client TLS; logs clients in with "
+       "SCRAM-SHA-256. Runs as N independent instances.",
        tech="Go; one external package (pgproto3)")
 system("pg", "Postgres",
        "One ordinary Postgres server. Sees at most the fleet's connection budget, all logged in as one role.",
@@ -100,7 +101,7 @@ system("duckdb", "DuckDB (analysis tool)",
        tech="DuckDB CLI, SQL", tags=("external",))
 system("otelcol", "OpenTelemetry Collector",
        "Receives the proxy's OTLP/HTTP push, batches it and exposes the metrics on a Prometheus endpoint. Dev setup: "
-       "docker-compose in deploy/obs-dev (chunk 16).", tech="otlp receiver, prometheus exporter", tags=("external",))
+       "docker-compose in deploy/obs-dev (chunk 15).", tech="otlp receiver, prometheus exporter", tags=("external",))
 system("prom", "Prometheus",
        "End of the production path. Scrapes the Collector; sees low-cardinality labels and the bounded tenant label "
        "only. Fleet totals are sums over the instance label.", tech="Prometheus", tags=("external",))
@@ -111,9 +112,11 @@ system("pgproto3", "pgproto3 (from pgx/v5)",
 # --------------------------------------------------------------------------- containers
 container("c-shell", "Shell and binary",
           "cmd/mini-gateway and internal/shell. Listeners, one reader and one writer goroutine per connection, bounded "
-          "mailboxes, a deadline on every socket operation, the admin listener on its own port, signal handling. "
+          "mailboxes, a deadline on every socket operation, TLS on both legs with crypto/tls (it answers a client's "
+          "TLS request, upgrades the socket and buffers nothing across the upgrade), the admin listener on its own "
+          "port, signal handling. "
           "Makes no decisions: it posts events to the engine and performs the actions the engine returns.",
-          tech="Go, goroutines, TCP")
+          tech="Go, goroutines, TCP, crypto/tls")
 container("c-engine", "Engine",
           "internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the "
           "client and database connection tables and the request pipeline with its stage seams. The simulator and the "
@@ -124,7 +127,7 @@ container("c-pgwire", "Wire layer",
           tech="Go, pure state machines, pgproto3")
 container("c-work", "Work vocabulary",
           "internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share "
-          "key, batchable flag, outcome. Carries no Postgres type. This is the extension seam for a second protocol.",
+          "key, outcome. Carries no Postgres type. This is the extension seam for a second protocol.",
           tech="Go types")
 container("c-adm", "Admission",
           "internal/admission. Rate gate, per-tenant queues with two selectable queue rules, adaptive LIFO, round-robin "
@@ -135,9 +138,6 @@ container("c-pool", "Pool",
 container("c-coal", "Coalescer",
           "internal/coalesce. Identical provably-read-only statements share one database read. Never writes.",
           tech="Go, pure core")
-container("c-batch", "Batcher",
-          "internal/batch. Timer-free: when a connection frees up, eligible queued single statements go out in one "
-          "write. Off by default.", tech="Go, pure core")
 container("c-retry", "Retry policy",
           "internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached "
           "the database, within a 10% budget.", tech="Go, pure core")
@@ -157,25 +157,24 @@ container("c-e2e", "End-to-end suite and load generator",
           "binary against a real Postgres (tier R). The load generator is open-loop.", tech="Go test code", tags=("test",))
 
 # --------------------------------------------------------------------------- context relationships
-rel("r-app-gw", "app", "gw", "Connects, logs in, sends statements and transactions", "Postgres wire protocol v3, simple query, TCP")
+rel("r-app-gw", "app", "gw", "Connects, logs in, sends statements and transactions", "Postgres wire protocol v3, simple query; TCP, TLS when the client asks for it")
 rel("r-op-gw", "operator", "gw", "Configures the fleet; reads health and stats; drains", "Config file, HTTP admin port, SIGTERM")
-rel("r-gw-pg", "gw", "pg", "Lends pooled connections per transaction; at most the configured budget", "Postgres wire protocol v3, TCP")
+rel("r-gw-pg", "gw", "pg", "Lends pooled connections per transaction; at most the configured budget", "Postgres wire protocol v3; TCP, TLS by config")
 rel("r-tel-gw", "telemetry", "gw", "Scrapes metrics and stats from every instance and merges them", "HTTP: Prometheus text, JSON")
 rel("r-gw-tel", "gw", "telemetry", "Pushes metrics to a Collector that feeds Prometheus; flushes CSV files; writes log lines", "OTLP/HTTP JSON, files")
 rel("r-dev-gw", "developer", "gw", "Runs simulator scenarios and the test, chaos and benchmark commands", "go test, make, cmd/mgsim")
 rel("r-gw-lib", "gw", "pgproto3", "Encodes and decodes wire messages", "Go import, wire layer only")
 
 # --------------------------------------------------------------------------- container view A (request path)
-rel("c1", "app", "c-shell", "Connects, logs in, sends statements", "Postgres wire protocol, TCP")
+rel("c1", "app", "c-shell", "Connects, logs in, sends statements", "Postgres wire protocol; TCP, TLS when the client asks for it")
 rel("c2", "operator", "c-shell", "Reads health, stats and metrics; sends SIGTERM to drain", "HTTP admin port, signal")
 rel("c3", "c-shell", "c-engine", "Posts events (bytes arrived, connection opened or closed, clock) and performs the returned actions", "Go, bounded mailboxes")
 rel("c4", "c-engine", "c-pgwire", "Turns bytes into work units and outcomes; builds replies the proxy makes itself", "Go, in-process")
 rel("c5", "c-engine", "c-adm", "Gate, enqueue, pick the next request, report completions", "Go, in-process")
 rel("c6", "c-engine", "c-coal", "Join or start a shared read; fan the reply out", "Go, in-process")
 rel("c7", "c-engine", "c-pool", "Lend and release connections; open and close decisions; breaker state", "Go, in-process")
-rel("c8", "c-engine", "c-batch", "Take a batch for a free connection; split the replies", "Go, in-process")
 rel("c9", "c-engine", "c-retry", "Ask whether a failure may be retried", "Go, in-process")
-rel("c10", "c-shell", "pg", "Opens the pooled connections and moves their bytes", "Postgres wire protocol, TCP")
+rel("c10", "c-shell", "pg", "Opens the pooled connections and moves their bytes", "Postgres wire protocol; TCP, TLS by config")
 rel("c11", "c-engine", "c-obs", "Publishes one instance snapshot per interval", "Go, plain structs")
 rel("c12", "c-shell", "c-obs", "Admin listener serves exporters and health from the last published snapshot", "Go, in-process")
 rel("c13", "telemetry", "c-shell", "Scrapes Prometheus text and JSON stats", "HTTP admin port")
@@ -189,7 +188,6 @@ rel("s3", "c-pgwire", "c-work", "Produces work units and outcomes", "Go types")
 rel("s4", "c-adm", "c-work", "Written against these types only", "Go types")
 rel("s5", "c-pool", "c-work", "Written against these types only", "Go types")
 rel("s6", "c-coal", "c-work", "Written against these types only", "Go types")
-rel("s7", "c-batch", "c-work", "Written against these types only", "Go types")
 rel("s8", "c-retry", "c-work", "Written against these types only", "Go types")
 rel("s9", "c-sim", "pgproto3", "The fake Postgres and the simulated clients speak real wire bytes", "Go import, test code")
 rel("s10", "c-e2e", "c-sim", "Tier S: runs each scenario on the simulator", "Go test")
@@ -234,7 +232,6 @@ rel("e7", "e-sessions", "e-pipeline", "One work unit at a time per client", "Go"
 rel("e8", "e-pipeline", "n-adm", "Gate, queue, dispatch, limit", "Go")
 rel("e9", "e-pipeline", "n-coal", "Join or lead a shared read", "Go")
 rel("e10", "e-pipeline", "n-pool", "Lend, release, breaker state, dirty connections", "Go")
-rel("e11", "e-pipeline", "n-batch", "Batch for a free connection", "Go")
 rel("e12", "e-pipeline", "n-retry", "May this failure be retried", "Go")
 rel("e13", "e-pipeline", "e-backends", "Forwards the statement on the lent connection", "Go")
 rel("e14", "e-backends", "e-relay", "Reply messages and the end-of-reply status byte", "Go")
@@ -255,11 +252,12 @@ comp(P, "w-codec", "Codec boundary",
      "The only product code that touches pgproto3: decodes a framed body into a message struct and encodes structs "
      "to bytes. pgproto3's own blocking reader is not used.", tech="Go, pgproto3")
 comp(P, "w-client", "Client session machine",
-     "Client-facing. Answers TLS and GSS requests with no, reads the startup message, finds the tenant by user, runs "
-     "SCRAM-SHA-256 (server side) or trust, sends the parameter set and proxy-issued key data, recognises cancel "
+     "Client-facing. Runs the exchange before startup: answers a TLS request yes or no by config and asks the shell to "
+     "upgrade the connection, answers a GSS encryption request no. Reads the startup message, finds the tenant by "
+     "user, runs SCRAM-SHA-256 (server side; trust only as a named test setting), sends the parameter set and proxy-issued key data, recognises cancel "
      "requests, takes in one query at a time, handles terminate.")
 comp(P, "w-backend", "Database session machine",
-     "Database-facing. Startup, SCRAM-SHA-256 (client side), collects server parameters and key data, reaches ready.")
+     "Database-facing. Asks for TLS first when the config requires it, then startup, SCRAM-SHA-256 (client side), collects server parameters and key data, reaches ready.")
 comp(P, "w-cycle", "Query-cycle tracker",
      "Follows a reply to its ReadyForQuery, reports the transaction status byte (idle, in transaction, failed), "
      "flags an unsolicited ParameterStatus (the connection is now dirty) and any protocol surprise.")
@@ -271,7 +269,7 @@ comp(P, "w-lexer", "SQL lexer",
      "Not a parser.")
 comp(P, "w-classifier", "Statement classifier",
      "Turns a statement into a work unit: rejected (session-level feature), transaction control, provably read-only, "
-     "shareable with its key, batchable. Conservative: what it cannot tokenise is never shared or batched.")
+     "shareable with its key. Conservative: what it cannot tokenise is never shared.")
 comp(P, "w-errors", "Error contract and reply builders",
      "One table: each refusal and failure, its SQLSTATE, whether anything reached the database, whether a write may "
      "have applied. Builds the ErrorResponse and the correct end marker. docs/error-contract.md is generated from it.")
@@ -408,28 +406,6 @@ rel("f8", "f-waiters", "f-deadline", "Last waiter gone: cancel", "Go")
 rel("f9", "f-reply", "f-waiters", "Fans the reply out", "Go")
 rel("f10", "f-reply", "f-neg", "Reply over the cap", "Go")
 rel("f11", "f-join", "n-work", "Reads the share key of a work unit", "Go types")
-
-# --------------------------------------------------------------------------- batcher components
-P = "c-batch"
-comp(P, "b-take", "Take rule",
-     "When a connection frees up, takes what is already queued and eligible, up to a count and byte cap. One request "
-     "with nothing else waiting goes alone at once. There is no timer.")
-comp(P, "b-elig", "Eligibility check",
-     "A request may be batched only if the classifier proved it is a single statement that is not transaction control, "
-     "and its client is outside a transaction.")
-comp(P, "b-split", "Reply splitter",
-     "Splits the replies in order at the end-of-reply markers and matches each to its requester.")
-comp(P, "b-poison", "Poison rule",
-     "If any end marker reports a status other than idle, the connection is closed and the remaining members get the "
-     "may-have-been-applied error.")
-comp(P, "b-snap", "Batcher snapshot",
-     "Snapshot(): batch-size histogram, batched share, in-batch wait histogram, poison events, ineligible reasons.")
-rel("b1", "n-engine", "b-take", "A connection is free and requests are waiting", "Go")
-rel("b2", "n-engine", "b-split", "Reply bytes of a batch", "Go")
-rel("b3", "n-engine", "b-snap", "Snapshot()", "Go")
-rel("b4", "b-take", "b-elig", "Is this request eligible", "Go")
-rel("b5", "b-split", "b-poison", "Status byte of each end marker", "Go")
-rel("b6", "b-elig", "n-work", "Reads the batchable flag of a work unit", "Go types")
 
 # --------------------------------------------------------------------------- retry components
 P = "c-retry"
@@ -613,13 +589,13 @@ diagram("context", "context", "System context", "01-system-context", scope="gw",
 diagram("container", "container", "Containers: the request path", "02-container-request-path", scope="gw", parent="context",
         shows="The Go packages inside one mini-gateway process and how a request passes through them",
         intro="Containers are Go packages inside one process. The shell does all socket I/O and makes no decisions. The "
-              "engine is one single-threaded state machine that calls the wire layer and the five pure cores. "
+              "engine is one single-threaded state machine that calls the wire layer and the four pure cores. "
               "Observability hangs off the side: the engine publishes snapshots, the admin listener serves them.",
-        nodes=["app", "operator", "c-shell", "c-engine", "c-pgwire", "c-adm", "c-coal", "c-pool", "c-batch", "c-retry",
+        nodes=["app", "operator", "c-shell", "c-engine", "c-pgwire", "c-adm", "c-coal", "c-pool", "c-retry",
                "c-obs", "c-config", "pg", "telemetry"],
-        rels=["c%d" % i for i in range(1, 16)], boundary="mini-gateway process",
+        rels=["c%d" % i for i in range(1, 16) if i != 8], boundary="mini-gateway process",
         detail={"c-engine": "component-engine", "c-pgwire": "component-wire", "c-adm": "component-admission",
-                "c-pool": "component-pool", "c-coal": "component-coalescer", "c-batch": "component-batcher",
+                "c-pool": "component-pool", "c-coal": "component-coalescer",
                 "c-retry": "component-retry", "c-obs": "component-observability"})
 
 diagram("container-seams", "container", "Containers: drivers and seams", "03-container-drivers-and-seams", scope="gw", parent="context",
@@ -629,8 +605,8 @@ diagram("container-seams", "container", "Containers: drivers and seams", "03-con
               "(the only product package that imports pgproto3), and the work vocabulary (the only thing the cores see). "
               "A second protocol would be a sibling of the wire layer producing the same vocabulary.",
         nodes=["developer", "c-sim", "c-e2e", "c-shell", "c-engine", "c-pgwire", "c-work", "c-adm", "c-pool", "c-coal",
-               "c-batch", "c-retry", "pgproto3", "pg"],
-        rels=["c3", "s1", "c4", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12", "s13", "s14", "s15", "c10"],
+               "c-retry", "pgproto3", "pg"],
+        rels=["c3", "s1", "c4", "s2", "s3", "s4", "s5", "s6", "s8", "s9", "s10", "s11", "s12", "s13", "s14", "s15", "c10"],
         boundary="mini-gateway repository",
         detail={"c-sim": "component-simulator", "c-engine": "component-engine", "c-pgwire": "component-wire"})
 
@@ -655,8 +631,8 @@ component_diagram("component-engine", "Components: engine", "05-component-engine
                   "The engine is where the seams meet. The transport seam below it has two implementations. The pipeline "
                   "above calls each core through a small stage interface, so a core can be replaced by a pass-through "
                   "(which is how each scenario's ablation run is made).",
-                  ["n-shell", "n-sim", "n-pgwire", "n-adm", "n-coal", "n-pool", "n-batch", "n-retry", "n-obs", "n-work"],
-                  ["e%d" % i for i in range(1, 22)])
+                  ["n-shell", "n-sim", "n-pgwire", "n-adm", "n-coal", "n-pool", "n-retry", "n-obs", "n-work"],
+                  ["e%d" % i for i in range(1, 22) if i != 11])
 component_diagram("component-wire", "Components: wire layer", "06-component-wire-layer", "c-pgwire",
                   "internal/pgwire: the pgproto3 codec boundary, our framer, both session machines, the classifier, the error contract",
                   "pgproto3 gives message structs and nothing else. The framer, the session machines, SCRAM, transaction "
@@ -678,22 +654,17 @@ component_diagram("component-coalescer", "Components: coalescer", "09-component-
                   "internal/coalesce: the join rule, the flight table, waiters, the flight's own deadline, the shared reply",
                   "Followers take no queue slot and no connection. The leader passes through admission like any request.",
                   ["n-engine", "n-work"], ["f%d" % i for i in range(1, 12)])
-component_diagram("component-batcher", "Components: batcher", "10-component-batcher", "c-batch",
-                  "internal/batch: the take rule, eligibility, reply splitting, the poison rule",
-                  "Batching here means writing several independent single-statement requests to one free connection in "
-                  "one write. It exists only where the classifier can prove it is safe, and it is off by default.",
-                  ["n-engine", "n-work"], ["b%d" % i for i in range(1, 7)])
-component_diagram("component-retry", "Components: retry policy", "11-component-retry", "c-retry",
+component_diagram("component-retry", "Components: retry policy", "10-component-retry", "c-retry",
                   "internal/retry: the policy interface, its two policies, the budget",
                   "The default policy is Off. Failures after anything reached the database are never retried under any policy.",
                   ["n-engine", "n-work"], ["t%d" % i for i in range(1, 8)])
-component_diagram("component-simulator", "Components: simulator harness", "12-component-simulator", "c-sim",
+component_diagram("component-simulator", "Components: simulator harness", "11-component-simulator", "c-sim",
                   "internal/sim and its sub-packages: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, faults, the trace, invariants, replay",
                   "The harness owns the world around the engine. It implements the engine's transport seam, so the engine "
                   "under test is the engine that ships. Several engines can run on one loop, which is how the "
                   "three-instance scenarios are made.",
                   ["developer", "n-engine", "n-pgwire", "pgproto3"], ["m%d" % i for i in range(1, 21)])
-component_diagram("component-observability", "Components: observability", "13-component-observability", "c-obs",
+component_diagram("component-observability", "Components: observability", "12-component-observability", "c-obs",
                   "internal/obs: the one raw export (snapshots), the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus",
                   "The hard rule: one common raw export, then the collector interface, then adapters. Components fill "
                   "plain structs; the collector assembles them; every output form is an adapter that reads only what the "
@@ -756,7 +727,7 @@ def model():
             "revision": REVISION, "defaultDiagramId": "context",
             "model": {"elements": list(E.values()), "relationships": list(R.values())},
             "diagrams": diagrams, "documents": [],
-            "sources": [{"id": "plan", "title": "mini-gateway PLAN.md (Phase 1 proposal)",
+            "sources": [{"id": "plan", "title": "mini-gateway PLAN.md (approved 2026-11-24)",
                          "url": "https://github.com/nickstrad/mini-gateway/blob/main/PLAN.md",
                          "notes": "Target architecture. Every element is planned; nothing is built yet."}]}
 

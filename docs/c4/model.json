@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "id": "mini-gateway",
  "title": "mini-gateway — target architecture",
- "revision": "target-phase1-2026-11-24-obs-amendment",
+ "revision": "target-approved-2026-11-24-rulings",
  "defaultDiagramId": "context",
  "model": {
   "elements": [
@@ -49,7 +49,7 @@
     "id": "gw",
     "kind": "softwareSystem",
     "name": "mini-gateway",
-    "description": "A proxy that speaks the Postgres wire protocol (simple-query subset) in front of one Postgres: a hard-capped connection pool lent per transaction, per-tenant admission with two CoDel modes, read coalescing, timer-free batching, an off-by-default retry policy, snapshot observability. Runs as N independent instances.",
+    "description": "A proxy that speaks the Postgres wire protocol (simple-query subset) in front of one Postgres: a hard-capped connection pool lent per transaction, per-tenant admission with two CoDel modes, read coalescing, an off-by-default retry policy, snapshot observability. Terminates client TLS; logs clients in with SCRAM-SHA-256. Runs as N independent instances.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -126,7 +126,7 @@
     "id": "otelcol",
     "kind": "softwareSystem",
     "name": "OpenTelemetry Collector",
-    "description": "Receives the proxy's OTLP/HTTP push, batches it and exposes the metrics on a Prometheus endpoint. Dev setup: docker-compose in deploy/obs-dev (chunk 16).",
+    "description": "Receives the proxy's OTLP/HTTP push, batches it and exposes the metrics on a Prometheus endpoint. Dev setup: docker-compose in deploy/obs-dev (chunk 15).",
     "status": "planned",
     "tags": [
      "external"
@@ -174,7 +174,7 @@
     "id": "c-shell",
     "kind": "container",
     "name": "Shell and binary",
-    "description": "cmd/mini-gateway and internal/shell. Listeners, one reader and one writer goroutine per connection, bounded mailboxes, a deadline on every socket operation, the admin listener on its own port, signal handling. Makes no decisions: it posts events to the engine and performs the actions the engine returns.",
+    "description": "cmd/mini-gateway and internal/shell. Listeners, one reader and one writer goroutine per connection, bounded mailboxes, a deadline on every socket operation, TLS on both legs with crypto/tls (it answers a client's TLS request, upgrades the socket and buffers nothing across the upgrade), the admin listener on its own port, signal handling. Makes no decisions: it posts events to the engine and performs the actions the engine returns.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -183,7 +183,7 @@
      "plan"
     ],
     "parentId": "gw",
-    "technology": "Go, goroutines, TCP",
+    "technology": "Go, goroutines, TCP, crypto/tls",
     "containerType": "application"
    },
    {
@@ -202,7 +202,7 @@
      "plan"
     ],
     "parentId": "gw",
-    "technology": "Go, goroutines, TCP",
+    "technology": "Go, goroutines, TCP, crypto/tls",
     "containerType": "application"
    },
    {
@@ -279,7 +279,7 @@
     "id": "c-work",
     "kind": "container",
     "name": "Work vocabulary",
-    "description": "internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, batchable flag, outcome. Carries no Postgres type. This is the extension seam for a second protocol.",
+    "description": "internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, outcome. Carries no Postgres type. This is the extension seam for a second protocol.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -401,41 +401,6 @@
     "kind": "container",
     "name": "Coalescer",
     "description": "Neighbour in a component view: stands for the container `c-coal`.",
-    "status": "planned",
-    "tags": [
-     "external",
-     "neighbour"
-    ],
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "parentId": "gw",
-    "technology": "Go, pure core",
-    "containerType": "application"
-   },
-   {
-    "id": "c-batch",
-    "kind": "container",
-    "name": "Batcher",
-    "description": "internal/batch. Timer-free: when a connection frees up, eligible queued single statements go out in one write. Off by default.",
-    "status": "planned",
-    "tags": [],
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "parentId": "gw",
-    "technology": "Go, pure core",
-    "containerType": "application"
-   },
-   {
-    "id": "n-batch",
-    "kind": "container",
-    "name": "Batcher",
-    "description": "Neighbour in a component view: stands for the container `c-batch`.",
     "status": "planned",
     "tags": [
      "external",
@@ -798,7 +763,7 @@
     "id": "w-client",
     "kind": "component",
     "name": "Client session machine",
-    "description": "Client-facing. Answers TLS and GSS requests with no, reads the startup message, finds the tenant by user, runs SCRAM-SHA-256 (server side) or trust, sends the parameter set and proxy-issued key data, recognises cancel requests, takes in one query at a time, handles terminate.",
+    "description": "Client-facing. Runs the exchange before startup: answers a TLS request yes or no by config and asks the shell to upgrade the connection, answers a GSS encryption request no. Reads the startup message, finds the tenant by user, runs SCRAM-SHA-256 (server side; trust only as a named test setting), sends the parameter set and proxy-issued key data, recognises cancel requests, takes in one query at a time, handles terminate.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -813,7 +778,7 @@
     "id": "w-backend",
     "kind": "component",
     "name": "Database session machine",
-    "description": "Database-facing. Startup, SCRAM-SHA-256 (client side), collects server parameters and key data, reaches ready.",
+    "description": "Database-facing. Asks for TLS first when the config requires it, then startup, SCRAM-SHA-256 (client side), collects server parameters and key data, reaches ready.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -873,7 +838,7 @@
     "id": "w-classifier",
     "kind": "component",
     "name": "Statement classifier",
-    "description": "Turns a statement into a work unit: rejected (session-level feature), transaction control, provably read-only, shareable with its key, batchable. Conservative: what it cannot tokenise is never shared or batched.",
+    "description": "Turns a statement into a work unit: rejected (session-level feature), transaction control, provably read-only, shareable with its key. Conservative: what it cannot tokenise is never shared.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -1274,81 +1239,6 @@
      "plan"
     ],
     "parentId": "c-coal",
-    "technology": "Go"
-   },
-   {
-    "id": "b-take",
-    "kind": "component",
-    "name": "Take rule",
-    "description": "When a connection frees up, takes what is already queued and eligible, up to a count and byte cap. One request with nothing else waiting goes alone at once. There is no timer.",
-    "status": "planned",
-    "tags": [],
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "parentId": "c-batch",
-    "technology": "Go"
-   },
-   {
-    "id": "b-elig",
-    "kind": "component",
-    "name": "Eligibility check",
-    "description": "A request may be batched only if the classifier proved it is a single statement that is not transaction control, and its client is outside a transaction.",
-    "status": "planned",
-    "tags": [],
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "parentId": "c-batch",
-    "technology": "Go"
-   },
-   {
-    "id": "b-split",
-    "kind": "component",
-    "name": "Reply splitter",
-    "description": "Splits the replies in order at the end-of-reply markers and matches each to its requester.",
-    "status": "planned",
-    "tags": [],
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "parentId": "c-batch",
-    "technology": "Go"
-   },
-   {
-    "id": "b-poison",
-    "kind": "component",
-    "name": "Poison rule",
-    "description": "If any end marker reports a status other than idle, the connection is closed and the remaining members get the may-have-been-applied error.",
-    "status": "planned",
-    "tags": [],
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "parentId": "c-batch",
-    "technology": "Go"
-   },
-   {
-    "id": "b-snap",
-    "kind": "component",
-    "name": "Batcher snapshot",
-    "description": "Snapshot(): batch-size histogram, batched share, in-batch wait histogram, poison events, ineligible reasons.",
-    "status": "planned",
-    "tags": [],
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "parentId": "c-batch",
     "technology": "Go"
    },
    {
@@ -1937,7 +1827,7 @@
     "sourceIds": [
      "plan"
     ],
-    "technology": "Postgres wire protocol v3, simple query, TCP"
+    "technology": "Postgres wire protocol v3, simple query; TCP, TLS when the client asks for it"
    },
    {
     "id": "r-op-gw",
@@ -1963,7 +1853,7 @@
     "sourceIds": [
      "plan"
     ],
-    "technology": "Postgres wire protocol v3, TCP"
+    "technology": "Postgres wire protocol v3; TCP, TLS by config"
    },
    {
     "id": "r-tel-gw",
@@ -2028,7 +1918,7 @@
     "sourceIds": [
      "plan"
     ],
-    "technology": "Postgres wire protocol, TCP"
+    "technology": "Postgres wire protocol; TCP, TLS when the client asks for it"
    },
    {
     "id": "c2",
@@ -2109,19 +1999,6 @@
     "technology": "Go, in-process"
    },
    {
-    "id": "c8",
-    "sourceId": "c-engine",
-    "targetId": "c-batch",
-    "label": "Take a batch for a free connection; split the replies",
-    "status": "planned",
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "technology": "Go, in-process"
-   },
-   {
     "id": "c9",
     "sourceId": "c-engine",
     "targetId": "c-retry",
@@ -2145,7 +2022,7 @@
     "sourceIds": [
      "plan"
     ],
-    "technology": "Postgres wire protocol, TCP"
+    "technology": "Postgres wire protocol; TCP, TLS by config"
    },
    {
     "id": "c11",
@@ -2280,19 +2157,6 @@
    {
     "id": "s6",
     "sourceId": "c-coal",
-    "targetId": "c-work",
-    "label": "Written against these types only",
-    "status": "planned",
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "technology": "Go types"
-   },
-   {
-    "id": "s7",
-    "sourceId": "c-batch",
     "targetId": "c-work",
     "label": "Written against these types only",
     "status": "planned",
@@ -2529,19 +2393,6 @@
     "sourceId": "e-pipeline",
     "targetId": "n-pool",
     "label": "Lend, release, breaker state, dirty connections",
-    "status": "planned",
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "technology": "Go"
-   },
-   {
-    "id": "e11",
-    "sourceId": "e-pipeline",
-    "targetId": "n-batch",
-    "label": "Batch for a free connection",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
@@ -3374,84 +3225,6 @@
     "sourceId": "f-join",
     "targetId": "n-work",
     "label": "Reads the share key of a work unit",
-    "status": "planned",
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "technology": "Go types"
-   },
-   {
-    "id": "b1",
-    "sourceId": "n-engine",
-    "targetId": "b-take",
-    "label": "A connection is free and requests are waiting",
-    "status": "planned",
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "technology": "Go"
-   },
-   {
-    "id": "b2",
-    "sourceId": "n-engine",
-    "targetId": "b-split",
-    "label": "Reply bytes of a batch",
-    "status": "planned",
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "technology": "Go"
-   },
-   {
-    "id": "b3",
-    "sourceId": "n-engine",
-    "targetId": "b-snap",
-    "label": "Snapshot()",
-    "status": "planned",
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "technology": "Go"
-   },
-   {
-    "id": "b4",
-    "sourceId": "b-take",
-    "targetId": "b-elig",
-    "label": "Is this request eligible",
-    "status": "planned",
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "technology": "Go"
-   },
-   {
-    "id": "b5",
-    "sourceId": "b-split",
-    "targetId": "b-poison",
-    "label": "Status byte of each end marker",
-    "status": "planned",
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "technology": "Go"
-   },
-   {
-    "id": "b6",
-    "sourceId": "b-elig",
-    "targetId": "n-work",
-    "label": "Reads the batchable flag of a work unit",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
@@ -4380,12 +4153,6 @@
      }
     },
     {
-     "elementId": "c-batch",
-     "detail": {
-      "diagramId": "component-batcher"
-     }
-    },
-    {
      "elementId": "c-retry",
      "detail": {
       "diagramId": "component-retry"
@@ -4428,9 +4195,6 @@
     },
     {
      "relationshipId": "c7"
-    },
-    {
-     "relationshipId": "c8"
     },
     {
      "relationshipId": "c9"
@@ -4569,9 +4333,6 @@
      "elementId": "c-coal"
     },
     {
-     "elementId": "c-batch"
-    },
-    {
      "elementId": "c-retry"
     },
     {
@@ -4605,9 +4366,6 @@
     },
     {
      "relationshipId": "s6"
-    },
-    {
-     "relationshipId": "s7"
     },
     {
      "relationshipId": "s8"
@@ -4883,9 +4641,6 @@
      "elementId": "n-pool"
     },
     {
-     "elementId": "n-batch"
-    },
-    {
      "elementId": "n-retry"
     },
     {
@@ -4925,9 +4680,6 @@
     },
     {
      "relationshipId": "e10"
-    },
-    {
-     "relationshipId": "e11"
     },
     {
      "relationshipId": "e12"
@@ -5583,113 +5335,6 @@
    }
   },
   {
-   "id": "component-batcher",
-   "kind": "component",
-   "title": "Components: batcher",
-   "status": "planned",
-   "nodes": [
-    {
-     "elementId": "b-take"
-    },
-    {
-     "elementId": "b-elig"
-    },
-    {
-     "elementId": "b-split"
-    },
-    {
-     "elementId": "b-poison"
-    },
-    {
-     "elementId": "b-snap"
-    },
-    {
-     "elementId": "n-engine"
-    },
-    {
-     "elementId": "n-work"
-    }
-   ],
-   "edges": [
-    {
-     "relationshipId": "b1"
-    },
-    {
-     "relationshipId": "b2"
-    },
-    {
-     "relationshipId": "b3"
-    },
-    {
-     "relationshipId": "b4"
-    },
-    {
-     "relationshipId": "b5"
-    },
-    {
-     "relationshipId": "b6"
-    }
-   ],
-   "legend": {
-    "title": "Key",
-    "entries": [
-     {
-      "id": "box",
-      "label": "Element",
-      "description": "A system, container, component or instance",
-      "swatch": {
-       "shape": "box",
-       "tone": "default",
-       "stroke": "solid"
-      }
-     },
-     {
-      "id": "external",
-      "label": "External or neighbouring element",
-      "description": "Outside the scope of this view",
-      "swatch": {
-       "shape": "box",
-       "tone": "external",
-       "stroke": "solid"
-      }
-     },
-     {
-      "id": "planned",
-      "label": "Planned",
-      "description": "Target architecture: not built yet",
-      "swatch": {
-       "shape": "box",
-       "tone": "default",
-       "stroke": "dashed"
-      }
-     },
-     {
-      "id": "edge",
-      "label": "Relationship",
-      "description": "The arrow points to the supplier",
-      "swatch": {
-       "shape": "line",
-       "tone": "default",
-       "stroke": "solid",
-       "arrow": "forward"
-      }
-     }
-    ]
-   },
-   "docIds": [],
-   "sourceIds": [
-    "plan"
-   ],
-   "layout": {
-    "mode": "auto",
-    "direction": "TB"
-   },
-   "scopeId": "c-batch",
-   "parent": {
-    "diagramId": "container"
-   }
-  },
-  {
    "id": "component-retry",
    "kind": "component",
    "title": "Components: retry policy",
@@ -6175,7 +5820,7 @@
  "sources": [
   {
    "id": "plan",
-   "title": "mini-gateway PLAN.md (Phase 1 proposal)",
+   "title": "mini-gateway PLAN.md (approved 2026-11-24)",
    "url": "https://github.com/nickstrad/mini-gateway/blob/main/PLAN.md",
    "notes": "Target architecture. Every element is planned; nothing is built yet."
   }

@@ -14,7 +14,6 @@ flowchart TB
   N_ADM["Admission"]
   N_COAL["Coalescer"]
   N_POOL["Pool"]
-  N_BATCH["Batcher"]
   N_RETRY["Retry policy"]
   N_OBS["Observability"]
   N_WORK["Work vocabulary"]
@@ -39,17 +38,16 @@ flowchart TB
   E_PIPELINE -->|8| N_ADM
   E_PIPELINE -->|9| N_COAL
   E_PIPELINE -->|10| N_POOL
-  E_PIPELINE -->|11| N_BATCH
-  E_PIPELINE -->|12| N_RETRY
-  E_PIPELINE -->|13| E_BACKENDS
-  E_BACKENDS -->|14| E_RELAY
-  E_RELAY -->|15| E_SESSIONS
-  E_PIPELINE -->|16| E_FAIL
-  E_FAIL -->|17| N_PGWIRE
-  E_CLOCK -->|18| E_PIPELINE
-  E_DRAIN -->|19| E_PIPELINE
-  E_PUBLISH -->|20| N_OBS
-  E_PIPELINE -->|21| N_WORK
+  E_PIPELINE -->|11| N_RETRY
+  E_PIPELINE -->|12| E_BACKENDS
+  E_BACKENDS -->|13| E_RELAY
+  E_RELAY -->|14| E_SESSIONS
+  E_PIPELINE -->|15| E_FAIL
+  E_FAIL -->|16| N_PGWIRE
+  E_CLOCK -->|17| E_PIPELINE
+  E_DRAIN -->|18| E_PIPELINE
+  E_PUBLISH -->|19| N_OBS
+  E_PIPELINE -->|20| N_WORK
 ```
 
 ## Elements
@@ -65,16 +63,15 @@ flowchart TB
 | Deadline table | component | Every wait in the timeout budget, as deadlines on the injected clock; returns the next wake-up time as an action. |
 | Drain controller | component | Sequences shutdown: stop admitting, finish transactions in progress within a bound, close idle connections, exit. |
 | Snapshot publisher | component | Collects every component's Snapshot() between events and hands the copy to the collector. |
-| Shell and binary | neighbouring container | cmd/mini-gateway and internal/shell. Listeners, one reader and one writer goroutine per connection, bounded mailboxes, a deadline on every socket operation, the admin listener on its own port, signal handling. Makes no decisions: it posts events to the engine and performs the actions the engine returns. |
+| Shell and binary | neighbouring container | cmd/mini-gateway and internal/shell. Listeners, one reader and one writer goroutine per connection, bounded mailboxes, a deadline on every socket operation, TLS on both legs with crypto/tls (it answers a client's TLS request, upgrades the socket and buffers nothing across the upgrade), the admin listener on its own port, signal handling. Makes no decisions: it posts events to the engine and performs the actions the engine returns. |
 | Simulator harness | neighbouring container | internal/sim, internal/sim/simnet, fakepg, workload, simtest, cmd/mgsim. A deterministic single-threaded world: virtual clock, simulated byte streams, a fake Postgres, simulated clients, faults, replay. Test code; built before any proxy code. |
 | Wire layer | neighbouring container | internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the statement classifier, the error contract. The only product package that imports pgproto3. |
 | Admission | neighbouring container | internal/admission. Rate gate, per-tenant queues with two selectable queue rules, adaptive LIFO, round-robin dispatcher with shares that bind under saturation, adaptive concurrency limit. |
 | Coalescer | neighbouring container | internal/coalesce. Identical provably-read-only statements share one database read. Never writes. |
 | Pool | neighbouring container | internal/pool. Hard-capped database connections, creation limiter, leases per transaction, the one breaker, the dirty-connection table. |
-| Batcher | neighbouring container | internal/batch. Timer-free: when a connection frees up, eligible queued single statements go out in one write. Off by default. |
 | Retry policy | neighbouring container | internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached the database, within a 10% budget. |
 | Observability | neighbouring container | internal/obs. Snapshot conventions (the one raw export), integer histogram, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health. |
-| Work vocabulary | neighbouring container | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, batchable flag, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
+| Work vocabulary | neighbouring container | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
 
 ## Relationships
 
@@ -90,14 +87,13 @@ flowchart TB
 | 8 | Request pipeline | Admission | Gate, queue, dispatch, limit | Go |
 | 9 | Request pipeline | Coalescer | Join or lead a shared read | Go |
 | 10 | Request pipeline | Pool | Lend, release, breaker state, dirty connections | Go |
-| 11 | Request pipeline | Batcher | Batch for a free connection | Go |
-| 12 | Request pipeline | Retry policy | May this failure be retried | Go |
-| 13 | Request pipeline | Database connection table | Forwards the statement on the lent connection | Go |
-| 14 | Database connection table | Reply relay | Reply messages and the end-of-reply status byte | Go |
-| 15 | Reply relay | Client session table | Reply bytes for each recipient | Go |
-| 16 | Request pipeline | Failure classifier | Every refusal and failure | Go |
-| 17 | Failure classifier | Wire layer | Builds the error reply for its contract row | Go |
-| 18 | Deadline table | Request pipeline | A deadline was reached | Go |
-| 19 | Drain controller | Request pipeline | Sets the draining input | Go |
-| 20 | Snapshot publisher | Observability | Hands over the instance snapshot | Go, plain structs |
-| 21 | Request pipeline | Work vocabulary | Passes work units and outcomes between stages | Go types |
+| 11 | Request pipeline | Retry policy | May this failure be retried | Go |
+| 12 | Request pipeline | Database connection table | Forwards the statement on the lent connection | Go |
+| 13 | Database connection table | Reply relay | Reply messages and the end-of-reply status byte | Go |
+| 14 | Reply relay | Client session table | Reply bytes for each recipient | Go |
+| 15 | Request pipeline | Failure classifier | Every refusal and failure | Go |
+| 16 | Failure classifier | Wire layer | Builds the error reply for its contract row | Go |
+| 17 | Deadline table | Request pipeline | A deadline was reached | Go |
+| 18 | Drain controller | Request pipeline | Sets the draining input | Go |
+| 19 | Snapshot publisher | Observability | Hands over the instance snapshot | Go, plain structs |
+| 20 | Request pipeline | Work vocabulary | Passes work units and outcomes between stages | Go types |

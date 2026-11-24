@@ -12,7 +12,6 @@ flowchart TB
     C_ADM["Admission<br/>internal/admission"]
     C_POOL["Pool<br/>internal/pool"]
     C_COAL["Coalescer<br/>internal/coalesce"]
-    C_BATCH["Batcher<br/>internal/batch"]
     C_RETRY["Retry policy<br/>internal/retry"]
   end
   C_SHELL -->|1| C_ENGINE
@@ -23,13 +22,12 @@ flowchart TB
   C_ADM -->|6| C_WORK
   C_POOL -->|7| C_WORK
   C_COAL -->|8| C_WORK
-  C_BATCH -->|9| C_WORK
-  C_RETRY -->|10| C_WORK
-  C_SIM -->|11| PGPROTO3
-  C_E2E -->|12| C_SIM
-  C_E2E -->|13| C_SHELL
-  C_E2E -->|14| PG
-  DEVELOPER -->|15| C_SIM
-  DEVELOPER -->|16| C_E2E
-  C_SIM -->|17| C_WORK
-  C_SHELL -->|18| PG
+  C_RETRY -->|9| C_WORK
+  C_SIM -->|10| PGPROTO3
+  C_E2E -->|11| C_SIM
+  C_E2E -->|12| C_SHELL
+  C_E2E -->|13| PG
+  DEVELOPER -->|14| C_SIM
+  DEVELOPER -->|15| C_E2E
+  C_SIM -->|16| C_WORK
+  C_SHELL -->|17| PG

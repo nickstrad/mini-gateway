@@ -5,7 +5,6 @@ flowchart TB
   N_ADM["Admission"]
   N_COAL["Coalescer"]
   N_POOL["Pool"]
-  N_BATCH["Batcher"]
   N_RETRY["Retry policy"]
   N_OBS["Observability"]
   N_WORK["Work vocabulary"]
@@ -30,14 +29,13 @@ flowchart TB
   E_PIPELINE -->|8| N_ADM
   E_PIPELINE -->|9| N_COAL
   E_PIPELINE -->|10| N_POOL
-  E_PIPELINE -->|11| N_BATCH
-  E_PIPELINE -->|12| N_RETRY
-  E_PIPELINE -->|13| E_BACKENDS
-  E_BACKENDS -->|14| E_RELAY
-  E_RELAY -->|15| E_SESSIONS
-  E_PIPELINE -->|16| E_FAIL
-  E_FAIL -->|17| N_PGWIRE
-  E_CLOCK -->|18| E_PIPELINE
-  E_DRAIN -->|19| E_PIPELINE
-  E_PUBLISH -->|20| N_OBS
-  E_PIPELINE -->|21| N_WORK
+  E_PIPELINE -->|11| N_RETRY
+  E_PIPELINE -->|12| E_BACKENDS
+  E_BACKENDS -->|13| E_RELAY
+  E_RELAY -->|14| E_SESSIONS
+  E_PIPELINE -->|15| E_FAIL
+  E_FAIL -->|16| N_PGWIRE
+  E_CLOCK -->|17| E_PIPELINE
+  E_DRAIN -->|18| E_PIPELINE
+  E_PUBLISH -->|19| N_OBS
+  E_PIPELINE -->|20| N_WORK

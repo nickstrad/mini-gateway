@@ -10,7 +10,6 @@ flowchart TB
     C_ADM["Admission<br/>internal/admission"]
     C_COAL["Coalescer<br/>internal/coalesce"]
     C_POOL["Pool<br/>internal/pool"]
-    C_BATCH["Batcher<br/>internal/batch"]
     C_RETRY["Retry policy<br/>internal/retry"]
     C_OBS["Observability<br/>internal/obs"]
     C_CONFIG["Configuration<br/>internal/config"]
@@ -22,11 +21,10 @@ flowchart TB
   C_ENGINE -->|5| C_ADM
   C_ENGINE -->|6| C_COAL
   C_ENGINE -->|7| C_POOL
-  C_ENGINE -->|8| C_BATCH
-  C_ENGINE -->|9| C_RETRY
-  C_SHELL -->|10| PG
-  C_ENGINE -->|11| C_OBS
-  C_SHELL -->|12| C_OBS
-  TELEMETRY -->|13| C_SHELL
-  C_OBS -->|14| TELEMETRY
-  C_SHELL -->|15| C_CONFIG
+  C_ENGINE -->|8| C_RETRY
+  C_SHELL -->|9| PG
+  C_ENGINE -->|10| C_OBS
+  C_SHELL -->|11| C_OBS
+  TELEMETRY -->|12| C_SHELL
+  C_OBS -->|13| TELEMETRY
+  C_SHELL -->|14| C_CONFIG

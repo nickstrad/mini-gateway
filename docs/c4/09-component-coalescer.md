@@ -42,7 +42,7 @@ flowchart TB
 | Do-not-share list | component | Keys whose reply was too large to share. Bounded and expiring. |
 | Coalescer snapshot | component | Snapshot(): flights, hits, waiters per flight, cancellations, overflows by cap, shared errors, table size. |
 | Engine | neighbouring container | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code. |
-| Work vocabulary | neighbouring container | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, batchable flag, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
+| Work vocabulary | neighbouring container | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
 
 ## Relationships
 

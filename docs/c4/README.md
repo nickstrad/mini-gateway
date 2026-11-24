@@ -1,8 +1,8 @@
 # C4 diagrams — mini-gateway
 
-**Target architecture, for approval.** These diagrams describe what [PLAN.md](../../PLAN.md) proposes to build. Nothing in them exists yet; every element carries the status `planned`. As chunks land, the orchestrator updates the diagrams to the as-built architecture, and a diagram that no longer matches the code is treated as a defect.
+**Target architecture of the approved plan.** These diagrams describe what [PLAN.md](../../PLAN.md) sets out to build; Nick approved the plan on 2026-11-24 as amended by his rulings (PLAN.md section 18). The set was updated for those rulings: the batcher is gone (batching was dropped from v1), and TLS is drawn on the shell and the two session machines. Nothing in them exists yet; every element carries the status `planned`. As chunks land, the orchestrator updates the diagrams to the as-built architecture, and a diagram that no longer matches the code is treated as a defect.
 
-Three C4 levels plus a deployment view: system context, containers (two views), components (nine views), and the three-instance deployment.
+Three C4 levels plus a deployment view: system context, containers (two views), components (eight views), and the three-instance deployment.
 
 ## Diagrams
 
@@ -18,10 +18,9 @@ Three C4 levels plus a deployment view: system context, containers (two views), 
 | 7 | Components | [07-component-admission.md](07-component-admission.md) | internal/admission: the rate gate, per-tenant queues, both CoDel modes behind one interface, the dispatcher, the adaptive limit |
 | 8 | Components | [08-component-pool.md](08-component-pool.md) | internal/pool: the hard cap, the creation limiter, leases per transaction, the breaker, the dirty-connection table |
 | 9 | Components | [09-component-coalescer.md](09-component-coalescer.md) | internal/coalesce: the join rule, the flight table, waiters, the flight's own deadline, the shared reply |
-| 10 | Components | [10-component-batcher.md](10-component-batcher.md) | internal/batch: the take rule, eligibility, reply splitting, the poison rule |
-| 11 | Components | [11-component-retry.md](11-component-retry.md) | internal/retry: the policy interface, its two policies, the budget |
-| 12 | Components | [12-component-simulator.md](12-component-simulator.md) | internal/sim and its sub-packages: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, faults, the trace, invariants, replay |
-| 13 | Components | [13-component-observability.md](13-component-observability.md) | internal/obs: the one raw export (snapshots), the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus |
+| 10 | Components | [10-component-retry.md](10-component-retry.md) | internal/retry: the policy interface, its two policies, the budget |
+| 11 | Components | [11-component-simulator.md](11-component-simulator.md) | internal/sim and its sub-packages: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, faults, the trace, invariants, replay |
+| 12 | Components | [12-component-observability.md](12-component-observability.md) | internal/obs: the one raw export (snapshots), the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus |
 <!-- diagram-table:end -->
 
 ## Where each required part is drawn
@@ -29,14 +28,14 @@ Three C4 levels plus a deployment view: system context, containers (two views), 
 | Part of the plan | Diagrams |
 | --- | --- |
 | Client-facing protocol layer and the `pgproto3` codec boundary | 3, 6 |
+| TLS: the request exchange (wire layer) and the upgrade on real sockets (shell) | 2, 6 |
 | Admission: queues, fairness, both CoDel modes, rate gate (GCRA), adaptive limit (AIMD) | 2, 7 |
 | Pool | 2, 8 |
 | Coalescer | 2, 9 |
-| Batcher | 2, 10 |
-| Retry policy | 2, 11 |
+| Retry policy | 2, 10 |
 | Backend interface verdict: Postgres-first with three seams (transport, wire layer, work vocabulary) | 3, 5 |
-| Simulator harness | 3, 12 |
-| Observability: snapshot → collector → exporters | 2, 13 |
+| Simulator harness | 3, 11 |
+| Observability: snapshot → collector → exporters | 2, 12 |
 | Horizontal scale: static fleet config, three instances | 4 |
 
 ## Format
@@ -58,9 +57,9 @@ Three C4 levels plus a deployment view: system context, containers (two views), 
 | Check | Tool | Result for this set |
 | --- | --- | --- |
 | `model.json` decodes | `decodeArchitecture` from `c4-sdk@0.1.0` (`c4-sdk/core`) | ok, 0 errors, 0 warnings |
-| Every diagram builds a scene | `buildScene` from `c4-sdk/core` | 13 of 13 |
+| Every diagram builds a scene | `buildScene` from `c4-sdk/core` | 12 of 12 |
 | Pictures and tables agree with the model | All three are written by `gen.py` from the same tables; it refuses a diagram edge whose ends are not in the diagram and a relationship no diagram uses | passes |
-| Mermaid renders | Each built page opened in a headless browser; every picture drew | 13 of 13 |
+| Mermaid renders | Each built page opened in a headless browser; every picture drew | 12 of 12 |
 
 To repeat after a change:
 
