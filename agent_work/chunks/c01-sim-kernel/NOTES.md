@@ -22,8 +22,9 @@ Durable facts for later builders: `docs/knowledge/sim-kernel.md`; copied-file re
 | Gate extra (G10) | `agent_work/chunks/c01-sim-kernel/gate/extra.sh` |
 | Rules files | `tools/lint-rules/det-packages.txt` (four packages); `race-packages.txt` unchanged (no concurrency in this chunk) |
 
-Size (`find internal cmd -name '*.go'`): product 3,508 lines (of which 380 are test plumbing:
-`simtest` 265, `obstest` 115), tests 3,458 lines, 116 test and fuzz functions.
+Size (`find internal cmd -name '*.go'`), after the repair round: product 3,529 lines (of
+which 380 are test plumbing: `simtest` 265, `obstest` 115), tests 3,698 lines, 127 test and
+fuzz functions.
 
 ## Kernel API in one screen
 
@@ -49,7 +50,8 @@ Size (`find internal cmd -name '*.go'`): product 3,508 lines (of which 380 are t
 2. **Stall errors.** One type, `*sim.StallError{Cause, Seed, Steps, Now, Replay}`, with
    causes `ErrBudgetExhausted` (more than `MaxSteps` steps, default 50,000,000),
    `ErrTimeFrozen` (more than `MaxSameInstant` consecutive steps at one instant, default
-   1,000,000) and `ErrHeapFull` (more than `MaxEvents` queued, default 4,194,304).
+   1,000,000; the first step at an instant counts as one, at time zero as at any later
+   instant, and `RunUntil` moving the clock to `t` restarts the count) and `ErrHeapFull` (more than `MaxEvents` queued, default 4,194,304).
 3. **Panic guard.** `*sim.PanicError{Value, Seed, Steps, Now, Replay}`; no stack (needs
    `runtime/debug`, which the determinism lint does not allow). Invariant and quiesce
    functions run under the same guard.
@@ -112,7 +114,8 @@ Writable or Connected event already pending for an end is not queued twice.
   after `EvConnected`.
 - Write: accepts `min(len, window - in flight)` bytes; a short write (including 0) counts
   one `WritesRefused` and arms one `EvWritable`, sent when the receiver next consumes or
-  discards bytes. `WaitWritable()` arms it without writing. Each accepted write is cut into
+  discards bytes (including the bytes its own `Close()` discards, and bytes arriving after
+  it closed), as long as the writer is still open and has not sent its FIN. `WaitWritable()` arms it without writing. Each accepted write is cut into
   pieces by the chunking mode (whole; fixed size, down to 1; random: between
   ceil(n/64) and n bytes per piece, from the pipe's own stream), and each piece arrives at
   `max(now + latency draw, previous arrival on this pipe)`, so order is kept under jitter.
@@ -126,7 +129,9 @@ Writable or Connected event already pending for an end is not queued twice.
 
 **Faults** (each one registered on the loop, applied at its instant, recorded in the trace
 as kind `fault` with `(kind, target, arg1, arg2)`; a fault whose target does not exist, is
-closed or is not yet accepted is counted `NoTarget` and does nothing).
+closed or is not yet accepted is counted `NoTarget` and does nothing; this holds for
+`clear` (9) too: a clear naming a closed listener, or a connection that is closed or not
+yet accepted, is `NoTarget`, not `Clear`).
 
 | Fault (kind) | Target, args | Client end sees | Server end sees | Clear |
 | --- | --- | --- | --- | --- |
@@ -160,10 +165,10 @@ accepted it gets `EvReset`.
 | 2 | Stream isolation | `sim_test.go`: `TestStreamIsolation`; per-connection streams: `simnet/semantics_test.go`: `TestFaultOnOneConnectionLeavesAnotherByteIdentical` |
 | 3 | Same-instant events in sequence order | `sim_test.go`: `TestSameInstantRunsInSequenceOrder`, `TestTimersFireInDeadlineThenCreationOrder`, `TestLoopAgainstReferenceModel` |
 | 3 | A cancelled timer never fires, and leaves the heap | `sim_test.go`: `TestTimersFireInDeadlineThenCreationOrder`, `TestThousandsOfTimers`, `TestHeapMatchesSortedReference`, `TestTimerHandleSemantics` |
-| 3 | Time never overflows | `sim_test.go`: `TestTimeSaturates`, `TestScheduleWindowAndArguments` |
+| 3 | Time never overflows | `sim_test.go`: `TestTimeSaturates`, `TestScheduleWindowAndArguments`, `TestAddDurationsSaturates`; `simnet/latency_test.go`: `TestBasePlusJitterSaturates`, `TestRefusalRoundTripSaturates`, `TestMaximumJitterDrawsWithoutPanicking` |
 | 4 | Bytes out = bytes in, in order, every chunking and latency | `simnet/simnet_test.go`: `TestBytesDeliveredInOrderForEveryChunking`; `random_test.go`: `TestRandomOperationsKeepEveryLaw`; `semantics_test.go`: `TestAsymmetricLatencyAndJitterAreSeeded`, `TestRandomChunkingBoundsPieceCount` |
-| 4 | Window bounds in-flight bytes; back pressure | `simnet_test.go`: `TestStoppedReaderBlocksWriterAtWindow` (and the window invariant in `newPair`); `random_test.go`; `semantics_test.go`: `TestWaitWritableWakesTheWriter`, `TestWritableNeverFiresForAWriterThatWasNotRefused`, `TestStallFillsWindowThenWriterResumes` |
-| 5 | Each fault behaves as defined above, both ends | `simnet_test.go`: `TestResetDeliversNothingAfterAndNotifiesBothEnds`, `TestLocalResetNotifiesOnlyThePeer`, `TestHalfOpenSurvivorNeverLearns`, `TestStallHoldsBytesThenResumesInOrder`, `TestDialRefusedStalledAndSilenced`, `TestHalfCloseFaultSendsFinAfterPendingBytes`; `semantics_test.go`: `TestHalfOpenOfTheClientEnd`, `TestBytesAlreadyInFlightFromAGoneEndStillArrive`, `TestStallOneDirectionOnly`, `TestChunkFaultOverridesAndClears`, `TestAbortOfAcceptedButUnconnectedDialResetsServer`, `TestResetOfAnAcceptedConnectingDial`, `TestWriteAfterCloseWriteAndReadAfterClose`, `TestCloseDiscardsUnreadAndLaterArrivals`, `TestConnectedPrecedesReadableEvenWhenServerWritesFirst`, `TestHandshakeTakesOneRoundTripOnTheVirtualClock`; `simtoy/ends_test.go`: `TestEachFaultAsSeenByBothEnds`, `TestStallTimeoutServerSeesClientCloseOnlyAfterTheClear`, `TestHalfOpenClientTimesOutOnItsOwnDeadline` |
+| 4 | Window bounds in-flight bytes; back pressure | `simnet_test.go`: `TestStoppedReaderBlocksWriterAtWindow` (and the window invariant in `newPair`); `random_test.go`; `semantics_test.go`: `TestWaitWritableWakesTheWriter`, `TestWritableNeverFiresForAWriterThatWasNotRefused`, `TestStallFillsWindowThenWriterResumes`; `closewake_test.go`: `TestReceiverCloseWakesABlockedWriterWhenItDiscardsBufferedBytes`, `TestReceiverCloseWakesABlockedWriterWhenLaterArrivalsAreDiscarded` |
+| 5 | Each fault behaves as defined above, both ends | `simnet_test.go`: `TestResetDeliversNothingAfterAndNotifiesBothEnds`, `TestLocalResetNotifiesOnlyThePeer`, `TestHalfOpenSurvivorNeverLearns`, `TestStallHoldsBytesThenResumesInOrder`, `TestDialRefusedStalledAndSilenced`, `TestHalfCloseFaultSendsFinAfterPendingBytes`; `semantics_test.go`: `TestHalfOpenOfTheClientEnd`, `TestBytesAlreadyInFlightFromAGoneEndStillArrive`, `TestStallOneDirectionOnly`, `TestChunkFaultOverridesAndClears`, `TestAbortOfAcceptedButUnconnectedDialResetsServer`, `TestResetOfAnAcceptedConnectingDial`, `TestWriteAfterCloseWriteAndReadAfterClose`, `TestCloseDiscardsUnreadAndLaterArrivals`, `TestConnectedPrecedesReadableEvenWhenServerWritesFirst`, `TestHandshakeTakesOneRoundTripOnTheVirtualClock`; `target_test.go`: `TestFaultsOnAClosedListenerHaveNoTarget`, `TestClearOnAnUnacceptedConnectionHasNoTarget`; `simtoy/ends_test.go`: `TestEachFaultAsSeenByBothEnds`, `TestStallTimeoutServerSeesClientCloseOnlyAfterTheClear`, `TestHalfOpenClientTimesOutOnItsOwnDeadline` |
 | 6 | A fault on one connection changes nothing on another | `simtoy/scenario_test.go`: `TestFaultOnOneConnectionLeavesOthersIdentical` (trace records and bytes of connections 2 and 3, every connection fault); `simnet/semantics_test.go`: `TestFaultOnOneConnectionLeavesAnotherByteIdentical` |
 | 6 | A cleared fault leaves no residue | `simtoy/scenario_test.go`: `TestClearedFaultLeavesNoResidue` (stall, chunk, refuse, dial stall, silence injected and cleared before traffic: traffic trace digest and state digest equal to a never-faulted run); `simnet/semantics_test.go`: `TestStateDigestHasNoResidueAfterClear`; `TestClearedListenerFaultsLeaveNewDialsNormal` |
 | 7 | Quiesce catches a leaked connection, byte or timer | `simtoy/scenario_test.go`: `TestQuiesceCatchesLeaks`, `TestQuiesceCatchesInFlightByte`; `simnet_test.go`: `TestQuiesceCatchesLeakedConnectionAndByte`; `sim_test.go`: `TestQuiesceCatchesLeakedTimerButNotBackground` |
@@ -243,17 +248,21 @@ be non-zero at some event of some scenario (`Up.WritesRefused` too) and checks
   event per byte (a 1 MB write is a million events).
 - `Write` copies the bytes; per-pipe memory is bounded by the window (default 64 KiB, cap
   16 MiB).
-- A latency draw is `Base + uniform[0, Jitter]` in ns; no other distribution yet.
+- A latency draw is `Base + uniform[0, Jitter]` in ns, both inclusive, with any
+  non-negative `Base` and `Jitter` up to `math.MaxInt64`; the sum saturates at
+  `math.MaxInt64` ns, as does a refused dial's round trip (up + down). An arrival that
+  saturates happens at `sim.MaxTime`. No other distribution yet.
 - `Stream(label)` returns a new stream each call; callers keep it.
 - Replay is claimed for same commit, same toolchain (Go 1.26.8), linux/amd64.
-- The toy server's pending echo is capped at `MaxPending` (1 MiB); past it the server resets.
+- The toy server's partial line plus pending echo is capped at `MaxPending` (1 MiB),
+  checked at every byte as it arrives; one byte past it the server resets the connection
+  (the line is not echoed and not counted in `Lines`).
 
 ## Deviations
 
-- **Size.** Product Go is 3,508 lines against "about 1,500, budgeted up to twice that". It is
+- **Size.** Product Go is 3,529 lines against "about 1,500, budgeted up to twice that". It is
   complete; no SPLIT-REQUEST. 380 of those lines are test plumbing (`simtest`, `obstest`).
-- **Tests vs product.** Tests are 3,458 lines, 50 fewer than all product lines and 330 more
-  than the product lines outside the two test-plumbing packages.
+- **Tests vs product.** Tests are 3,698 lines, more than the 3,529 product lines.
 - **`ScheduleFromBytes` signature** takes a `Space` (decision 8).
 - **Determinism list** names four packages instead of `internal/sim/...` (decision 10).
 - **No panic stack** in `PanicError` (decision 3).
@@ -282,3 +291,31 @@ Results on the committed tree (vm-1, Go 1.26.8): `scripts/gate.sh c01-sim-kernel
 pass, counts_for_landing true, 70 s (G4 sweep 5 s, G5 fuzz 47 s, G10 extra 2 s; G6–G8
 skip-not-built). `scripts/sweep.sh -seeds 1000`: 11,000 seed runs passed in 17 s.
 `TestRandomOperationsKeepEveryLaw` was also run once at 3,000 seeds: pass.
+
+## Repair round
+
+Opus, 2026-11-24, from `REVIEW-1.md` (FAIL: 4 major, 3 minor) and
+`agent_work/adversarial/c01-sim-kernel/RESULTS.md` (4 broken). Each item was reproduced
+first (the regression test failed on the pre-repair code; the adversary's test failed too);
+then fixed. No claim was narrowed, no finding disputed, nothing declined.
+
+| Item | Result |
+| --- | --- |
+| Review 1 (MAJOR): receiver `Close` discards without waking a blocked writer | fixed in `571e020` (`End.Close` calls `unblock` after `discardAll`); regression `simnet/closewake_test.go`: `TestReceiverCloseWakesABlockedWriterWhenItDiscardsBufferedBytes` (failed before: space 10, wakes 0); `TestReceiverCloseWakesABlockedWriterWhenLaterArrivalsAreDiscarded` covers the `discardFront` path (already correct; it kills mutation M9) |
+| Review 2 (MAJOR): latency arithmetic overflows; `Jitter == MaxInt64` panics | fixed in `4c9981f` (`sim.AddDurations` saturates; `pipe.jitter` draws `Int64()` for the maximum bound; `Dial` saturates the refusal round trip); regressions `simnet/latency_test.go`: `TestMaximumJitterDrawsWithoutPanicking`, `TestBasePlusJitterSaturates`, `TestRefusalRoundTripSaturates`; `sim_test.go`: `TestAddDurationsSaturates` |
+| Review 3 (MAJOR): faults on a closed listener and clears on an unaccepted connection not `NoTarget` | fixed in `32cbf44` (`applyKind` and `clear` treat a closed listener as no target; `clear` needs `c.accepted`); regressions `simnet/target_test.go`: `TestFaultsOnAClosedListenerHaveNoTarget`, `TestClearOnAnUnacceptedConnectionHasNoTarget`; NOTES fault paragraph now says `clear` follows the same rule |
+| Review 4 (MAJOR): toy `MaxPending` cap untested and the partial line unbounded | fixed in `c264260` (`take` checks `len(out)+len(line) > MaxPending` at every byte, then resets; the later echo check is subsumed and removed); `simtoy/ends_test.go`: `TestServerPendingEchoIsBounded` rewritten: a precondition proves seed 1's first line exceeds `MaxPending`, then it asserts outcome `reset`, `Closed.Reset == 1`, nothing echoed and no line counted; it failed before the fix (`lines 1`) and fails with the cap removed (mutation M11 now caught) |
+| Review 5 (MINOR): `TraceTail`/`LogTail` panic on negative n | fixed in `c5b2f0b` (`tail` returns nil for n <= 0); regression `sim_test.go`: `TestTraceTailOfZeroOrNegativeIsEmpty` |
+| Review 6 (MINOR): `sweep.sh` misses one-level `TestScenarioX/seed=N` | fixed in `673b304` (regex `--- PASS: TestScenario[^ ]*/seed=`); checked against both line shapes; `sweep.sh -seeds 20` still counts 231 runs |
+| Review 7 (MINOR): `MaxSameInstant` off by one between t = 0 and t > 0 | fixed in `a839c27` (the first step at a new instant counts as 1); while there, `RunUntil` moving the clock with no event left the count of the previous instant in place, so the first instant after it was short; that now restarts at 0. Regressions `sim_test.go`: `TestMaxSameInstantIsTheSameBoundAtZeroAndLater` (failed before: 6 ran at t = 3), `TestMaxSameInstantRestartsWhenRunUntilMovesTheClock` (failed before) |
+| Attack `TestAdv_3_RefusalRoundTripOverflow` | fixed in `4c9981f` (same as review 2); passes |
+| Attack `TestAdv_4_MaximumJitter` | fixed in `4c9981f`; passes |
+| Attack `TestAdv_4_LatencySumSaturates` | fixed in `4c9981f`; passes |
+| Attack `TestAdv_4_ClosedReaderFreesBlockedWriter` | fixed in `571e020` (same as review 1); passes in both directions |
+
+Golden digests are unchanged: no scenario reaches any of the repaired paths.
+
+### Narrowed claims
+
+None.
+
