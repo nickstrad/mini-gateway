@@ -31,4 +31,53 @@ Scripts and research artifacts for mini-zgateway. Every script any agent produce
 | `phase1/c4-check.mjs` | Validates `docs/c4/model.json` with `c4-sdk@0.1.0`: decodes it and builds a scene for every diagram. Run from a scratch folder outside `/tmp` that has `npm init -y && npm install c4-sdk@0.1.0`: copy the script into that folder, then `node c4-check.mjs <repo>/docs/c4/model.json` | Fable | 2026-11-24, after amendment 2 (rulings applied): decode ok, 0 errors, 0 warnings; 12 of 12 scenes built |
 | `phase1/check-mermaid.py` | Opens every page listed in a site's `pages.txt` in headless Chromium (the Playwright install of `/root/Software/web-tools`) and reports HTTP status and whether every Mermaid picture drew. Run: `agent_work/phase1/check-mermaid.py <base-url>` | Fable | 2026-11-24, local build after amendment 2: 17 pages 200, 12 of 12 pictures drew. Live result: see `/root/runs/zgateway-phase1-done.txt` |
 | `../docs/c4/gen.py` | Source of the C4 set: writes `model.json`, the 12 diagram pages, the Mermaid sources and the table in `docs/c4/README.md`. Run: `python3 docs/c4/gen.py` | Fable | 116 elements, 166 relationships, 12 diagrams (after amendment 2: batcher removed, TLS added) |
-| `../.github/scripts/build_site.py` | Builds the Pages site (review page, plan, C4, influences). Needs the `markdown` package. Run: `python3 .github/scripts/build_site.py _site`. Fails on a broken relative link | Fable | 17 pages (after amendment 2) |
+| `../.github/scripts/build_site.py` | Builds the Pages site (review page, plan, C4, influences, and since chunk 0 the book: front page with a contents list from `book/manifest.json`, one page per live chapter). Needs the `markdown` package; locally run it through `scripts/site.sh`. Fails on a broken relative link or a manifest that disagrees with `book/chapters/` | Fable | 2026-11-24, chunk 0: 18 pages (the 17 earlier pages and `book/index.html`) |
+
+## Chunk 0 — foundation (Fable, 2026-11-24)
+
+Notes: `chunks/c00-foundation/NOTES.md`. Durable facts: `../docs/knowledge/foundation-gates.md`. Results below are from the gated commit `7a19c14`.
+
+### Gates and scripts
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../scripts/gate.sh` | The local landing gate, G0 to G10, on the host; the landing authority. Run: `scripts/gate.sh <chunk-dir>` (or `make gate CHUNK=<chunk-dir>`); `GATE_STAGE=build\|final\|foundation`, `GATE_ONLY=G0,G3` for a subset. Writes `chunks/<chunk-dir>/gate/result.json` | Fable | `GATE_STAGE=foundation scripts/gate.sh c00-foundation`: overall pass, counts_for_landing true, 8 s; G4 to G8 skip-not-built; result in `chunks/c00-foundation/gate/result.json` |
+| `../scripts/ci-fast.sh` | The CI set (G0, G1, G3 with `-short`), run by `.github/workflows/ci.yml` and `make ci`. Run: `scripts/ci-fast.sh` | Fable | Green in 8 s on vm-1 (target under five minutes). Not yet run on GitHub: nothing is pushed from the builder's worktree |
+| `../scripts/gate-canaries.sh` | Tests the gate: plants one violation per check in a throwaway copy under `/tmp` and requires the right check to go red with the expected message. Run: `scripts/gate-canaries.sh` (`CANARY_ONLY=<id>,<id>` for a few) | Fable | 35 of 35 caught in 153 s (30 red, 3 refused with exit 2, 2 controls); `chunks/c00-foundation/gate/canaries.json` |
+| `../scripts/site.sh` | Builds the site locally; fetches the pinned `markdown` wheel into `.cache/pylib` when Python has no such package. Run: `scripts/site.sh [output-dir]` or `make site` | Fable | 18 pages built; runs as gate check G9 |
+| `../scripts/sweep.sh` | Skeleton: seed sweep, tier S (gate G4). Run: `SWEEP_SEEDS=200 RUN_DIR=<dir> scripts/sweep.sh` | Fable | Not built yet (exit 3); marker `scripts/.not-built/sweep`; built in chunk 1 |
+| `../scripts/fuzz.sh` | Skeleton: timed fuzzing of every target (gate G5). Run: `FUZZ_SECONDS=20 scripts/fuzz.sh` | Fable | Not built yet (exit 3); marker `fuzz` |
+| `../scripts/tier-r.sh` | Skeleton: scenarios against the real binary and Postgres 17 in Docker (gate G6). Run: `RUN_DIR=<dir> scripts/tier-r.sh` | Fable | Not built yet (exit 3); marker `tier-r`; built in chunk 6 |
+| `../scripts/csv-assert.sh` | Skeleton: DuckDB assertions over flushed CSV files (gate G7). Run: `scripts/csv-assert.sh <run-dir>...` | Fable | Not built yet (exit 3); marker `csv-assert`; built in chunk 3 |
+| `../scripts/gen-docs.sh` | Skeleton: generated contract documents; `--check` diffs against the committed files (gate G8). Run: `scripts/gen-docs.sh [--check]` | Fable | Not built yet (exit 3); marker `gen-docs`; built in chunk 5 |
+| `../scripts/race-long.sh` | Skeleton: repeated race run of the shell and engine tests, on demand. Run: `RACE_COUNT=20 scripts/race-long.sh` | Fable | Not built yet (exit 3); marker `race-long` |
+| `../scripts/soak.sh` | Skeleton: long steady-state run, on demand. Run: `SOAK_MINUTES=30 scripts/soak.sh` | Fable | Not built yet (exit 3); marker `soak` |
+| `../scripts/bench.sh` | Skeleton: benchmarks (PLAN.md section 11), on demand; `make bench` runs it. Run: `scripts/bench.sh` | Fable | Not built yet (exit 3); marker `bench`; built in chunk 14 |
+| `../scripts/obs-chain.sh` | Skeleton: OTLP push through a Collector into Prometheus, on demand. Run: `scripts/obs-chain.sh` | Fable | Not built yet (exit 3); marker `obs-chain`; built in chunk 15 |
+| `../Makefile` | `make test`, `chaos`, `bench` (fail with "not built yet" while their markers exist), `gate CHUNK=…`, `ci`, `lint`, `site` | Fable | `make test`, `make chaos`, `make bench` each fail with `not built yet`; `make ci`, `make lint`, `make site` green |
+| `../.github/workflows/ci.yml` | CI: push to main, pull requests, manual dispatch; `actions/setup-go` with the version from `go.mod`; runs `scripts/ci-fast.sh`; 15-minute timeout | Fable | Parses as YAML; first real run happens when the orchestrator pushes |
+
+### Lint tools (`../tools/detlint`, nested module, standard library only)
+
+Build all: `BIN=$(mktemp -d); (cd tools/detlint && go build -o "$BIN" ./...)`. Test: `cd tools/detlint && go vet ./... && go test ./...` (green, 8 packages). Rules in full: `../tools/detlint/README-tools.txt`. Origin: `../tools/detlint/SOURCE.md` (object-store commit `060bb3e`).
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../tools/detlint` (`detlint`) | Determinism lint: wall clock, global random, concurrency, floats, map order, process state, imports. Run: `$BIN/detlint -root . -allow tools/lint-rules/detlint-allow.txt <pkg>...` (gate G1, packages from `tools/lint-rules/det-packages.txt`) | Copied from object-store | Tests pass here; canary `g1-wallclock` caught a planted `time.Now()` |
+| `../tools/detlint/cmd/nocomments` | The no-comments rule for product Go, with a baseline. Run: `$BIN/nocomments -root . -baseline <old-tree>` (gate G2, build stage) | Copied; skip list changed to `agent_work .git testdata vendor tools` | Canary `g2-comment` caught |
+| `../tools/detlint/cmd/astdiff` | Proves two trees have the same code (comments and formatting aside). Run: `$BIN/astdiff <tree-a> <tree-b>` (gate G2, final stage) | Copied | Canary `g2-prose-changed-code` caught; control `g2-prose-only` passes |
+| `../tools/detlint/cmd/paniccheck` | Every `panic(` needs an allow line. Run: `$BIN/paniccheck -root . -allow tools/lint-rules/panic-allow.txt internal cmd` (gate G1) | Copied | Canary `g1-panic` caught |
+| `../tools/detlint/cmd/importcheck` | Standard library and own module only, from a file list on standard input | Copied | Kept with its tests; the gate uses `importlint` instead |
+| `../tools/detlint/cmd/importlint` | Import rules of PLAN.md section 6.3 and the go.mod requirement rule, from `tools/lint-rules/imports.txt`. Run: `$BIN/importlint -root . -rules tools/lint-rules/imports.txt` (gate G1) | Fable | Canaries caught: core imports wire layer, engine imports adapter, pgproto3 outside its packages, third-party import, second requirement |
+| `../tools/detlint/cmd/boundlint` | Bounded-channel lint for the shell: unbuffered channels, unnamed capacities, growth in unbounded loops. Run: `$BIN/boundlint -root . -allow tools/lint-rules/boundlint-allow.txt internal/shell/...` (gate G1) | Fable | Canaries caught: unbuffered channel, literal capacity, append in a receive loop |
+| `../tools/lint-rules/` | The rules and package lists the gate reads: `imports.txt`, `det-packages.txt`, `race-packages.txt`, `shell-packages.txt`, and the three allow files | Fable | Package lists empty at chunk 0 except `shell-packages.txt` |
+
+### Orchestration (`orch/`, written by the orchestrator before chunk 0; indexed here)
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `orch/launch.sh` | Launches one headless agent, detached, in a worktree; checks 15 s in that it is alive and in the right folder; writes `/root/runs/zgateway-p2-<run>.{log,pid,exit}`. Run: `agent_work/orch/launch.sh <run-name> <seat> <workdir> <brief-file>` (seats: opus, fable, neon, neon-oc, astra) | Fable (orchestrator) | Launched the chunk 0 builder |
+| `orch/wait.sh` | Waits for launched runs to stop, with a deadline; exit 0 all zero, 1 a nonzero exit, 3 a run died with no exit file, 4 still running. Run: `agent_work/orch/wait.sh <deadline-seconds> <run-name>...` | Fable (orchestrator) | Not run by the builder |
+| `orch/land.sh` | Lands a chunk on main from the main checkout: requires the gate result (pass, counts for landing, gated commit on the branch, only `agent_work/`, `STATE.md`, `docs/knowledge/` changed after it), the review verdict and `ADVERSARIAL.md`; merges `--no-ff` and pushes. Run: `agent_work/orch/land.sh <chunk-dir> <branch> <message-file>` (`LAND_NO_REVIEW=1` for chunk 0) | Fable (orchestrator) | Not run by the builder |
+| `orch/pages-check.sh` | After a push: waits for the Pages run of a commit, then requires HTTP 200 for each site path. Run: `agent_work/orch/pages-check.sh <commit-sha> <site-path>...` | Fable (orchestrator) | Not run by the builder |
+| `orch/usage.sh` | Usage gauges before a wave: Neon through `agy -p "/usage"`, limit messages in the newest run logs for the others. Run: `agent_work/orch/usage.sh` | Fable (orchestrator) | Not run by the builder |

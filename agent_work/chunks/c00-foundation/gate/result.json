@@ -1,0 +1,176 @@
+{
+  "chunk": "c00-foundation",
+  "sha": "7a19c14260a920c1ce3ff4358ebef55307a884da",
+  "dirty_tree": false,
+  "stage": "foundation",
+  "partial": false,
+  "only": "",
+  "overall": "pass",
+  "counts_for_landing": true,
+  "go_version": "go version go1.26.8 linux/amd64",
+  "duckdb_version": "v1.5.5 (Variegata) d8cdaa33fd",
+  "started": "2026-11-24T22:58:25Z",
+  "finished": "2026-11-24T22:58:33Z",
+  "seconds": 8,
+  "comment_baseline": "none",
+  "preprose_commit": "none",
+  "short": false,
+  "sweep_seeds": 200,
+  "fuzz_seconds": 20,
+  "skip_not_built": [
+    "G4 sweep",
+    "G5 fuzz",
+    "G6 tier-r",
+    "G7 csv",
+    "G8 gen-docs"
+  ],
+  "checks": [
+    {
+      "gate": "G0",
+      "check": "tools",
+      "status": "pass",
+      "seconds": 2,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "gofmt",
+      "status": "pass",
+      "seconds": 0,
+      "note": "no Go packages in the module yet (tools/detlint is formatted)"
+    },
+    {
+      "gate": "G0",
+      "check": "build",
+      "status": "pass",
+      "seconds": 0,
+      "note": "no Go packages in the module yet"
+    },
+    {
+      "gate": "G0",
+      "check": "vet",
+      "status": "pass",
+      "seconds": 0,
+      "note": "no Go packages in the module yet"
+    },
+    {
+      "gate": "G0",
+      "check": "tools-vet",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tools-test",
+      "status": "pass",
+      "seconds": 4,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tidy",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "detlint",
+      "status": "pass",
+      "seconds": 0,
+      "note": "det-packages.txt lists no package yet"
+    },
+    {
+      "gate": "G1",
+      "check": "importlint",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "boundlint",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "paniccheck",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G2",
+      "check": "comments",
+      "status": "skip-foundation",
+      "seconds": 0,
+      "note": "stage foundation: chunk 0 has no product Go"
+    },
+    {
+      "gate": "G3",
+      "check": "unit",
+      "status": "pass",
+      "seconds": 0,
+      "note": "no Go packages in the module yet"
+    },
+    {
+      "gate": "G3",
+      "check": "race",
+      "status": "pass",
+      "seconds": 0,
+      "note": "race-packages.txt lists no package yet"
+    },
+    {
+      "gate": "G4",
+      "check": "sweep",
+      "status": "skip-not-built",
+      "seconds": 0,
+      "note": "not built yet (marker scripts/.not-built/sweep)"
+    },
+    {
+      "gate": "G5",
+      "check": "fuzz",
+      "status": "skip-not-built",
+      "seconds": 0,
+      "note": "not built yet (marker scripts/.not-built/fuzz)"
+    },
+    {
+      "gate": "G6",
+      "check": "tier-r",
+      "status": "skip-not-built",
+      "seconds": 0,
+      "note": "not built yet (marker scripts/.not-built/tier-r)"
+    },
+    {
+      "gate": "G7",
+      "check": "csv",
+      "status": "skip-not-built",
+      "seconds": 0,
+      "note": "not built yet (marker scripts/.not-built/csv-assert)"
+    },
+    {
+      "gate": "G8",
+      "check": "gen-docs",
+      "status": "skip-not-built",
+      "seconds": 0,
+      "note": "not built yet (marker scripts/.not-built/gen-docs)"
+    },
+    {
+      "gate": "G9",
+      "check": "site",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G10",
+      "check": "extra",
+      "status": "skip-none",
+      "seconds": 0,
+      "note": "the chunk has no gate/extra.sh"
+    }
+  ]
+}
