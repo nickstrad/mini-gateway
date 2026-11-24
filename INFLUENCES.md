@@ -13,6 +13,14 @@ rule, Tailscale's `DoChanContext`, Twemproxy's `server_connections` default, the
 retry ratio) and re-ran the two probe scripts in `agent_work/phase0/probes/`. Everything else
 carries the research agent's label.
 
+**Addendum, 2026-11-24.** Three directions from Nick arrived while the merge above was being
+written and are added here without reopening Phase 0: the component-snapshot metrics pattern
+(F29), *Release It!* (F30), and horizontal scale of the proxy tier as a design constraint (I36),
+with steering questions 13 and 14. The orchestrator wrote these three entries itself from sources
+on this machine (the direction note, the text of *Backpressure in Microservices*, and Nick's
+*Release It!* notes); no research agent ran and no new external source was fetched. Each entry is
+marked *(addendum)*. The gate is unchanged.
+
 **Verification labels.** `read directly` = the primary source was fetched and read in this
 Phase 0 run (partial reads are said so). `secondary only` = only a summary or third-party
 account was read. `could not verify` = not reached; any content is from model memory and is
@@ -82,6 +90,19 @@ The eight influences that should most shape this project, in priority order.
 8. **Netflix AIMD with the in-flight guard, sized by Little's Law** (I11, F11, F14). Four lines and
    one integer for the adaptive limit; Little's Law shows the spec's scenarios need a pool of 32,
    not 20, for the quiet tenant to have any margin during the 200 ms stall.
+
+**Addendum, 2026-11-24 — three binding directions from Nick, added after the list above was
+written.** They do not reorder the eight; they sit across all of them.
+
+- **Observability is first-class, like testing** (F29). Every component owns a metrics state
+  object and exposes a snapshot; one collector interface reads them; exporters (Prometheus,
+  OpenTelemetry, CSV, JSON, logs) are separate and never touch components. Question 13.
+- ***Release It!* is a checklist over the whole design** (F30). Most of its patterns are already
+  here under other names; what it adds is steady state (everything that grows gets an automatic
+  remover), one timeout-budget table, a health path walled off from the data path, and a
+  four-part row for every protective mechanism.
+- **Horizontal scale is a design input from the start** (I36). Each guarantee is stated for N
+  instances — multiplies, weakens or survives — and the weakened ones are measured. Question 14.
 
 ---
 
@@ -657,6 +678,23 @@ files read.
 - **Do not copy:** frameworks and control planes — the spec forbids external core dependencies and the proxy is already the single control point.
 - **Strength:** BACKGROUND · **Recommendation:** EXCLUDE — no extractable small mechanism not already covered.
 
+#### I36 · Horizontal scale of the proxy tier — a design constraint, with the precedent already in this list *(addendum)*
+- **Source:** Nick's direction of 2026-11-24 (`/root/briefs/zgateway-observability-scale-releaseit-note.md` §3); spec §2.1 fan-in arithmetic (backend connections = proxy instances × max pool size); S1 (ZGateway is a "stateless proxy tier"); I4 (Supavisor); I31 (Stripe); F11 (AIMD); *Backpressure in Microservices*, "Local Versus Distributed Backpressure" and "Kubernetes Trade-Offs" (`/root/briefs/zgateway-backpressure-reference.txt`)
+- **Verified:** read directly — the note, and those two sections of the book text. The precedent rests on entries already verified above; no new external source was fetched. PgBouncer's habit of running several processes behind `so_reuseport`, each with its own pools, is from memory only and is not relied on.
+- **Key idea:** Every guarantee in the spec is written for one proxy process, and every production proxy it cites runs many. At N instances a limit either multiplies by N, weakens by N, or survives unchanged — and which one must be decided per mechanism, written down, and measured, not discovered later. The book's rule: local bounds in every process always; distributed coordination only for a shared scarce dependency; "a remote controller can fail; local bounds must still hold"; and say for each limit whether it is per instance or globally coordinated (its example: 32 workers per pod, 10 → 50 pods, downstream concurrency 320 → 1,600).
+- **Borrow:** (pool, admission, fairness, coalescing, retries, observability, testing) a per-instance-state table as a plan deliverable, one row per mechanism. First cut, to be confirmed by measurement:
+  - *Pool hard cap* — multiplies: backend connections ≤ N × pool. The fleet bound holds only if pool size is set from a fleet budget (budget ÷ N). The creation-rate cap multiplies the same way, which matters in a reconnection storm.
+  - *Coalescing flights* — weakens: a hot-key burst costs up to N backend reads instead of 1. Still bounded and still far below one per client. Accept and measure.
+  - *Queue-wait bound (CoDel state, LIFO switch)* — survives: each instance detects and bounds its own standing queue. No shared state needed.
+  - *Fairness (share under saturation)* — survives only if tenants are spread evenly. Shares are computed from the tenants active on that instance, so a tenant whose connections land on one instance is judged against a different crowd than one spread across all N. The optional GCRA outer gate multiplies by N unless divided.
+  - *Retry budget* — survives where it is a ratio (N instances each at ≤ 10% is a fleet at ≤ 10%); the bucket's minimum floor multiplies.
+  - *Adaptive concurrency (AIMD)* — survives by design: N independent AIMD loops sharing one bottleneck is the setting Chiu & Jain analysed (F11). Each instance reads backend latency itself. What does not adapt is the static pool cap above it.
+  - *Metrics* — per instance. Aggregation belongs to the collector side (F29): counters and gauges sum, histograms merge, ratios are recomputed from merged counters, never averaged.
+  - *Loss of an instance* — survivors inherit its clients as a reconnection burst (Release It!'s chain reaction, F30).
+  Also borrow: the simulator runs N proxy cores on one event loop at almost no extra cost, because the cores are sans-I/O (question 8) — so a multi-instance scenario (a reconnection storm split across 3 instances, a hot key seen by 3 coalescers, one instance killed) can be exact and replayable.
+- **Do not copy:** central counters in a shared store on the request path (I31 — a remote decision per request, and a new failure mode); a tenant's pool pinned to one node with the others proxying to it (I4 — cluster membership); any discovery, gossip or leader. Do not claim ZGateway's or Hyperdrive's fleet behaviour as ours: neither source says how, or whether, instances coordinate limits.
+- **Strength:** CORE · **Recommendation:** ADOPT WITH CHANGE — per-instance enforcement with a static, instance-aware config; every degradation named and measured; coordination left as a seam. The stance itself is question 14.
+
 ### Bucket 4 — Foundational papers and algorithms, reduced to the mechanism we would build
 
 Pseudo-code sketches for each are in `agent_work/phase0/research/b4-foundations.md`. *(probe)*
@@ -887,6 +925,41 @@ orchestrator with identical output. They are a reason to test this in Commit 0, 
 - **Borrow:** (testing) the second test layer: the real goroutine shell — timers, context deadlines, write-deadline teardown, leak checks — with real `time` calls and no sleeps.
 - **Do not copy:** it as the replay harness. Mutex waits and network I/O are not durable blocks (so a fake network is required), and it gives fake time, not a seeded scheduler — Nick's own probe (P4) saw 24 orderings in 2,000 runs.
 - **Strength:** SECONDARY · **Recommendation:** ADOPT WITH CHANGE — a second layer under the custom simulator, not a replacement.
+
+#### F29 · Component-snapshot metrics — "Metrics Without Framework Lock-In" (*Backpressure in Microservices*, Luca Sepe) *(addendum)*
+- **Source:** `/root/briefs/zgateway-backpressure-reference.txt` (text of the book; PDF beside it) — sections "Production-Ready Implementation in Go", "Metrics Without Framework Lock-In", "Recommended Metrics", "Behavior Under Stress"; Nick's direction in `/root/briefs/zgateway-observability-scale-releaseit-note.md` §1. Bucket: **foundational** — it is a mechanism we would build, not a system we would study. P19 is the same book reaching us through mansio; this entry is the book's metrics pattern read at the source.
+- **Verified:** read directly for those sections and the passages around them; the rest of the book was not read end to end. The companion repository (`github.com/lucasepe/backpressure-in-microservices`) was not fetched.
+- **Key idea:** The component keeps its own counts and exposes one call — `Snapshot()` — returning "monotonic counters plus current gauges" (`Accepted, Rejected, Dropped, Queued, InFlight`). The service, not the component, maps that snapshot to Prometheus, OpenTelemetry, StatsD, logs or local diagnostics: "the package should not own the organization's telemetry stack."
+- **Borrow:** (observability — every component) three layers with one direction of dependency.
+  1. *State object per component* — pool, coalescer, admission queue, fairness dispatcher, concurrency limiter, retry budget, batcher, protocol layer, proxy pipeline. Plain integers and fixed-size histograms (F17), no telemetry imports. Filled only when config enables emission; the plan states the cost when off and when on.
+  2. *One collector interface* that walks the components and returns their snapshots as plain values.
+  3. *Exporters* that read only the collector: Prometheus text, OpenTelemetry, CSV (the benchmark and chaos evidence tables), JSON stats endpoint, logs. Adding one touches no component.
+  The book's metric vocabulary as the per-component floor: accepted / processed / rejected / dropped / failed counters, depth / capacity / in-flight gauges, a queue-wait histogram (admission to pickup). Its label rule: aggregate, low-cardinality labels (queue, policy, dependency); never raw tenant ID, request path, job ID or error text. For us: Prometheus gets a bounded tenant label (configured tenants, or top-K plus `other`); full per-tenant detail stays in the snapshot, the JSON endpoint and CSV. Its alert rule — "alert on broken protection, not merely active protection" — as the README's guidance. Three things this project adds on top:
+  - *Control reads are not exports.* Admission and AIMD consume queue wait and in-flight counts on every request. Those values are core state, always on, read in place. The snapshot is a copy for observers and is never on a decision path.
+  - *Snapshots are part of the replay law.* The spec demands bit-identical final metrics. So a snapshot may contain no wall-clock time and no map-order dependence, and the simulator can assert conservation exactly (accepted = processed + failed + dropped + queued + in-flight) because the cores are single-threaded.
+  - *A landing gate.* A component without its snapshot, its exporter mapping and a test showing its counters move does not land — the same standing testing has.
+- **Do not copy:** the reference's single mutex over the whole queue as our hot path (our cores are single-threaded; the goroutine shell decides its own synchronisation); its five-field snapshot as sufficient (no histograms, no per-tenant view, no shed reasons); tenant ID as a Prometheus label. The book says nothing on cost when disabled, snapshot consistency under concurrent writers, or merging across instances — those are ours to design (I36).
+- **Strength:** CORE · **Recommendation:** ADOPT — as the observability architecture. Exporter set and coverage depth for v1 are question 13.
+
+#### F30 · *Release It!* 2nd ed. (Michael Nygard) — stability anti-patterns and patterns, via Nick's litefleet notes *(addendum)*
+- **Source:** `/root/Software/book-notes/books/release-it/` — `PLAN.md` (§1 the book's argument, §3 the 18-flaw register, §4.4 coverage), `lessons/README.md` (measured before/after per lesson), lessons 05, 06 and 10, `skills/suggest-stability-patterns/SKILL.md`. Bucket: **foundational** (book).
+- **Verified:** read directly for those files (the three lessons: opening sections only; lessons 01–04, 07–09, 11–12 through the index and register). **The book itself was not read** — the PDF is on Nick's Drive, which this run cannot reach; chapter attributions are as the notes give them. Two `kb` searches found no Release It! entry.
+- **Key idea:** Systems fail at integration points, and a small fault spreads along whatever path the design leaves open. Ch. 4 names the ways cracks start; Ch. 5 names the structures that stop them. The notes add a rule for using them: a pattern is a decision with four parts — where it sits, what numbers it needs, what the caller gets when it trips, and which signal shows it tripped. "A pattern missing any of the four is not done."
+- **Borrow:** the four-part rule as the row format for every protective mechanism in the plan, and the mapping below. litefleet numbers are Nick's own measurements, quoted for scale only.
+  - **Timeouts — ADOPT.** Every wait bounded, inner shorter than outer: client read and idle, queue wait, pool checkout, backend connect, backend reply, client write. One generated timeout-budget table beside the capacity table (litefleet: 2.9 s ⊃ 2.5 s ⊃ 2 s; requests in flight during a stall 1,130 → 149). Work must not outlive every caller: the coalescer's detached flight (I25) carries its own deadline.
+  - **Fail fast — ADOPT.** Validate, then check resources, then work: reject a bad or disallowed command before it queues; refuse at once when the backend is marked down. Already present as P14's "refuse before reading"; this makes it a rule for every stage.
+  - **Circuit breaker — ADOPT WITH CHANGE.** Exactly one breaker: the backend-down state machine of I15 with I1's connect lockout. The notes' warning, "a breaker without a fallback just fails faster", is accepted on purpose — with no cache (question 5) a fast pre-forward error *is* the fallback, and it shields a recovering backend. I29's objection (breakers add a second mode that is hard to test) is met by testing both modes in the simulator. WATCH: per-tenant or per-command breakers — the fairness queues already contain a bad tenant.
+  - **Bulkheads per tenant — ADOPT WITH CHANGE.** litefleet's lesson: the partition had to be per tenant, not per database (neighbours' p99 534 ms → 87 ms). Ours is a softer wall — a share that binds only under saturation (I12) — because a hard partition wastes idle capacity; hard per-tenant caps remain option 4c. One hard bulkhead to add: health, stats and metrics endpoints must not draw on the data path's pool, queues or locks (in litefleet a health check drawing on the shared pool timed out under load and the service was marked unreachable).
+  - **Shed load, handshaking, back pressure — ADOPT (already the core of the spec).** What the book adds is placement and the reply: shed at the callee, tell the caller what happened. RESP has no `Retry-After`, so the handshake is a distinct error prefix. Plan decision to record: when to stop reading a client's socket (TCP back pressure) versus read-and-shed. (litefleet: goodput after losing one of three gateways 11% → 68.5%.)
+  - **Steady state — ADOPT. The one group nothing else in this document covers.** Every accumulator gets an automatic remover and a gauge: per-tenant queues and histograms for tenants that went quiet, the coalescer's flight map, batch-map entries (S1's idle eviction), idle backend connections, tenant label sets in exporters, log volume while shedding. Test: a long simulated run with tenant churn in which every size gauge levels off.
+  - **Governor — ADOPT.** Any automatic loop gets a bound on how far and how fast it moves: the retry budget (I14), and floor, ceiling and step limits on AIMD.
+  - **Test harness — ADOPT (already Commit 0).** The fault-injecting backend is Nygard's harness; litefleet found 5 of 12 chaos tests failing on code whose happy-path tests passed.
+  - **Anti-patterns — ADOPT as the review checklist at each landing,** each mapped to a place in this proxy: *integration points* (the backend connection; the client socket), *blocked threads* (goroutines held by slow clients or a stalled backend), *slow responses* (the 150–200 ms stall scenarios), *cascading failure* (backend slow → clients time out → retries), *chain reaction* (one proxy instance dies and its clients land on the survivors — I36, question 14), *unbalanced capacities* (N × pool against the backend's connection limit; clients against the proxy's accept limit), *dogpile* (reconnection storm; recovery after an outage), *force multiplier* (AIMD and retries acting on a wrong signal), *unbounded result sets* (reply size and `MGET` width caps — a memory bound the spec states only in general terms).
+  - **Graceful drain on shutdown — ADOPT (small).** From the versions lesson: stop accepting, finish in-flight, then exit (litefleet: 5 requests cut off by a restart → 0). It is what makes a multi-instance rollout safe.
+  - **Let it crash, decoupling middleware, the rest of deployment and versioning — EXCLUDE.** The proxy holds no durable state, so a crash is a reconnection storm, which is already a scenario. Accepting a write now and delivering it later contradicts honest post-forward errors (the same objection as I19's delete stream). Expand/contract migrations and tolerant readers have nothing to attach to.
+  - **Transparency — see F29.** The notes moved it to lesson 1 "because every later pattern is measured through it", and give health three states (ok / degraded / failed): degraded while shedding or while the breaker is open.
+- **Do not copy:** litefleet's parameters (seconds-scale HTTP timeouts; ours are milliseconds); HTTP-specific handshaking (`503` + `Retry-After`, balancer queue limits); a breaker per dependency (there is one dependency); hard per-tenant partitions as the default.
+- **Strength:** CORE as a checklist and row format; most of its mechanisms already arrive through S7, I14–I17, I12 and P11–P14, and steady state, the timeout table, the health-path bulkhead and drain are what is new · **Recommendation:** ADOPT WITH CHANGE — per group as marked. PLAN.md must carry the adopted / rejected table with reasons (Nick's direction).
 
 ---
 
@@ -1147,6 +1220,46 @@ Reply with numbers and letters (for example "1a 2a 3a … 10: promote P12"). **B
     with and without their own budgets.**
     (b) Never — the proxy only answers fast and honestly; all retry control is by error codes.
 
+13. **Observability scope for v1 — exporter set, and how deep the per-component snapshots go.**
+    *(addendum; F29. The architecture itself — state object per component, one collector
+    interface, exporters separate — is Nick's binding direction and is not the question.)*
+    **(a) Full coverage, five exporters, standard library only. Every component ships a snapshot
+    (throughput, queue depth / wait / age, CoDel and LIFO state, drops by policy, connections and
+    creation rate, coalescing hits / waiters / cancellations, per-tenant in-flight and shed share,
+    retry-budget use, errors by command and code, latency histograms per tenant and outcome,
+    goroutine and memory-bound checks), held by a landing gate. Exporters: Prometheus text
+    endpoint, JSON stats endpoint, CSV (the benchmark and chaos evidence tables), periodic log
+    line, and a hand-written OTLP/HTTP JSON push exporter landed last — no SDK, checked against a
+    real OpenTelemetry Collector container in the long-budget leg. Prometheus carries a bounded
+    tenant label (configured tenants or top-K plus `other`); full per-tenant detail lives in
+    JSON and CSV. Lock-wait timing and per-key hotness are opt-in diagnostics, off by default,
+    because they cost on the hot path.**
+    (b) The same coverage and the first four exporters; no OTLP code. OpenTelemetry is reached by
+    pointing a Collector's Prometheus receiver at our endpoint, and the README says so. Cheapest
+    honest answer; the push path of the collector interface goes unexercised.
+    (c) As (a), but OTLP through the official OpenTelemetry Go SDK, isolated in its own Go module
+    so the core keeps zero dependencies. Most standard; breaks "no external modules".
+    (d) Narrow: the spec's per-tenant list and its Prometheus/JSON endpoint only; other components
+    get snapshots when someone needs them.
+
+14. **Horizontal-scale stance for v1.** *(addendum; I36.)*
+    (a) Single instance in v1, with the seams designed in (budgets behind an interface, config
+    shaped per fleet, metrics merged outside the components), a multi-instance C4 deployment
+    view, and one multi-instance scenario in the simulator only.
+    **(b) Per-instance enforcement with instance-aware config. Running N instances is a supported
+    v1 deployment: a static `instances` value divides the fleet budgets (pool size, creation-rate
+    cap, optional rate gate, retry floor); nothing is coordinated at run time. PLAN.md carries the
+    per-instance-state table (I36) saying, for each guarantee, whether it multiplies, weakens or
+    survives at N. The accepted degradations are measured — a 3-instance reconnection storm, a
+    hot key across 3 coalescers, a tenant pinned to one instance, one instance killed — exactly
+    in the simulator and once against real Redis. The load generator spreads connections; we
+    build no balancer, no discovery, no membership. Coordination stays a documented seam.**
+    (c) Coordinated budgets: instances share tenant budgets and the hot-key flight through the
+    backend (leases or counters in Redis). Restores the single-instance guarantees; puts a remote
+    decision on the request path and adds a failure mode the spec does not ask for.
+    (d) Sticky tenant-to-instance routing, so per-tenant state is whole on one instance. Needs a
+    routing layer in front and makes losing an instance a per-tenant outage.
+
 ---
 
 ## 6. What this changes for the plan
@@ -1178,10 +1291,23 @@ written straight from the spec in these ways:
   "converges to target" wordings are replaced with what the mechanisms actually do.
 - **Integration chunks are sized larger than primitive chunks**, with arbitration budget, because
   that is where the last project's cost was.
+- **Observability becomes a plan section at the level of the testing architecture** (F29, question
+  13): a metrics state object and snapshot per component, one collector interface, separate
+  exporters, a stated cost model and label policy, per-chunk observability deliverables, and a
+  landing-gate item — no component lands without its snapshot, its exporter mapping and a test
+  that its counters move. Control reads stay separate from, and cheaper than, the export path.
+- **The plan carries two more tables and one more view** (F30, I36, question 14): the *Release It!*
+  mapping (each pattern group adopted or rejected, with where it sits, its numbers, what the
+  caller gets, and its signal), and the per-instance-state table (each guarantee at N instances).
+  C4 gains a multi-instance deployment view; the chaos and benchmark suites gain multi-instance
+  scenarios; a steady-state run (tenant churn, every size gauge levels off) joins the invariants.
 - **Explicitly absent from the plan**: caching, replicas, hedging, RESP3, connection pinning, any
-  Postgres wire code, a baton scheduler, a shared kernel repo, external modules of any kind.
+  Postgres wire code, a baton scheduler, a shared kernel repo, external modules of any kind,
+  and any run-time coordination between proxy instances.
 
 ---
 
-*Counts: 97 influences — 14 spec-named, 20 prior projects, 35 industry systems, 28 foundations.
+*Counts: 100 influences — 14 spec-named, 20 prior projects, 36 industry systems, 30 foundations
+(97 from the original Phase 0 merge plus the three addendum entries I36, F29, F30); 14 steering
+questions.
 Research notes, briefs and probes: `agent_work/phase0/`, indexed in `agent_work/INDEX.md`.*
