@@ -1,0 +1,23 @@
+flowchart TB
+  N_ENGINE["Engine"]
+  N_WORK["Work vocabulary"]
+  subgraph SCOPE["Coalescer"]
+    F_JOIN["Join rule"]
+    F_TABLE["Flight table"]
+    F_WAITERS["Waiter set"]
+    F_DEADLINE["Flight deadline"]
+    F_REPLY["Shared reply buffer"]
+    F_NEG["Do-not-share list"]
+    F_SNAP["Coalescer snapshot"]
+  end
+  N_ENGINE -->|1| F_JOIN
+  N_ENGINE -->|2| F_WAITERS
+  N_ENGINE -->|3| F_REPLY
+  N_ENGINE -->|4| F_SNAP
+  F_JOIN -->|5| F_TABLE
+  F_JOIN -->|6| F_NEG
+  F_TABLE -->|7| F_WAITERS
+  F_WAITERS -->|8| F_DEADLINE
+  F_REPLY -->|9| F_WAITERS
+  F_REPLY -->|10| F_NEG
+  F_JOIN -->|11| N_WORK

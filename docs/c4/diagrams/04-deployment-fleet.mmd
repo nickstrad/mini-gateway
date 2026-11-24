@@ -1,0 +1,24 @@
+flowchart LR
+  subgraph D_CLIENTS["Application hosts"]
+    I_SPREAD["Client connections"]
+  end
+  subgraph D_TIER["Proxy tier, N = 3"]
+    I_GW1["mini-gateway instance 1"]
+    I_GW2["mini-gateway instance 2"]
+    I_GW3["mini-gateway instance 3"]
+  end
+  subgraph D_DB["Database host"]
+    I_PG[("Postgres 17")]
+  end
+  subgraph D_OPS["Operations"]
+    I_TEL["Scraper or collector"]
+  end
+  I_SPREAD -->|1| I_GW1
+  I_SPREAD -->|2| I_GW2
+  I_SPREAD -->|3| I_GW3
+  I_GW1 -->|4| I_PG
+  I_GW2 -->|5| I_PG
+  I_GW3 -->|6| I_PG
+  I_TEL -->|7| I_GW1
+  I_TEL -->|8| I_GW2
+  I_TEL -->|9| I_GW3

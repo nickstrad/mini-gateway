@@ -1,0 +1,5977 @@
+{
+ "schemaVersion": 1,
+ "id": "mini-gateway",
+ "title": "mini-gateway — target architecture",
+ "revision": "target-phase1-2026-11-24",
+ "defaultDiagramId": "context",
+ "model": {
+  "elements": [
+   {
+    "id": "app",
+    "kind": "person",
+    "name": "Client application",
+    "description": "Any program that speaks the Postgres wire protocol. Its startup user name selects its tenant.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ]
+   },
+   {
+    "id": "operator",
+    "kind": "person",
+    "name": "Operator",
+    "description": "Runs proxy instances, writes the static fleet config, reads health and stats, drains an instance with SIGTERM.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ]
+   },
+   {
+    "id": "developer",
+    "kind": "person",
+    "name": "Developer or reader",
+    "description": "Runs simulator scenarios from a seed, replays a failure from its printed REPLAY line, runs make test / chaos / bench.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ]
+   },
+   {
+    "id": "gw",
+    "kind": "softwareSystem",
+    "name": "mini-gateway",
+    "description": "A proxy that speaks the Postgres wire protocol (simple-query subset) in front of one Postgres: a hard-capped connection pool lent per transaction, per-tenant admission with two CoDel modes, read coalescing, timer-free batching, an off-by-default retry policy, snapshot observability. Runs as N independent instances.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go; one external package (pgproto3)"
+   },
+   {
+    "id": "pg",
+    "kind": "softwareSystem",
+    "name": "Postgres",
+    "description": "One ordinary Postgres server. Sees at most the fleet's connection budget, all logged in as one role.",
+    "status": "planned",
+    "tags": [
+     "external"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "PostgreSQL 17"
+   },
+   {
+    "id": "telemetry",
+    "kind": "softwareSystem",
+    "name": "Metrics and log readers",
+    "description": "A Prometheus scraper, an OpenTelemetry Collector, CSV files, log readers. They read exporters and merge across instances; no component knows about them.",
+    "status": "planned",
+    "tags": [
+     "external"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ]
+   },
+   {
+    "id": "pgproto3",
+    "kind": "softwareSystem",
+    "name": "pgproto3 (from pgx/v5)",
+    "description": "Go package github.com/jackc/pgx/v5/pgproto3: Postgres wire message structs with Encode and Decode. The one external dependency, used for message encoding only.",
+    "status": "planned",
+    "tags": [
+     "external"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go library"
+   },
+   {
+    "id": "c-shell",
+    "kind": "container",
+    "name": "Shell and binary",
+    "description": "cmd/mini-gateway and internal/shell. Listeners, one reader and one writer goroutine per connection, bounded mailboxes, a deadline on every socket operation, the admin listener on its own port, signal handling. Makes no decisions: it posts events to the engine and performs the actions the engine returns.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, goroutines, TCP",
+    "containerType": "application"
+   },
+   {
+    "id": "n-shell",
+    "kind": "container",
+    "name": "Shell and binary",
+    "description": "Neighbour in a component view: stands for the container `c-shell`.",
+    "status": "planned",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, goroutines, TCP",
+    "containerType": "application"
+   },
+   {
+    "id": "c-engine",
+    "kind": "container",
+    "name": "Engine",
+    "description": "internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure state machine",
+    "containerType": "application"
+   },
+   {
+    "id": "n-engine",
+    "kind": "container",
+    "name": "Engine",
+    "description": "Neighbour in a component view: stands for the container `c-engine`.",
+    "status": "planned",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure state machine",
+    "containerType": "application"
+   },
+   {
+    "id": "c-pgwire",
+    "kind": "container",
+    "name": "Wire layer",
+    "description": "internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the statement classifier, the error contract. The only product package that imports pgproto3.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure state machines, pgproto3",
+    "containerType": "application"
+   },
+   {
+    "id": "n-pgwire",
+    "kind": "container",
+    "name": "Wire layer",
+    "description": "Neighbour in a component view: stands for the container `c-pgwire`.",
+    "status": "planned",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure state machines, pgproto3",
+    "containerType": "application"
+   },
+   {
+    "id": "c-work",
+    "kind": "container",
+    "name": "Work vocabulary",
+    "description": "internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, batchable flag, outcome. Carries no Postgres type. This is the extension seam for a second protocol.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go types",
+    "containerType": "application"
+   },
+   {
+    "id": "n-work",
+    "kind": "container",
+    "name": "Work vocabulary",
+    "description": "Neighbour in a component view: stands for the container `c-work`.",
+    "status": "planned",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go types",
+    "containerType": "application"
+   },
+   {
+    "id": "c-adm",
+    "kind": "container",
+    "name": "Admission",
+    "description": "internal/admission. Rate gate, per-tenant queues with two selectable queue rules, adaptive LIFO, round-robin dispatcher with shares that bind under saturation, adaptive concurrency limit.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure core",
+    "containerType": "application"
+   },
+   {
+    "id": "n-adm",
+    "kind": "container",
+    "name": "Admission",
+    "description": "Neighbour in a component view: stands for the container `c-adm`.",
+    "status": "planned",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure core",
+    "containerType": "application"
+   },
+   {
+    "id": "c-pool",
+    "kind": "container",
+    "name": "Pool",
+    "description": "internal/pool. Hard-capped database connections, creation limiter, leases per transaction, the one breaker, the dirty-connection table.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure core",
+    "containerType": "application"
+   },
+   {
+    "id": "n-pool",
+    "kind": "container",
+    "name": "Pool",
+    "description": "Neighbour in a component view: stands for the container `c-pool`.",
+    "status": "planned",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure core",
+    "containerType": "application"
+   },
+   {
+    "id": "c-coal",
+    "kind": "container",
+    "name": "Coalescer",
+    "description": "internal/coalesce. Identical provably-read-only statements share one database read. Never writes.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure core",
+    "containerType": "application"
+   },
+   {
+    "id": "n-coal",
+    "kind": "container",
+    "name": "Coalescer",
+    "description": "Neighbour in a component view: stands for the container `c-coal`.",
+    "status": "planned",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure core",
+    "containerType": "application"
+   },
+   {
+    "id": "c-batch",
+    "kind": "container",
+    "name": "Batcher",
+    "description": "internal/batch. Timer-free: when a connection frees up, eligible queued single statements go out in one write. Off by default.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure core",
+    "containerType": "application"
+   },
+   {
+    "id": "n-batch",
+    "kind": "container",
+    "name": "Batcher",
+    "description": "Neighbour in a component view: stands for the container `c-batch`.",
+    "status": "planned",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure core",
+    "containerType": "application"
+   },
+   {
+    "id": "c-retry",
+    "kind": "container",
+    "name": "Retry policy",
+    "description": "internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached the database, within a 10% budget.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure core",
+    "containerType": "application"
+   },
+   {
+    "id": "n-retry",
+    "kind": "container",
+    "name": "Retry policy",
+    "description": "Neighbour in a component view: stands for the container `c-retry`.",
+    "status": "planned",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, pure core",
+    "containerType": "application"
+   },
+   {
+    "id": "c-obs",
+    "kind": "container",
+    "name": "Observability",
+    "description": "internal/obs. Snapshot conventions, integer histogram, collector, fleet merge, health, and the exporters.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, standard library",
+    "containerType": "application"
+   },
+   {
+    "id": "n-obs",
+    "kind": "container",
+    "name": "Observability",
+    "description": "Neighbour in a component view: stands for the container `c-obs`.",
+    "status": "planned",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go, standard library",
+    "containerType": "application"
+   },
+   {
+    "id": "c-config",
+    "kind": "container",
+    "name": "Configuration",
+    "description": "internal/config. The config file, the static fleet block (instance count N; fleet budgets divided by N), and load-time validation that fails closed.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go",
+    "containerType": "application"
+   },
+   {
+    "id": "n-config",
+    "kind": "container",
+    "name": "Configuration",
+    "description": "Neighbour in a component view: stands for the container `c-config`.",
+    "status": "planned",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go",
+    "containerType": "application"
+   },
+   {
+    "id": "c-sim",
+    "kind": "container",
+    "name": "Simulator harness",
+    "description": "internal/sim, internal/sim/simnet, fakepg, workload, simtest, cmd/mgsim. A deterministic single-threaded world: virtual clock, simulated byte streams, a fake Postgres, simulated clients, faults, replay. Test code; built before any proxy code.",
+    "status": "planned",
+    "tags": [
+     "test"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go test harness",
+    "containerType": "application"
+   },
+   {
+    "id": "n-sim",
+    "kind": "container",
+    "name": "Simulator harness",
+    "description": "Neighbour in a component view: stands for the container `c-sim`.",
+    "status": "planned",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go test harness",
+    "containerType": "application"
+   },
+   {
+    "id": "c-e2e",
+    "kind": "container",
+    "name": "End-to-end suite and load generator",
+    "description": "test/e2e and cmd/loadgen. Each scenario is written once and runs on the simulator (tier S) and on the real binary against a real Postgres (tier R). The load generator is open-loop.",
+    "status": "planned",
+    "tags": [
+     "test"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go test code",
+    "containerType": "application"
+   },
+   {
+    "id": "n-e2e",
+    "kind": "container",
+    "name": "End-to-end suite and load generator",
+    "description": "Neighbour in a component view: stands for the container `c-e2e`.",
+    "status": "planned",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go test code",
+    "containerType": "application"
+   },
+   {
+    "id": "e-transport",
+    "kind": "component",
+    "name": "Transport seam",
+    "description": "Dialer and byte-stream connection events and actions: open, bytes in, bytes out, closed. Knows no protocol. Two implementations: TCP in the shell, simulated streams in the harness.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go interface"
+   },
+   {
+    "id": "e-sessions",
+    "kind": "component",
+    "name": "Client session table",
+    "description": "One entry per client connection: its wire state machine, tenant, transaction state, the single request it may have inside the proxy, and its bounded reply buffer.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go"
+   },
+   {
+    "id": "e-backends",
+    "kind": "component",
+    "name": "Database connection table",
+    "description": "One entry per database connection: its wire state machine, the query-cycle tracker, and who holds it.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go"
+   },
+   {
+    "id": "e-pipeline",
+    "kind": "component",
+    "name": "Request pipeline",
+    "description": "The fixed order every request takes, each stage a small interface: classify, reject list, draining, breaker, rate gate, coalesce, queue, lease, forward, release. Statements inside an open transaction skip from classify straight to forward on the connection the client already holds.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go"
+   },
+   {
+    "id": "e-relay",
+    "kind": "component",
+    "name": "Reply relay",
+    "description": "Streams database messages to the client (or to every waiter of a shared read) through bounded buffers, with back pressure in both directions. Never sends a short reply that looks complete.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go"
+   },
+   {
+    "id": "e-fail",
+    "kind": "component",
+    "name": "Failure classifier",
+    "description": "For every failure records whether any byte reached the database, and picks the error-contract row.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go"
+   },
+   {
+    "id": "e-clock",
+    "kind": "component",
+    "name": "Deadline table",
+    "description": "Every wait in the timeout budget, as deadlines on the injected clock; returns the next wake-up time as an action.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go"
+   },
+   {
+    "id": "e-drain",
+    "kind": "component",
+    "name": "Drain controller",
+    "description": "Sequences shutdown: stop admitting, finish transactions in progress within a bound, close idle connections, exit.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go"
+   },
+   {
+    "id": "e-publish",
+    "kind": "component",
+    "name": "Snapshot publisher",
+    "description": "Collects every component's Snapshot() between events and hands the copy to the collector.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go"
+   },
+   {
+    "id": "w-framer",
+    "kind": "component",
+    "name": "Framer",
+    "description": "Ours. Cuts a byte stream into messages (type byte, 4-byte length, body) whatever the fragmentation, down to one byte at a time; enforces a maximum message size.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-codec",
+    "kind": "component",
+    "name": "Codec boundary",
+    "description": "The only product code that touches pgproto3: decodes a framed body into a message struct and encodes structs to bytes. pgproto3's own blocking reader is not used.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go, pgproto3"
+   },
+   {
+    "id": "w-client",
+    "kind": "component",
+    "name": "Client session machine",
+    "description": "Client-facing. Answers TLS and GSS requests with no, reads the startup message, finds the tenant by user, runs SCRAM-SHA-256 (server side) or trust, sends the parameter set and proxy-issued key data, recognises cancel requests, takes in one query at a time, handles terminate.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-backend",
+    "kind": "component",
+    "name": "Database session machine",
+    "description": "Database-facing. Startup, SCRAM-SHA-256 (client side), collects server parameters and key data, reaches ready.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-cycle",
+    "kind": "component",
+    "name": "Query-cycle tracker",
+    "description": "Follows a reply to its ReadyForQuery, reports the transaction status byte (idle, in transaction, failed), flags an unsolicited ParameterStatus (the connection is now dirty) and any protocol surprise.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-scram",
+    "kind": "component",
+    "name": "SCRAM-SHA-256 functions",
+    "description": "Pure functions on the standard library. Shared with the simulator's fake Postgres and test clients.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go, crypto/pbkdf2, hmac, sha256"
+   },
+   {
+    "id": "w-lexer",
+    "kind": "component",
+    "name": "SQL lexer",
+    "description": "Tokens only: strings, escape strings, dollar quotes, comments, identifiers; splits a message into statements. Not a parser.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-classifier",
+    "kind": "component",
+    "name": "Statement classifier",
+    "description": "Turns a statement into a work unit: rejected (session-level feature), transaction control, provably read-only, shareable with its key, batchable. Conservative: what it cannot tokenise is never shared or batched.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-errors",
+    "kind": "component",
+    "name": "Error contract and reply builders",
+    "description": "One table: each refusal and failure, its SQLSTATE, whether anything reached the database, whether a write may have applied. Builds the ErrorResponse and the correct end marker. docs/error-contract.md is generated from it.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "a-gate",
+    "kind": "component",
+    "name": "Rate gate (GCRA)",
+    "description": "Optional outer gate, off by default: a per-tenant rate and burst in integer nanoseconds. Refuses before anything is queued. Rates are divided by the instance count.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-adm",
+    "technology": "Go"
+   },
+   {
+    "id": "a-tenants",
+    "kind": "component",
+    "name": "Tenant table",
+    "description": "State for tenants that are active now: queue, in-flight count, share, gate state. Created on first use, removed when all-zero, so memory follows active tenants.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-adm",
+    "technology": "Go"
+   },
+   {
+    "id": "a-queues",
+    "kind": "component",
+    "name": "Per-tenant queues",
+    "description": "A fixed-capacity ring per tenant. Age is measured on the oldest item; expired items are swept from the head and answered at once; overflow sheds the head. Serves newest-first while the rule reports overload (adaptive LIFO).",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-adm",
+    "technology": "Go"
+   },
+   {
+    "id": "a-rule",
+    "kind": "component",
+    "name": "QueueRule",
+    "description": "The interface both shedding rules implement; chosen by config.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-adm",
+    "technology": "Go interface"
+   },
+   {
+    "id": "a-rule-timeout",
+    "kind": "component",
+    "name": "Timeout rule",
+    "description": "Mode 1, from \"Fail at Scale\": one last-empty timestamp per queue; allowed wait is the short target while a standing queue exists, otherwise the interval.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-adm",
+    "technology": "Go"
+   },
+   {
+    "id": "a-rule-law",
+    "kind": "component",
+    "name": "Control-law rule",
+    "description": "Mode 2, from the CoDel paper and RFC 8289: sojourn above target for an interval starts dropping; next drop after interval / sqrt(count), in integer arithmetic.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-adm",
+    "technology": "Go"
+   },
+   {
+    "id": "a-arms",
+    "kind": "component",
+    "name": "Comparison arms",
+    "description": "Simulator only: plain FIFO and folly's minimum-delay detector, for the head-to-head table.",
+    "status": "planned",
+    "tags": [
+     "test"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-adm",
+    "technology": "Go"
+   },
+   {
+    "id": "a-dispatch",
+    "kind": "component",
+    "name": "Dispatcher",
+    "description": "Chooses whose request runs next: round robin across tenants with waiting work; a tenant's share binds only when the limit is reached; otherwise work-conserving.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-adm",
+    "technology": "Go"
+   },
+   {
+    "id": "a-limit",
+    "kind": "component",
+    "name": "Adaptive limit (AIMD)",
+    "description": "One integer limit on concurrent leases. Cut by a tenth on a slow statement, a timeout or a connection failure; raised by one when busy. Bounded by a floor, the pool size, a maximum step and a minimum interval. Reads database round-trip time, never queue wait.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-adm",
+    "technology": "Go"
+   },
+   {
+    "id": "a-snap",
+    "kind": "component",
+    "name": "Admission snapshot",
+    "description": "Snapshot(): per tenant and total — depth, oldest-item age, queue-wait histogram, rule state, LIFO switches, sheds by reason, in flight, share, limit and its changes, gate refusals.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-adm",
+    "technology": "Go"
+   },
+   {
+    "id": "p-acct",
+    "kind": "component",
+    "name": "Connection accounting",
+    "description": "Every database connection is connecting, idle, lent or closing. Invariant: open + connecting never exceeds the pool size, which is the fleet budget divided by the instance count.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pool",
+    "technology": "Go"
+   },
+   {
+    "id": "p-create",
+    "kind": "component",
+    "name": "Creation limiter",
+    "description": "Caps concurrent connects and the rate of new connections, so a storm or a cold start cannot flood the database.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pool",
+    "technology": "Go"
+   },
+   {
+    "id": "p-lease",
+    "kind": "component",
+    "name": "Lease table",
+    "description": "Lends a connection for one transaction: held while the status byte says in-transaction or failed, released on idle. Enforces the idle-in-transaction deadline.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pool",
+    "technology": "Go"
+   },
+   {
+    "id": "p-breaker",
+    "kind": "component",
+    "name": "Database-down breaker",
+    "description": "The one circuit breaker. Counts connection-class failures only, never SQL errors. Open: requests are refused at once and no dial is made. Half-open: one trial connect.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pool",
+    "technology": "Go"
+   },
+   {
+    "id": "p-dirty",
+    "kind": "component",
+    "name": "Dirty-connection table",
+    "description": "What to do with a connection whose client vanished or that surprised us: cancel, wait a bounded time, roll back, then reuse only if it is idle and clean; otherwise close. Destroy on doubt.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pool",
+    "technology": "Go"
+   },
+   {
+    "id": "p-reaper",
+    "kind": "component",
+    "name": "Idle and lifetime reaper",
+    "description": "Closes idle and old connections, with jitter so they do not all expire together; checks a long-idle connection before reuse.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pool",
+    "technology": "Go"
+   },
+   {
+    "id": "p-cancel",
+    "kind": "component",
+    "name": "Cancel map",
+    "description": "Maps proxy-issued key data to the connection a client currently holds, so a client's cancel request reaches its own statement and no one else's. Caps concurrent cancels.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pool",
+    "technology": "Go"
+   },
+   {
+    "id": "p-snap",
+    "kind": "component",
+    "name": "Pool snapshot",
+    "description": "Snapshot(): open, idle, lent, connecting, creation rate, closes by reason, exhaustion events, breaker state and transitions, dirty-table outcomes, lease-time histogram.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pool",
+    "technology": "Go"
+   },
+   {
+    "id": "f-join",
+    "kind": "component",
+    "name": "Join rule",
+    "description": "Decides whether a shareable request leads a new read or joins one. Strict (default): never join a read already running on the database — join the next one, which starts when the running one ends. Relaxed: join the running read.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-coal",
+    "technology": "Go"
+   },
+   {
+    "id": "f-table",
+    "kind": "component",
+    "name": "Flight table",
+    "description": "In-flight and pending shared reads, keyed by the exact statement text. At most one read per key is on the database at a time. Entries are removed on completion.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-coal",
+    "technology": "Go"
+   },
+   {
+    "id": "f-waiters",
+    "kind": "component",
+    "name": "Waiter set",
+    "description": "The callers of one flight, counted. Capped. A caller that leaves gets its own error and does not disturb the rest.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-coal",
+    "technology": "Go"
+   },
+   {
+    "id": "f-deadline",
+    "kind": "component",
+    "name": "Flight deadline",
+    "description": "The flight runs under its own deadline, not any caller's. The database work is cancelled only when the last waiter has left.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-coal",
+    "technology": "Go"
+   },
+   {
+    "id": "f-reply",
+    "kind": "component",
+    "name": "Shared reply buffer",
+    "description": "The reply's message bytes, stored once and capped; each recipient gets them with its own end marker. Errors are shared too.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-coal",
+    "technology": "Go"
+   },
+   {
+    "id": "f-neg",
+    "kind": "component",
+    "name": "Do-not-share list",
+    "description": "Keys whose reply was too large to share. Bounded and expiring.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-coal",
+    "technology": "Go"
+   },
+   {
+    "id": "f-snap",
+    "kind": "component",
+    "name": "Coalescer snapshot",
+    "description": "Snapshot(): flights, hits, waiters per flight, cancellations, overflows by cap, shared errors, table size.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-coal",
+    "technology": "Go"
+   },
+   {
+    "id": "b-take",
+    "kind": "component",
+    "name": "Take rule",
+    "description": "When a connection frees up, takes what is already queued and eligible, up to a count and byte cap. One request with nothing else waiting goes alone at once. There is no timer.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-batch",
+    "technology": "Go"
+   },
+   {
+    "id": "b-elig",
+    "kind": "component",
+    "name": "Eligibility check",
+    "description": "A request may be batched only if the classifier proved it is a single statement that is not transaction control, and its client is outside a transaction.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-batch",
+    "technology": "Go"
+   },
+   {
+    "id": "b-split",
+    "kind": "component",
+    "name": "Reply splitter",
+    "description": "Splits the replies in order at the end-of-reply markers and matches each to its requester.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-batch",
+    "technology": "Go"
+   },
+   {
+    "id": "b-poison",
+    "kind": "component",
+    "name": "Poison rule",
+    "description": "If any end marker reports a status other than idle, the connection is closed and the remaining members get the may-have-been-applied error.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-batch",
+    "technology": "Go"
+   },
+   {
+    "id": "b-snap",
+    "kind": "component",
+    "name": "Batcher snapshot",
+    "description": "Snapshot(): batch-size histogram, batched share, in-batch wait histogram, poison events, ineligible reasons.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-batch",
+    "technology": "Go"
+   },
+   {
+    "id": "r-policy",
+    "kind": "component",
+    "name": "Policy",
+    "description": "The interface the engine asks: given this failure — did anything reach the database, is the breaker open, how much of the deadline is left — may it be retried.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-retry",
+    "technology": "Go interface"
+   },
+   {
+    "id": "r-off",
+    "kind": "component",
+    "name": "Off",
+    "description": "The default. Never retries.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-retry",
+    "technology": "Go"
+   },
+   {
+    "id": "r-once",
+    "kind": "component",
+    "name": "PreForwardOnce",
+    "description": "Retries at most once, only when nothing reached the database, only within budget, never while the breaker is open, never holding a queue slot or a connection while it waits.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-retry",
+    "technology": "Go"
+   },
+   {
+    "id": "r-budget",
+    "kind": "component",
+    "name": "Retry budget",
+    "description": "An integer bucket: each first attempt deposits a tenth of a token, each retry takes one; capped, so credit expires. Retries stay at or below 10% of requests.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-retry",
+    "technology": "Go"
+   },
+   {
+    "id": "r-snap",
+    "kind": "component",
+    "name": "Retry snapshot",
+    "description": "Snapshot(): attempts, retries, budget level, deposits, withdrawals, exhaustions, refusals by reason.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-retry",
+    "technology": "Go"
+   },
+   {
+    "id": "s-loop",
+    "kind": "component",
+    "name": "Event loop",
+    "description": "One thread, one heap ordered by (time, sequence), opaque events. Step budget, stall errors, panic guard.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go"
+   },
+   {
+    "id": "s-clock",
+    "kind": "component",
+    "name": "Virtual clock and timers",
+    "description": "64-bit nanoseconds, cancellable timers. Time moves only when the loop moves it.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go"
+   },
+   {
+    "id": "s-streams",
+    "kind": "component",
+    "name": "Named random streams",
+    "description": "One generator per (seed, label), so a new draw in one place does not shift any other.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go"
+   },
+   {
+    "id": "s-net",
+    "kind": "component",
+    "name": "Simulated byte streams",
+    "description": "internal/sim/simnet. Ordered byte connections with chosen fragmentation (down to one byte), latency per direction, a bounded send window, half-close, reset, stall, half-open.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go"
+   },
+   {
+    "id": "s-fakepg",
+    "kind": "component",
+    "name": "Fake Postgres",
+    "description": "internal/sim/fakepg. Speaks the simple-query subset in real wire bytes; connection limit; transaction status; a small keyed table with a write log; service-time models; every database-side fault; its own snapshot.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go, pgproto3"
+   },
+   {
+    "id": "s-workload",
+    "kind": "component",
+    "name": "Clients and tenants",
+    "description": "internal/sim/workload. Simulated clients: tenants, open-loop arrivals measured from intended send time, Zipf keys, transactions, disconnects, cancels, aggressive retries.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go, pgproto3"
+   },
+   {
+    "id": "s-faults",
+    "kind": "component",
+    "name": "Fault schedule",
+    "description": "Timed faults recorded in the trace; decodable from bytes for the fuzzer; a delete-one-fault shrinker. Faults are injected only from outside the proxy code.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go"
+   },
+   {
+    "id": "s-trace",
+    "kind": "component",
+    "name": "Decision trace and digests",
+    "description": "Every decision (accepted, coalesced, shed, timed out) appended in order; separate digests for the trace and for final state. Same seed, same digests.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go"
+   },
+   {
+    "id": "s-inv",
+    "kind": "component",
+    "name": "Invariants",
+    "description": "Checked at every event: connection cap, conservation of requests. Checked at the end: quiesce (nothing in use, nothing queued, no flight, no timer).",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go"
+   },
+   {
+    "id": "s-simtest",
+    "kind": "component",
+    "name": "Seeds, replay, sweep",
+    "description": "internal/sim/simtest. Seed flags and pinned seeds, the run-twice check, sweeps, the REPLAY line printed on every failure.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go"
+   },
+   {
+    "id": "s-cli",
+    "kind": "component",
+    "name": "cmd/mgsim",
+    "description": "Runs a named scenario from a seed outside go test and prints the digests.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go CLI"
+   },
+   {
+    "id": "s-toy",
+    "kind": "component",
+    "name": "Toy echo protocol",
+    "description": "A tiny protocol with a planted-bug switch, used only to test the harness itself.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go"
+   },
+   {
+    "id": "o-contract",
+    "kind": "component",
+    "name": "Snapshot conventions",
+    "description": "What every component's Snapshot() returns: a plain struct of monotonic counters and current gauges. No wall-clock time, no map order, no telemetry imports.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-hist",
+    "kind": "component",
+    "name": "Integer histogram",
+    "description": "Fixed array, fixed relative error, no allocation on record; record, merge, percentile. Out-of-range values are clamped and counted.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-collector",
+    "kind": "component",
+    "name": "Collector",
+    "description": "Assembles one instance snapshot from the component snapshots, with instance id, build and config fingerprint. Keeps the last published copy; readers never wait on the engine.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-merge",
+    "kind": "component",
+    "name": "Fleet merge",
+    "description": "Merges instance snapshots: counters and gauges sum, histograms merge, ratios are recomputed, never averaged.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-health",
+    "kind": "component",
+    "name": "Health",
+    "description": "Three states: ok; degraded while shedding, while the breaker is open, at the limit's floor, or draining; failed only when this instance cannot work. A database outage is degraded.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-prom",
+    "kind": "component",
+    "name": "Prometheus text exporter",
+    "description": "Low-cardinality labels and a bounded tenant label (configured tenants up to a cap, the rest as other).",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-json",
+    "kind": "component",
+    "name": "JSON stats exporter",
+    "description": "The full snapshot, including every active tenant.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-csv",
+    "kind": "component",
+    "name": "CSV writer",
+    "description": "Evidence tables for scenarios and benchmarks.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-log",
+    "kind": "component",
+    "name": "Log-line exporter",
+    "description": "One structured line per interval.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-otlp",
+    "kind": "component",
+    "name": "OTLP/HTTP push exporter",
+    "description": "Hand-written on the standard library, no SDK. Bounded queue, timeout, drop-and-count when the collector is down. Lands in the last build chunk and touches no component.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "d-clients",
+    "kind": "deploymentNode",
+    "name": "Application hosts",
+    "description": "Clients of every tenant. They spread their connections over the instances themselves, or through any TCP balancer; we build none.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Any",
+    "environment": "fleet-of-3"
+   },
+   {
+    "id": "d-tier",
+    "kind": "deploymentNode",
+    "name": "Proxy tier, N = 3",
+    "description": "Three independent mini-gateway processes with the same static config: fleet.instances = 3, so each takes a third of every fleet budget. No instance knows about the others.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Linux hosts or containers",
+    "environment": "fleet-of-3"
+   },
+   {
+    "id": "d-db",
+    "kind": "deploymentNode",
+    "name": "Database host",
+    "description": "One Postgres. Its connection limit must cover the fleet budget plus a reserve; config validation checks it.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Linux host or container",
+    "environment": "fleet-of-3"
+   },
+   {
+    "id": "d-ops",
+    "kind": "deploymentNode",
+    "name": "Operations",
+    "description": "Where metrics are scraped or pushed to, and merged across instances.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Any",
+    "environment": "fleet-of-3"
+   },
+   {
+    "id": "i-spread",
+    "kind": "infrastructureNode",
+    "name": "Client connections",
+    "description": "500 clients here; each connects to one instance.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "d-clients",
+    "technology": "Postgres wire protocol"
+   },
+   {
+    "id": "i-gw1",
+    "kind": "instance",
+    "name": "mini-gateway instance 1",
+    "description": "Own engine, pool (fleet budget / 3), queues, flights, limit, retry budget and snapshots. Drains on SIGTERM.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "d-tier",
+    "instanceOf": "c-shell",
+    "environment": "fleet-of-3"
+   },
+   {
+    "id": "i-gw2",
+    "kind": "instance",
+    "name": "mini-gateway instance 2",
+    "description": "Own engine, pool (fleet budget / 3), queues, flights, limit, retry budget and snapshots. Drains on SIGTERM.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "d-tier",
+    "instanceOf": "c-shell",
+    "environment": "fleet-of-3"
+   },
+   {
+    "id": "i-gw3",
+    "kind": "instance",
+    "name": "mini-gateway instance 3",
+    "description": "Own engine, pool (fleet budget / 3), queues, flights, limit, retry budget and snapshots. Drains on SIGTERM.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "d-tier",
+    "instanceOf": "c-shell",
+    "environment": "fleet-of-3"
+   },
+   {
+    "id": "i-pg",
+    "kind": "infrastructureNode",
+    "name": "Postgres 17",
+    "description": "Sees at most the fleet connection budget (for example 3 x 32 = 96), all as one role.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "d-db",
+    "technology": "PostgreSQL"
+   },
+   {
+    "id": "i-tel",
+    "kind": "infrastructureNode",
+    "name": "Scraper or collector",
+    "description": "Reads each instance's exporters; sums counters, merges histograms, recomputes ratios.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "d-ops",
+    "technology": "Prometheus, OpenTelemetry Collector"
+   }
+  ],
+  "relationships": [
+   {
+    "id": "r-app-gw",
+    "sourceId": "app",
+    "targetId": "gw",
+    "label": "Connects, logs in, sends statements and transactions",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Postgres wire protocol v3, simple query, TCP"
+   },
+   {
+    "id": "r-op-gw",
+    "sourceId": "operator",
+    "targetId": "gw",
+    "label": "Configures the fleet; reads health and stats; drains",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Config file, HTTP admin port, SIGTERM"
+   },
+   {
+    "id": "r-gw-pg",
+    "sourceId": "gw",
+    "targetId": "pg",
+    "label": "Lends pooled connections per transaction; at most the configured budget",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Postgres wire protocol v3, TCP"
+   },
+   {
+    "id": "r-tel-gw",
+    "sourceId": "telemetry",
+    "targetId": "gw",
+    "label": "Scrapes metrics and stats from every instance and merges them",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "HTTP: Prometheus text, JSON"
+   },
+   {
+    "id": "r-gw-tel",
+    "sourceId": "gw",
+    "targetId": "telemetry",
+    "label": "Pushes metrics; writes CSV and log lines",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "OTLP/HTTP JSON, files"
+   },
+   {
+    "id": "r-dev-gw",
+    "sourceId": "developer",
+    "targetId": "gw",
+    "label": "Runs simulator scenarios and the test, chaos and benchmark commands",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "go test, make, cmd/mgsim"
+   },
+   {
+    "id": "r-gw-lib",
+    "sourceId": "gw",
+    "targetId": "pgproto3",
+    "label": "Encodes and decodes wire messages",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go import, wire layer only"
+   },
+   {
+    "id": "c1",
+    "sourceId": "app",
+    "targetId": "c-shell",
+    "label": "Connects, logs in, sends statements",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Postgres wire protocol, TCP"
+   },
+   {
+    "id": "c2",
+    "sourceId": "operator",
+    "targetId": "c-shell",
+    "label": "Reads health, stats and metrics; sends SIGTERM to drain",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "HTTP admin port, signal"
+   },
+   {
+    "id": "c3",
+    "sourceId": "c-shell",
+    "targetId": "c-engine",
+    "label": "Posts events (bytes arrived, connection opened or closed, clock) and performs the returned actions",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, bounded mailboxes"
+   },
+   {
+    "id": "c4",
+    "sourceId": "c-engine",
+    "targetId": "c-pgwire",
+    "label": "Turns bytes into work units and outcomes; builds replies the proxy makes itself",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, in-process"
+   },
+   {
+    "id": "c5",
+    "sourceId": "c-engine",
+    "targetId": "c-adm",
+    "label": "Gate, enqueue, pick the next request, report completions",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, in-process"
+   },
+   {
+    "id": "c6",
+    "sourceId": "c-engine",
+    "targetId": "c-coal",
+    "label": "Join or start a shared read; fan the reply out",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, in-process"
+   },
+   {
+    "id": "c7",
+    "sourceId": "c-engine",
+    "targetId": "c-pool",
+    "label": "Lend and release connections; open and close decisions; breaker state",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, in-process"
+   },
+   {
+    "id": "c8",
+    "sourceId": "c-engine",
+    "targetId": "c-batch",
+    "label": "Take a batch for a free connection; split the replies",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, in-process"
+   },
+   {
+    "id": "c9",
+    "sourceId": "c-engine",
+    "targetId": "c-retry",
+    "label": "Ask whether a failure may be retried",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, in-process"
+   },
+   {
+    "id": "c10",
+    "sourceId": "c-shell",
+    "targetId": "pg",
+    "label": "Opens the pooled connections and moves their bytes",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Postgres wire protocol, TCP"
+   },
+   {
+    "id": "c11",
+    "sourceId": "c-engine",
+    "targetId": "c-obs",
+    "label": "Publishes one instance snapshot per interval",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, plain structs"
+   },
+   {
+    "id": "c12",
+    "sourceId": "c-shell",
+    "targetId": "c-obs",
+    "label": "Admin listener serves exporters and health from the last published snapshot",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, in-process"
+   },
+   {
+    "id": "c13",
+    "sourceId": "telemetry",
+    "targetId": "c-shell",
+    "label": "Scrapes Prometheus text and JSON stats",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "HTTP admin port"
+   },
+   {
+    "id": "c14",
+    "sourceId": "c-obs",
+    "targetId": "telemetry",
+    "label": "Pushes OTLP metrics (last build chunk); writes CSV and log lines",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "OTLP/HTTP JSON, files"
+   },
+   {
+    "id": "c15",
+    "sourceId": "c-shell",
+    "targetId": "c-config",
+    "label": "Loads and validates the config and the fleet block at start",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, in-process"
+   },
+   {
+    "id": "s1",
+    "sourceId": "c-sim",
+    "targetId": "c-engine",
+    "label": "Drives the same engine on its event loop, over simulated byte streams",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, transport seam"
+   },
+   {
+    "id": "s2",
+    "sourceId": "c-pgwire",
+    "targetId": "pgproto3",
+    "label": "The codec boundary: message structs encoded and decoded here and nowhere else in product code",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go import"
+   },
+   {
+    "id": "s3",
+    "sourceId": "c-pgwire",
+    "targetId": "c-work",
+    "label": "Produces work units and outcomes",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "s4",
+    "sourceId": "c-adm",
+    "targetId": "c-work",
+    "label": "Written against these types only",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "s5",
+    "sourceId": "c-pool",
+    "targetId": "c-work",
+    "label": "Written against these types only",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "s6",
+    "sourceId": "c-coal",
+    "targetId": "c-work",
+    "label": "Written against these types only",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "s7",
+    "sourceId": "c-batch",
+    "targetId": "c-work",
+    "label": "Written against these types only",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "s8",
+    "sourceId": "c-retry",
+    "targetId": "c-work",
+    "label": "Written against these types only",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "s9",
+    "sourceId": "c-sim",
+    "targetId": "pgproto3",
+    "label": "The fake Postgres and the simulated clients speak real wire bytes",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go import, test code"
+   },
+   {
+    "id": "s10",
+    "sourceId": "c-e2e",
+    "targetId": "c-sim",
+    "label": "Tier S: runs each scenario on the simulator",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
+   },
+   {
+    "id": "s11",
+    "sourceId": "c-e2e",
+    "targetId": "c-shell",
+    "label": "Tier R: runs the real binary and drives it with test clients and open-loop load",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Process, Postgres wire protocol"
+   },
+   {
+    "id": "s12",
+    "sourceId": "c-e2e",
+    "targetId": "pg",
+    "label": "Tier R: starts a real Postgres 17 container and checks its state",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Docker, Postgres wire protocol"
+   },
+   {
+    "id": "s13",
+    "sourceId": "developer",
+    "targetId": "c-sim",
+    "label": "Runs a scenario from a seed; replays a failure",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "cmd/mgsim, go test"
+   },
+   {
+    "id": "s14",
+    "sourceId": "developer",
+    "targetId": "c-e2e",
+    "label": "make test, make chaos, make bench",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "make"
+   },
+   {
+    "id": "s15",
+    "sourceId": "c-sim",
+    "targetId": "c-work",
+    "label": "Synthetic workloads drive the cores directly, with no Postgres code",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types, test code"
+   },
+   {
+    "id": "e1",
+    "sourceId": "n-shell",
+    "targetId": "e-transport",
+    "label": "Implements it with TCP sockets; posts events through bounded mailboxes",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, interface implementation"
+   },
+   {
+    "id": "e2",
+    "sourceId": "n-sim",
+    "targetId": "e-transport",
+    "label": "Implements it with simulated byte streams on the event loop",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, interface implementation"
+   },
+   {
+    "id": "e3",
+    "sourceId": "e-transport",
+    "targetId": "e-sessions",
+    "label": "Client bytes and connection events",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e4",
+    "sourceId": "e-transport",
+    "targetId": "e-backends",
+    "label": "Database bytes and connection events",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e5",
+    "sourceId": "e-sessions",
+    "targetId": "n-pgwire",
+    "label": "Client session machine; statement classifier",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e6",
+    "sourceId": "e-backends",
+    "targetId": "n-pgwire",
+    "label": "Database session machine; query-cycle tracker",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e7",
+    "sourceId": "e-sessions",
+    "targetId": "e-pipeline",
+    "label": "One work unit at a time per client",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e8",
+    "sourceId": "e-pipeline",
+    "targetId": "n-adm",
+    "label": "Gate, queue, dispatch, limit",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e9",
+    "sourceId": "e-pipeline",
+    "targetId": "n-coal",
+    "label": "Join or lead a shared read",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e10",
+    "sourceId": "e-pipeline",
+    "targetId": "n-pool",
+    "label": "Lend, release, breaker state, dirty connections",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e11",
+    "sourceId": "e-pipeline",
+    "targetId": "n-batch",
+    "label": "Batch for a free connection",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e12",
+    "sourceId": "e-pipeline",
+    "targetId": "n-retry",
+    "label": "May this failure be retried",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e13",
+    "sourceId": "e-pipeline",
+    "targetId": "e-backends",
+    "label": "Forwards the statement on the lent connection",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e14",
+    "sourceId": "e-backends",
+    "targetId": "e-relay",
+    "label": "Reply messages and the end-of-reply status byte",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e15",
+    "sourceId": "e-relay",
+    "targetId": "e-sessions",
+    "label": "Reply bytes for each recipient",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e16",
+    "sourceId": "e-pipeline",
+    "targetId": "e-fail",
+    "label": "Every refusal and failure",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e17",
+    "sourceId": "e-fail",
+    "targetId": "n-pgwire",
+    "label": "Builds the error reply for its contract row",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e18",
+    "sourceId": "e-clock",
+    "targetId": "e-pipeline",
+    "label": "A deadline was reached",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e19",
+    "sourceId": "e-drain",
+    "targetId": "e-pipeline",
+    "label": "Sets the draining input",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e20",
+    "sourceId": "e-publish",
+    "targetId": "n-obs",
+    "label": "Hands over the instance snapshot",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, plain structs"
+   },
+   {
+    "id": "e21",
+    "sourceId": "e-pipeline",
+    "targetId": "n-work",
+    "label": "Passes work units and outcomes between stages",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "w1",
+    "sourceId": "n-engine",
+    "targetId": "w-client",
+    "label": "Client bytes in; events and bytes out",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w2",
+    "sourceId": "n-engine",
+    "targetId": "w-backend",
+    "label": "Database bytes in; events and bytes out",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w3",
+    "sourceId": "n-engine",
+    "targetId": "w-cycle",
+    "label": "Reply bytes in; status and message boundaries out",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w4",
+    "sourceId": "n-engine",
+    "targetId": "w-classifier",
+    "label": "Statement text in; work unit out",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w5",
+    "sourceId": "n-engine",
+    "targetId": "w-errors",
+    "label": "Contract row in; reply bytes out",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w6",
+    "sourceId": "w-client",
+    "targetId": "w-codec",
+    "label": "Decode and encode messages",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w7",
+    "sourceId": "w-backend",
+    "targetId": "w-codec",
+    "label": "Decode and encode messages",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w8",
+    "sourceId": "w-cycle",
+    "targetId": "w-codec",
+    "label": "Decode message headers and status",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w9",
+    "sourceId": "w-errors",
+    "targetId": "w-codec",
+    "label": "Encode ErrorResponse and ReadyForQuery",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w10",
+    "sourceId": "w-codec",
+    "targetId": "w-framer",
+    "label": "Framed message bodies",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w11",
+    "sourceId": "w-codec",
+    "targetId": "pgproto3",
+    "label": "Message structs: Encode, Decode",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go import"
+   },
+   {
+    "id": "w12",
+    "sourceId": "w-client",
+    "targetId": "w-scram",
+    "label": "Server side of the exchange",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w13",
+    "sourceId": "w-backend",
+    "targetId": "w-scram",
+    "label": "Client side of the exchange",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w14",
+    "sourceId": "w-classifier",
+    "targetId": "w-lexer",
+    "label": "Tokens and statement boundaries",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w15",
+    "sourceId": "w-classifier",
+    "targetId": "n-work",
+    "label": "Produces work units",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "w16",
+    "sourceId": "w-cycle",
+    "targetId": "n-work",
+    "label": "Produces outcomes",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "a1",
+    "sourceId": "n-engine",
+    "targetId": "a-gate",
+    "label": "May this request enter",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "a2",
+    "sourceId": "n-engine",
+    "targetId": "a-queues",
+    "label": "Enqueue; sweep expired",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "a3",
+    "sourceId": "n-engine",
+    "targetId": "a-dispatch",
+    "label": "Capacity freed: who runs next",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "a4",
+    "sourceId": "n-engine",
+    "targetId": "a-limit",
+    "label": "Statement time and outcome of each completion",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "a5",
+    "sourceId": "n-engine",
+    "targetId": "a-snap",
+    "label": "Snapshot()",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "a6",
+    "sourceId": "a-queues",
+    "targetId": "a-rule",
+    "label": "Allowed wait; overloaded or not",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "a7",
+    "sourceId": "a-rule-timeout",
+    "targetId": "a-rule",
+    "label": "Implements",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, interface implementation"
+   },
+   {
+    "id": "a8",
+    "sourceId": "a-rule-law",
+    "targetId": "a-rule",
+    "label": "Implements",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, interface implementation"
+   },
+   {
+    "id": "a9",
+    "sourceId": "a-arms",
+    "targetId": "a-rule",
+    "label": "Implement (simulator only)",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, interface implementation"
+   },
+   {
+    "id": "a10",
+    "sourceId": "a-dispatch",
+    "targetId": "a-queues",
+    "label": "Pops the chosen tenant's next request",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "a11",
+    "sourceId": "a-dispatch",
+    "targetId": "a-limit",
+    "label": "Reads the current limit",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "a12",
+    "sourceId": "a-dispatch",
+    "targetId": "a-tenants",
+    "label": "In-flight counts and shares",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "a13",
+    "sourceId": "a-gate",
+    "targetId": "a-tenants",
+    "label": "Per-tenant gate state",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "a14",
+    "sourceId": "a-queues",
+    "targetId": "a-tenants",
+    "label": "Per-tenant queue",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "a15",
+    "sourceId": "a-dispatch",
+    "targetId": "n-work",
+    "label": "Work units and outcomes",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "p1",
+    "sourceId": "n-engine",
+    "targetId": "p-lease",
+    "label": "Lend to a work unit; release on outcome",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "p2",
+    "sourceId": "n-engine",
+    "targetId": "p-breaker",
+    "label": "Reports connect and connection failures; asks whether to fail fast",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "p3",
+    "sourceId": "n-engine",
+    "targetId": "p-dirty",
+    "label": "Client vanished, deadline passed, or protocol surprise",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "p4",
+    "sourceId": "n-engine",
+    "targetId": "p-cancel",
+    "label": "Client cancel request",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "p5",
+    "sourceId": "n-engine",
+    "targetId": "p-snap",
+    "label": "Snapshot()",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "p6",
+    "sourceId": "p-lease",
+    "targetId": "p-acct",
+    "label": "Idle to lent and back",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "p7",
+    "sourceId": "p-acct",
+    "targetId": "p-create",
+    "label": "May another connection be opened now",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "p8",
+    "sourceId": "p-create",
+    "targetId": "p-breaker",
+    "label": "Is the database marked down",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "p9",
+    "sourceId": "p-dirty",
+    "targetId": "p-acct",
+    "label": "Reuse or close",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "p10",
+    "sourceId": "p-reaper",
+    "targetId": "p-acct",
+    "label": "Close idle and old connections",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "p11",
+    "sourceId": "p-cancel",
+    "targetId": "p-lease",
+    "label": "Finds the lent connection",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "p12",
+    "sourceId": "p-lease",
+    "targetId": "n-work",
+    "label": "Work units and outcomes (released clean, still held, dirty)",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "f1",
+    "sourceId": "n-engine",
+    "targetId": "f-join",
+    "label": "A shareable work unit arrived",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "f2",
+    "sourceId": "n-engine",
+    "targetId": "f-waiters",
+    "label": "A waiter left",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "f3",
+    "sourceId": "n-engine",
+    "targetId": "f-reply",
+    "label": "Reply bytes; reply complete or failed",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "f4",
+    "sourceId": "n-engine",
+    "targetId": "f-snap",
+    "label": "Snapshot()",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "f5",
+    "sourceId": "f-join",
+    "targetId": "f-table",
+    "label": "Look up or create the flight",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "f6",
+    "sourceId": "f-join",
+    "targetId": "f-neg",
+    "label": "Is this key barred from sharing",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "f7",
+    "sourceId": "f-table",
+    "targetId": "f-waiters",
+    "label": "Adds the caller",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "f8",
+    "sourceId": "f-waiters",
+    "targetId": "f-deadline",
+    "label": "Last waiter gone: cancel",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "f9",
+    "sourceId": "f-reply",
+    "targetId": "f-waiters",
+    "label": "Fans the reply out",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "f10",
+    "sourceId": "f-reply",
+    "targetId": "f-neg",
+    "label": "Reply over the cap",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "f11",
+    "sourceId": "f-join",
+    "targetId": "n-work",
+    "label": "Reads the share key of a work unit",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "b1",
+    "sourceId": "n-engine",
+    "targetId": "b-take",
+    "label": "A connection is free and requests are waiting",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "b2",
+    "sourceId": "n-engine",
+    "targetId": "b-split",
+    "label": "Reply bytes of a batch",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "b3",
+    "sourceId": "n-engine",
+    "targetId": "b-snap",
+    "label": "Snapshot()",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "b4",
+    "sourceId": "b-take",
+    "targetId": "b-elig",
+    "label": "Is this request eligible",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "b5",
+    "sourceId": "b-split",
+    "targetId": "b-poison",
+    "label": "Status byte of each end marker",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "b6",
+    "sourceId": "b-elig",
+    "targetId": "n-work",
+    "label": "Reads the batchable flag of a work unit",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "t1",
+    "sourceId": "n-engine",
+    "targetId": "r-policy",
+    "label": "May this failure be retried",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "t2",
+    "sourceId": "n-engine",
+    "targetId": "r-budget",
+    "label": "Deposit on each first attempt",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "t3",
+    "sourceId": "n-engine",
+    "targetId": "r-snap",
+    "label": "Snapshot()",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "t4",
+    "sourceId": "r-off",
+    "targetId": "r-policy",
+    "label": "Implements",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, interface implementation"
+   },
+   {
+    "id": "t5",
+    "sourceId": "r-once",
+    "targetId": "r-policy",
+    "label": "Implements",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, interface implementation"
+   },
+   {
+    "id": "t6",
+    "sourceId": "r-once",
+    "targetId": "r-budget",
+    "label": "Withdraw one token per retry",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "t7",
+    "sourceId": "r-policy",
+    "targetId": "n-work",
+    "label": "Reads the outcome's reached-the-database fact",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "m1",
+    "sourceId": "developer",
+    "targetId": "s-cli",
+    "label": "Runs a scenario with a seed",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Command line"
+   },
+   {
+    "id": "m2",
+    "sourceId": "s-cli",
+    "targetId": "s-simtest",
+    "label": "Run, verify, report",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m3",
+    "sourceId": "s-simtest",
+    "targetId": "s-loop",
+    "label": "Runs the scenario twice and compares digests",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m4",
+    "sourceId": "s-loop",
+    "targetId": "s-clock",
+    "label": "Advances time to the next event",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m5",
+    "sourceId": "s-loop",
+    "targetId": "s-net",
+    "label": "Delivers byte and connection events",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m6",
+    "sourceId": "s-net",
+    "targetId": "n-engine",
+    "label": "Implements the engine's transport seam: bytes in, bytes out, opened, closed",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, interface implementation"
+   },
+   {
+    "id": "m7",
+    "sourceId": "s-workload",
+    "targetId": "s-net",
+    "label": "Opens client connections; sends and reads",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m8",
+    "sourceId": "s-fakepg",
+    "targetId": "s-net",
+    "label": "Accepts database connections; replies",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m9",
+    "sourceId": "s-faults",
+    "targetId": "s-net",
+    "label": "Stall, reset, fragment, half-open",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m10",
+    "sourceId": "s-faults",
+    "targetId": "s-fakepg",
+    "label": "Slow, kill, freeze, refuse, garbage",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m11",
+    "sourceId": "s-faults",
+    "targetId": "s-workload",
+    "label": "Disconnect, stop reading, retry storm",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m12",
+    "sourceId": "s-workload",
+    "targetId": "s-streams",
+    "label": "Arrivals, keys, tenants",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m13",
+    "sourceId": "s-fakepg",
+    "targetId": "s-streams",
+    "label": "Service times",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m14",
+    "sourceId": "s-fakepg",
+    "targetId": "pgproto3",
+    "label": "Wire messages",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go import"
+   },
+   {
+    "id": "m15",
+    "sourceId": "s-workload",
+    "targetId": "pgproto3",
+    "label": "Wire messages",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go import"
+   },
+   {
+    "id": "m16",
+    "sourceId": "s-fakepg",
+    "targetId": "n-pgwire",
+    "label": "Reuses the SCRAM functions",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m17",
+    "sourceId": "n-engine",
+    "targetId": "s-trace",
+    "label": "Appends each decision",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m18",
+    "sourceId": "s-inv",
+    "targetId": "n-engine",
+    "label": "Reads snapshots at every event and at the end",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m19",
+    "sourceId": "s-simtest",
+    "targetId": "s-trace",
+    "label": "Compares digests across runs",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m20",
+    "sourceId": "s-toy",
+    "targetId": "s-net",
+    "label": "Echo over simulated streams, for the meta-tests",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o1",
+    "sourceId": "n-engine",
+    "targetId": "o-collector",
+    "label": "Hands over every component's snapshot at each publish",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, plain structs"
+   },
+   {
+    "id": "o2",
+    "sourceId": "o-collector",
+    "targetId": "o-contract",
+    "label": "Assembles the instance snapshot",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o3",
+    "sourceId": "o-contract",
+    "targetId": "o-hist",
+    "label": "Histograms inside snapshots",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o4",
+    "sourceId": "o-collector",
+    "targetId": "o-health",
+    "label": "Derives the health state and its reasons",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o5",
+    "sourceId": "n-shell",
+    "targetId": "o-prom",
+    "label": "Admin listener serves /metrics",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "HTTP"
+   },
+   {
+    "id": "o6",
+    "sourceId": "n-shell",
+    "targetId": "o-json",
+    "label": "Admin listener serves /stats",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "HTTP"
+   },
+   {
+    "id": "o7",
+    "sourceId": "n-shell",
+    "targetId": "o-health",
+    "label": "Admin listener serves /health",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "HTTP"
+   },
+   {
+    "id": "o8",
+    "sourceId": "o-prom",
+    "targetId": "o-collector",
+    "label": "Reads the last published snapshot",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o9",
+    "sourceId": "o-json",
+    "targetId": "o-collector",
+    "label": "Reads the last published snapshot",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o10",
+    "sourceId": "o-csv",
+    "targetId": "o-collector",
+    "label": "Reads the last published snapshot",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o11",
+    "sourceId": "o-log",
+    "targetId": "o-collector",
+    "label": "Reads the last published snapshot",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o12",
+    "sourceId": "o-otlp",
+    "targetId": "o-collector",
+    "label": "Reads the last published snapshot",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o13",
+    "sourceId": "o-otlp",
+    "targetId": "telemetry",
+    "label": "Pushes metrics",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "OTLP/HTTP JSON"
+   },
+   {
+    "id": "o14",
+    "sourceId": "o-merge",
+    "targetId": "o-contract",
+    "label": "Merges snapshots from several instances",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "x1",
+    "sourceId": "i-spread",
+    "targetId": "i-gw1",
+    "label": "About a third of the client connections",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Postgres wire protocol, TCP"
+   },
+   {
+    "id": "x2",
+    "sourceId": "i-spread",
+    "targetId": "i-gw2",
+    "label": "About a third of the client connections",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Postgres wire protocol, TCP"
+   },
+   {
+    "id": "x3",
+    "sourceId": "i-spread",
+    "targetId": "i-gw3",
+    "label": "About a third of the client connections",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Postgres wire protocol, TCP"
+   },
+   {
+    "id": "x4",
+    "sourceId": "i-gw1",
+    "targetId": "i-pg",
+    "label": "At most budget / 3 pooled connections; dials at most rate / 3",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Postgres wire protocol, TCP"
+   },
+   {
+    "id": "x5",
+    "sourceId": "i-gw2",
+    "targetId": "i-pg",
+    "label": "At most budget / 3 pooled connections; dials at most rate / 3",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Postgres wire protocol, TCP"
+   },
+   {
+    "id": "x6",
+    "sourceId": "i-gw3",
+    "targetId": "i-pg",
+    "label": "At most budget / 3 pooled connections; dials at most rate / 3",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Postgres wire protocol, TCP"
+   },
+   {
+    "id": "x7",
+    "sourceId": "i-tel",
+    "targetId": "i-gw1",
+    "label": "Scrapes this instance's snapshot",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "HTTP admin port"
+   },
+   {
+    "id": "x8",
+    "sourceId": "i-tel",
+    "targetId": "i-gw2",
+    "label": "Scrapes this instance's snapshot",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "HTTP admin port"
+   },
+   {
+    "id": "x9",
+    "sourceId": "i-tel",
+    "targetId": "i-gw3",
+    "label": "Scrapes this instance's snapshot",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "HTTP admin port"
+   }
+  ]
+ },
+ "diagrams": [
+  {
+   "id": "context",
+   "kind": "context",
+   "title": "System context",
+   "status": "planned",
+   "nodes": [
+    {
+     "elementId": "app"
+    },
+    {
+     "elementId": "operator"
+    },
+    {
+     "elementId": "developer"
+    },
+    {
+     "elementId": "gw",
+     "detail": {
+      "diagramId": "container"
+     }
+    },
+    {
+     "elementId": "pg"
+    },
+    {
+     "elementId": "telemetry"
+    },
+    {
+     "elementId": "pgproto3"
+    }
+   ],
+   "edges": [
+    {
+     "relationshipId": "r-app-gw"
+    },
+    {
+     "relationshipId": "r-op-gw"
+    },
+    {
+     "relationshipId": "r-dev-gw"
+    },
+    {
+     "relationshipId": "r-gw-pg"
+    },
+    {
+     "relationshipId": "r-tel-gw"
+    },
+    {
+     "relationshipId": "r-gw-tel"
+    },
+    {
+     "relationshipId": "r-gw-lib"
+    }
+   ],
+   "legend": {
+    "title": "Key",
+    "entries": [
+     {
+      "id": "person",
+      "label": "Person or client",
+      "description": "A user or client of the system",
+      "swatch": {
+       "shape": "person",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "accent",
+      "label": "System in focus",
+      "description": "The scope of this view",
+      "swatch": {
+       "shape": "box",
+       "tone": "accent",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "box",
+      "label": "Element",
+      "description": "A system, container, component or instance",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "external",
+      "label": "External or neighbouring element",
+      "description": "Outside the scope of this view",
+      "swatch": {
+       "shape": "box",
+       "tone": "external",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "planned",
+      "label": "Planned",
+      "description": "Target architecture: not built yet",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "dashed"
+      }
+     },
+     {
+      "id": "edge",
+      "label": "Relationship",
+      "description": "The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "solid",
+       "arrow": "forward"
+      }
+     }
+    ]
+   },
+   "docIds": [],
+   "sourceIds": [
+    "plan"
+   ],
+   "layout": {
+    "mode": "auto",
+    "direction": "TB"
+   },
+   "scopeId": "gw"
+  },
+  {
+   "id": "container",
+   "kind": "container",
+   "title": "Containers: the request path",
+   "status": "planned",
+   "nodes": [
+    {
+     "elementId": "app"
+    },
+    {
+     "elementId": "operator"
+    },
+    {
+     "elementId": "c-shell"
+    },
+    {
+     "elementId": "c-engine",
+     "detail": {
+      "diagramId": "component-engine"
+     }
+    },
+    {
+     "elementId": "c-pgwire",
+     "detail": {
+      "diagramId": "component-wire"
+     }
+    },
+    {
+     "elementId": "c-adm",
+     "detail": {
+      "diagramId": "component-admission"
+     }
+    },
+    {
+     "elementId": "c-coal",
+     "detail": {
+      "diagramId": "component-coalescer"
+     }
+    },
+    {
+     "elementId": "c-pool",
+     "detail": {
+      "diagramId": "component-pool"
+     }
+    },
+    {
+     "elementId": "c-batch",
+     "detail": {
+      "diagramId": "component-batcher"
+     }
+    },
+    {
+     "elementId": "c-retry",
+     "detail": {
+      "diagramId": "component-retry"
+     }
+    },
+    {
+     "elementId": "c-obs",
+     "detail": {
+      "diagramId": "component-observability"
+     }
+    },
+    {
+     "elementId": "c-config"
+    },
+    {
+     "elementId": "pg"
+    },
+    {
+     "elementId": "telemetry"
+    }
+   ],
+   "edges": [
+    {
+     "relationshipId": "c1"
+    },
+    {
+     "relationshipId": "c2"
+    },
+    {
+     "relationshipId": "c3"
+    },
+    {
+     "relationshipId": "c4"
+    },
+    {
+     "relationshipId": "c5"
+    },
+    {
+     "relationshipId": "c6"
+    },
+    {
+     "relationshipId": "c7"
+    },
+    {
+     "relationshipId": "c8"
+    },
+    {
+     "relationshipId": "c9"
+    },
+    {
+     "relationshipId": "c10"
+    },
+    {
+     "relationshipId": "c11"
+    },
+    {
+     "relationshipId": "c12"
+    },
+    {
+     "relationshipId": "c13"
+    },
+    {
+     "relationshipId": "c14"
+    },
+    {
+     "relationshipId": "c15"
+    }
+   ],
+   "legend": {
+    "title": "Key",
+    "entries": [
+     {
+      "id": "person",
+      "label": "Person or client",
+      "description": "A user or client of the system",
+      "swatch": {
+       "shape": "person",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "box",
+      "label": "Element",
+      "description": "A system, container, component or instance",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "external",
+      "label": "External or neighbouring element",
+      "description": "Outside the scope of this view",
+      "swatch": {
+       "shape": "box",
+       "tone": "external",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "planned",
+      "label": "Planned",
+      "description": "Target architecture: not built yet",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "dashed"
+      }
+     },
+     {
+      "id": "edge",
+      "label": "Relationship",
+      "description": "The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "solid",
+       "arrow": "forward"
+      }
+     }
+    ]
+   },
+   "docIds": [],
+   "sourceIds": [
+    "plan"
+   ],
+   "layout": {
+    "mode": "auto",
+    "direction": "TB"
+   },
+   "scopeId": "gw",
+   "parent": {
+    "diagramId": "context"
+   }
+  },
+  {
+   "id": "container-seams",
+   "kind": "container",
+   "title": "Containers: drivers and seams",
+   "status": "planned",
+   "nodes": [
+    {
+     "elementId": "developer"
+    },
+    {
+     "elementId": "c-sim",
+     "detail": {
+      "diagramId": "component-simulator"
+     }
+    },
+    {
+     "elementId": "c-e2e"
+    },
+    {
+     "elementId": "c-shell"
+    },
+    {
+     "elementId": "c-engine",
+     "detail": {
+      "diagramId": "component-engine"
+     }
+    },
+    {
+     "elementId": "c-pgwire",
+     "detail": {
+      "diagramId": "component-wire"
+     }
+    },
+    {
+     "elementId": "c-work"
+    },
+    {
+     "elementId": "c-adm"
+    },
+    {
+     "elementId": "c-pool"
+    },
+    {
+     "elementId": "c-coal"
+    },
+    {
+     "elementId": "c-batch"
+    },
+    {
+     "elementId": "c-retry"
+    },
+    {
+     "elementId": "pgproto3"
+    },
+    {
+     "elementId": "pg"
+    }
+   ],
+   "edges": [
+    {
+     "relationshipId": "c3"
+    },
+    {
+     "relationshipId": "s1"
+    },
+    {
+     "relationshipId": "c4"
+    },
+    {
+     "relationshipId": "s2"
+    },
+    {
+     "relationshipId": "s3"
+    },
+    {
+     "relationshipId": "s4"
+    },
+    {
+     "relationshipId": "s5"
+    },
+    {
+     "relationshipId": "s6"
+    },
+    {
+     "relationshipId": "s7"
+    },
+    {
+     "relationshipId": "s8"
+    },
+    {
+     "relationshipId": "s9"
+    },
+    {
+     "relationshipId": "s10"
+    },
+    {
+     "relationshipId": "s11"
+    },
+    {
+     "relationshipId": "s12"
+    },
+    {
+     "relationshipId": "s13"
+    },
+    {
+     "relationshipId": "s14"
+    },
+    {
+     "relationshipId": "s15"
+    },
+    {
+     "relationshipId": "c10"
+    }
+   ],
+   "legend": {
+    "title": "Key",
+    "entries": [
+     {
+      "id": "person",
+      "label": "Person or client",
+      "description": "A user or client of the system",
+      "swatch": {
+       "shape": "person",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "box",
+      "label": "Element",
+      "description": "A system, container, component or instance",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "external",
+      "label": "External or neighbouring element",
+      "description": "Outside the scope of this view",
+      "swatch": {
+       "shape": "box",
+       "tone": "external",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "planned",
+      "label": "Planned",
+      "description": "Target architecture: not built yet",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "dashed"
+      }
+     },
+     {
+      "id": "edge",
+      "label": "Relationship",
+      "description": "The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "solid",
+       "arrow": "forward"
+      }
+     }
+    ]
+   },
+   "docIds": [],
+   "sourceIds": [
+    "plan"
+   ],
+   "layout": {
+    "mode": "auto",
+    "direction": "TB"
+   },
+   "scopeId": "gw",
+   "parent": {
+    "diagramId": "context"
+   }
+  },
+  {
+   "id": "deployment",
+   "kind": "deployment",
+   "title": "Deployment: three instances, one database",
+   "status": "planned",
+   "nodes": [
+    {
+     "elementId": "d-clients"
+    },
+    {
+     "elementId": "i-spread"
+    },
+    {
+     "elementId": "d-tier"
+    },
+    {
+     "elementId": "i-gw1"
+    },
+    {
+     "elementId": "i-gw2"
+    },
+    {
+     "elementId": "i-gw3"
+    },
+    {
+     "elementId": "d-db"
+    },
+    {
+     "elementId": "i-pg"
+    },
+    {
+     "elementId": "d-ops"
+    },
+    {
+     "elementId": "i-tel"
+    }
+   ],
+   "edges": [
+    {
+     "relationshipId": "x1"
+    },
+    {
+     "relationshipId": "x2"
+    },
+    {
+     "relationshipId": "x3"
+    },
+    {
+     "relationshipId": "x4"
+    },
+    {
+     "relationshipId": "x5"
+    },
+    {
+     "relationshipId": "x6"
+    },
+    {
+     "relationshipId": "x7"
+    },
+    {
+     "relationshipId": "x8"
+    },
+    {
+     "relationshipId": "x9"
+    }
+   ],
+   "legend": {
+    "title": "Key",
+    "entries": [
+     {
+      "id": "boundary",
+      "label": "Deployment node",
+      "description": "A host or group of hosts",
+      "swatch": {
+       "shape": "boundary",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "box",
+      "label": "Element",
+      "description": "A system, container, component or instance",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "planned",
+      "label": "Planned",
+      "description": "Target architecture: not built yet",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "dashed"
+      }
+     },
+     {
+      "id": "edge",
+      "label": "Relationship",
+      "description": "The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "solid",
+       "arrow": "forward"
+      }
+     }
+    ]
+   },
+   "docIds": [],
+   "sourceIds": [
+    "plan"
+   ],
+   "layout": {
+    "mode": "auto",
+    "direction": "LR"
+   },
+   "parent": {
+    "diagramId": "container"
+   },
+   "environment": "fleet-of-3"
+  },
+  {
+   "id": "component-engine",
+   "kind": "component",
+   "title": "Components: engine",
+   "status": "planned",
+   "nodes": [
+    {
+     "elementId": "e-transport"
+    },
+    {
+     "elementId": "e-sessions"
+    },
+    {
+     "elementId": "e-backends"
+    },
+    {
+     "elementId": "e-pipeline"
+    },
+    {
+     "elementId": "e-relay"
+    },
+    {
+     "elementId": "e-fail"
+    },
+    {
+     "elementId": "e-clock"
+    },
+    {
+     "elementId": "e-drain"
+    },
+    {
+     "elementId": "e-publish"
+    },
+    {
+     "elementId": "n-shell"
+    },
+    {
+     "elementId": "n-sim"
+    },
+    {
+     "elementId": "n-pgwire"
+    },
+    {
+     "elementId": "n-adm"
+    },
+    {
+     "elementId": "n-coal"
+    },
+    {
+     "elementId": "n-pool"
+    },
+    {
+     "elementId": "n-batch"
+    },
+    {
+     "elementId": "n-retry"
+    },
+    {
+     "elementId": "n-obs"
+    },
+    {
+     "elementId": "n-work"
+    }
+   ],
+   "edges": [
+    {
+     "relationshipId": "e1"
+    },
+    {
+     "relationshipId": "e2"
+    },
+    {
+     "relationshipId": "e3"
+    },
+    {
+     "relationshipId": "e4"
+    },
+    {
+     "relationshipId": "e5"
+    },
+    {
+     "relationshipId": "e6"
+    },
+    {
+     "relationshipId": "e7"
+    },
+    {
+     "relationshipId": "e8"
+    },
+    {
+     "relationshipId": "e9"
+    },
+    {
+     "relationshipId": "e10"
+    },
+    {
+     "relationshipId": "e11"
+    },
+    {
+     "relationshipId": "e12"
+    },
+    {
+     "relationshipId": "e13"
+    },
+    {
+     "relationshipId": "e14"
+    },
+    {
+     "relationshipId": "e15"
+    },
+    {
+     "relationshipId": "e16"
+    },
+    {
+     "relationshipId": "e17"
+    },
+    {
+     "relationshipId": "e18"
+    },
+    {
+     "relationshipId": "e19"
+    },
+    {
+     "relationshipId": "e20"
+    },
+    {
+     "relationshipId": "e21"
+    }
+   ],
+   "legend": {
+    "title": "Key",
+    "entries": [
+     {
+      "id": "box",
+      "label": "Element",
+      "description": "A system, container, component or instance",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "external",
+      "label": "External or neighbouring element",
+      "description": "Outside the scope of this view",
+      "swatch": {
+       "shape": "box",
+       "tone": "external",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "planned",
+      "label": "Planned",
+      "description": "Target architecture: not built yet",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "dashed"
+      }
+     },
+     {
+      "id": "edge",
+      "label": "Relationship",
+      "description": "The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "solid",
+       "arrow": "forward"
+      }
+     }
+    ]
+   },
+   "docIds": [],
+   "sourceIds": [
+    "plan"
+   ],
+   "layout": {
+    "mode": "auto",
+    "direction": "TB"
+   },
+   "scopeId": "c-engine",
+   "parent": {
+    "diagramId": "container"
+   }
+  },
+  {
+   "id": "component-wire",
+   "kind": "component",
+   "title": "Components: wire layer",
+   "status": "planned",
+   "nodes": [
+    {
+     "elementId": "w-framer"
+    },
+    {
+     "elementId": "w-codec"
+    },
+    {
+     "elementId": "w-client"
+    },
+    {
+     "elementId": "w-backend"
+    },
+    {
+     "elementId": "w-cycle"
+    },
+    {
+     "elementId": "w-scram"
+    },
+    {
+     "elementId": "w-lexer"
+    },
+    {
+     "elementId": "w-classifier"
+    },
+    {
+     "elementId": "w-errors"
+    },
+    {
+     "elementId": "n-engine"
+    },
+    {
+     "elementId": "n-work"
+    },
+    {
+     "elementId": "pgproto3"
+    }
+   ],
+   "edges": [
+    {
+     "relationshipId": "w1"
+    },
+    {
+     "relationshipId": "w2"
+    },
+    {
+     "relationshipId": "w3"
+    },
+    {
+     "relationshipId": "w4"
+    },
+    {
+     "relationshipId": "w5"
+    },
+    {
+     "relationshipId": "w6"
+    },
+    {
+     "relationshipId": "w7"
+    },
+    {
+     "relationshipId": "w8"
+    },
+    {
+     "relationshipId": "w9"
+    },
+    {
+     "relationshipId": "w10"
+    },
+    {
+     "relationshipId": "w11"
+    },
+    {
+     "relationshipId": "w12"
+    },
+    {
+     "relationshipId": "w13"
+    },
+    {
+     "relationshipId": "w14"
+    },
+    {
+     "relationshipId": "w15"
+    },
+    {
+     "relationshipId": "w16"
+    }
+   ],
+   "legend": {
+    "title": "Key",
+    "entries": [
+     {
+      "id": "box",
+      "label": "Element",
+      "description": "A system, container, component or instance",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "external",
+      "label": "External or neighbouring element",
+      "description": "Outside the scope of this view",
+      "swatch": {
+       "shape": "box",
+       "tone": "external",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "planned",
+      "label": "Planned",
+      "description": "Target architecture: not built yet",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "dashed"
+      }
+     },
+     {
+      "id": "edge",
+      "label": "Relationship",
+      "description": "The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "solid",
+       "arrow": "forward"
+      }
+     }
+    ]
+   },
+   "docIds": [],
+   "sourceIds": [
+    "plan"
+   ],
+   "layout": {
+    "mode": "auto",
+    "direction": "TB"
+   },
+   "scopeId": "c-pgwire",
+   "parent": {
+    "diagramId": "container"
+   }
+  },
+  {
+   "id": "component-admission",
+   "kind": "component",
+   "title": "Components: admission",
+   "status": "planned",
+   "nodes": [
+    {
+     "elementId": "a-gate"
+    },
+    {
+     "elementId": "a-tenants"
+    },
+    {
+     "elementId": "a-queues"
+    },
+    {
+     "elementId": "a-rule"
+    },
+    {
+     "elementId": "a-rule-timeout"
+    },
+    {
+     "elementId": "a-rule-law"
+    },
+    {
+     "elementId": "a-arms"
+    },
+    {
+     "elementId": "a-dispatch"
+    },
+    {
+     "elementId": "a-limit"
+    },
+    {
+     "elementId": "a-snap"
+    },
+    {
+     "elementId": "n-engine"
+    },
+    {
+     "elementId": "n-work"
+    }
+   ],
+   "edges": [
+    {
+     "relationshipId": "a1"
+    },
+    {
+     "relationshipId": "a2"
+    },
+    {
+     "relationshipId": "a3"
+    },
+    {
+     "relationshipId": "a4"
+    },
+    {
+     "relationshipId": "a5"
+    },
+    {
+     "relationshipId": "a6"
+    },
+    {
+     "relationshipId": "a7"
+    },
+    {
+     "relationshipId": "a8"
+    },
+    {
+     "relationshipId": "a9"
+    },
+    {
+     "relationshipId": "a10"
+    },
+    {
+     "relationshipId": "a11"
+    },
+    {
+     "relationshipId": "a12"
+    },
+    {
+     "relationshipId": "a13"
+    },
+    {
+     "relationshipId": "a14"
+    },
+    {
+     "relationshipId": "a15"
+    }
+   ],
+   "legend": {
+    "title": "Key",
+    "entries": [
+     {
+      "id": "box",
+      "label": "Element",
+      "description": "A system, container, component or instance",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "external",
+      "label": "External or neighbouring element",
+      "description": "Outside the scope of this view",
+      "swatch": {
+       "shape": "box",
+       "tone": "external",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "planned",
+      "label": "Planned",
+      "description": "Target architecture: not built yet",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "dashed"
+      }
+     },
+     {
+      "id": "edge",
+      "label": "Relationship",
+      "description": "The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "solid",
+       "arrow": "forward"
+      }
+     }
+    ]
+   },
+   "docIds": [],
+   "sourceIds": [
+    "plan"
+   ],
+   "layout": {
+    "mode": "auto",
+    "direction": "TB"
+   },
+   "scopeId": "c-adm",
+   "parent": {
+    "diagramId": "container"
+   }
+  },
+  {
+   "id": "component-pool",
+   "kind": "component",
+   "title": "Components: pool",
+   "status": "planned",
+   "nodes": [
+    {
+     "elementId": "p-acct"
+    },
+    {
+     "elementId": "p-create"
+    },
+    {
+     "elementId": "p-lease"
+    },
+    {
+     "elementId": "p-breaker"
+    },
+    {
+     "elementId": "p-dirty"
+    },
+    {
+     "elementId": "p-reaper"
+    },
+    {
+     "elementId": "p-cancel"
+    },
+    {
+     "elementId": "p-snap"
+    },
+    {
+     "elementId": "n-engine"
+    },
+    {
+     "elementId": "n-work"
+    }
+   ],
+   "edges": [
+    {
+     "relationshipId": "p1"
+    },
+    {
+     "relationshipId": "p2"
+    },
+    {
+     "relationshipId": "p3"
+    },
+    {
+     "relationshipId": "p4"
+    },
+    {
+     "relationshipId": "p5"
+    },
+    {
+     "relationshipId": "p6"
+    },
+    {
+     "relationshipId": "p7"
+    },
+    {
+     "relationshipId": "p8"
+    },
+    {
+     "relationshipId": "p9"
+    },
+    {
+     "relationshipId": "p10"
+    },
+    {
+     "relationshipId": "p11"
+    },
+    {
+     "relationshipId": "p12"
+    }
+   ],
+   "legend": {
+    "title": "Key",
+    "entries": [
+     {
+      "id": "box",
+      "label": "Element",
+      "description": "A system, container, component or instance",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "external",
+      "label": "External or neighbouring element",
+      "description": "Outside the scope of this view",
+      "swatch": {
+       "shape": "box",
+       "tone": "external",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "planned",
+      "label": "Planned",
+      "description": "Target architecture: not built yet",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "dashed"
+      }
+     },
+     {
+      "id": "edge",
+      "label": "Relationship",
+      "description": "The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "solid",
+       "arrow": "forward"
+      }
+     }
+    ]
+   },
+   "docIds": [],
+   "sourceIds": [
+    "plan"
+   ],
+   "layout": {
+    "mode": "auto",
+    "direction": "TB"
+   },
+   "scopeId": "c-pool",
+   "parent": {
+    "diagramId": "container"
+   }
+  },
+  {
+   "id": "component-coalescer",
+   "kind": "component",
+   "title": "Components: coalescer",
+   "status": "planned",
+   "nodes": [
+    {
+     "elementId": "f-join"
+    },
+    {
+     "elementId": "f-table"
+    },
+    {
+     "elementId": "f-waiters"
+    },
+    {
+     "elementId": "f-deadline"
+    },
+    {
+     "elementId": "f-reply"
+    },
+    {
+     "elementId": "f-neg"
+    },
+    {
+     "elementId": "f-snap"
+    },
+    {
+     "elementId": "n-engine"
+    },
+    {
+     "elementId": "n-work"
+    }
+   ],
+   "edges": [
+    {
+     "relationshipId": "f1"
+    },
+    {
+     "relationshipId": "f2"
+    },
+    {
+     "relationshipId": "f3"
+    },
+    {
+     "relationshipId": "f4"
+    },
+    {
+     "relationshipId": "f5"
+    },
+    {
+     "relationshipId": "f6"
+    },
+    {
+     "relationshipId": "f7"
+    },
+    {
+     "relationshipId": "f8"
+    },
+    {
+     "relationshipId": "f9"
+    },
+    {
+     "relationshipId": "f10"
+    },
+    {
+     "relationshipId": "f11"
+    }
+   ],
+   "legend": {
+    "title": "Key",
+    "entries": [
+     {
+      "id": "box",
+      "label": "Element",
+      "description": "A system, container, component or instance",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "external",
+      "label": "External or neighbouring element",
+      "description": "Outside the scope of this view",
+      "swatch": {
+       "shape": "box",
+       "tone": "external",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "planned",
+      "label": "Planned",
+      "description": "Target architecture: not built yet",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "dashed"
+      }
+     },
+     {
+      "id": "edge",
+      "label": "Relationship",
+      "description": "The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "solid",
+       "arrow": "forward"
+      }
+     }
+    ]
+   },
+   "docIds": [],
+   "sourceIds": [
+    "plan"
+   ],
+   "layout": {
+    "mode": "auto",
+    "direction": "TB"
+   },
+   "scopeId": "c-coal",
+   "parent": {
+    "diagramId": "container"
+   }
+  },
+  {
+   "id": "component-batcher",
+   "kind": "component",
+   "title": "Components: batcher",
+   "status": "planned",
+   "nodes": [
+    {
+     "elementId": "b-take"
+    },
+    {
+     "elementId": "b-elig"
+    },
+    {
+     "elementId": "b-split"
+    },
+    {
+     "elementId": "b-poison"
+    },
+    {
+     "elementId": "b-snap"
+    },
+    {
+     "elementId": "n-engine"
+    },
+    {
+     "elementId": "n-work"
+    }
+   ],
+   "edges": [
+    {
+     "relationshipId": "b1"
+    },
+    {
+     "relationshipId": "b2"
+    },
+    {
+     "relationshipId": "b3"
+    },
+    {
+     "relationshipId": "b4"
+    },
+    {
+     "relationshipId": "b5"
+    },
+    {
+     "relationshipId": "b6"
+    }
+   ],
+   "legend": {
+    "title": "Key",
+    "entries": [
+     {
+      "id": "box",
+      "label": "Element",
+      "description": "A system, container, component or instance",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "external",
+      "label": "External or neighbouring element",
+      "description": "Outside the scope of this view",
+      "swatch": {
+       "shape": "box",
+       "tone": "external",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "planned",
+      "label": "Planned",
+      "description": "Target architecture: not built yet",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "dashed"
+      }
+     },
+     {
+      "id": "edge",
+      "label": "Relationship",
+      "description": "The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "solid",
+       "arrow": "forward"
+      }
+     }
+    ]
+   },
+   "docIds": [],
+   "sourceIds": [
+    "plan"
+   ],
+   "layout": {
+    "mode": "auto",
+    "direction": "TB"
+   },
+   "scopeId": "c-batch",
+   "parent": {
+    "diagramId": "container"
+   }
+  },
+  {
+   "id": "component-retry",
+   "kind": "component",
+   "title": "Components: retry policy",
+   "status": "planned",
+   "nodes": [
+    {
+     "elementId": "r-policy"
+    },
+    {
+     "elementId": "r-off"
+    },
+    {
+     "elementId": "r-once"
+    },
+    {
+     "elementId": "r-budget"
+    },
+    {
+     "elementId": "r-snap"
+    },
+    {
+     "elementId": "n-engine"
+    },
+    {
+     "elementId": "n-work"
+    }
+   ],
+   "edges": [
+    {
+     "relationshipId": "t1"
+    },
+    {
+     "relationshipId": "t2"
+    },
+    {
+     "relationshipId": "t3"
+    },
+    {
+     "relationshipId": "t4"
+    },
+    {
+     "relationshipId": "t5"
+    },
+    {
+     "relationshipId": "t6"
+    },
+    {
+     "relationshipId": "t7"
+    }
+   ],
+   "legend": {
+    "title": "Key",
+    "entries": [
+     {
+      "id": "box",
+      "label": "Element",
+      "description": "A system, container, component or instance",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "external",
+      "label": "External or neighbouring element",
+      "description": "Outside the scope of this view",
+      "swatch": {
+       "shape": "box",
+       "tone": "external",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "planned",
+      "label": "Planned",
+      "description": "Target architecture: not built yet",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "dashed"
+      }
+     },
+     {
+      "id": "edge",
+      "label": "Relationship",
+      "description": "The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "solid",
+       "arrow": "forward"
+      }
+     }
+    ]
+   },
+   "docIds": [],
+   "sourceIds": [
+    "plan"
+   ],
+   "layout": {
+    "mode": "auto",
+    "direction": "TB"
+   },
+   "scopeId": "c-retry",
+   "parent": {
+    "diagramId": "container"
+   }
+  },
+  {
+   "id": "component-simulator",
+   "kind": "component",
+   "title": "Components: simulator harness",
+   "status": "planned",
+   "nodes": [
+    {
+     "elementId": "s-loop"
+    },
+    {
+     "elementId": "s-clock"
+    },
+    {
+     "elementId": "s-streams"
+    },
+    {
+     "elementId": "s-net"
+    },
+    {
+     "elementId": "s-fakepg"
+    },
+    {
+     "elementId": "s-workload"
+    },
+    {
+     "elementId": "s-faults"
+    },
+    {
+     "elementId": "s-trace"
+    },
+    {
+     "elementId": "s-inv"
+    },
+    {
+     "elementId": "s-simtest"
+    },
+    {
+     "elementId": "s-cli"
+    },
+    {
+     "elementId": "s-toy"
+    },
+    {
+     "elementId": "developer"
+    },
+    {
+     "elementId": "n-engine"
+    },
+    {
+     "elementId": "n-pgwire"
+    },
+    {
+     "elementId": "pgproto3"
+    }
+   ],
+   "edges": [
+    {
+     "relationshipId": "m1"
+    },
+    {
+     "relationshipId": "m2"
+    },
+    {
+     "relationshipId": "m3"
+    },
+    {
+     "relationshipId": "m4"
+    },
+    {
+     "relationshipId": "m5"
+    },
+    {
+     "relationshipId": "m6"
+    },
+    {
+     "relationshipId": "m7"
+    },
+    {
+     "relationshipId": "m8"
+    },
+    {
+     "relationshipId": "m9"
+    },
+    {
+     "relationshipId": "m10"
+    },
+    {
+     "relationshipId": "m11"
+    },
+    {
+     "relationshipId": "m12"
+    },
+    {
+     "relationshipId": "m13"
+    },
+    {
+     "relationshipId": "m14"
+    },
+    {
+     "relationshipId": "m15"
+    },
+    {
+     "relationshipId": "m16"
+    },
+    {
+     "relationshipId": "m17"
+    },
+    {
+     "relationshipId": "m18"
+    },
+    {
+     "relationshipId": "m19"
+    },
+    {
+     "relationshipId": "m20"
+    }
+   ],
+   "legend": {
+    "title": "Key",
+    "entries": [
+     {
+      "id": "person",
+      "label": "Person or client",
+      "description": "A user or client of the system",
+      "swatch": {
+       "shape": "person",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "box",
+      "label": "Element",
+      "description": "A system, container, component or instance",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "external",
+      "label": "External or neighbouring element",
+      "description": "Outside the scope of this view",
+      "swatch": {
+       "shape": "box",
+       "tone": "external",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "planned",
+      "label": "Planned",
+      "description": "Target architecture: not built yet",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "dashed"
+      }
+     },
+     {
+      "id": "edge",
+      "label": "Relationship",
+      "description": "The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "solid",
+       "arrow": "forward"
+      }
+     }
+    ]
+   },
+   "docIds": [],
+   "sourceIds": [
+    "plan"
+   ],
+   "layout": {
+    "mode": "auto",
+    "direction": "TB"
+   },
+   "scopeId": "c-sim",
+   "parent": {
+    "diagramId": "container"
+   }
+  },
+  {
+   "id": "component-observability",
+   "kind": "component",
+   "title": "Components: observability",
+   "status": "planned",
+   "nodes": [
+    {
+     "elementId": "o-contract"
+    },
+    {
+     "elementId": "o-hist"
+    },
+    {
+     "elementId": "o-collector"
+    },
+    {
+     "elementId": "o-merge"
+    },
+    {
+     "elementId": "o-health"
+    },
+    {
+     "elementId": "o-prom"
+    },
+    {
+     "elementId": "o-json"
+    },
+    {
+     "elementId": "o-csv"
+    },
+    {
+     "elementId": "o-log"
+    },
+    {
+     "elementId": "o-otlp"
+    },
+    {
+     "elementId": "n-engine"
+    },
+    {
+     "elementId": "n-shell"
+    },
+    {
+     "elementId": "telemetry"
+    }
+   ],
+   "edges": [
+    {
+     "relationshipId": "o1"
+    },
+    {
+     "relationshipId": "o2"
+    },
+    {
+     "relationshipId": "o3"
+    },
+    {
+     "relationshipId": "o4"
+    },
+    {
+     "relationshipId": "o5"
+    },
+    {
+     "relationshipId": "o6"
+    },
+    {
+     "relationshipId": "o7"
+    },
+    {
+     "relationshipId": "o8"
+    },
+    {
+     "relationshipId": "o9"
+    },
+    {
+     "relationshipId": "o10"
+    },
+    {
+     "relationshipId": "o11"
+    },
+    {
+     "relationshipId": "o12"
+    },
+    {
+     "relationshipId": "o13"
+    },
+    {
+     "relationshipId": "o14"
+    }
+   ],
+   "legend": {
+    "title": "Key",
+    "entries": [
+     {
+      "id": "box",
+      "label": "Element",
+      "description": "A system, container, component or instance",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "external",
+      "label": "External or neighbouring element",
+      "description": "Outside the scope of this view",
+      "swatch": {
+       "shape": "box",
+       "tone": "external",
+       "stroke": "solid"
+      }
+     },
+     {
+      "id": "planned",
+      "label": "Planned",
+      "description": "Target architecture: not built yet",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "dashed"
+      }
+     },
+     {
+      "id": "edge",
+      "label": "Relationship",
+      "description": "The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "solid",
+       "arrow": "forward"
+      }
+     }
+    ]
+   },
+   "docIds": [],
+   "sourceIds": [
+    "plan"
+   ],
+   "layout": {
+    "mode": "auto",
+    "direction": "TB"
+   },
+   "scopeId": "c-obs",
+   "parent": {
+    "diagramId": "container"
+   }
+  }
+ ],
+ "documents": [],
+ "sources": [
+  {
+   "id": "plan",
+   "title": "mini-gateway PLAN.md (Phase 1 proposal)",
+   "url": "https://github.com/nickstrad/mini-gateway/blob/main/PLAN.md",
+   "notes": "Target architecture. Every element is planned; nothing is built yet."
+  }
+ ]
+}

@@ -1,0 +1,43 @@
+flowchart TB
+  N_SHELL["Shell and binary"]
+  N_SIM["Simulator harness"]
+  N_PGWIRE["Wire layer"]
+  N_ADM["Admission"]
+  N_COAL["Coalescer"]
+  N_POOL["Pool"]
+  N_BATCH["Batcher"]
+  N_RETRY["Retry policy"]
+  N_OBS["Observability"]
+  N_WORK["Work vocabulary"]
+  subgraph SCOPE["Engine"]
+    E_TRANSPORT["Transport seam"]
+    E_SESSIONS["Client session table"]
+    E_BACKENDS["Database connection table"]
+    E_PIPELINE["Request pipeline"]
+    E_RELAY["Reply relay"]
+    E_FAIL["Failure classifier"]
+    E_CLOCK["Deadline table"]
+    E_DRAIN["Drain controller"]
+    E_PUBLISH["Snapshot publisher"]
+  end
+  N_SHELL -.->|1| E_TRANSPORT
+  N_SIM -.->|2| E_TRANSPORT
+  E_TRANSPORT -->|3| E_SESSIONS
+  E_TRANSPORT -->|4| E_BACKENDS
+  E_SESSIONS -->|5| N_PGWIRE
+  E_BACKENDS -->|6| N_PGWIRE
+  E_SESSIONS -->|7| E_PIPELINE
+  E_PIPELINE -->|8| N_ADM
+  E_PIPELINE -->|9| N_COAL
+  E_PIPELINE -->|10| N_POOL
+  E_PIPELINE -->|11| N_BATCH
+  E_PIPELINE -->|12| N_RETRY
+  E_PIPELINE -->|13| E_BACKENDS
+  E_BACKENDS -->|14| E_RELAY
+  E_RELAY -->|15| E_SESSIONS
+  E_PIPELINE -->|16| E_FAIL
+  E_FAIL -->|17| N_PGWIRE
+  E_CLOCK -->|18| E_PIPELINE
+  E_DRAIN -->|19| E_PIPELINE
+  E_PUBLISH -->|20| N_OBS
+  E_PIPELINE -->|21| N_WORK

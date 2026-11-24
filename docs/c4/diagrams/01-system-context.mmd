@@ -1,0 +1,15 @@
+flowchart TB
+  APP(["Client application"])
+  OPERATOR(["Operator"])
+  DEVELOPER(["Developer or reader"])
+  GW["mini-gateway"]
+  PG[("Postgres")]
+  TELEMETRY[["Metrics and log readers"]]
+  PGPROTO3[["pgproto3 (from pgx/v5)"]]
+  APP -->|1| GW
+  OPERATOR -->|2| GW
+  DEVELOPER -->|3| GW
+  GW -->|4| PG
+  TELEMETRY -->|5| GW
+  GW -->|6| TELEMETRY
+  GW -->|7| PGPROTO3

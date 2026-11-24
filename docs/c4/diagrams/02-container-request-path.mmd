@@ -1,0 +1,32 @@
+flowchart TB
+  APP(["Client application"])
+  OPERATOR(["Operator"])
+  PG[("Postgres")]
+  TELEMETRY[["Metrics and log readers"]]
+  subgraph SCOPE["mini-gateway process"]
+    C_SHELL["Shell and binary<br/>cmd/mini-gateway"]
+    C_ENGINE["Engine<br/>internal/proxy"]
+    C_PGWIRE["Wire layer<br/>internal/pgwire"]
+    C_ADM["Admission<br/>internal/admission"]
+    C_COAL["Coalescer<br/>internal/coalesce"]
+    C_POOL["Pool<br/>internal/pool"]
+    C_BATCH["Batcher<br/>internal/batch"]
+    C_RETRY["Retry policy<br/>internal/retry"]
+    C_OBS["Observability<br/>internal/obs"]
+    C_CONFIG["Configuration<br/>internal/config"]
+  end
+  APP -->|1| C_SHELL
+  OPERATOR -->|2| C_SHELL
+  C_SHELL -->|3| C_ENGINE
+  C_ENGINE -->|4| C_PGWIRE
+  C_ENGINE -->|5| C_ADM
+  C_ENGINE -->|6| C_COAL
+  C_ENGINE -->|7| C_POOL
+  C_ENGINE -->|8| C_BATCH
+  C_ENGINE -->|9| C_RETRY
+  C_SHELL -->|10| PG
+  C_ENGINE -->|11| C_OBS
+  C_SHELL -->|12| C_OBS
+  TELEMETRY -->|13| C_SHELL
+  C_OBS -->|14| TELEMETRY
+  C_SHELL -->|15| C_CONFIG

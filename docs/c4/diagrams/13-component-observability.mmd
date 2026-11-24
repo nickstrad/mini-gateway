@@ -1,0 +1,30 @@
+flowchart TB
+  N_ENGINE["Engine"]
+  N_SHELL["Shell and binary"]
+  TELEMETRY[["Metrics and log readers"]]
+  subgraph SCOPE["Observability"]
+    O_CONTRACT["Snapshot conventions"]
+    O_HIST["Integer histogram"]
+    O_COLLECTOR["Collector"]
+    O_MERGE["Fleet merge"]
+    O_HEALTH["Health"]
+    O_PROM["Prometheus text exporter"]
+    O_JSON["JSON stats exporter"]
+    O_CSV["CSV writer"]
+    O_LOG["Log-line exporter"]
+    O_OTLP["OTLP/HTTP push exporter"]
+  end
+  N_ENGINE -->|1| O_COLLECTOR
+  O_COLLECTOR -->|2| O_CONTRACT
+  O_CONTRACT -->|3| O_HIST
+  O_COLLECTOR -->|4| O_HEALTH
+  N_SHELL -->|5| O_PROM
+  N_SHELL -->|6| O_JSON
+  N_SHELL -->|7| O_HEALTH
+  O_PROM -->|8| O_COLLECTOR
+  O_JSON -->|9| O_COLLECTOR
+  O_CSV -->|10| O_COLLECTOR
+  O_LOG -->|11| O_COLLECTOR
+  O_OTLP -->|12| O_COLLECTOR
+  O_OTLP -->|13| TELEMETRY
+  O_MERGE -->|14| O_CONTRACT
