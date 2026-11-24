@@ -1,0 +1,84 @@
+=== 1. client leg TLS, backend leg plaintext (SCRAM done by Postgres through the relay)
+## sslmode=require
+  psql: backend leg ssl=false -
+  psql: You are connected to database "postgres" as user "postgres" on host "127.0.0.1" at port "6543".
+  psql: SSL connection (protocol: TLSv1.3, cipher: TLS_AES_128_GCM_SHA256, compression: off)
+## sslmode=verify-full sslrootcert=ca.pem host=localhost
+  psql: ok verify-full
+## default sslmode (prefer)
+  psql: ok prefer
+  psql: You are connected to database "postgres" as user "postgres" on host "127.0.0.1" at port "6543".
+  psql: SSL connection (protocol: TLSv1.3, cipher: TLS_AES_128_GCM_SHA256, compression: off)
+## sslmode=disable
+  psql: ok disable
+## sslmode=require channel_binding=require
+  psql: psql: error: connection to server at "127.0.0.1", port 6543 failed: channel binding is required, but server did not offer an authentication method that supports channel binding
+## pgbench -S simple protocol over TLS, 4 clients 200 tx
+  psql: starting vacuum...end.
+  psql: number of transactions actually processed: 800/800
+  psql: number of failed transactions: 0 (0.000%)
+## smuggled plaintext
+  smuggled plaintext after SSLRequest: proxy answered "S" then 0 more bytes, err=EOF
+--- relay log
+connection:
+  client leg: TLS TLS 1.3 TLS_AES_128_GCM_SHA256, handshake 17.1ms
+  client SASL mechanism "SCRAM-SHA-256", GS2 header "y,,"
+connection:
+  client leg: TLS TLS 1.3 TLS_AES_128_GCM_SHA256, handshake 11.5ms
+  client SASL mechanism "SCRAM-SHA-256", GS2 header "y,,"
+connection:
+  client leg: TLS TLS 1.3 TLS_AES_128_GCM_SHA256, handshake 11.3ms
+  client SASL mechanism "SCRAM-SHA-256", GS2 header "y,,"
+connection:
+  client leg: plaintext
+  client SASL mechanism "SCRAM-SHA-256", GS2 header "n,,"
+connection:
+  client leg: TLS TLS 1.3 TLS_AES_128_GCM_SHA256, handshake 9.8ms
+connection:
+  client leg: TLS TLS 1.3 TLS_AES_128_GCM_SHA256, handshake 13.5ms
+  client SASL mechanism "SCRAM-SHA-256", GS2 header "y,,"
+connection:
+  client leg: TLS TLS 1.3 TLS_AES_128_GCM_SHA256, handshake 12.2ms
+  client SASL mechanism "SCRAM-SHA-256", GS2 header "y,,"
+connection:
+  client leg: TLS TLS 1.3 TLS_AES_128_GCM_SHA256, handshake 4.7ms
+  client SASL mechanism "SCRAM-SHA-256", GS2 header "y,,"
+connection:
+  client leg: TLS TLS 1.3 TLS_AES_128_GCM_SHA256, handshake 3.6ms
+  client SASL mechanism "SCRAM-SHA-256", GS2 header "y,,"
+connection:
+  client leg: TLS TLS 1.3 TLS_AES_128_GCM_SHA256, handshake 2.9ms
+  client SASL mechanism "SCRAM-SHA-256", GS2 header "y,,"
+connection:
+  client leg: TLS TLS 1.3 TLS_AES_128_GCM_SHA256, handshake 7.6ms
+  client SASL mechanism "SCRAM-SHA-256", GS2 header "y,,"
+connection:
+  closed in prelude: tls handshake: tls: first record does not look like a TLS handshake
+=== 2. client leg TLS, backend leg TLS
+## sslmode=require (channel_binding default = prefer)
+  psql: psql: error: connection to server at "127.0.0.1", port 6543 failed: FATAL:  SCRAM channel binding check failed
+## sslmode=require channel_binding=disable
+  psql: backend leg ssl=true TLSv1.3
+--- relay log
+connection:
+  client leg: TLS TLS 1.3 TLS_AES_128_GCM_SHA256, handshake 5.8ms
+  backend leg: TLS TLS 1.3
+  client SASL mechanism "SCRAM-SHA-256-PLUS", GS2 header "p=t"
+connection:
+  client leg: TLS TLS 1.3 TLS_AES_128_GCM_SHA256, handshake 9.6ms
+  backend leg: TLS TLS 1.3
+  client SASL mechanism "SCRAM-SHA-256", GS2 header "n,,"
+=== 3. TLS off at the proxy (answers N)
+## default sslmode (prefer)
+  psql: ok prefer, fell back to plaintext
+## sslmode=require
+  psql: psql: error: connection to server at "127.0.0.1", port 6543 failed: server does not support SSL, but SSL was required
+--- relay log
+connection:
+  client leg: plaintext
+  client SASL mechanism "SCRAM-SHA-256", GS2 header "n,,"
+connection:
+  closed in prelude: EOF
+=== 4. handshake CPU cost (Go go1.26.8, TLS 1.3, loopback; host load: 23.87 14.63 7.67)
+  ECDSA P-256  300 full handshakes: 3.27 ms CPU each (client+server), 3.92 ms wall each
+  RSA 2048     300 full handshakes: 6.08 ms CPU each (client+server), 7.76 ms wall each
