@@ -2,13 +2,14 @@
 
 Operational document, written by the Fable orchestrator on 2026-11-24 for Nick's approval.
 **Status: PROPOSAL. Nothing below is authorized to be built until Nick approves it in chat.**
+**Amended 2026-11-24** with Nick's observability amendment (CSV flush, DuckDB analysis, the OTLP → Collector → Prometheus chain). It changes sections 6.5, 7.1, 7.4, 7.6–7.9 and 11, chunks 3–16, and the tables in sections 14, 16 and 17. The chunk list, the chunk order and the open questions in section 18 are unchanged.
 The diagrams that go with it are in [docs/c4/](docs/c4/README.md); both are published for review at
 https://nickstrad.github.io/mini-gateway/.
 
 Inputs, in order of authority:
 
 1. Nick's 14 steering answers of 2026-11-24 (`/root/briefs/zgateway-steering-answers.md`). They govern.
-2. The observability / horizontal-scale / *Release It!* note (`/root/briefs/zgateway-observability-scale-releaseit-note.md`) and the seat ruling (`/root/briefs/zgateway-seat-ruling.md`).
+2. The observability / horizontal-scale / *Release It!* note (`/root/briefs/zgateway-observability-scale-releaseit-note.md`) and the seat ruling (`/root/briefs/zgateway-seat-ruling.md`). Also the observability amendment of 2026-11-24 (`/root/briefs/zgateway-observability-csv-duckdb-amendment.md`), which extends steering answer 13 and does not replace it.
 3. The spec, [docs/project-source.md](docs/project-source.md).
 4. [INFLUENCES.md](INFLUENCES.md) — 100 influences and 18 conflicts. Written before the steering, with Redis as its working assumption. Where it disagrees with the steering, the steering wins; every such override is listed in section 2.
 
@@ -36,7 +37,7 @@ In one process it has these parts:
 - **Coalescer.** Identical read-only statements that arrive together share one database round trip. Writes are never shared.
 - **Batcher.** When a database connection frees up and several single-statement requests are already waiting, they can be written to it in one go. No timer.
 - **Retry policy.** An interface with two policies: off (the default), and "retry once, only if nothing reached the database, within a 10% budget".
-- **Observability.** Every part keeps counters and gauges and returns them from `Snapshot()`. One collector reads the snapshots; separate exporters turn them into Prometheus text, JSON, CSV, a log line and (last) an OTLP push.
+- **Observability.** Every part keeps counters and gauges and returns them from `Snapshot()`. That snapshot is the one raw export. One collector reads the snapshots, and adapters behind one interface turn its output into Prometheus text, JSON, CSV files flushed to disk, a log line and (last) an OTLP push that reaches Prometheus through an OpenTelemetry Collector. No part knows which adapters exist. Tests assert on the flushed CSV files, with DuckDB for the SQL, so no metrics server has to run during testing.
 - **Simulator.** A deterministic, single-threaded test harness with a virtual clock, simulated byte-stream connections, a fake Postgres and simulated clients. It is built first and everything else is proved in it before it is proved against a real Postgres.
 
 Scope fixed by the steering: Postgres only in v1; simple-query protocol only; transaction pooling; session-level features rejected rather than pinned; no cache; no replicas; no run-time coordination between proxy instances; N instances supported through a static fleet configuration.
@@ -61,7 +62,7 @@ Not in v1 (details in section 17): the extended query protocol (Parse/Bind/Execu
 | 10 | No promotions | Nothing promoted. folly's rule (F3) stays what it was: a gauge and a simulator-only comparison arm. P12 stays out. | none |
 | 11 | GCRA as outer gate; AIMD in v1; timer-free batching | Chunks 10 and 12. **Note:** INFLUENCES conflict C3 said a Postgres variant "has no micro-batching". The steering keeps batching, so section 3 (decision D9) defines what it honestly means for Postgres; it is flagged in open question 3. | Overrides C3's "no micro-batching in B". |
 | 12 | Retry policy behind an interface, default OFF | Chunk 13 | **Overrides** the recommendation (retry on by default). |
-| 13 | Full snapshot observability, OTLP exporter last | Section 7; chunk 16 is the last build chunk | none |
+| 13 | Full snapshot observability, OTLP exporter last. Amended 2026-11-24: CSV flush as a testing path, DuckDB over the flushed files, OTLP → Collector → Prometheus as the production path | Section 7 (7.7–7.9 for the amendment); section 6.5; chunk 16 is the last build chunk | none |
 | 14 | Per-instance enforcement, static fleet config, graceful drain | Section 8; chunk 14 | none |
 
 Two entries in INFLUENCES.md were written in Redis terms and are translated here, not overridden: F30's "RESP has no Retry-After" becomes "a distinct SQLSTATE per refusal", and its "`MGET` width caps" becomes reply-size and batch-width caps.
@@ -222,7 +223,7 @@ Testing is the main deliverable of this project, and the simulator lands before 
 ### 6.3 Gates and where they run
 
 - **CI runs fast tests only** (target: under five minutes): build, vet, the lints, unit and property tests with a small fixed budget, the pinned simulator seeds, shell tests with `-race`, fuzz seed corpora as plain tests. No Docker, no sweeps.
-- **On-demand scripts** (in `scripts/`, indexed in `agent_work/INDEX.md`): `sweep.sh` (hundreds of seeds per scenario), `fuzz.sh` (timed fuzzing per target), `race-long.sh`, `soak.sh` (long steady-state run), `tier-r.sh` (real Postgres scenarios), `bench.sh`.
+- **On-demand scripts** (in `scripts/`, indexed in `agent_work/INDEX.md`): `sweep.sh` (hundreds of seeds per scenario), `fuzz.sh` (timed fuzzing per target), `race-long.sh`, `soak.sh` (long steady-state run), `tier-r.sh` (real Postgres scenarios), `bench.sh`, `csv-assert.sh` (SQL assertions over flushed CSV files with DuckDB, section 6.5), `obs-chain.sh` (the Collector and Prometheus chain check, chunk 16).
 - **The local landing gate is the landing authority**, not CI: it runs the chunk's full list including the sweep and tier R, writes a machine-readable result, and fails closed.
 - **Lints:** the determinism lint on core packages; an import lint (cores cannot import the wire layer or `pgproto3`; nothing outside the wire layer, the fake and the test clients imports `pgproto3`; `go.mod` has exactly one requirement); a bounded-channel lint for the shell (no unbuffered-forever or unbounded structures without a named cap).
 - **Makefile:** `make test` (the CI set), `make chaos` (the named chaos scenarios, tier S, then tier R if Docker is present), `make bench` (section 11). Each exists from chunk 0 and fails with "not built yet" until its chunk lands, so a green target is never a stub.
@@ -237,6 +238,39 @@ Testing is the main deliverable of this project, and the simulator lands before 
 | Noisy-neighbour fairness (> 99% success, p99 within 2×, flooder takes > 95% of shedding) | In simulation: compared exactly against a control run of the quiet tenant alone, same seed. Against real Postgres: the spec's thresholds. |
 | CoDel "wait converges to target" | **Restated per mode** (steering answer 3). Timeout-rule mode: every served request waited ≤ the interval; depth is the same for a run of length T and 4T; the database is never idled by shedding. Control-law mode: under moderate overload the sojourn time returns to the target; under heavy open-loop overload it does not converge (the Phase 0 toy showed this) and depth is bounded by the queue's hard capacity instead. The head-to-head table states this plainly. |
 
+### 6.5 Asserting on flushed numbers: CSV and DuckDB
+
+Added by the observability amendment. The exact checks of section 6.2 read the engine's state inside the test process. This section adds the outside view: a run flushes its snapshots to CSV files (section 7.7), and assertions are made on those files, the way an operator would read telemetry. No OpenTelemetry Collector and no Prometheus runs for any of it.
+
+Two levels:
+
+- **Round trip, in Go, in CI.** The scenario harness turns the CSV flush on for every run, in both tiers. At the end of a run it reads the final flush back with `encoding/csv` and requires it to equal the final in-memory snapshot, value for value. One helper does this for every scenario, so every scenario proves on every run that the exported numbers are the real numbers. In tier S the flushed files of two runs with the same seed must be byte-identical; this extends the replay law to the files.
+- **Scenario assertions, in SQL, with DuckDB.** Each scenario may ship SQL files under `test/analysis/<scenario>/`. `scripts/csv-assert.sh <run directory> <sql file>` runs them with the DuckDB command-line tool over the flushed files (`read_csv`). A query returns the rows that violate the claim, so zero rows is a pass. The runner fails closed: on any returned row, on a schema version it does not know, on a missing `run.csv` (the run did not finish), on an input with no rows for the metric under test (the "counters must move" rule), and when `duckdb` is not installed. It never skips.
+
+Where each level runs: the round trip runs in CI with everything else. The SQL assertions run in the local landing gate (the landing authority), in `make chaos`, in `make bench` and by hand. CI keeps to the Go toolchain and does not install DuckDB.
+
+DuckDB is a tool run over files after a run. It is not in `go.mod`, no Go package imports it, and the proxy and the simulator work without it. The import lint and the "one requirement" check already enforce this.
+
+**Which flows flush and what they assert.** Every scenario flushes from chunk 6 on; the table names the SQL assertions each chunk adds. The last column gives the PromQL it replaces, where a live Prometheus would otherwise be needed.
+
+| Chunk | Flow | Assertions on the flushed files | Otherwise needs |
+| --- | --- | --- | --- |
+| 3 | Chunk 2 baseline scenarios, tier S | The flush machinery itself: golden header for schema version 1; byte-identical files for one seed; the round trip. First SQL: the fake Postgres peaked at 500 connections for 500 clients; 1,000 identical reads were 1,000 database reads; workload sent = intended. Self-tests: a planted wrong number, an empty input and an unknown schema version each make the runner fail | — |
+| 4, 5 | Wire-level scenarios, tier S | Startup failures by reason = startup faults injected by kind. Reject list: classifier rejects = statements sent, and the fake Postgres statement count is 0 | `sum by (reason)` over a scrape |
+| 6 | Every walking-skeleton scenario, tiers S and R | Conservation per instance from exported counters: accepted = completed + failed + shed, with queued and in flight at 0 in the final flush. Proxy completed = workload completed (two components, one query). Error-contract counts by row = faults injected. First use against the real binary: the proxy runs with `obs.csv.dir` set and the same SQL files run on its files | `increase()` over the run per outcome |
+| 7 | Hard cap, reconnection storm, cold start, database restart | Over every flush: pool open + connecting ≤ cap, and the fake's connection peak ≤ cap. Storm: database connections flat while the baseline run (joined by scenario and seed) shows refusals. Dials per interval ≤ the creation limit, from differences between flushes. Recovery: completed-per-interval returns to its pre-fault level after the restart. Headline 1 is the output of a query | `max_over_time`, `rate()`, and two separate runs kept in one Prometheus |
+| 8 | Anti-bufferbloat per mode; 10× overload; head-to-head | Queue-wait percentiles computed from the bucket rows, per mode and load. Depth of the run of length T equals depth at 4T. Sheds by reason. **The head-to-head table in the book is one query's output** over the runs of every arm and load | `histogram_quantile` over `rate()` of buckets, per arm |
+| 9 | Noisy neighbour; many tenants, one flooder; held transactions | Per-tenant totals: the quiet tenant's completed count equals its count in the run where it is alone (tier S, a join of two runs) or exceeds 99% (tier R). The flooder's share of all shedding > 95%. With 10,000 tenants every tenant has its own rows, which the bounded Prometheus label cannot show | `sum by (tenant)`, and a tenant label that is capped at 32 |
+| 10 | Noisy neighbour + backend stall; limit against queue rule | The limit gauge over time: no increase between the stall's start and recovery; decreases by cause; number of direction changes under the stated bound. Rate-gate refusals per tenant = `53M02` count | `changes()`, `delta()` over a window |
+| 11 | Hot key; cancel; read-your-own-write | Database reads for the burst: ≤ 2 with the coalescer, 1,000 in the ablation arm (a join of two arms). Flights + hits = shareable reads. Waiters-per-flight totals | A comparison across two runs |
+| 12 | Batching off against on | Round trips and in-batch wait percentiles per arm, at low load and at saturation. This query's output decides the default | `histogram_quantile` per arm |
+| 13 | Retry storm; no statement applied twice | In every window of the run: retries ≤ 10% of first attempts plus the floor, from differences between flushes. Statements reaching the database bounded against the ablation arm. Writes applied in the fake = distinct writes sent | `increase()` ratios over sliding windows |
+| 14 | Three-instance set; drain; steady state | Fleet totals as sums over the three instances' rows: connections ≤ fleet budget, hot-key reads ≤ 3. The SQL sum and bucket merge must equal the output of the `obs` merge function, which checks the merge laws with a second implementation. Size gauges at three points level off. Requests cut mid-answer during drain = 0 | `sum without (instance)`, `histogram_quantile` over merged buckets |
+| 15 | `make bench`, `make chaos`, soak | Every benchmark run flushes at each publish interval. The validity gate (achieved rate within 2% of intended), per-arm medians and spread over the interleaved runs, the A/A noise floor, and the three headline tables are SQL over the per-run files (section 11). The "what is slow?" acceptance test is also answered by a query on the files | A Prometheus retaining every run, with a label per run and arm |
+| 16 | The production chain, tier R on demand | The flushed files are the reference: what Prometheus holds after the OTLP → Collector → Prometheus chain must equal what DuckDB reads from the CSV files of the same run (section 7.9) | This is the one flow that does run a live Prometheus |
+
+What the files cannot do: an assertion on flushed gauges sees the system at the flush instants only. Bounds that must hold at every event (the connection cap, for one) stay as simulator invariants; the components also export high-water marks so that a sampled view cannot miss a peak.
+
 ---
 
 ## 7. Observability architecture
@@ -245,11 +279,28 @@ First-class, like testing: it has its own landing-gate item and its own per-chun
 
 ### 7.1 Three layers, one direction of dependency
 
-1. **State in the component.** Each core keeps its counters and gauges as plain integers and fixed-size integer histograms. No telemetry imports. `Snapshot()` returns a copy as a plain struct.
-2. **One collector.** `internal/obs` walks the components of an instance and assembles one instance snapshot (with the instance id, build and config fingerprint). The engine publishes it at a fixed interval; readers get the last published copy (decision D12).
-3. **Exporters read only the collector's output.** Prometheus text, JSON stats, CSV writer (the evidence tables for scenarios and benchmarks), a structured one-line log, and — last — a hand-written OTLP/HTTP push exporter. Adding an exporter touches no component. All standard library.
+**The hard rule (observability amendment, 2026-11-24): one common raw export → the collector interface → adapters.** A component exports its numbers in exactly one way, its `Snapshot()`. The collector is the only reader of snapshots. Every output form is an adapter that reads only what the collector publishes. No component, core or engine knows that CSV, DuckDB, OpenTelemetry or Prometheus exists.
 
-Across instances, aggregation belongs to whoever reads the exporters: counters and gauges sum, histograms merge, ratios are recomputed from merged counters and never averaged. `internal/obs` ships the merge function, and the multi-instance scenarios use it.
+```
+components        Snapshot()  — plain structs: integer counters, gauges, fixed-size histograms
+    │             the one raw export; nothing else leaves a component
+    ▼
+collector         assembles one instance snapshot per publish interval and keeps the last copy
+    │             hands it to adapters through one interface
+    ▼
+adapters          Prometheus text │ JSON stats │ CSV flush to disk │ log line │ OTLP/HTTP push
+                                                     │                              │
+                                                     ▼                              ▼
+                                        files  ←  DuckDB (tests, analysis)   OpenTelemetry Collector → Prometheus
+```
+
+1. **State in the component.** Each core keeps its counters and gauges as plain integers and fixed-size integer histograms. No telemetry imports. `Snapshot()` returns a copy as a plain struct. This is the common raw export.
+2. **One collector.** `internal/obs` walks the components of an instance and assembles one instance snapshot (with the instance id, build and config fingerprint). The engine publishes it at a fixed interval; readers get the last published copy (decision D12). The test-side actors (the fake Postgres, the simulated workload, the load generator) hand their snapshots to a collector in the same way, so their numbers reach the same adapters.
+3. **Adapters read only the collector's output.** Elsewhere this plan calls them exporters; the words mean the same thing. All implement one small interface (take an instance snapshot, produce output) and pass one conformance test. The set: Prometheus text; JSON stats; the **CSV flush** (section 7.7), which is also the testing path; a structured one-line log; and, last, the hand-written **OTLP/HTTP push**, the proxy's end of the production chain to Prometheus (section 7.9). Adding an adapter touches no component. All standard library.
+
+The rule is enforced, not only stated: each adapter is its own package under `internal/obs/`, the import lint forbids any core and the engine from importing one, and no telemetry or database library can be imported anywhere (`go.mod` keeps its one requirement). Chunk 16's gate checks that adding the last adapter changed no component file.
+
+Across instances, aggregation belongs to whoever reads the adapters' output: counters and gauges sum, histograms merge, ratios are recomputed from merged counters and never averaged. `internal/obs` ships the merge function, and the multi-instance scenarios use it.
 
 ### 7.2 Three rules this project adds
 
@@ -267,7 +318,7 @@ Across instances, aggregation belongs to whoever reads the exporters: counters a
 
 ### 7.4 Label policy
 
-Prometheus gets low-cardinality labels only: component, outcome, reason, mode, and a **bounded** tenant label — the configured tenants up to `obs.prom_tenant_max` (default 32), the rest folded into `other`. Never statement text, client address or error text. Full per-tenant detail is in the snapshot, the JSON endpoint and CSV. Exporter label sets for tenants that went quiet are evicted (steady state).
+Prometheus gets low-cardinality labels only: component, outcome, reason, mode, and a **bounded** tenant label — the configured tenants up to `obs.prom_tenant_max` (default 32), the rest folded into `other`. Never statement text, client address or error text. Full per-tenant detail is in the snapshot, the JSON endpoint and CSV. Exporter label sets for tenants that went quiet are evicted (steady state). The same discipline applies on the OTLP path, since it ends in Prometheus: the OTLP adapter sends the bounded tenant label, never the full tenant set. Histogram buckets are bounded too: the Prometheus text and OTLP adapters re-bucket each histogram to one fixed short list of bounds (`obs.export_buckets`, about 16, from 100 µs to 60 s); the full-resolution buckets are in the snapshot, JSON and CSV.
 
 ### 7.5 Coverage
 
@@ -289,7 +340,97 @@ Each chunk states what its mechanism does to the health mapping.
 
 ### 7.6 Landing gate item
 
-A chunk that adds or changes a component does not land without: its `Snapshot()`; its mapping in every exporter that exists at that point; a test showing its counters move and conservation holds; its row in the coverage table; its health rule. Acceptance test of the whole (chunk 15): add latency to the database below every timeout and answer "what is slow?" from the stats surface alone; then stop the database and time how long until health says `degraded`.
+A chunk that adds or changes a component does not land without: its `Snapshot()`; its mapping in every exporter that exists at that point, including its rows in the CSV metric registry (section 7.7); a test showing its counters move and conservation holds; a CSV-flush assertion for each of its end-to-end scenarios (section 6.5); its row in the coverage table; its health rule. Acceptance test of the whole (chunk 15): add latency to the database below every timeout and answer "what is slow?" from the stats surface alone; then stop the database and time how long until health says `degraded`.
+
+### 7.7 The CSV flush adapter and its schema (version 1)
+
+The CSV adapter flushes snapshots to files on disk. It has two purposes: evidence tables for scenarios and benchmarks, and a way to capture and check metrics with nothing else running. A test turns the flush on, runs, and asserts on the numbers in the files.
+
+**When it flushes.** At every publish interval when `obs.csv.dir` is set (rows are appended), and once more at the end of a run or on shutdown (the final flush). A test harness can also ask for a flush at a chosen instant. In the simulator the flush is synchronous at a virtual instant. In the real binary the adapter writes from its own goroutine and never blocks the engine.
+
+**One run, one directory, three files.** The directory is `<obs.csv.dir>/<run_id>/`.
+
+`metrics.csv` — one row per scalar value per flush:
+
+| Column | Type | Meaning |
+| --- | --- | --- |
+| `schema_version` | integer | `1` |
+| `run_id` | text | Set by whoever starts the run. Simulator: `<scenario>/<seed>/<arm>`. `bench.sh`: `<benchmark>/<run number>/<arm>`. A real proxy: the config value `obs.csv.run_id` |
+| `flush_seq` | integer | Publish sequence number of the snapshot, from 0. In the simulator all instances publish at the same virtual instants, so equal values mean the same instant |
+| `t_ns` | integer | Nanoseconds since the run began on the driver's clock: virtual time in tier S, the monotonic clock in tier R. The adapter stamps it; the snapshot itself still carries no time |
+| `instance` | text | Instance id |
+| `component` | text | `pool`, `admission`, `coalescer`, `batcher`, `retry`, `wire`, `classifier`, `engine`, `obs`; and from the test side `fakepg`, `workload`, `loadgen`, `simnet` |
+| `metric` | text | A name from the metric registry (below) |
+| `kind` | text | `counter` (cumulative since start, never decreases) or `gauge` (value at the snapshot) |
+| `tenant`, `outcome`, `reason`, `mode` | text | The label columns of section 7.4, always present, empty when a metric does not use one. The tenant column is **not** bounded here: every tenant has its own rows |
+| `value` | integer | Integers only. No ratios and no floating point; a reader recomputes ratios from counters |
+
+`histograms.csv` — one row per non-empty bucket per flush: the same columns up to `mode` (without `kind`), then `unit` (`ns`, `bytes` or `count`), `bucket_lo` (inclusive), `bucket_hi` (exclusive) and `count` (cumulative since start). These are the full-resolution buckets of the integer histogram, so percentiles are computed by the reader, and histograms from several instances merge by adding counts per bucket. Clamped out-of-range values appear as counters in `metrics.csv`.
+
+`run.csv` — one row, written last: `schema_version`, `run_id`, `scenario`, `tier` (`S`, `R` or `bench`), `seed`, `arm`, `instances`, `build`, `config_fingerprint`, `flushes`, `duration_ns`. A directory without `run.csv` is a run that did not finish, and assertions on it fail.
+
+**Stability rules.**
+
+- The same columns in the same order in every flush of every run. Rows are sorted by (`flush_seq`, `instance`, `component`, `metric`, labels), so a tier S run writes byte-identical files for the same seed.
+- A registered metric that has no tenant label is written in every flush, also when its value is 0, so "nothing was shed" is a row that says 0 and not a missing row. A tenant's rows appear from the tenant's first activity and stay for the rest of the run.
+- **Versioning.** `schema_version` starts at 1. Adding a metric adds rows, not columns, and does not change the version. Any change to a column (added, removed, renamed, retyped, or changed in meaning) and any rename or change in meaning of a registered metric raises the version. Every SQL file checks the version before it reads anything else.
+- **The metric registry** is `docs/csv-schema.md`: the column tables above and every metric with its component, kind, labels and unit. It is generated from the code and has a test like the other generated contract documents, so a metric cannot be exported without being documented. A golden-header test pins the columns.
+- **Bounded.** `obs.csv.max_bytes` caps a run directory. At the cap, or on any write error, a real proxy stops writing, counts it (`csv_flush_errors`, `csv_rows_dropped`) and carries on; the data path is never slowed. A test run treats the same events as a failure.
+
+### 7.8 DuckDB over the flushed files
+
+DuckDB reads the flushed files directly with `read_csv` so that tests and ad-hoc analysis can run real SQL over the metrics. It is an analysis-side tool and never a runtime dependency: the proxy does not import it, link it or start it (section 6.5 has the enforcement and says where the assertions run).
+
+- **Shape.** `test/analysis/views.sql` defines the views `metrics`, `hist`, `runs` and `final` (the last flush of each run) over a directory of runs, with the column types written out instead of detected. DuckDB reads an empty field as NULL, so the views turn empty label columns back into the empty string. A glob over several run directories puts many runs, arms and seeds in one table, which is what makes comparisons between runs a join.
+- **Version.** Nick named DuckDB 2.0. vm-1 has the DuckDB command-line tool 1.5.5 today. Chunk 3 pins the version the scripts require and the gate records `duckdb --version` beside its result. The SQL uses only `read_csv` with explicit columns, aggregates and window functions.
+- **Checked on vm-1, 2026-11-24:** a sample `metrics.csv` and `histograms.csv` in this schema were read with DuckDB 1.5.5, and the two queries below returned the expected answers.
+
+```sql
+-- The flooder (tenant A) must take more than 95% of all shedding. Rows returned are violations.
+SELECT run_id, sum(value) FILTER (WHERE tenant = 'A') AS shed_a, sum(value) AS shed_all
+FROM final
+WHERE component = 'admission' AND metric = 'requests' AND outcome = 'shed'
+GROUP BY run_id
+HAVING sum(value) = 0 OR 100 * sum(value) FILTER (WHERE tenant = 'A') <= 95 * sum(value);
+
+-- Upper bound of the quiet tenant's p99 queue wait, from the bucket rows, merged over instances.
+WITH b AS (SELECT run_id, bucket_hi, sum(count) AS n FROM hist
+           WHERE metric = 'queue_wait' AND tenant = 'B' AND flush_seq = (SELECT max(flush_seq) FROM hist)
+           GROUP BY ALL),
+     c AS (SELECT *, sum(n) OVER (PARTITION BY run_id ORDER BY bucket_hi) AS cum,
+                     sum(n) OVER (PARTITION BY run_id) AS total FROM b)
+SELECT run_id, min(bucket_hi) AS p99_upper_ns FROM c WHERE 100 * cum >= 99 * total GROUP BY run_id;
+```
+
+**What this makes checkable with no Prometheus running** (the per-chunk list is the table in section 6.5):
+
+| Assertion | With a live Prometheus it would be | From the files |
+| --- | --- | --- |
+| Shed counts by tenant and reason after a scenario | `sum by (tenant, reason) (increase(…[run]))`, limited to the 32 labelled tenants | A grouped sum over the final flush, for every tenant |
+| Queue-wait and latency percentiles | `histogram_quantile` over about 16 buckets, interpolated | The same computation over the full-resolution bucket rows; exact bucket bounds |
+| Per-tenant totals and conservation (accepted = completed + failed + shed + queued + in flight) | Several queries compared by hand | One query; a returned row is a violation |
+| Fleet totals at N instances | `sum without (instance)` | A sum over instances, compared with the `obs` merge function's output |
+| Behaviour over time: recovery after a fault, dial rate, limit not rising during a stall, retry ratio per window | `rate()`, `delta()`, `changes()`, `max_over_time` over a retained series | Window functions over `flush_seq` |
+| Mechanism on against off; proxy against the direct baseline; one seed against another | Two runs retained side by side with labels to tell them apart | A join of two `run_id`s |
+| Benchmark verdicts: medians, spread, A/A noise floor over 10 interleaved runs per arm | Not a natural fit | `median` and quantiles grouped by arm |
+
+### 7.9 The production chain: OTLP → OpenTelemetry Collector → Prometheus
+
+The final adapter is the production path, end to end:
+
+```
+component Snapshot() → collector → OTLP adapter ──OTLP/HTTP JSON push──► OpenTelemetry Collector ──► Prometheus
+   (plain structs)    (internal/obs)  (internal/obs/otlp, stdlib)          otlp receiver (:4318)         scrapes the Collector's
+                                       bounded queue, drop-and-count        batch processor               Prometheus endpoint
+                                                                            prometheus exporter (:8889)   (:8889); UI on :9090
+```
+
+- **Proxy side.** The hand-written OTLP/HTTP push adapter of steering answer 13: standard library only, no OpenTelemetry SDK. It reads the collector's published snapshot like every other adapter and posts to `obs.otlp.endpoint` (for example `http://127.0.0.1:4318/v1/metrics`) every `obs.otlp.interval` (initial value 10 s). Counters go out as cumulative monotonic sums, which is what the snapshot already holds; gauges as gauges; histograms as explicit-bucket histograms on the short bound list of section 7.4. The instance id is the `service.instance.id` resource attribute. OTLP needs wall-clock timestamps; the adapter stamps them at push time, and the snapshot still carries none.
+- **Collector.** Receives OTLP over HTTP, batches, and exposes the metrics on a Prometheus endpoint, with resource attributes turned into labels so that `instance` survives. The fleet view is then a sum over `instance` in Prometheus, the same merge rule as everywhere else.
+- **Prometheus.** Scrapes the Collector. The Collector exposing an endpoint for Prometheus to scrape is chosen over the Collector writing to Prometheus by remote write because it needs no extra Prometheus flags; either satisfies the chain.
+- **Cardinality.** Unchanged from section 7.4: Prometheus sees component, outcome, reason, mode and the bounded tenant label. Per-tenant detail stays in the snapshot, JSON and CSV.
+- **Runnable, not only drawn.** Chunk 16 ships a docker-compose dev setup for the Collector and Prometheus leg (`deploy/obs-dev/`, started with `make obs-up`), and a check that runs a scenario through the whole chain and compares Prometheus with the CSV flush of the same run. Details are in chunk 16.
+- **The Prometheus text endpoint stays** (`/metrics` on the admin port) for a direct scrape, for `curl`, and for setups with no Collector. The two routes carry the same metric names and labels, checked by a test, and one Prometheus should use one of them, not both.
 
 ---
 
@@ -467,7 +608,7 @@ Apollo's post describes three gates (is the run valid, do repeats agree, did the
 - Margins and verdicts are **declared before the run**; "**inconclusive**" is an allowed verdict.
 - **Calibration** first: measure the real backend's capacity open-loop, write it to a file, and express every scenario as a fraction of it.
 - **Headlines are exact counts**, with latency percentiles second: database connections under 500 clients (measured, stated as clients ÷ pool — the spec's "19×" and "~15×" are labelled as a model, not our result); database reads per hot-key burst with and without coalescing; shed attribution by tenant; goodput. Then the quiet tenant's p99 under a noisy neighbour, unprotected FIFO against the full admission stack, in both CoDel modes.
-- Results are emitted in Go benchmark text format so `benchstat` can read them, but the report uses an in-repo median/spread script (no new dependency).
+- Every run flushes its snapshots (proxy and load generator) to CSV at each publish interval (section 7.7). The report — the validity gate, medians and spread per arm, the A/A noise floor, the headline tables — is a set of SQL files run by DuckDB over the per-run files (sections 6.5 and 7.8). This replaces the in-repo median/spread script the first draft of this plan proposed. DuckDB is a tool the benchmark scripts need, like Docker; it is not a dependency of the Go module. Results are also emitted in Go benchmark text format so `benchstat` can read them.
 - The scripts ship in the repository so a reader can re-run them on real hardware.
 
 **Deliverable Nick added (steering answer 7): the trade-offs write-up.** A book chapter, "How much to trust these numbers" (source `book/chapters/…-benchmark-trade-offs.md`, Neon's prose from evidence gathered in chunk 15; also linked from the README). It must cover:
@@ -613,15 +754,15 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 ### Chunk 3 — Observability spine
 
-**Purpose.** The path from a component's numbers to something a person or a scraper can read, built before the components so each one plugs in on arrival.
+**Purpose.** The path from a component's numbers to something a person, a test or a scraper can read, built before the components so each one plugs in on arrival. It also builds the testing path of the observability amendment: flush to CSV, assert on the files.
 
-**Deliverables.** `internal/obs`: the collector (instance snapshot assembly, publish interval, last-copy reads); the merge function across instances; exporters — JSON stats, CSV writer, one-line structured log, Prometheus text with the bounded tenant label and label eviction; the three-state health type and its rule table; the `obs.detail` gate. The cost-model benchmark and the zero-allocation gate. An exporter conformance test any future exporter must pass.
+**Deliverables.** `internal/obs`: the collector (instance snapshot assembly, publish interval, last-copy reads); the adapter interface every output implements; the merge function across instances; adapters — JSON stats, the **CSV flush adapter** with schema version 1 (section 7.7: the three files, flush per interval and final flush, sorted rows, the size cap, drop-and-count), one-line structured log, Prometheus text with the bounded tenant label, the short export bucket list and label eviction; the three-state health type and its rule table; the `obs.detail` gate. The cost-model benchmark and the zero-allocation gate. An adapter conformance test any future adapter must pass. `docs/csv-schema.md`, generated, with its test. **The analysis side (section 7.8):** `test/analysis/views.sql`, `scripts/csv-assert.sh` with its fail-closed rules and the pinned DuckDB version, the Go round-trip helper the scenario harness will call for every run, and the first SQL assertion files, for the chunk 2 baseline.
 
-**Tests.** Golden output per exporter; Prometheus text parses under the exposition grammar (a small in-repo checker); merge laws (sum, histogram merge, ratios recomputed); label bound holds with 10,000 tenants; snapshots contain no time and no map order (run-twice byte equality). e2e for this chunk: the chunk 2 baseline scenarios exported through every exporter, CSV checked against the scenario's own counts.
+**Tests.** Golden output per adapter; Prometheus text parses under the exposition grammar (a small in-repo checker); merge laws (sum, histogram merge, ratios recomputed); label bound holds with 10,000 tenants; snapshots contain no time and no map order (run-twice byte equality). CSV: golden header; the same seed gives byte-identical files; the final flush read back equals the snapshot; zero-valued metrics are present as rows; the size cap and a write error are counted and do not block. e2e for this chunk: the chunk 2 baseline scenarios exported through every adapter, and the baseline's counts asserted from the flushed files with DuckDB (500 clients, 500 database connections at peak; 1,000 identical reads, 1,000 database reads; sent = intended). Self-tests of the assertion runner: a planted wrong number, an input with no rows, a missing `run.csv` and an unknown schema version each fail it.
 
-**Observability.** This chunk is the obligation's machinery; it adds the collector's own counters (publishes, export errors).
+**Observability.** This chunk is the obligation's machinery; it adds the collector's own counters (publishes, export errors, CSV flushes, flush errors, rows dropped).
 
-**Landing.** Cost numbers recorded for section 7.3; conformance test in place. Size: ~1,200 lines.
+**Landing.** Cost numbers recorded for section 7.3; conformance test in place; schema version 1 and the metric registry published; the import lint shows no core or engine package importing an adapter. Size: ~1,400 lines.
 
 ---
 
@@ -631,7 +772,7 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Deliverables.** `internal/pgwire`: the incremental framer (with a maximum message size); the client-facing session machine — TLS and GSS requests answered "no", startup message, tenant lookup by user, SCRAM-SHA-256 server side and trust, the parameter-status set, proxy-issued key data, cancel-request recognition, termination; the database-facing session machine — startup, SCRAM client side, collecting server parameters, key data, ready; SCRAM as pure functions shared with the simulator's fake and test clients; the query-cycle tracker that follows a reply to its end marker and reports the status byte, unsolicited messages and protocol surprises. Unknown but well-framed message types on the database side are passed through, not rejected.
 
-**Tests.** Golden bytes for every message we produce; every-chunking tests (a conversation split at every byte boundary gives the same events); fuzzing of the framer and both machines (no panic, bounded memory); SCRAM against the RFC 7677 test vector and against real Postgres (tier R); wrong password, unknown user, wrong database give the right fatal errors. e2e for this chunk, in the simulator: a simulated client completes startup through the two machines wired back-to-back to the fake Postgres, under one-byte delivery and under each startup-phase fault (accept and silence, reset mid-handshake, garbage), each ending in the expected error class within its deadline.
+**Tests.** Golden bytes for every message we produce; every-chunking tests (a conversation split at every byte boundary gives the same events); fuzzing of the framer and both machines (no panic, bounded memory); SCRAM against the RFC 7677 test vector and against real Postgres (tier R); wrong password, unknown user, wrong database give the right fatal errors. e2e for this chunk, in the simulator: a simulated client completes startup through the two machines wired back-to-back to the fake Postgres, under one-byte delivery and under each startup-phase fault (accept and silence, reset mid-handshake, garbage), each ending in the expected error class within its deadline. CSV-flush assertion: startup failures by reason in the wire snapshot equal the startup faults injected by kind.
 
 **Observability.** Wire snapshot: startups begun, completed and failed by reason; authentication failures; messages and bytes by direction; protocol violations; oversized messages.
 
@@ -645,7 +786,7 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Deliverables.** In `internal/pgwire`: the SQL lexer (strings, escape strings, dollar quotes, comments, identifiers, statement splitting); the classifier producing a work unit — reject (with reason), transaction control, read-only-provable, coalescable (with key), batchable; the reject list of section 9.4; the function allow-list. `internal/work`: the vocabulary types. The error table as code, with the generator and test for `docs/error-contract.md`; builders for every proxy-made reply (error plus the correct end marker; the discard-until-sync rule for extended-protocol messages). The reject-list document generated the same way.
 
-**Tests.** A classifier corpus (several hundred statements with expected classes, including hostile ones: keywords inside strings and comments, dollar-quoted bodies, data-changing common table expressions, locking clauses, multi-statement messages). Property: classification is identical for every way of padding with whitespace and comments. Conservative-by-construction test: any statement the lexer cannot fully tokenise is never coalescable or batchable. Differential test against real Postgres (tier R): every statement classed "transaction control: no" leaves status `I`; every statement classed read-only-provable leaves the fake's and the real table's write log unchanged. Fuzz: no panic. e2e for this chunk: each reject-list feature sent by a simulated client through the wire machines gets `0A000` and nothing reaches the fake Postgres (its statement counter stays zero).
+**Tests.** A classifier corpus (several hundred statements with expected classes, including hostile ones: keywords inside strings and comments, dollar-quoted bodies, data-changing common table expressions, locking clauses, multi-statement messages). Property: classification is identical for every way of padding with whitespace and comments. Conservative-by-construction test: any statement the lexer cannot fully tokenise is never coalescable or batchable. Differential test against real Postgres (tier R): every statement classed "transaction control: no" leaves status `I`; every statement classed read-only-provable leaves the fake's and the real table's write log unchanged. Fuzz: no panic. e2e for this chunk: each reject-list feature sent by a simulated client through the wire machines gets `0A000` and nothing reaches the fake Postgres (its statement counter stays zero). CSV-flush assertion: classifier rejects equal statements sent, and the fake Postgres statement count is 0.
 
 **Observability.** Classifier counters: statements by class, rejects by reason, unclassifiable. Error-contract counters keyed by row.
 
@@ -659,7 +800,7 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Deliverables.** `internal/proxy`: the engine (decision D1) with its stage seams — classify, gate, coalesce, queue, lease, forward, release — each a small interface with a pass-through implementation; the transaction-lease lifecycle (lend on first statement, hold while status is `T` or `E`, release on `I`); reply relay with bounded buffers and back pressure both ways (D5); the dirty-connection rule in its simplest form (close on doubt); the "reached the database?" fact recorded for every failure; the `draining` input reserved. `internal/shell`: listeners, per-connection reader and writer goroutines, bounded mailboxes, deadlines on every socket operation, the admin listener on its own port serving health, JSON stats and Prometheus from the published snapshot. `internal/config`: the config file, validation, the fleet block (parsed; division used from chunk 7). `cmd/mini-gateway`. `cmd/loadgen` in its first form (open-loop, intended-send-time, one workload). `test/e2e`: the scenario harness for tier S and tier R, with the Docker setup for Postgres 17. `docs/timeout-budget.md` and `docs/capacity-table.md` generators. `docs/extension-seams.md`. The fault × path matrix, first rows.
 
-**Tests.** e2e, both tiers: *results through the proxy equal results direct* (same workload, same seed); *transaction integrity* — with many clients running interleaved multi-statement transactions over few connections, no statement of one client ever runs on a connection inside another client's transaction (checked from the fake's log, exactly; this is the core safety property of transaction pooling); *fragmentation* — one-byte delivery on both sides changes nothing; *reject list end-to-end*; *client vanishes mid-statement and mid-transaction* — the connection is not reused dirty; *database killed mid-statement* — the client gets the row of the error contract the matrix predicts; *slow reader* — bounded memory, proxy stops reading the database. Shell tests under `synctest` and `-race`: no goroutine left after any teardown path; mailboxes never exceed their cap. `psql` and `pgbench -S`-style simple-protocol smoke runs against the real binary (tier R).
+**Tests.** e2e, both tiers: *results through the proxy equal results direct* (same workload, same seed); *transaction integrity* — with many clients running interleaved multi-statement transactions over few connections, no statement of one client ever runs on a connection inside another client's transaction (checked from the fake's log, exactly; this is the core safety property of transaction pooling); *fragmentation* — one-byte delivery on both sides changes nothing; *reject list end-to-end*; *client vanishes mid-statement and mid-transaction* — the connection is not reused dirty; *database killed mid-statement* — the client gets the row of the error contract the matrix predicts; *slow reader* — bounded memory, proxy stops reading the database. Shell tests under `synctest` and `-race`: no goroutine left after any teardown path; mailboxes never exceed their cap. `psql` and `pgbench -S`-style simple-protocol smoke runs against the real binary (tier R). **CSV flush in the harness:** from this chunk every scenario in both tiers flushes and runs the round-trip check (section 6.5); the real binary runs with `obs.csv.dir` set, so tier R numbers are read from files with no metrics server. SQL assertions: conservation per instance; proxy completed = workload completed; error-contract counts by row = faults injected.
 
 **Observability.** Engine snapshot: clients connected, in startup, in transaction; requests by stage and outcome; statement-time histogram (database send to end of reply); relay buffer high-water; the three-state health (only `ok` / `failed` rules so far, plus "database unreachable → degraded").
 
@@ -673,7 +814,7 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Deliverables.** `internal/pool` core: accounting with open + connecting ≤ cap; a cap on concurrent connects and a creation rate (not PgBouncer's one-at-a-time); idle timeout and maximum lifetime with jitter (no synchronized expiry); check before reuse after long idle; the single breaker — database-down detection from connection-class failures, connect lockout, one trial when half-open, immediate `53M03` while open; the full dirty-connection table (cancel, bounded wait, rollback, reuse or close); the idle-in-transaction deadline; client-issued cancel requests mapped to the lent connection, with a cap on concurrent cancels; the separate cap on clients in startup; fleet division of the connection and creation-rate budgets. Wiring into the engine's lease stage.
 
-**Tests.** Core property tests against a reference model with synthetic work units (no Postgres types). e2e, both tiers unless noted: **hard connection cap** — 1,000 simultaneous client connects, open + connecting never exceeds the cap (exact, simulator); **reconnection storm** — 500 clients dropped and reconnecting within 50 ms, database connections stay flat at the pool size, against the chunk 2 baseline where the database refuses clients; **slow consumer / half-open** — clients that stop reading are torn down at the write deadline and no connection leaks; **cold start** — empty pool, full load at time zero: dial rate ≤ the cap; **synchronized lifetimes** — no dial spike; **database restart** — breaker opens, requests cost O(1) with no dial, one trial, recovery without a dogpile, goodput returns; **idle-in-transaction** client is rolled back and its connection reused; **cancel** reaches the right statement and never another client's. Ablation: with the creation-rate cap off, the cold-start scenario exceeds the bound. Headline benchmark 1 (tier R): database connections under 500 clients, direct against proxy.
+**Tests.** Core property tests against a reference model with synthetic work units (no Postgres types). e2e, both tiers unless noted: **hard connection cap** — 1,000 simultaneous client connects, open + connecting never exceeds the cap (exact, simulator); **reconnection storm** — 500 clients dropped and reconnecting within 50 ms, database connections stay flat at the pool size, against the chunk 2 baseline where the database refuses clients; **slow consumer / half-open** — clients that stop reading are torn down at the write deadline and no connection leaks; **cold start** — empty pool, full load at time zero: dial rate ≤ the cap; **synchronized lifetimes** — no dial spike; **database restart** — breaker opens, requests cost O(1) with no dial, one trial, recovery without a dogpile, goodput returns; **idle-in-transaction** client is rolled back and its connection reused; **cancel** reaches the right statement and never another client's. Ablation: with the creation-rate cap off, the cold-start scenario exceeds the bound. Headline benchmark 1 (tier R): database connections under 500 clients, direct against proxy. CSV-flush assertions: open + connecting ≤ cap in every flush and the fake's connection peak ≤ cap; storm against the baseline run as a join; dials per interval ≤ the creation limit; completed-per-interval recovers after the restart.
 
 **Observability.** Pool snapshot: open, idle, lent, connecting; creation rate; closes by reason; exhaustion events; breaker state and transitions; dirty-table outcomes; cancels; lease-time histogram. Health: `degraded` while the breaker is open.
 
@@ -687,7 +828,7 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Deliverables.** `internal/admission`: a fixed-capacity ring per tenant, created on first use and removed when a tenant goes quiet; the `QueueRule` interface with two equal implementations — **timeout rule** ("Fail at Scale": one last-empty timestamp; allowed wait is the short target while a standing queue exists, else the interval) and **control law** (CoDel paper / RFC 8289: sojourn above target for an interval enters dropping; next drop after interval/√count, integer arithmetic) — selected by config, per instance; in both, age is measured on the oldest item and expired items are swept from the head and answered at once; adaptive LIFO (serve newest while the rule reports overload, with hysteresis); overflow sheds the head, not the arrival; folly's minimum-delay figure as a 0–100 load gauge. Simulator-only comparison arms: plain FIFO, folly's detector. Wiring into the engine's queue stage with a single default dispatcher (round robin arrives in chunk 9; the queues are tenant-keyed already).
 
-**Tests.** Core property tests for both rules against reference models; the classic bug list from INFLUENCES F2–F4 as named tests (first burst after idle must not get the short timeout; LIFO without the head sweep buries stale requests). e2e: **anti-bufferbloat per mode** as restated in section 6.4, against a FIFO control with the same seed that grows without bound; **10× overload** — depth ≤ capacity, memory flat, backend never idled by shedding (served ≥ 95% of capacity); **the head-to-head table** — both modes and the comparison arms at 1.2×, 2× and 10× load: served-wait percentiles, depth, shed count, idle capacity (simulator, exact; this table goes in the book); recovery after overload ends. Ablation: with the rule off, the standing queue persists. Tier R: overload against real Postgres with `pg_sleep`-shaped service time.
+**Tests.** Core property tests for both rules against reference models; the classic bug list from INFLUENCES F2–F4 as named tests (first burst after idle must not get the short timeout; LIFO without the head sweep buries stale requests). e2e: **anti-bufferbloat per mode** as restated in section 6.4, against a FIFO control with the same seed that grows without bound; **10× overload** — depth ≤ capacity, memory flat, backend never idled by shedding (served ≥ 95% of capacity); **the head-to-head table** — both modes and the comparison arms at 1.2×, 2× and 10× load: served-wait percentiles, depth, shed count, idle capacity (simulator, exact; this table goes in the book); recovery after overload ends. Ablation: with the rule off, the standing queue persists. Tier R: overload against real Postgres with `pg_sleep`-shaped service time. CSV-flush assertions: queue-wait percentiles from the bucket rows per mode and load; depth equal at T and 4T; sheds by reason; the head-to-head table is produced by one DuckDB query over the flushed runs of every arm.
 
 **Observability.** Per tenant and total: depth, capacity, oldest-item age, queue-wait histogram, rule state, LIFO on/off and switches, sheds by reason, the load gauge. Health: `degraded` while any queue is shedding.
 
@@ -701,7 +842,7 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Deliverables.** In `internal/admission`: the dispatcher — round robin across tenants with waiting work; a tenant's share (limit ÷ active tenants, with optional weights) enforced only when the limit is reached; work-conserving otherwise; per-tenant in-flight accounting that includes held transactions; removal of all-zero tenant state (memory bounded by active tenants). Parse-time checks on shares.
 
-**Tests.** Property tests: per-tenant in flight ≤ share under saturation; total = sum; work-conserving (no idle capacity while anyone eligible waits); no starvation. e2e: **noisy neighbour** — tenant A at 10× capacity, tenant B steady and small: B's outcomes compared exactly with B running alone (simulator), and against the spec's thresholds (> 99% success, p99 within 2×, A takes > 95% of the shedding) in tier R; the test requires B's successes, not merely the absence of failures. **Many tenants, one flooder.** **A tenant holding transactions open** does not exceed its share. Ablation: with a single shared queue the quiet tenant starves.
+**Tests.** Property tests: per-tenant in flight ≤ share under saturation; total = sum; work-conserving (no idle capacity while anyone eligible waits); no starvation. e2e: **noisy neighbour** — tenant A at 10× capacity, tenant B steady and small: B's outcomes compared exactly with B running alone (simulator), and against the spec's thresholds (> 99% success, p99 within 2×, A takes > 95% of the shedding) in tier R; the test requires B's successes, not merely the absence of failures. **Many tenants, one flooder.** **A tenant holding transactions open** does not exceed its share. Ablation: with a single shared queue the quiet tenant starves. CSV-flush assertions: per-tenant totals — the quiet tenant against its run alone, the flooder's share of shedding > 95%; the many-tenants scenario is checked per tenant from the files, beyond the Prometheus label bound.
 
 **Observability.** Per tenant: in flight, current share, served, shed share, time at share. Dispatcher: rounds, saturation time.
 
@@ -715,7 +856,7 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Deliverables.** In `internal/admission`: the AIMD limit on concurrent leases — one integer; multiplicative decrease on a statement time over the threshold, a timeout or a connection-class error (SQL errors never count); additive increase only when in flight ≥ half the limit; bounded by a floor, the pool size, a maximum step and a minimum interval between decreases; its signal is database round-trip time per statement, never queue wait (the queue rule's signal) — two loops, two signals. The GCRA gate — per tenant, integer nanoseconds, off by default, state evicted for quiet tenants, divided by N from the fleet config. Wiring: the gate stage and the dispatcher's limit.
 
-**Tests.** Property tests: bounds always hold; after latency steps from 50 ms to 200 ms the limit never increases until recovery, then rises by at most one per completion; a pathological signal cannot push the limit past floor or ceiling or move it faster than the interval allows. GCRA against a reference model; a burst after a quiet hour is still bounded. e2e: **noisy neighbour + backend stall** (spec suite 3) — a 200 ms database stall while A sends 5,000/s and B 50/s: B protected, limit falls and recovers, goodput returns after the stall; **limit and queue rule do not fight** (no oscillation beyond a stated bound); rate gate refuses with `53M02` and never when off. Ablation: with a static limit the stall scenario fails B's bound. Headline benchmark 3 (tier R): quiet tenant's p99 under a noisy neighbour — unprotected FIFO against the full stack, in both CoDel modes.
+**Tests.** Property tests: bounds always hold; after latency steps from 50 ms to 200 ms the limit never increases until recovery, then rises by at most one per completion; a pathological signal cannot push the limit past floor or ceiling or move it faster than the interval allows. GCRA against a reference model; a burst after a quiet hour is still bounded. e2e: **noisy neighbour + backend stall** (spec suite 3) — a 200 ms database stall while A sends 5,000/s and B 50/s: B protected, limit falls and recovers, goodput returns after the stall; **limit and queue rule do not fight** (no oscillation beyond a stated bound); rate gate refuses with `53M02` and never when off. Ablation: with a static limit the stall scenario fails B's bound. Headline benchmark 3 (tier R): quiet tenant's p99 under a noisy neighbour — unprotected FIFO against the full stack, in both CoDel modes. CSV-flush assertions: the limit gauge does not rise between stall and recovery; direction changes stay under the stated bound; gate refusals per tenant = `53M02` count.
 
 **Observability.** Limit, floor, ceiling, increases, decreases by cause, time at floor; gate allows and refusals per tenant. Health: `degraded` while the limit is at its floor.
 
@@ -729,7 +870,7 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Deliverables.** `internal/coalesce`: the flight table keyed by statement text; leader and followers; the two join modes of decision D10 (strict by default); a flight deadline independent of every waiter; waiter reference counting — the database work is cancelled only when the last waiter leaves; a caller that has left gets its own error even if a result arrives at that moment; a cap on waiters per flight (`53M04` past it) and on the shared reply's size (past it, followers are refused and the key is not shared again for a while — a bounded, expiring list); shared errors; followers take no queue slot and no connection but are counted per tenant; entries removed on completion. Wiring into the engine's coalesce stage; the reply is stored once as the database's message bytes and each recipient gets its own end marker. Config: `off | auto | hinted` (hinted = only statements carrying an opt-in comment) and the scope of the key.
 
-**Tests.** Property tests on the flight table with synthetic units. e2e: **at most one in-flight read per key** (exact, simulator); **writes are never coalesced** — every write in the workload appears in the fake's write log exactly once; **cancel 99 of 100** — the 100th waiter gets a valid reply; **all 100 cancel** — the database work is cancelled and the connection handled by the dirty table; **viral hot key** (spec suite 2) — 1,000 concurrent identical reads with 50 ms database latency: 1–2 database reads, p99 near one service time in relaxed mode and near two in strict mode, both reported; **read-your-own-write** — a client that writes then reads the same key never gets the old value in strict mode, and the same scenario shows the window in relaxed mode; statements inside transactions are never shared; a slow follower does not delay the others; shared error on a failed flight, with no re-drive stampede. Ablation: coalescer off gives 1,000 reads. Headline benchmark 2 (tier R): database reads and p99 under Zipf skew (exponent stated; the spec's "99/1" restated as what the generator actually produces) with and without coalescing.
+**Tests.** Property tests on the flight table with synthetic units. e2e: **at most one in-flight read per key** (exact, simulator); **writes are never coalesced** — every write in the workload appears in the fake's write log exactly once; **cancel 99 of 100** — the 100th waiter gets a valid reply; **all 100 cancel** — the database work is cancelled and the connection handled by the dirty table; **viral hot key** (spec suite 2) — 1,000 concurrent identical reads with 50 ms database latency: 1–2 database reads, p99 near one service time in relaxed mode and near two in strict mode, both reported; **read-your-own-write** — a client that writes then reads the same key never gets the old value in strict mode, and the same scenario shows the window in relaxed mode; statements inside transactions are never shared; a slow follower does not delay the others; shared error on a failed flight, with no re-drive stampede. Ablation: coalescer off gives 1,000 reads. Headline benchmark 2 (tier R): database reads and p99 under Zipf skew (exponent stated; the spec's "99/1" restated as what the generator actually produces) with and without coalescing. CSV-flush assertions: database reads for the burst ≤ 2 against 1,000 in the ablation arm (a join of two arms); flights + hits = shareable reads.
 
 **Observability.** Flights started, hits, waiters-per-flight histogram, cancellations (waiter and flight), overflows by cap, shared errors, table size; opt-in per-key hotness. Per tenant: coalesced hits.
 
@@ -743,7 +884,7 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Deliverables.** `internal/batch`: the take rule (when a connection frees up, take what is queued and eligible, up to `max_batch` and `max_bytes`; one item with nothing else waiting goes alone at once); eligibility from the classifier (decision D9); in-order reply splitting at end markers; the poison rule (any non-idle status ends the batch: connection closed, remaining members get `08007` or `08006` by class); accounting — each member counts toward its tenant's in-flight and the adaptive limit; time spent behind earlier members of a batch is recorded separately and is not queue wait. Config: `off` (default) / `on`. Wiring into the dispatcher and the forward stage.
 
-**Tests.** Property tests: batch ≤ caps; replies matched to requesters in order; with one request in the system, enqueue-to-write is zero on the virtual clock. e2e: **batch safety** — across seeds and workloads mixing transactions and single statements, no statement ever runs inside another client's transaction (the chunk 6 integrity check, now with batching on); **the hazard, planted** — a fake-Postgres fault that returns a non-idle status mid-batch: the connection is closed and no later member's reply is delivered as if clean; an error in one member does not affect the others; a member's client vanishing mid-batch; fairness still holds with batching on. Ablation and measurement: round trips and latency with batching off against on, at low load (no added latency) and at saturation, in the simulator and tier R — the result decides the default, and "no gain on a local socket" is an acceptable, reported outcome.
+**Tests.** Property tests: batch ≤ caps; replies matched to requesters in order; with one request in the system, enqueue-to-write is zero on the virtual clock. e2e: **batch safety** — across seeds and workloads mixing transactions and single statements, no statement ever runs inside another client's transaction (the chunk 6 integrity check, now with batching on); **the hazard, planted** — a fake-Postgres fault that returns a non-idle status mid-batch: the connection is closed and no later member's reply is delivered as if clean; an error in one member does not affect the others; a member's client vanishing mid-batch; fairness still holds with batching on. Ablation and measurement: round trips and latency with batching off against on, at low load (no added latency) and at saturation, in the simulator and tier R — the result decides the default, and "no gain on a local socket" is an acceptable, reported outcome. CSV-flush assertions: round trips and in-batch wait percentiles per arm; the query's output is the evidence for the default.
 
 **Observability.** Batch-size histogram, batched share of requests, in-batch wait histogram, poison events, ineligible reasons.
 
@@ -757,7 +898,7 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Deliverables.** `internal/retry`: the `Policy` interface; **Off** (the default); **PreForwardOnce** — at most one retry, only for failures the engine marks "nothing reached the database", charged to a budget (each first attempt deposits a tenth of a token, each retry withdraws one, the bucket is capped so credit expires, a small floor divided by N; integers only); never when the breaker is open; never holding a queue slot or a connection while waiting; never past the request's deadline. Completion of the error contract and the fault × path matrix (every row now states retryable-by-proxy or not). Wiring into the engine's lease and forward stages.
 
-**Tests.** Property tests of the budget (retries ≤ 10% of first attempts plus the floor over any window; a quiet hour cannot bank a storm). e2e: **retry storm** (spec suite 5) — 30% database errors with aggressively retrying clients: with the policy off and on, the load reaching the database stays bounded, refusals are fast, and goodput returns after the errors stop; **post-forward failures are never retried under any policy** — the fake's write log shows no statement applied twice across a sweep with kills at every point of the conversation; a retry happens only on the matrix rows that allow it; budget exhaustion is visible. Ablation: a deliberately wrong policy ("retry everything", test-only) produces duplicate writes and amplification, proving the scenario can fail.
+**Tests.** Property tests of the budget (retries ≤ 10% of first attempts plus the floor over any window; a quiet hour cannot bank a storm). e2e: **retry storm** (spec suite 5) — 30% database errors with aggressively retrying clients: with the policy off and on, the load reaching the database stays bounded, refusals are fast, and goodput returns after the errors stop; **post-forward failures are never retried under any policy** — the fake's write log shows no statement applied twice across a sweep with kills at every point of the conversation; a retry happens only on the matrix rows that allow it; budget exhaustion is visible. Ablation: a deliberately wrong policy ("retry everything", test-only) produces duplicate writes and amplification, proving the scenario can fail. CSV-flush assertions: in every window retries ≤ 10% of first attempts plus the floor; statements reaching the database bounded against the ablation arm; writes applied = distinct writes sent.
 
 **Observability.** Attempts, retries, budget level, deposits, withdrawals, exhaustions, retries refused by reason. Health: unchanged by retries.
 
@@ -771,7 +912,7 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Deliverables.** `internal/config`: the full fleet block with division and validation (section 8.1). The drain sequence (section 8.3) across engine and shell. Multi-instance support in the simulator scenarios (N engines, one fake Postgres, a connection-spreading rule) and in the tier R harness (three processes). The steady-state soak. `docs/fleet-guarantees.md`: the table of section 8.2 with measured numbers, generated from scenario output.
 
-**Tests.** e2e, three instances: **reconnection storm split across 3** — fleet connections ≤ the fleet budget; **hot key seen by 3 coalescers** — at most 3 database reads; **tenant pinned to one instance** against tenants spread over three — the fairness loss measured; **retry storm** — fleet ratio holds; **backend stall** — three adaptive limits converge, their sum bounded; **one instance killed at 80% load** — survivors shed rather than queue, the connection bound holds, goodput settles near two thirds and recovers when it returns; **rolling restart with drain** — zero requests cut mid-answer; refused-fast and timed-out counts reported; without drain (ablation) requests are cut. **Steady state** — a long simulated run with tenant churn (many configured tenants, few active at a time): every size gauge sampled at three points levels off. Config validation tests (bad divisions, budgets over the database limit, timeouts that do not nest). Tier R: the reconnection storm and the kill with three real processes.
+**Tests.** e2e, three instances: **reconnection storm split across 3** — fleet connections ≤ the fleet budget; **hot key seen by 3 coalescers** — at most 3 database reads; **tenant pinned to one instance** against tenants spread over three — the fairness loss measured; **retry storm** — fleet ratio holds; **backend stall** — three adaptive limits converge, their sum bounded; **one instance killed at 80% load** — survivors shed rather than queue, the connection bound holds, goodput settles near two thirds and recovers when it returns; **rolling restart with drain** — zero requests cut mid-answer; refused-fast and timed-out counts reported; without drain (ablation) requests are cut. **Steady state** — a long simulated run with tenant churn (many configured tenants, few active at a time): every size gauge sampled at three points levels off. Config validation tests (bad divisions, budgets over the database limit, timeouts that do not nest). Tier R: the reconnection storm and the kill with three real processes. CSV-flush assertions: fleet totals as SQL sums over the three instances (connections ≤ fleet budget, hot-key reads ≤ 3); the SQL merge equals the `obs` merge function's output; size gauges level off at three points; requests cut mid-answer during drain = 0.
 
 **Observability.** Instance id and fleet settings in the snapshot; drain state and progress; merged fleet view in the scenario reports. Health: `degraded (draining)`.
 
@@ -783,11 +924,11 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 **Purpose.** The proof a reader can re-run: one command each for tests, chaos and benchmarks, and an honest account of how far the numbers can be trusted.
 
-**Deliverables.** `cmd/loadgen` complete (workload profiles: fan-in, Zipf, noisy neighbour, storm; calibration mode; 3-significant-digit histograms; "could not send" count). `scripts/bench.sh` and `make bench`: calibration file, A/A run, interleaved runs, validity gate, the in-repo stats report, verdicts including "inconclusive", CSV and Go-benchmark-format output. `make chaos` running every named scenario. The three headline tables regenerated under the full method. The observability acceptance test (section 7.6). The long-budget runs: sweeps, soak, timed fuzzing, `-race` long. Evidence pack for Neon: every number with its kind and its confidence row. README proof section. **The trade-offs chapter** (section 11).
+**Deliverables.** `cmd/loadgen` complete (workload profiles: fan-in, Zipf, noisy neighbour, storm; calibration mode; 3-significant-digit histograms; "could not send" count). `scripts/bench.sh` and `make bench`: calibration file, A/A run, interleaved runs, validity gate, the in-repo stats report, verdicts including "inconclusive", a CSV flush per run and Go-benchmark-format output; the report's SQL files under `test/analysis/bench/` (validity gate, medians and spread per arm, A/A noise floor, headline tables), run by DuckDB over the per-run files. `make chaos` running every named scenario. The three headline tables regenerated under the full method. The observability acceptance test (section 7.6). The long-budget runs: sweeps, soak, timed fuzzing, `-race` long. Evidence pack for Neon: every number with its kind and its confidence row. README proof section. **The trade-offs chapter** (section 11).
 
-**Tests.** The load generator's own: samples = intended sends; a stalled server shows in the corrected latency; achieved-rate gate rejects a throttled run. The A/A run reports "no difference". Bounded memory and no goroutine growth under a sustained 10× overload on the real binary.
+**Tests.** The load generator's own: samples = intended sends; a stalled server shows in the corrected latency; achieved-rate gate rejects a throttled run. The A/A run reports "no difference". Bounded memory and no goroutine growth under a sustained 10× overload on the real binary. The report queries are tested on recorded run directories: a throttled run is rejected by the validity query; an A/A pair gives "no difference"; a planted difference above the margin is found. The "what is slow?" acceptance test is answered once from the stats surface and once by a query on the flushed files.
 
-**Observability.** The load generator's snapshot; benchmark CSV through the same exporter as everything else.
+**Observability.** The load generator's snapshot goes through a collector and the same CSV flush adapter as the proxy's, so one query can compare what the generator sent with what the proxy counted.
 
 **Landing.** `make test`, `make chaos`, `make bench` each run from a clean checkout; every headline carries its confidence statement; claims that did not come out in our favour are narrowed in writing. Size: ~1,200 lines.
 
@@ -795,15 +936,39 @@ For every chunk below, "Seats" is as in section 12.1 unless stated (build Opus; 
 
 ### Chunk 16 — OTLP push exporter (last build chunk)
 
-**Purpose.** Showing the snapshot design pays off: a new way to ship metrics added without touching any component.
+**Purpose.** The final adapter, and with it the production path: snapshots → collector → OTLP push → OpenTelemetry Collector → Prometheus (section 7.9). It also shows the snapshot design paying off: a new way to ship metrics is added without touching any component. It stays the last build chunk and the last observability chunk.
 
-**Deliverables.** `internal/obs/otlp`: a hand-written OTLP/HTTP JSON metrics push exporter on the standard library — no OpenTelemetry SDK; bounded queue, timeout, bounded retry with backoff, drop-and-count when the collector is down (the exporter must never slow the proxy). Config. The exporter conformance test from chunk 3.
+**Deliverables.** `internal/obs/otlp`: a hand-written OTLP/HTTP JSON metrics push adapter on the standard library — no OpenTelemetry SDK; cumulative sums, gauges and explicit-bucket histograms on the short bound list; the bounded tenant label; bounded queue, timeout, bounded retry with backoff, drop-and-count when the Collector is down (the adapter must never slow the proxy). Config (`obs.otlp.endpoint`, `obs.otlp.interval`). The adapter conformance test from chunk 3.
 
-**Tests.** Golden payloads; a collector that is down, slow, or answering errors never affects the data path (simulator and shell tests); the diff of this chunk touches no file outside `internal/obs`, `internal/config` and the shell's wiring — checked by the gate. Tier R, on demand: a real OpenTelemetry Collector container receives and accepts the metrics.
+**The dev setup for the Collector and Prometheus leg**, `deploy/obs-dev/`, so the chain can be run and not only read about:
 
-**Observability.** Exporter counters: pushes, failures, dropped snapshots, queue depth.
+- `docker-compose.yml` with two services, image versions pinned, every published port bound to 127.0.0.1, container names prefixed `mg-`:
 
-**Landing.** "No component changed" verified mechanically. Size: ~500 lines.
+```yaml
+name: mg-obs-dev
+services:
+  otelcol:                       # receives the proxy's OTLP push, exposes a Prometheus endpoint
+    image: otel/opentelemetry-collector-contrib:<pinned in this chunk>
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes: ["./otelcol.yaml:/etc/otelcol/config.yaml:ro"]
+    ports: ["127.0.0.1:4318:4318"]
+  prometheus:                    # scrapes otelcol:8889
+    image: prom/prometheus:<pinned in this chunk>
+    volumes: ["./prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["127.0.0.1:9090:9090"]
+    depends_on: [otelcol]
+```
+
+- `otelcol.yaml`: an `otlp` receiver on HTTP port 4318; the `batch` processor; the `prometheus` exporter on port 8889 with resource attributes converted to labels; one metrics pipeline joining them.
+- `prometheus.yml`: one scrape job for `otelcol:8889`, with a short scrape interval for development.
+- `make obs-up` and `make obs-down`; the proxy runs on the host with `obs.otlp.endpoint: http://127.0.0.1:4318/v1/metrics`, and Prometheus is then at `http://127.0.0.1:9090`. The same steps are the walkthrough in this chunk's chapter.
+- `scripts/obs-chain.sh`: the chain check described under Tests.
+
+**Tests.** Golden payloads; a Collector that is down, slow, or answering errors never affects the data path (simulator and shell tests, using a fake receiver; no container); the diff of this chunk touches no file outside `internal/obs`, `internal/config`, `deploy/obs-dev`, the scripts and the shell's wiring — checked by the gate. Metric names and labels on the OTLP route equal those of the Prometheus text adapter. **The chain check, tier R, on demand** (`scripts/obs-chain.sh`, needs Docker): bring the compose setup up; run a short scenario against the real binary with both the CSV flush and the OTLP push on; after the final push and one scrape, query Prometheus over its HTTP API and compare with DuckDB's totals from the flushed files of the same run — counters equal for every labelled tenant, `other` equal to the sum of the remaining tenants, histogram counts equal after re-bucketing, and the three instances of a fleet run summing to the fleet total. Then stop the Collector mid-run: goodput is unchanged, the adapter's dropped-snapshot counter moves (read from the CSV flush, which does not depend on the Collector), and after the Collector returns Prometheus shows the correct cumulative totals. This is the only test in the plan that runs a live Prometheus.
+
+**Observability.** Adapter counters: pushes, failures, dropped snapshots, queue depth.
+
+**Landing.** "No component changed" verified mechanically; the chain check passes on vm-1 and its result file is recorded; the compose setup starts from a clean checkout with one command. Size: ~550 lines, plus the three config files.
 
 ---
 
@@ -826,6 +991,7 @@ Every scenario has one owning chunk — the first chunk in which it can run — 
 | Toy echo under every network fault; replay law | spec 4.1 | 1 | S | — |
 | Direct baseline: 500 clients, storm, 1,000 identical reads with no proxy | control arms | 2 | S, R | compared against in 7, 11 |
 | Fake Postgres fidelity script | section 6.2 | 2 | S+R | extended by 4, 5 |
+| CSV flush: schema version 1, round trip, byte-identical files; baseline counts asserted with DuckDB; the assertion runner's self-tests | observability amendment | 3 | S | every scenario from chunk 6 on flushes and adds its SQL assertions (section 6.5) |
 | Startup and authentication under fragmentation and faults | spec 4.1 | 4 | S, R | — |
 | Reject list end-to-end | steering 9 | 5 (wire-level), 6 (through the proxy) | S, R | — |
 | Results through the proxy equal results direct | ours | 6 | S, R | every later chunk (with its feature on) |
@@ -855,6 +1021,7 @@ Every scenario has one owning chunk — the first chunk in which it can run — 
 | Steady state under tenant churn | *Release It!* | 14 | S | 15 (long) |
 | Observability acceptance ("what is slow?") | *Release It!* | 15 | R | — |
 | Collector down does not affect the data path | steering 13 | 16 | S, R | — |
+| The chain check: Prometheus, fed through OTLP and the Collector, agrees with the CSV flush of the same run | observability amendment | 16 | R (compose setup) | — |
 
 The five suites the spec names (bold) are each owned by the chunk that builds their subject; none waits for the benchmark chunk.
 
@@ -901,6 +1068,8 @@ Chunk 0 has no chapter (the front page only). Titles are placeholders for Neon.
 | The control-law mode behaves badly under heavy open-loop overload | Phase 0 toy: queue grew without bound | It is bounded by the queue's hard capacity; the head-to-head table says plainly what each mode does |
 | Wave merges conflict in `internal/proxy` | Several chunks wire into one engine | Stage seams fixed in chunk 6; chunks in a wave land one at a time and the later one rebases |
 | Shared-VM noise | 4 shared vCPUs | Section 11; exact counts as headlines |
+| The CSV schema drifts and SQL assertions silently read the wrong thing | Files outlive the code that wrote them | Schema version in every row and checked first by every query; golden header; generated metric registry with a test; the runner fails on empty input |
+| DuckDB differs between machines | Nick named 2.0; vm-1 has 1.5.5 | Version pinned in the scripts and recorded by the gate; plain `read_csv` with explicit column types; DuckDB is absent from CI and from `go.mod`, so it cannot break the build |
 | Neon or another pool runs out mid-wave | Subscription limits | Gauge check before each wave; recorded fallback route for Neon |
 | vm-1 Claude sign-in expires Nov 25–28 | STATE.md | Owner: Nick/Twin; everything resumes from files |
 
@@ -910,7 +1079,7 @@ Total estimate: about 19,000–21,000 lines of product code before the ×2 allow
 
 ## 17. Out of scope for v1, and follow-ups
 
-**Out of v1:** the extended query protocol; TLS on either side; `COPY`; replication connections; `LISTEN`/`NOTIFY`; connection pinning; per-tenant database roles or several databases; caching; read replicas, hedging, outlier detection, shuffle sharding; a second backend protocol; run-time coordination between instances; a balancer, discovery or membership; the OpenTelemetry SDK; a SQL parser; md5 password authentication.
+**Out of v1:** the extended query protocol; TLS on either side; `COPY`; replication connections; `LISTEN`/`NOTIFY`; connection pinning; per-tenant database roles or several databases; caching; read replicas, hedging, outlier detection, shuffle sharding; a second backend protocol; run-time coordination between instances; a balancer, discovery or membership; the OpenTelemetry SDK; DuckDB as a library or anywhere in the proxy; Parquet or any second file format for the flush; dashboards and alert rules on top of Prometheus; a SQL parser; md5 password authentication.
 
 **Follow-ups after the project, not part of v1:**
 
