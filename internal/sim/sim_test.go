@@ -428,3 +428,43 @@ func TestThousandsOfTimers(t *testing.T) {
 		t.Fatalf("fired %d", count)
 	}
 }
+
+func TestKernelSnapshotCountersMove(t *testing.T) {
+	s := New(Config{Seed: 1})
+	_ = s.RegisterFaultKind(1, "noop", func(Fault) error { return nil })
+	_ = s.RegisterInvariant("ok", func() error { return nil })
+	bg := s.After(time.Hour, func() {})
+	bg.MarkBackground()
+	s.After(5, func() {}).Cancel()
+	s.InjectAt(Fault{At: 2, Kind: 1})
+	var mid Snapshot
+	s.After(3, func() {
+		s.Trace(K("x"), 1, 0, 0, 0)
+		s.After(1, func() {})
+		mid = s.Snapshot()
+	})
+	if err := s.RunUntilQuiet(); err != nil {
+		t.Fatal(err)
+	}
+	end := s.Snapshot()
+	check := func(name string, a, b int64) {
+		if a == 0 && b == 0 {
+			t.Errorf("%s never moved", name)
+		}
+	}
+	check("Steps", mid.Steps, end.Steps)
+	check("Scheduled", mid.Scheduled, end.Scheduled)
+	check("Fired", mid.Fired, end.Fired)
+	check("Cancelled", mid.Cancelled, end.Cancelled)
+	check("HeapLen", mid.HeapLen, end.HeapLen)
+	check("HeapPeak", mid.HeapPeak, end.HeapPeak)
+	check("PendingTimers", mid.PendingTimers, end.PendingTimers)
+	check("BackgroundTimers", mid.BackgroundTimers, end.BackgroundTimers)
+	check("TraceRecords", mid.TraceRecords, end.TraceRecords)
+	check("TraceRingLen", mid.TraceRingLen, end.TraceRingLen)
+	check("FaultsApplied", mid.FaultsApplied, end.FaultsApplied)
+	check("InvariantChecks", mid.InvariantChecks, end.InvariantChecks)
+	if end.Fired+end.Cancelled+end.HeapLen != end.Scheduled {
+		t.Fatalf("scheduled %d != fired %d + cancelled %d + queued %d", end.Scheduled, end.Fired, end.Cancelled, end.HeapLen)
+	}
+}

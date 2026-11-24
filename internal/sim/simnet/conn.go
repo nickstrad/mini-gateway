@@ -139,6 +139,12 @@ func (e *End) Space() int {
 	return p.window - len(p.buf)
 }
 
+func (e *End) WaitWritable() {
+	if e.state == stOpen {
+		e.out().blocked = true
+	}
+}
+
 func (e *End) Read(b []byte) (int, error) {
 	if err := e.err(); err != nil {
 		return 0, err
