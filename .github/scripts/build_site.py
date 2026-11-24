@@ -12,12 +12,22 @@ Pages (all links relative, so the site works under any path prefix):
   docs/c4/README.md           -> c4/index.html
   docs/c4/NN-*.md             -> c4/NN-*.html
   docs/c4/model.json, docs/c4/diagrams/*.mmd are copied beside them.
+  book/index.md               -> book/index.html, followed by a table of contents
+                                 generated from book/manifest.json
+  book/chapters/NN-<slug>.md  -> book/NN-<slug>.html, for every chapter the manifest
+                                 marks "live"
+The book manifest lists every chapter with its number, chunk, title, file and status
+("planned" or "live"). A live chapter is published and linked from the contents; a planned
+chapter is listed as plain text. The build fails if a live chapter's file is missing, if a
+planned chapter's file exists, or if book/chapters/ holds a file the manifest does not list.
 A relative link from a published page to another published page is rewritten to the
 built page; a relative link to anything else in the repository goes to GitHub.
 Never published: agent_work/, STATE.md, docs/knowledge/.
-Exit status: 0 on success; 1 with a message if a source is missing or a link is broken.
+Exit status: 0 on success; 1 with a message if a source is missing, a link is broken or the
+book manifest is wrong.
 """
 import html
+import json
 import posixpath
 import re
 import shutil
@@ -30,8 +40,10 @@ ROOT = Path(__file__).resolve().parents[2]
 REPO_URL = "https://github.com/nickstrad/mini-gateway"
 MERMAID_CDN = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"
 
-NAV = [("index.html", "Review"), ("plan.html", "Plan"), ("c4/index.html", "C4 diagrams"),
-       ("influences.html", "Influences")]
+NAV = [("index.html", "Review"), ("book/index.html", "Book"), ("plan.html", "Plan"),
+       ("c4/index.html", "C4 diagrams"), ("influences.html", "Influences")]
+BOOK_INDEX = "book/index.md"
+BOOK_MANIFEST = "book/manifest.json"
 
 CSS = """
 :root { color-scheme: light dark; --fg: #1c1e21; --bg: #ffffff; --muted: #5c6370;
@@ -70,6 +82,11 @@ th { background: var(--soft); }
 details.toc { background: var(--soft); border: 1px solid var(--line); border-radius: 6px;
   padding: 0.5rem 1rem; margin: 1rem 0; }
 details.toc ul { margin: 0.25rem 0; padding-left: 1.25rem; }
+ul.book-toc { list-style: none; padding-left: 0; }
+ul.book-toc li { padding: 0.2rem 0; }
+ul.book-toc .planned { color: var(--muted); }
+nav.chapter { display: flex; flex-wrap: wrap; gap: 0.25rem 1.5rem; border-top: 1px solid var(--line);
+  margin-top: 2.5rem; padding-top: 0.75rem; font-size: 0.95rem; }
 .banner { border: 1px solid var(--line); border-left: 4px solid var(--link); background: var(--soft);
   padding: 0.6rem 1rem; border-radius: 4px; margin: 1rem 0; }
 """
@@ -93,9 +110,9 @@ PAGE = """<!doctype html>
 <body>
 <header class="site"><nav><a class="name" href="{up}index.html">mini-gateway</a>{nav}</nav></header>
 <main>
-{banner}{toc}{body}
+{banner}{toc}{body}{after}
 </main>
-<footer class="site">Plan approved 2026-11-24; nothing built yet. Source: <a href="{repo}">{repo}</a></footer>
+<footer class="site">Build in progress. Source: <a href="{repo}">{repo}</a></footer>
 {script}</body>
 </html>
 """
@@ -105,7 +122,87 @@ class BuildError(Exception):
     pass
 
 
-def pages():
+def load_book():
+    """Read and check book/manifest.json. Returns (title, chapters); each chapter is a dict
+    with number, chunk, title, file, status and out (the page it is published to)."""
+    path = ROOT / BOOK_MANIFEST
+    if not path.is_file():
+        raise BuildError("missing source: %s" % BOOK_MANIFEST)
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        raise BuildError("%s: not valid JSON: %s" % (BOOK_MANIFEST, e))
+    title = manifest.get("title") if isinstance(manifest, dict) else None
+    chapters = manifest.get("chapters") if isinstance(manifest, dict) else None
+    if not isinstance(title, str) or not title.strip() or not isinstance(chapters, list):
+        raise BuildError("%s: needs a \"title\" and a \"chapters\" list" % BOOK_MANIFEST)
+    seen_numbers, seen_files, out = set(), set(), []
+    for i, ch in enumerate(chapters):
+        where = "%s: chapter entry %d" % (BOOK_MANIFEST, i + 1)
+        if not isinstance(ch, dict):
+            raise BuildError("%s: not an object" % where)
+        number, chunk, ctitle, file, status = (ch.get(k) for k in ("number", "chunk", "title", "file", "status"))
+        if type(number) is not int or number < 0 or type(chunk) is not int or chunk < 0:
+            raise BuildError("%s: \"number\" and \"chunk\" must be whole numbers" % where)
+        if not isinstance(ctitle, str) or not ctitle.strip():
+            raise BuildError("%s: needs a \"title\"" % where)
+        if status not in ("planned", "live"):
+            raise BuildError("%s: \"status\" must be \"planned\" or \"live\", got %r" % (where, status))
+        m = re.fullmatch(r"book/chapters/((\d\d)-[a-z0-9]+(?:-[a-z0-9]+)*)\.md", file if isinstance(file, str) else "")
+        if not m or int(m.group(2)) != number:
+            raise BuildError("%s: \"file\" must be book/chapters/NN-<slug>.md with NN equal to the number, got %r"
+                             % (where, file))
+        if number in seen_numbers or file in seen_files:
+            raise BuildError("%s: chapter number or file listed twice" % where)
+        seen_numbers.add(number)
+        seen_files.add(file)
+        exists = (ROOT / file).is_file()
+        if status == "live" and not exists:
+            raise BuildError("%s: chapter %d is live but %s is missing" % (BOOK_MANIFEST, number, file))
+        if status == "planned" and exists:
+            raise BuildError("%s: chapter %d is planned but %s exists (set its status to live, or remove the file)"
+                             % (BOOK_MANIFEST, number, file))
+        out.append(dict(ch, out="book/%s.html" % m.group(1)))
+    chapter_dir = ROOT / "book/chapters"
+    if chapter_dir.is_dir():
+        for p in sorted(chapter_dir.iterdir()):
+            if "book/chapters/" + p.name not in seen_files:
+                raise BuildError("book/chapters/%s is not listed in %s" % (p.name, BOOK_MANIFEST))
+    out.sort(key=lambda ch: ch["number"])
+    return title, out
+
+
+def chapter_label(ch):
+    text = html.escape(ch["title"])
+    return text if ch["number"] == 0 else "%d. %s" % (ch["number"], text)
+
+
+def book_contents(chapters):
+    """The table of contents placed under the front page: links for live chapters, plain
+    text marked "planned" for the rest."""
+    items = []
+    for ch in chapters:
+        if ch["status"] == "live":
+            items.append('<li><a href="%s">%s</a></li>' % (posixpath.basename(ch["out"]), chapter_label(ch)))
+        else:
+            items.append('<li class="planned">%s (planned)</li>' % chapter_label(ch))
+    return '\n<h2 id="contents">Contents</h2>\n<ul class="book-toc">\n%s\n</ul>\n' % "\n".join(items)
+
+
+def chapter_footer(chapters, ch):
+    """Previous, contents and next links under a chapter (live chapters only)."""
+    live = [c for c in chapters if c["status"] == "live"]
+    i = live.index(ch)
+    parts = []
+    if i > 0:
+        parts.append('<a href="%s">Previous: %s</a>' % (posixpath.basename(live[i - 1]["out"]), chapter_label(live[i - 1])))
+    parts.append('<a href="index.html">Contents</a>')
+    if i + 1 < len(live):
+        parts.append('<a href="%s">Next: %s</a>' % (posixpath.basename(live[i + 1]["out"]), chapter_label(live[i + 1])))
+    return '\n<nav class="chapter">%s</nav>\n' % "".join(parts)
+
+
+def pages(chapters):
     """source path (repo-relative, posix) -> output path (site-relative, posix)."""
     out = {
         "docs/index.md": "index.html",
@@ -116,6 +213,10 @@ def pages():
     }
     for p in sorted((ROOT / "docs/c4").glob("[0-9][0-9]-*.md")):
         out["docs/c4/" + p.name] = "c4/" + p.stem + ".html"
+    out[BOOK_INDEX] = "book/index.html"
+    for ch in chapters:
+        if ch["status"] == "live":
+            out[ch["file"]] = ch["out"]
     return out
 
 
@@ -150,7 +251,7 @@ def rewrite_links(body, src, out, page_map):
     return re.sub(r'(<a\s[^>]*?href=)"([^"]*)"', fix, body)
 
 
-def render(src, out, page_map):
+def render(src, out, page_map, after=""):
     text = (ROOT / src).read_text(encoding="utf-8")
     md = markdown.Markdown(extensions=["tables", "fenced_code", "sane_lists", "toc"],
                            extension_configs={"toc": {"toc_depth": "2-3"}})
@@ -163,7 +264,8 @@ def render(src, out, page_map):
     title = re.sub(r"[`*_]", "", m.group(1)) if m else out
     up = "../" * out.count("/")
     nav = "".join('<a href="%s%s"%s>%s</a>' % (
-        up, href, ' aria-current="page"' if href == out else "", label) for href, label in NAV)
+        up, href, ' aria-current="page"' if href == out or (href == "book/index.html" and out.startswith("book/"))
+        else "", label) for href, label in NAV)
     toc = ""
     if len(text) > 20000 and md.toc_tokens:
         toc = '<details class="toc"><summary>Contents</summary>%s</details>\n' % md.toc
@@ -172,7 +274,7 @@ def render(src, out, page_map):
         banner = ('<div class="banner">Written in Phase 0, before the steering, under the old name and with Redis as '
                   'its working assumption. Where it disagrees with the plan, the plan follows the steering. '
                   'See the <a href="influences.html">summary</a>.</div>\n')
-    page = PAGE.format(title=html.escape(title), css=CSS, up=up, nav=nav, banner=banner, toc=toc, body=body,
+    page = PAGE.format(title=html.escape(title), css=CSS, up=up, nav=nav, banner=banner, toc=toc, body=body, after=after,
                        repo=REPO_URL, script=MERMAID_SCRIPT if 'class="mermaid"' in body else "")
     dest = OUT / out
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -185,12 +287,17 @@ def main():
     if OUT.exists():
         shutil.rmtree(OUT)
     OUT.mkdir(parents=True)
-    page_map = pages()
+    _, chapters = load_book()
+    page_map = pages(chapters)
     for src in page_map:
         if not (ROOT / src).is_file():
             raise BuildError("missing source: %s" % src)
+    after = {BOOK_INDEX: book_contents(chapters)}
+    for ch in chapters:
+        if ch["status"] == "live":
+            after[ch["file"]] = chapter_footer(chapters, ch)
     for src, out in page_map.items():
-        render(src, out, page_map)
+        render(src, out, page_map, after.get(src, ""))
     for src, out in COPIES.items():
         if out:
             (OUT / out).parent.mkdir(parents=True, exist_ok=True)

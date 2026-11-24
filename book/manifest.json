@@ -1,0 +1,117 @@
+{
+  "title": "mini-gateway: the book",
+  "chapters": [
+    {
+      "number": 0,
+      "chunk": 16,
+      "title": "Preface, topic map, assembly",
+      "file": "book/chapters/00-preface.md",
+      "status": "planned"
+    },
+    {
+      "number": 1,
+      "chunk": 1,
+      "title": "A world that repeats: the simulator kernel",
+      "file": "book/chapters/01-simulator-kernel.md",
+      "status": "planned"
+    },
+    {
+      "number": 2,
+      "chunk": 2,
+      "title": "A fake Postgres and hostile clients",
+      "file": "book/chapters/02-simulated-world.md",
+      "status": "planned"
+    },
+    {
+      "number": 3,
+      "chunk": 3,
+      "title": "Numbers without a framework: snapshots, a collector, exporters",
+      "file": "book/chapters/03-observability-spine.md",
+      "status": "planned"
+    },
+    {
+      "number": 4,
+      "chunk": 4,
+      "title": "Speaking Postgres: TLS or not, startup, login, fragments",
+      "file": "book/chapters/04-wire-sessions.md",
+      "status": "planned"
+    },
+    {
+      "number": 5,
+      "chunk": 5,
+      "title": "What a statement is allowed to do: classification and the error contract",
+      "file": "book/chapters/05-classifier-and-contracts.md",
+      "status": "planned"
+    },
+    {
+      "number": 6,
+      "chunk": 6,
+      "title": "The first working proxy, and lending connections by the transaction",
+      "file": "book/chapters/06-walking-skeleton.md",
+      "status": "planned"
+    },
+    {
+      "number": 7,
+      "chunk": 7,
+      "title": "The pool: a hard cap, a creation rate, and connections that go bad",
+      "file": "book/chapters/07-pool.md",
+      "status": "planned"
+    },
+    {
+      "number": 8,
+      "chunk": 8,
+      "title": "Two CoDels, measured against each other",
+      "file": "book/chapters/08-admission-queues.md",
+      "status": "planned"
+    },
+    {
+      "number": 9,
+      "chunk": 9,
+      "title": "Fairness that binds only when it must",
+      "file": "book/chapters/09-fairness.md",
+      "status": "planned"
+    },
+    {
+      "number": 10,
+      "chunk": 10,
+      "title": "Letting the database set the limit",
+      "file": "book/chapters/10-adaptive-limit.md",
+      "status": "planned"
+    },
+    {
+      "number": 11,
+      "chunk": 11,
+      "title": "One read for a thousand callers",
+      "file": "book/chapters/11-coalescer.md",
+      "status": "planned"
+    },
+    {
+      "number": 12,
+      "chunk": 12,
+      "title": "Retries, off by default",
+      "file": "book/chapters/12-retry-policy.md",
+      "status": "planned"
+    },
+    {
+      "number": 13,
+      "chunk": 13,
+      "title": "Three proxies, one database: what multiplies, weakens and survives",
+      "file": "book/chapters/13-fleet-and-drain.md",
+      "status": "planned"
+    },
+    {
+      "number": 14,
+      "chunk": 14,
+      "title": "How much to trust these numbers (the trade-offs write-up)",
+      "file": "book/chapters/14-benchmarks-and-trade-offs.md",
+      "status": "planned"
+    },
+    {
+      "number": 15,
+      "chunk": 15,
+      "title": "Adding an exporter without touching a component",
+      "file": "book/chapters/15-otlp-exporter.md",
+      "status": "planned"
+    }
+  ]
+}

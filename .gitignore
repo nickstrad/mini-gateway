@@ -16,3 +16,6 @@ agent_work/ci/
 /runs/
 
 .DS_Store
+
+# The markdown package scripts/site.sh fetches when Python has no pip
+/.cache/
