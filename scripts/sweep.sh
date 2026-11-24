@@ -47,7 +47,7 @@ unset DST_SEED
 rc=0
 DST_SEEDS=$seeds DST_SEED_BASE=$base go test -count=1 -timeout 60m -v -run "$pattern" ./... >"$log" 2>&1 || rc=$?
 
-passed=$(grep -cE -- '--- PASS: TestScenario[^ /]*/[^ ]+/seed=' "$log" || true)
+passed=$(grep -cE -- '--- PASS: TestScenario[^ ]*/seed=' "$log" || true)
 failed=$(grep -cE -- '--- FAIL: ' "$log" || true)
 echo "sweep: $passed seed runs passed, $failed failures; log $log"
 if [ "$rc" != 0 ] || [ "$failed" != 0 ]; then
