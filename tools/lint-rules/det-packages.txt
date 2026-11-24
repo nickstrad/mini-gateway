@@ -3,3 +3,12 @@
 # '#' lines and blank lines are ignored. A line whose directory does not exist is a gate
 # failure, so a typo cannot switch the lint off. Empty at chunk 0: no core exists yet.
 # The chunk that adds a core or simulator package adds its line here.
+# Chunk 1: the simulator kernel, the simulated network, the toy and the measurement half of
+# internal/obs. Listed one by one rather than as internal/sim/... because
+# internal/sim/simtest is test plumbing (flags, environment, files, the testing package) and
+# internal/obs/obstest uses reflect; neither is simulation. A new simulator package adds its
+# own line here.
+internal/sim
+internal/sim/simnet
+internal/sim/simtoy
+internal/obs
