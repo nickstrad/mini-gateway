@@ -31,7 +31,15 @@ Measured against PostgreSQL 17.11 with `agent_work/phase1/probes/pgwire/` (outpu
 - Elements with status `planned` are drawn dashed, and the legend must then contain an entry with a dashed stroke or decoding warns.
 - `decodeArchitecture(json)` returns `{ ok, value: { bundle, index }, diagnostics }`; `buildScene` takes `value.index` and a diagram id.
 - A container may appear in another container's component view only if the element is tagged `external`; `docs/c4/gen.py` generates a twin element (id prefix `n-`) for this.
+- `agent_work/phase1/c4-check.mjs` must be copied into the folder that holds `node_modules/c4-sdk`: Node resolves the import from the script's own folder, not from the working directory. On vm-1 make that folder outside `/tmp`, because `/tmp/node_modules` exists and `npm install` in a subfolder of `/tmp` fails with "Cannot read properties of null (reading 'edgesOut')"; run `npm init -y` first.
 
 ## Building the site on vm-1
 
 - The system Python on vm-1 has no `pip` and no `ensurepip`. To build the site locally, download the `Markdown` wheel from PyPI, unzip it into a scratch folder and set `PYTHONPATH` to it. CI installs it with `pip` as usual.
+
+## Flushed CSV metrics and DuckDB (observability amendment, 2026-11-24)
+
+- vm-1 has the DuckDB command-line tool 1.5.5 at `/root/.local/bin/duckdb`. Nick named DuckDB 2.0 for this project; the plan pins the version in chunk 3.
+- The schema of PLAN.md section 7.7 was tried on sample files with DuckDB 1.5.5. `read_csv(getvariable('csv_dir') || '/**/metrics.csv', header = true, columns = {...})` works with the path taken from a variable set by `SET VARIABLE`, and a glob reads many run directories as one table.
+- With explicit column types, an empty text field is read as NULL, not as the empty string. `views.sql` has to turn label columns back into `''` (for example with `coalesce`), or comparisons such as `reason = ''` silently match nothing.
+- A sum over a BIGINT column comes back as a 128-bit integer (`HUGEINT`); integer comparisons such as `100 * a <= 95 * b` need no casts.

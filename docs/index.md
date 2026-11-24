@@ -2,6 +2,8 @@
 
 **Status: awaiting Nick's approval. Nothing has been built.** This site holds the proposal: the build plan, the target architecture diagrams, and a summary of the influences behind them. It is a review site, not the book; the book's chapters will appear here as chunks land.
 
+**Amended 2026-11-24** with the observability amendment: metrics flushed to CSV files that tests assert on, DuckDB queries over those files, and the production path from the OTLP push through an OpenTelemetry Collector to Prometheus. See sections 6.5 and 7.7–7.9 of [the plan](../PLAN.md), chunks 3 and 16, and [the observability diagram](c4/13-component-observability.md).
+
 mini-gateway is a Go proxy that speaks the Postgres wire protocol in front of one ordinary Postgres. It gives the database a bounded number of connections however many clients arrive, and under overload it decides per tenant which requests wait, which run, and which are refused quickly with an error that says whether a retry is safe.
 
 ## What to review
