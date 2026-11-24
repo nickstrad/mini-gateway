@@ -1,44 +1,44 @@
-# STATE — mini-zgateway
+# STATE — mini-gateway
 
-Goal: build Mini-ZGateway (spec: docs/project-source.md) — a Go storage proxy in front of a single vanilla Redis (Variant A, recommended) or Postgres (Variant B) backend: bounded multiplexed connection pool, in-flight read coalescing (never writes), micro-batching, CoDel + Adaptive LIFO admission, per-tenant fairness / noisy-neighbor isolation, adaptive concurrency, retry budgets, distinct pre-forward vs post-forward error semantics — designed testing-first, deterministic simulation harness (Commit 0) before any proxy code.
+RENAMED 2026-11-24 (Nick, steering answer 2): the project is **mini-gateway** (was mini-zgateway). Repository github.com/nickstrad/mini-gateway, checkout /root/Software/mini-gateway, site https://nickstrad.github.io/mini-gateway/. History was not rewritten; INFLUENCES.md, docs/project-source.md and the Phase 0 records under agent_work/ keep the old name and their Redis-first recommendations.
 
-Status: PHASE 0 COMPLETE, ADDENDUM LANDED (2026-11-24) — awaiting Nick's steering on INFLUENCES.md. HARD GATE: nothing further is authorized. No PLAN.md, no C4 diagrams, no product code, no builder dispatch until Nick's steering arrives (Twin relays it as a file). Waiting is correct behaviour, not a stall. After steering: PLAN.md + initial C4 + Pages review site, then STOP again for Nick's approval of that proposal.
+Goal: build mini-gateway (spec: [docs/project-source.md](docs/project-source.md), as changed by Nick's steering) — a Go proxy that speaks the Postgres wire protocol (simple-query subset) in front of one ordinary Postgres: a hard-capped connection pool lent per transaction, sharing of identical in-flight reads (never writes), timer-free batching, admission queues with two selectable CoDel modes and adaptive LIFO, per-tenant fairness, an adaptive concurrency limit, a retry policy that is off by default, distinct errors for "refused before anything reached the database" versus "failed after", snapshot-based observability in every component, and a static N-instance fleet configuration. Testing-first: the deterministic simulator lands before any proxy code.
 
-Seats (this project only; ruling: /root/briefs/zgateway-seat-ruling.md): Fable orchestrates, gates and lands; Opus writes product Go (logic only), fresh agent and worktree per chunk, concurrently where the dependency graph allows; Gemini Neon reviews Opus and writes ALL reader-facing prose once, late, per chunk (via Antigravity `agy` by default per Nick's 2026-11-24 ruling; OpenCode/OpenRouter are fallback only); Astra (gpt-6-astra) writes adversarial harnesses per chunk. Mission: /root/briefs/zgateway-orchestrator-mission.md.
+Plan: [PLAN.md](PLAN.md) — a PROPOSAL, not yet approved. Diagrams: [docs/c4/](docs/c4/README.md) (target architecture).
+
+Status: **PHASE 1 PROPOSAL AWAITING NICK'S APPROVAL (2026-11-24).** HARD GATE: no proxy code, no chunk builds, no builder dispatch until Nick approves the proposal in chat. Waiting is correct behaviour, not a stall.
+
+Seats (this project only; ruling: /root/briefs/zgateway-seat-ruling.md): Fable orchestrates, gates, lands and owns the C4 diagrams; Opus writes product Go (logic only), fresh agent and worktree per chunk; Gemini Neon (via Antigravity `agy`) writes all reader-facing prose once, late, per chunk; Astra (gpt-6-astra) writes adversarial harnesses per chunk. Who reviews Opus's code is open question 1 below.
 
 Done:
-- Scaffold commit `0005af5` (Twin) — repo, spec copy, STATE.md, agent_work index, docs/c4 placeholder, Pages enabled.
-- Phase 0 research: four fresh Fable research agents (one per bucket), briefs and conductor in `agent_work/phase0/` (commit `e1992eb`); all exited 0; notes in `agent_work/phase0/research/`, probes in `agent_work/phase0/probes/`.
-- INFLUENCES.md at the repo root (original merge, commit `1c6eecf`): 97 influences, 18 conflicts, variant implications, 12 steering questions, plan consequences.
-- Phase 0 addendum (Nick's three directions, `/root/briefs/zgateway-observability-scale-releaseit-note.md`; amendment brief from Twin): three entries added — F29 component-snapshot metrics, F30 *Release It!*, I36 horizontal scale of the proxy tier — plus steering questions 13 and 14, an addendum note in sections 1 and 6. INFLUENCES.md now holds 100 influences (14 spec-named, 20 prior projects, 36 industry systems, 30 foundations; 28 ADOPT, 40 ADOPT WITH CHANGE, 18 WATCH ONLY, 14 EXCLUDE), 18 conflicts, 14 steering questions. Commit SHA is in /root/runs/zgateway-influences-amendment-done.txt and `git log -- INFLUENCES.md`. All three directions remain mandatory inputs to PLAN.md + C4 whatever Nick answers on 13 and 14.
+- Phase 0: scaffold `0005af5`; research `e1992eb`, `8fc77f5`; INFLUENCES.md `1c6eecf`, addendum `dbd79d0` (100 influences, 18 conflicts, 14 steering questions).
+- Steering: Nick answered all 14 questions on 2026-11-24 (/root/briefs/zgateway-steering-answers.md). They govern; PLAN.md section 2 lists every place they override INFLUENCES.md.
+- Phase 1 evidence, commit `43f8c33`: a probe against a real Postgres 17 (`agent_work/phase1/probes/pgwire/`), the evaluation of the object-store simulator and the *Release It!* mining report (`agent_work/phase1/research/`). Indexed in `agent_work/INDEX.md`.
+- PLAN.md, commit `5c83fe6`: 17 chunks after a foundation step, each with purpose, deliverables, its end-to-end tests, observability duties, seats and landing criteria; the scenario-to-chunk table; testing and observability architecture; the fleet table; error, timeout and capacity contracts; the *Release It!* mapping; the benchmarking method and its trade-offs write-up.
+- The two verdicts the steering asked for:
+  - Simulator (steering answer 8): the object-store simulator does not fit as a whole (no byte-stream connections; about 8% of its code survives unchanged). The plan writes a seeded event-loop kernel in this repository and copies in the clean pieces (named random streams, seed and replay plumbing, event heap, determinism lint). A shared kernel for both projects is a follow-up after this project, outside v1.
+  - Backend interface (steering answer 1): a generic backend interface would misdescribe Postgres. The plan is Postgres-first with three tested seams (a protocol-free byte transport under the engine, one package holding everything Postgres, a small work vocabulary that is all the cores see); the generic interface waits for a second protocol.
+- C4, commit `eacd1f4`: 13 target-architecture diagrams generated from `docs/c4/gen.py` (context, two container views, three-instance deployment, nine component views); the c4-sdk model decodes with 0 errors and all 13 scenes build.
+- Review site, commit `1e2e582`: workflow `.github/workflows/pages.yml`, builder `.github/scripts/build_site.py`. Live check results are in /root/runs/zgateway-phase1-done.txt.
 
 In progress: nothing. Waiting at the gate.
 
-Next steps: (1) Twin presents INFLUENCES.md sections 1 and 5 (now 14 questions) to Nick; (2) Nick steers by question number; Twin relays the steering as a file; (3) a fresh Fable orchestrator run reads this file, INFLUENCES.md and the steering file, then produces PLAN.md + kickoff C4 + Pages review site and stops for proposal approval.
+Next steps, in order: (1) Nick reviews the proposal on the site and answers the open questions; (2) the orchestrator applies his answers to PLAN.md and the C4 set; (3) only then: chunk 0 (foundation: module, gates, CI, scripts, book scaffold), then chunk 1 (simulator kernel) and chunk 2 (simulated world) — the simulator harness that must land before any proxy code.
 
-Steering questions awaiting Nick (INFLUENCES.md section 5; Fable's recommendation in brackets):
-1. Variant [A — Redis RESP — as v1, cores kept protocol-free so B can be v2].
-2. Repo name `mini-zgateway` [keep].
-3. Which CoDel, and reword the spec invariant ["Fail at Scale" timeout rule per tenant queue, LIFO on the same signal with a head sweep; invariant becomes "served wait ≤ N, depth bounded, backend never idled"; the paper's law and folly's rule only as simulator comparison arms].
-4. Fairness mechanism [per-tenant queues drained round-robin, share enforced only under saturation; GCRA as an optional outer gate].
-5. Caching [none in v1; coalescing only].
-6. Postgres influence carried under A [pool-management ideas and a README contrast only; no Postgres code].
-7. Benchmark rigor ["Apollo-lite": simulator evidence first, open-loop generator, A/A run, ≥10 interleaved runs, achieved-rate gate, exact counts as headlines; pool 32, Zipf s = 1.2, the 19× labelled a model].
-8. Simulator architecture and kernel location [sans-I/O cores on a single-threaded seeded event loop + goroutine shell under synctest and -race; kernel in-repo; CI fast-only, no test-only deps, e2e per chunk].
-9. Redis compatibility in v1 [RESP2 only, allow-list, stateful commands rejected].
-10. Promote any EXCLUDE/WATCH item [only the comparison arms already in 3].
-11. Demote/reshape any CORE or spec item [GCRA to outer gate; AIMD in v1, not optional; batching timer-free].
-12. Does the proxy itself retry [only when no byte reached the backend, once, under a 10% budget].
-13. Observability scope for v1 [every component ships a snapshot, held by a landing gate; exporters Prometheus text, JSON stats, CSV, log line and a hand-written OTLP/HTTP push exporter landed last, all standard library; bounded tenant label in Prometheus, full per-tenant detail in JSON/CSV; lock-wait timing and per-key hotness opt-in].
-14. Horizontal-scale stance for v1 [per-instance enforcement with a static instance-aware config; N instances is a supported deployment; each guarantee stated as multiplies / weakens / survives at N and the weakened ones measured in 3-instance scenarios; no run-time coordination, which stays a documented seam].
+Open questions for Nick (full text in PLAN.md section 18):
+1. Who reviews Opus's code here — Neon (project seat ruling of 2026-11-24) or Fable only (global rule of 2026-11-11)?
+2. Shared reads: default to "never older than the request" (slower under a stampede) or "join the read already running" (faster, brief stale-read gap)? Proposed: the first, with the second selectable.
+3. Batching under Postgres means pipelining independent single statements onto one connection. Proposed: build it, off by default until measured. Or drop that chunk.
+4. Tenant = the client's startup user name, checked by the proxy; all pooled connections use one database role. Acceptable for v1?
+5. No TLS in v1; SCRAM-SHA-256 and trust only; client cancel requests supported. Agree?
+6. The *Release It!* notes lack the book's material on pooled connections dying silently. Consult the book first? (The PDF is on Drive; the Drive connector was not authorized for this run.)
+7. Size: 17 chunks, roughly 20,000 lines of product code. Go as proposed or apply the cuts listed in PLAN.md section 16?
+8. Approval of the "end-to-end with every chunk" wording draft is still unrecorded; the plan follows the rule as standing.
 
-Open decisions / blockers:
-- All fourteen steering questions above — owner: Nick.
-- vm-1 Claude sign-in expiry: warns it ends sometime Nov 25–28, 2026 — renew before then (owner: Nick/Twin). Phase 1 must start from files; nothing lives only in a session.
-- Shared simulator-kernel repo (Nick's 2026-11-21 preference, `/root/briefs/shared-sim-ruling-note.md`): no such repo exists; folded into question 8.
-- Incremental-e2e guide wording (`/root/briefs/flow-guide-e2e-wording-draft.md`) has no recorded approval, though the rule is treated as standing — owner: Nick.
-- Addendum limits, stated in INFLUENCES.md: *Release It!* was read through Nick's on-machine notes (`/root/Software/book-notes/books/release-it/`), not the book (the PDF is on Drive, not reachable from this run); the kb store has no Release It! entry; the Backpressure book's companion repository was not fetched.
-- Not verified, stated in INFLUENCES.md: the two "Master" companion Google Docs (no local copy); ZGateway's formula/table images; Apollo post date; Canva Part 2 (unpublished).
-- Tooling note: the `kb` on PATH cannot open the VM store at /root/Raw/knowledge (no kb.toml there); `/root/Raw/knowledge/kb/.cache/kb` run from that directory works. Owner: Twin — fix or record in kb.
+Other open items:
+- Terminal (Unicode) renderings of the C4 diagrams are not in this first set; the diagrams have a c4-sdk model and Mermaid pages. Owner: Fable, at chunk 0, unless Nick wants them before approval.
+- README.md and the site's pages were written by the orchestrator as plain status pages; Neon's prose starts with the first chapter.
+- vm-1 Claude sign-in expiry: warned to end sometime Nov 25–28, 2026 — renew before then (owner: Nick/Twin).
+- Tooling: the `kb` on PATH cannot open the VM store from this repo; run `./kb/.cache/kb` from /root/Raw/knowledge (owner: Twin). The system Python on vm-1 has no pip; see `docs/knowledge/phase1-findings.md` for building the site locally.
 
-Resume instructions: branch `main`, no worktrees, no background runs alive. Read this file, then INFLUENCES.md, /root/briefs/zgateway-orchestrator-mission.md, /root/briefs/zgateway-observability-scale-releaseit-note.md, and the steering file once Twin writes it; check `git log` and /root/runs/zgateway-orchestrator-progress.txt. If no steering file exists, do nothing — the gate is still closed.
+Resume instructions: branch `main`, no worktrees, no background runs alive. Read this file, then PLAN.md. Done marker: /root/runs/zgateway-phase1-done.txt; progress log: /root/runs/zgateway-phase1-progress.txt. If no approval from Nick is recorded (a brief under /root/briefs/ or an instruction in chat), do nothing — the gate is closed. After approval: apply his answers to PLAN.md and docs/c4 (edit `docs/c4/gen.py`, run it, re-run `agent_work/phase1/c4-check.mjs`), then write the chunk 0 brief.

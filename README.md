@@ -1,7 +1,10 @@
-# mini-zgateway
+# mini-gateway
 
-Mini-ZGateway — a high-performance, fault-tolerant database/storage proxy in Go, inspired by Meta's ZGateway and Cloudflare's Hyperdrive. It collapses N×M client-to-database connections into a bounded multiplexed pool, coalesces hot-key stampedes, and enforces per-tenant adaptive admission control (CoDel + Adaptive LIFO, per-tenant fairness, retry budgets) in front of a single vanilla Redis or Postgres backend.
+A Go proxy that speaks the Postgres wire protocol in front of one ordinary Postgres. It collapses many client connections into a bounded pool lent per transaction, shares identical in-flight reads, and enforces per-tenant admission control under overload (two selectable CoDel modes, adaptive LIFO, fair shares, an adaptive concurrency limit). It is designed testing-first: a deterministic simulator is built before any proxy code.
 
-Status: Phase 0 (influences). Before any plan or architecture diagrams, the orchestrator is producing an expanded influences list for the owner to steer on.
+Status: **Phase 1 proposal, awaiting approval. Nothing is built yet.**
 
-Spec: [docs/project-source.md](docs/project-source.md) · Site (once the foundation chunk lands): https://nickstrad.github.io/mini-zgateway/
+- Proposal site: https://nickstrad.github.io/mini-gateway/
+- Plan: [PLAN.md](PLAN.md) · Diagrams: [docs/c4/](docs/c4/README.md) · Influences: [INFLUENCES.md](INFLUENCES.md) · Spec: [docs/project-source.md](docs/project-source.md)
+
+The project was first named mini-zgateway; earlier documents keep that name.
