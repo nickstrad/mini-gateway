@@ -1,0 +1,5 @@
+internal/a/a.go	F	negative input is a caller bug
+internal/a/a.go	T.M	invariant
+internal/a/a.go	G.Get	
+internal/a/a.go	Gone	removed function
+internal/a/a.go	only two fields
