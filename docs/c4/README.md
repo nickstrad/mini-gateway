@@ -21,7 +21,7 @@ Three C4 levels plus a deployment view: system context, containers (two views), 
 | 10 | Components | [10-component-batcher.md](10-component-batcher.md) | internal/batch: the take rule, eligibility, reply splitting, the poison rule |
 | 11 | Components | [11-component-retry.md](11-component-retry.md) | internal/retry: the policy interface, its two policies, the budget |
 | 12 | Components | [12-component-simulator.md](12-component-simulator.md) | internal/sim and its sub-packages: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, faults, the trace, invariants, replay |
-| 13 | Components | [13-component-observability.md](13-component-observability.md) | internal/obs: snapshot conventions, the histogram, the collector, health, the exporters, the fleet merge |
+| 13 | Components | [13-component-observability.md](13-component-observability.md) | internal/obs: the one raw export (snapshots), the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus |
 <!-- diagram-table:end -->
 
 ## Where each required part is drawn
@@ -66,6 +66,7 @@ To repeat after a change:
 
 ```sh
 python3 docs/c4/gen.py
-# in a scratch folder with `npm install c4-sdk@0.1.0`:
-node /root/Software/mini-gateway/agent_work/phase1/c4-check.mjs /root/Software/mini-gateway/docs/c4/model.json
+# in a scratch folder outside /tmp, after `npm init -y && npm install c4-sdk@0.1.0`, with the script copied in
+# (Node resolves the import from the script's own folder):
+cp /root/Software/mini-gateway/agent_work/phase1/c4-check.mjs . && node c4-check.mjs /root/Software/mini-gateway/docs/c4/model.json
 ```

@@ -31,7 +31,7 @@ flowchart TB
 | Developer or reader | person | Runs simulator scenarios from a seed, replays a failure from its printed REPLAY line, runs make test / chaos / bench. |
 | mini-gateway | softwareSystem | A proxy that speaks the Postgres wire protocol (simple-query subset) in front of one Postgres: a hard-capped connection pool lent per transaction, per-tenant admission with two CoDel modes, read coalescing, timer-free batching, an off-by-default retry policy, snapshot observability. Runs as N independent instances. |
 | Postgres | softwareSystem, external | One ordinary Postgres server. Sees at most the fleet's connection budget, all logged in as one role. |
-| Metrics and log readers | softwareSystem, external | A Prometheus scraper, an OpenTelemetry Collector, CSV files, log readers. They read exporters and merge across instances; no component knows about them. |
+| Metrics and log readers | softwareSystem, external | Everything that reads what the adapters produce: a Prometheus fed through an OpenTelemetry Collector or by direct scrape, flushed CSV files read by tests and DuckDB, log readers. They merge across instances; no component knows about them. The observability component view shows them one by one. |
 | pgproto3 (from pgx/v5) | softwareSystem, external | Go package github.com/jackc/pgx/v5/pgproto3: Postgres wire message structs with Encode and Decode. The one external dependency, used for message encoding only. |
 
 ## Relationships
@@ -43,5 +43,5 @@ flowchart TB
 | 3 | Developer or reader | mini-gateway | Runs simulator scenarios and the test, chaos and benchmark commands | go test, make, cmd/mgsim |
 | 4 | mini-gateway | Postgres | Lends pooled connections per transaction; at most the configured budget | Postgres wire protocol v3, TCP |
 | 5 | Metrics and log readers | mini-gateway | Scrapes metrics and stats from every instance and merges them | HTTP: Prometheus text, JSON |
-| 6 | mini-gateway | Metrics and log readers | Pushes metrics; writes CSV and log lines | OTLP/HTTP JSON, files |
+| 6 | mini-gateway | Metrics and log readers | Pushes metrics to a Collector that feeds Prometheus; flushes CSV files; writes log lines | OTLP/HTTP JSON, files |
 | 7 | mini-gateway | pgproto3 (from pgx/v5) | Encodes and decodes wire messages | Go import, wire layer only |

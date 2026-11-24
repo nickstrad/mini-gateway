@@ -53,10 +53,10 @@ flowchart TB
 | Pool | container | internal/pool. Hard-capped database connections, creation limiter, leases per transaction, the one breaker, the dirty-connection table. |
 | Batcher | container | internal/batch. Timer-free: when a connection frees up, eligible queued single statements go out in one write. Off by default. |
 | Retry policy | container | internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached the database, within a 10% budget. |
-| Observability | container | internal/obs. Snapshot conventions, integer histogram, collector, fleet merge, health, and the exporters. |
+| Observability | container | internal/obs. Snapshot conventions (the one raw export), integer histogram, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health. |
 | Configuration | container | internal/config. The config file, the static fleet block (instance count N; fleet budgets divided by N), and load-time validation that fails closed. |
 | Postgres | softwareSystem, external | One ordinary Postgres server. Sees at most the fleet's connection budget, all logged in as one role. |
-| Metrics and log readers | softwareSystem, external | A Prometheus scraper, an OpenTelemetry Collector, CSV files, log readers. They read exporters and merge across instances; no component knows about them. |
+| Metrics and log readers | softwareSystem, external | Everything that reads what the adapters produce: a Prometheus fed through an OpenTelemetry Collector or by direct scrape, flushed CSV files read by tests and DuckDB, log readers. They merge across instances; no component knows about them. The observability component view shows them one by one. |
 
 ## Relationships
 
@@ -75,5 +75,5 @@ flowchart TB
 | 11 | Engine | Observability | Publishes one instance snapshot per interval | Go, plain structs |
 | 12 | Shell and binary | Observability | Admin listener serves exporters and health from the last published snapshot | Go, in-process |
 | 13 | Metrics and log readers | Shell and binary | Scrapes Prometheus text and JSON stats | HTTP admin port |
-| 14 | Observability | Metrics and log readers | Pushes OTLP metrics (last build chunk); writes CSV and log lines | OTLP/HTTP JSON, files |
+| 14 | Observability | Metrics and log readers | Pushes OTLP metrics to a Collector that feeds Prometheus (last build chunk); flushes CSV files; writes log lines | OTLP/HTTP JSON, files |
 | 15 | Shell and binary | Configuration | Loads and validates the config and the fleet block at start | Go, in-process |

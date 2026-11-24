@@ -15,7 +15,7 @@ import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-REVISION = "target-phase1-2026-11-24"
+REVISION = "target-phase1-2026-11-24-obs-amendment"
 SRC = ["plan"]
 
 E = {}      # id -> element
@@ -87,8 +87,23 @@ system("pg", "Postgres",
        "One ordinary Postgres server. Sees at most the fleet's connection budget, all logged in as one role.",
        tech="PostgreSQL 17", tags=("external",))
 system("telemetry", "Metrics and log readers",
-       "A Prometheus scraper, an OpenTelemetry Collector, CSV files, log readers. They read exporters and merge "
-       "across instances; no component knows about them.", tags=("external",))
+       "Everything that reads what the adapters produce: a Prometheus fed through an OpenTelemetry Collector or by "
+       "direct scrape, flushed CSV files read by tests and DuckDB, log readers. They merge across instances; no "
+       "component knows about them. The observability component view shows them one by one.", tags=("external",))
+system("csvfiles", "Flushed CSV files",
+       "One directory per run on local disk: run.csv, metrics.csv, histograms.csv, schema version 1 (PLAN.md section "
+       "7.7). Same columns in every flush; every tenant has its own rows. Nothing has to be running to read them.",
+       tech="CSV files", tags=("external",))
+system("duckdb", "DuckDB (analysis tool)",
+       "The DuckDB command-line tool, run after a run by test and benchmark scripts and by hand. Reads the flushed "
+       "files with read_csv and runs SQL assertions and report queries. Never imported, linked or started by the proxy.",
+       tech="DuckDB CLI, SQL", tags=("external",))
+system("otelcol", "OpenTelemetry Collector",
+       "Receives the proxy's OTLP/HTTP push, batches it and exposes the metrics on a Prometheus endpoint. Dev setup: "
+       "docker-compose in deploy/obs-dev (chunk 16).", tech="otlp receiver, prometheus exporter", tags=("external",))
+system("prom", "Prometheus",
+       "End of the production path. Scrapes the Collector; sees low-cardinality labels and the bounded tenant label "
+       "only. Fleet totals are sums over the instance label.", tech="Prometheus", tags=("external",))
 system("pgproto3", "pgproto3 (from pgx/v5)",
        "Go package github.com/jackc/pgx/v5/pgproto3: Postgres wire message structs with Encode and Decode. "
        "The one external dependency, used for message encoding only.", tech="Go library", tags=("external",))
@@ -127,7 +142,8 @@ container("c-retry", "Retry policy",
           "internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached "
           "the database, within a 10% budget.", tech="Go, pure core")
 container("c-obs", "Observability",
-          "internal/obs. Snapshot conventions, integer histogram, collector, fleet merge, health, and the exporters.",
+          "internal/obs. Snapshot conventions (the one raw export), integer histogram, collector, the adapter interface and "
+          "its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health.",
           tech="Go, standard library")
 container("c-config", "Configuration",
           "internal/config. The config file, the static fleet block (instance count N; fleet budgets divided by N), "
@@ -145,7 +161,7 @@ rel("r-app-gw", "app", "gw", "Connects, logs in, sends statements and transactio
 rel("r-op-gw", "operator", "gw", "Configures the fleet; reads health and stats; drains", "Config file, HTTP admin port, SIGTERM")
 rel("r-gw-pg", "gw", "pg", "Lends pooled connections per transaction; at most the configured budget", "Postgres wire protocol v3, TCP")
 rel("r-tel-gw", "telemetry", "gw", "Scrapes metrics and stats from every instance and merges them", "HTTP: Prometheus text, JSON")
-rel("r-gw-tel", "gw", "telemetry", "Pushes metrics; writes CSV and log lines", "OTLP/HTTP JSON, files")
+rel("r-gw-tel", "gw", "telemetry", "Pushes metrics to a Collector that feeds Prometheus; flushes CSV files; writes log lines", "OTLP/HTTP JSON, files")
 rel("r-dev-gw", "developer", "gw", "Runs simulator scenarios and the test, chaos and benchmark commands", "go test, make, cmd/mgsim")
 rel("r-gw-lib", "gw", "pgproto3", "Encodes and decodes wire messages", "Go import, wire layer only")
 
@@ -163,7 +179,7 @@ rel("c10", "c-shell", "pg", "Opens the pooled connections and moves their bytes"
 rel("c11", "c-engine", "c-obs", "Publishes one instance snapshot per interval", "Go, plain structs")
 rel("c12", "c-shell", "c-obs", "Admin listener serves exporters and health from the last published snapshot", "Go, in-process")
 rel("c13", "telemetry", "c-shell", "Scrapes Prometheus text and JSON stats", "HTTP admin port")
-rel("c14", "c-obs", "telemetry", "Pushes OTLP metrics (last build chunk); writes CSV and log lines", "OTLP/HTTP JSON, files")
+rel("c14", "c-obs", "telemetry", "Pushes OTLP metrics to a Collector that feeds Prometheus (last build chunk); flushes CSV files; writes log lines", "OTLP/HTTP JSON, files")
 rel("c15", "c-shell", "c-config", "Loads and validates the config and the fleet block at start", "Go, in-process")
 
 # --------------------------------------------------------------------------- container view B (drivers and seams)
@@ -496,14 +512,18 @@ rel("m20", "s-toy", "s-net", "Echo over simulated streams, for the meta-tests", 
 # --------------------------------------------------------------------------- observability components
 P = "c-obs"
 comp(P, "o-contract", "Snapshot conventions",
-     "What every component's Snapshot() returns: a plain struct of monotonic counters and current gauges. No "
-     "wall-clock time, no map order, no telemetry imports.")
+     "The one common raw export. What every component's Snapshot() returns: a plain struct of monotonic counters and "
+     "current gauges. No wall-clock time, no map order, no telemetry imports. Nothing else leaves a component.")
 comp(P, "o-hist", "Integer histogram",
      "Fixed array, fixed relative error, no allocation on record; record, merge, percentile. Out-of-range values are "
      "clamped and counted.")
 comp(P, "o-collector", "Collector",
      "Assembles one instance snapshot from the component snapshots, with instance id, build and config fingerprint. "
-     "Keeps the last published copy; readers never wait on the engine.")
+     "Keeps the last published copy; readers never wait on the engine. The only reader of component snapshots.")
+comp(P, "o-adapter", "Adapter interface",
+     "The one interface every output form implements: take the published instance snapshot, produce output. One "
+     "conformance test for all adapters. Components cannot see past it, so none knows about CSV, DuckDB, OTel or "
+     "Prometheus.")
 comp(P, "o-merge", "Fleet merge",
      "Merges instance snapshots: counters and gauges sum, histograms merge, ratios are recomputed, never averaged.")
 comp(P, "o-health", "Health",
@@ -513,13 +533,16 @@ comp(P, "o-prom", "Prometheus text exporter",
      "Low-cardinality labels and a bounded tenant label (configured tenants up to a cap, the rest as other).")
 comp(P, "o-json", "JSON stats exporter",
      "The full snapshot, including every active tenant.")
-comp(P, "o-csv", "CSV writer",
-     "Evidence tables for scenarios and benchmarks.")
+comp(P, "o-csv", "CSV flush adapter",
+     "Flushes snapshots to disk at each publish and at the end of a run, in a stable versioned schema with unbounded "
+     "per-tenant rows. The testing path: tests assert on the files with no Collector or Prometheus running. "
+     "Bounded size; drop-and-count on a write error.")
 comp(P, "o-log", "Log-line exporter",
      "One structured line per interval.")
 comp(P, "o-otlp", "OTLP/HTTP push exporter",
-     "Hand-written on the standard library, no SDK. Bounded queue, timeout, drop-and-count when the collector is down. "
-     "Lands in the last build chunk and touches no component.")
+     "The final adapter and the proxy's end of the production path. Hand-written on the standard library, no SDK. "
+     "Cumulative sums, gauges, short-list histogram buckets, bounded tenant label. Bounded queue, timeout, "
+     "drop-and-count when the Collector is down. Lands in the last build chunk and touches no component.")
 rel("o1", "n-engine", "o-collector", "Hands over every component's snapshot at each publish", "Go, plain structs")
 rel("o2", "o-collector", "o-contract", "Assembles the instance snapshot", "Go")
 rel("o3", "o-contract", "o-hist", "Histograms inside snapshots", "Go")
@@ -527,13 +550,20 @@ rel("o4", "o-collector", "o-health", "Derives the health state and its reasons",
 rel("o5", "n-shell", "o-prom", "Admin listener serves /metrics", "HTTP")
 rel("o6", "n-shell", "o-json", "Admin listener serves /stats", "HTTP")
 rel("o7", "n-shell", "o-health", "Admin listener serves /health", "HTTP")
-rel("o8", "o-prom", "o-collector", "Reads the last published snapshot", "Go")
-rel("o9", "o-json", "o-collector", "Reads the last published snapshot", "Go")
-rel("o10", "o-csv", "o-collector", "Reads the last published snapshot", "Go")
-rel("o11", "o-log", "o-collector", "Reads the last published snapshot", "Go")
-rel("o12", "o-otlp", "o-collector", "Reads the last published snapshot", "Go")
-rel("o13", "o-otlp", "telemetry", "Pushes metrics", "OTLP/HTTP JSON")
+rel("o8", "o-prom", "o-adapter", "Implements the adapter interface", "Go", "implementation")
+rel("o9", "o-json", "o-adapter", "Implements the adapter interface", "Go", "implementation")
+rel("o10", "o-csv", "o-adapter", "Implements the adapter interface", "Go", "implementation")
+rel("o11", "o-log", "o-adapter", "Implements the adapter interface", "Go", "implementation")
+rel("o12", "o-otlp", "o-adapter", "Implements the adapter interface", "Go", "implementation")
+rel("o13", "o-otlp", "otelcol", "Pushes metrics every interval", "OTLP/HTTP JSON")
 rel("o14", "o-merge", "o-contract", "Merges snapshots from several instances", "Go")
+rel("o15", "o-adapter", "o-collector", "Receives the last published snapshot; all an adapter can read", "Go")
+rel("o16", "o-csv", "csvfiles", "Flushes rows at each publish and at the end of a run", "Files, schema version 1")
+rel("o17", "duckdb", "csvfiles", "Reads the files directly", "read_csv, SQL")
+rel("o18", "n-e2e", "o-csv", "Turns the flush on for every run; checks the final flush equals the snapshot", "Go test")
+rel("o19", "n-e2e", "duckdb", "Runs SQL assertions and report queries after a run", "scripts/csv-assert.sh")
+rel("o20", "prom", "otelcol", "Scrapes the Collector's Prometheus endpoint", "HTTP")
+rel("o21", "prom", "n-shell", "Can scrape /metrics directly instead (no Collector)", "HTTP admin port")
 
 # --------------------------------------------------------------------------- deployment (N = 3)
 ENV = "fleet-of-3"
@@ -664,10 +694,16 @@ component_diagram("component-simulator", "Components: simulator harness", "12-co
                   "three-instance scenarios are made.",
                   ["developer", "n-engine", "n-pgwire", "pgproto3"], ["m%d" % i for i in range(1, 21)])
 component_diagram("component-observability", "Components: observability", "13-component-observability", "c-obs",
-                  "internal/obs: snapshot conventions, the histogram, the collector, health, the exporters, the fleet merge",
-                  "One direction of dependency: components fill plain structs; the collector assembles them; exporters "
-                  "read only the collector. Adding an exporter touches no component.",
-                  ["n-engine", "n-shell", "telemetry"], ["o%d" % i for i in range(1, 15)])
+                  "internal/obs: the one raw export (snapshots), the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus",
+                  "The hard rule: one common raw export, then the collector interface, then adapters. Components fill "
+                  "plain structs; the collector assembles them; every output form is an adapter that reads only what the "
+                  "collector publishes. No component knows about CSV, DuckDB, OTel or Prometheus, and adding an adapter "
+                  "touches no component. Two paths leave the process. The testing path: the CSV flush adapter writes "
+                  "files, and tests and DuckDB read them with nothing else running. The production path: the OTLP "
+                  "adapter pushes to an OpenTelemetry Collector, which Prometheus scrapes. DuckDB is an analysis tool "
+                  "over files, never a dependency of the proxy.",
+                  ["n-engine", "n-shell", "n-e2e", "csvfiles", "duckdb", "otelcol", "prom"],
+                  ["o%d" % i for i in (1, 2, 3, 4, 15, 8, 9, 10, 11, 12, 5, 6, 7, 16, 18, 17, 19, 13, 20, 21, 14)])
 
 
 # --------------------------------------------------------------------------- output

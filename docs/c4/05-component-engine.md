@@ -73,7 +73,7 @@ flowchart TB
 | Pool | neighbouring container | internal/pool. Hard-capped database connections, creation limiter, leases per transaction, the one breaker, the dirty-connection table. |
 | Batcher | neighbouring container | internal/batch. Timer-free: when a connection frees up, eligible queued single statements go out in one write. Off by default. |
 | Retry policy | neighbouring container | internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached the database, within a 10% budget. |
-| Observability | neighbouring container | internal/obs. Snapshot conventions, integer histogram, collector, fleet merge, health, and the exporters. |
+| Observability | neighbouring container | internal/obs. Snapshot conventions (the one raw export), integer histogram, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health. |
 | Work vocabulary | neighbouring container | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, batchable flag, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
 
 ## Relationships

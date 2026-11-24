@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "id": "mini-gateway",
  "title": "mini-gateway — target architecture",
- "revision": "target-phase1-2026-11-24",
+ "revision": "target-phase1-2026-11-24-obs-amendment",
  "defaultDiagramId": "context",
  "model": {
   "elements": [
@@ -79,7 +79,7 @@
     "id": "telemetry",
     "kind": "softwareSystem",
     "name": "Metrics and log readers",
-    "description": "A Prometheus scraper, an OpenTelemetry Collector, CSV files, log readers. They read exporters and merge across instances; no component knows about them.",
+    "description": "Everything that reads what the adapters produce: a Prometheus fed through an OpenTelemetry Collector or by direct scrape, flushed CSV files read by tests and DuckDB, log readers. They merge across instances; no component knows about them. The observability component view shows them one by one.",
     "status": "planned",
     "tags": [
      "external"
@@ -89,6 +89,70 @@
     "sourceIds": [
      "plan"
     ]
+   },
+   {
+    "id": "csvfiles",
+    "kind": "softwareSystem",
+    "name": "Flushed CSV files",
+    "description": "One directory per run on local disk: run.csv, metrics.csv, histograms.csv, schema version 1 (PLAN.md section 7.7). Same columns in every flush; every tenant has its own rows. Nothing has to be running to read them.",
+    "status": "planned",
+    "tags": [
+     "external"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "CSV files"
+   },
+   {
+    "id": "duckdb",
+    "kind": "softwareSystem",
+    "name": "DuckDB (analysis tool)",
+    "description": "The DuckDB command-line tool, run after a run by test and benchmark scripts and by hand. Reads the flushed files with read_csv and runs SQL assertions and report queries. Never imported, linked or started by the proxy.",
+    "status": "planned",
+    "tags": [
+     "external"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "DuckDB CLI, SQL"
+   },
+   {
+    "id": "otelcol",
+    "kind": "softwareSystem",
+    "name": "OpenTelemetry Collector",
+    "description": "Receives the proxy's OTLP/HTTP push, batches it and exposes the metrics on a Prometheus endpoint. Dev setup: docker-compose in deploy/obs-dev (chunk 16).",
+    "status": "planned",
+    "tags": [
+     "external"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "otlp receiver, prometheus exporter"
+   },
+   {
+    "id": "prom",
+    "kind": "softwareSystem",
+    "name": "Prometheus",
+    "description": "End of the production path. Scrapes the Collector; sees low-cardinality labels and the bounded tenant label only. Fleet totals are sums over the instance label.",
+    "status": "planned",
+    "tags": [
+     "external"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Prometheus"
    },
    {
     "id": "pgproto3",
@@ -425,7 +489,7 @@
     "id": "c-obs",
     "kind": "container",
     "name": "Observability",
-    "description": "internal/obs. Snapshot conventions, integer histogram, collector, fleet merge, health, and the exporters.",
+    "description": "internal/obs. Snapshot conventions (the one raw export), integer histogram, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -1546,7 +1610,7 @@
     "id": "o-contract",
     "kind": "component",
     "name": "Snapshot conventions",
-    "description": "What every component's Snapshot() returns: a plain struct of monotonic counters and current gauges. No wall-clock time, no map order, no telemetry imports.",
+    "description": "The one common raw export. What every component's Snapshot() returns: a plain struct of monotonic counters and current gauges. No wall-clock time, no map order, no telemetry imports. Nothing else leaves a component.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -1576,7 +1640,22 @@
     "id": "o-collector",
     "kind": "component",
     "name": "Collector",
-    "description": "Assembles one instance snapshot from the component snapshots, with instance id, build and config fingerprint. Keeps the last published copy; readers never wait on the engine.",
+    "description": "Assembles one instance snapshot from the component snapshots, with instance id, build and config fingerprint. Keeps the last published copy; readers never wait on the engine. The only reader of component snapshots.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-adapter",
+    "kind": "component",
+    "name": "Adapter interface",
+    "description": "The one interface every output form implements: take the published instance snapshot, produce output. One conformance test for all adapters. Components cannot see past it, so none knows about CSV, DuckDB, OTel or Prometheus.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -1650,8 +1729,8 @@
    {
     "id": "o-csv",
     "kind": "component",
-    "name": "CSV writer",
-    "description": "Evidence tables for scenarios and benchmarks.",
+    "name": "CSV flush adapter",
+    "description": "Flushes snapshots to disk at each publish and at the end of a run, in a stable versioned schema with unbounded per-tenant rows. The testing path: tests assert on the files with no Collector or Prometheus running. Bounded size; drop-and-count on a write error.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -1681,7 +1760,7 @@
     "id": "o-otlp",
     "kind": "component",
     "name": "OTLP/HTTP push exporter",
-    "description": "Hand-written on the standard library, no SDK. Bounded queue, timeout, drop-and-count when the collector is down. Lands in the last build chunk and touches no component.",
+    "description": "The final adapter and the proxy's end of the production path. Hand-written on the standard library, no SDK. Cumulative sums, gauges, short-list histogram buckets, bounded tenant label. Bounded queue, timeout, drop-and-count when the Collector is down. Lands in the last build chunk and touches no component.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -1903,7 +1982,7 @@
     "id": "r-gw-tel",
     "sourceId": "gw",
     "targetId": "telemetry",
-    "label": "Pushes metrics; writes CSV and log lines",
+    "label": "Pushes metrics to a Collector that feeds Prometheus; flushes CSV files; writes log lines",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
@@ -2111,7 +2190,7 @@
     "id": "c14",
     "sourceId": "c-obs",
     "targetId": "telemetry",
-    "label": "Pushes OTLP metrics (last build chunk); writes CSV and log lines",
+    "label": "Pushes OTLP metrics to a Collector that feeds Prometheus (last build chunk); flushes CSV files; writes log lines",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
@@ -3826,73 +3905,73 @@
    {
     "id": "o8",
     "sourceId": "o-prom",
-    "targetId": "o-collector",
-    "label": "Reads the last published snapshot",
+    "targetId": "o-adapter",
+    "label": "Implements the adapter interface",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
-    "technology": "Go"
+    "technology": "Go, interface implementation"
    },
    {
     "id": "o9",
     "sourceId": "o-json",
-    "targetId": "o-collector",
-    "label": "Reads the last published snapshot",
+    "targetId": "o-adapter",
+    "label": "Implements the adapter interface",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
-    "technology": "Go"
+    "technology": "Go, interface implementation"
    },
    {
     "id": "o10",
     "sourceId": "o-csv",
-    "targetId": "o-collector",
-    "label": "Reads the last published snapshot",
+    "targetId": "o-adapter",
+    "label": "Implements the adapter interface",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
-    "technology": "Go"
+    "technology": "Go, interface implementation"
    },
    {
     "id": "o11",
     "sourceId": "o-log",
-    "targetId": "o-collector",
-    "label": "Reads the last published snapshot",
+    "targetId": "o-adapter",
+    "label": "Implements the adapter interface",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
-    "technology": "Go"
+    "technology": "Go, interface implementation"
    },
    {
     "id": "o12",
     "sourceId": "o-otlp",
-    "targetId": "o-collector",
-    "label": "Reads the last published snapshot",
+    "targetId": "o-adapter",
+    "label": "Implements the adapter interface",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
-    "technology": "Go"
+    "technology": "Go, interface implementation"
    },
    {
     "id": "o13",
     "sourceId": "o-otlp",
-    "targetId": "telemetry",
-    "label": "Pushes metrics",
+    "targetId": "otelcol",
+    "label": "Pushes metrics every interval",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
@@ -3913,6 +3992,97 @@
      "plan"
     ],
     "technology": "Go"
+   },
+   {
+    "id": "o15",
+    "sourceId": "o-adapter",
+    "targetId": "o-collector",
+    "label": "Receives the last published snapshot; all an adapter can read",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o16",
+    "sourceId": "o-csv",
+    "targetId": "csvfiles",
+    "label": "Flushes rows at each publish and at the end of a run",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Files, schema version 1"
+   },
+   {
+    "id": "o17",
+    "sourceId": "duckdb",
+    "targetId": "csvfiles",
+    "label": "Reads the files directly",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "read_csv, SQL"
+   },
+   {
+    "id": "o18",
+    "sourceId": "n-e2e",
+    "targetId": "o-csv",
+    "label": "Turns the flush on for every run; checks the final flush equals the snapshot",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
+   },
+   {
+    "id": "o19",
+    "sourceId": "n-e2e",
+    "targetId": "duckdb",
+    "label": "Runs SQL assertions and report queries after a run",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "scripts/csv-assert.sh"
+   },
+   {
+    "id": "o20",
+    "sourceId": "prom",
+    "targetId": "otelcol",
+    "label": "Scrapes the Collector's Prometheus endpoint",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "HTTP"
+   },
+   {
+    "id": "o21",
+    "sourceId": "prom",
+    "targetId": "n-shell",
+    "label": "Can scrape /metrics directly instead (no Collector)",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "HTTP admin port"
    },
    {
     "id": "x1",
@@ -5831,6 +6001,9 @@
      "elementId": "o-collector"
     },
     {
+     "elementId": "o-adapter"
+    },
+    {
      "elementId": "o-merge"
     },
     {
@@ -5858,7 +6031,19 @@
      "elementId": "n-shell"
     },
     {
-     "elementId": "telemetry"
+     "elementId": "n-e2e"
+    },
+    {
+     "elementId": "csvfiles"
+    },
+    {
+     "elementId": "duckdb"
+    },
+    {
+     "elementId": "otelcol"
+    },
+    {
+     "elementId": "prom"
     }
    ],
    "edges": [
@@ -5875,13 +6060,7 @@
      "relationshipId": "o4"
     },
     {
-     "relationshipId": "o5"
-    },
-    {
-     "relationshipId": "o6"
-    },
-    {
-     "relationshipId": "o7"
+     "relationshipId": "o15"
     },
     {
      "relationshipId": "o8"
@@ -5899,7 +6078,34 @@
      "relationshipId": "o12"
     },
     {
+     "relationshipId": "o5"
+    },
+    {
+     "relationshipId": "o6"
+    },
+    {
+     "relationshipId": "o7"
+    },
+    {
+     "relationshipId": "o16"
+    },
+    {
+     "relationshipId": "o18"
+    },
+    {
+     "relationshipId": "o17"
+    },
+    {
+     "relationshipId": "o19"
+    },
+    {
      "relationshipId": "o13"
+    },
+    {
+     "relationshipId": "o20"
+    },
+    {
+     "relationshipId": "o21"
     },
     {
      "relationshipId": "o14"
