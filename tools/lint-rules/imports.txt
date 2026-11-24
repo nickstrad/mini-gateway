@@ -1,0 +1,30 @@
+# Import rules for importlint (PLAN.md section 6.3). Read by scripts/gate.sh and
+# scripts/ci-fast.sh:  importlint -root . -rules tools/lint-rules/imports.txt
+# Syntax and findings: tools/detlint/README-tools.txt, section 6.
+#   module <path>                 the module these rules are for
+#   require <module path>         a module go.mod may require directly
+#   deny <pkg>... : <import>...   packages on the left may not import those on the right
+#   only <import>... : <pkg>...   imports on the left are allowed ONLY in packages on the right
+# Patterns are directories of this module (internal/pool; /... also matches everything
+# below) or full import paths (first element has a dot). !pattern is an exclusion.
+# A rule about a package that does not exist yet is silent. Any import outside the standard
+# library and this module that no `only` rule names is a finding.
+
+module github.com/nickstrad/mini-gateway
+
+# go.mod: no requirement, or exactly this one (indirect lines only beside it, and only as
+# `go mod tidy` writes them: the gate's G0 runs `go mod tidy -diff`).
+require github.com/jackc/pgx/v5
+
+# The cores know nothing of the wire layer, of pgproto3, or of any observability adapter.
+# internal/obs itself (the collector and the snapshot types) is allowed; packages below it
+# are the adapters.
+deny internal/pool/... internal/admission/... internal/coalesce/... internal/retry/... internal/work/... : internal/pgwire/... github.com/jackc/pgx/v5/pgproto3 internal/obs/... !internal/obs
+
+# The engine does not import an adapter either.
+deny internal/proxy/... : internal/obs/... !internal/obs
+
+# pgproto3 is the one third-party package, and only the wire layer, the fake Postgres and
+# the test clients may import it. The test-client package is not built yet: the chunk that
+# adds it (chunk 4 or 6) puts its real directory here in place of internal/testclient.
+only github.com/jackc/pgx/v5/pgproto3 : internal/pgwire/... internal/sim/fakepg/... internal/testclient/...

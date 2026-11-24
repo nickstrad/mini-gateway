@@ -1,0 +1,5 @@
+# Packages the bounded-channel lint (boundlint) checks: one package pattern per line,
+# relative to the repository root. '#' lines and blank lines are ignored. Unlike the other
+# lists this one is set from the start: a pattern whose directory does not exist yet is
+# skipped, so the lint starts working the moment the shell is created.
+internal/shell/...

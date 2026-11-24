@@ -1,0 +1,1 @@
+# relative/file.go<TAB>EnclosingFunc<TAB>justification -- every panic( under internal/ and cmd/ must have a line here; an unused line fails the gate
