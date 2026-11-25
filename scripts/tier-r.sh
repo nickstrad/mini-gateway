@@ -11,7 +11,9 @@
 # What it does: starts two containers from postgres:17, each bound to 127.0.0.1 on a free
 # port, named mg-tier-r-<pid>-main and mg-tier-r-<pid>-burst, with trust authentication.
 # The main one has max_connections=600 and pg_stat_statements loaded; the burst one has
-# max_connections=100. Both are removed on exit, also on failure or interrupt. Then it
+# max_connections=100. A third, mg-tier-r-<pid>-scram, uses scram-sha-256 authentication
+# (password $scram_pw for postgres) with ssl=on (the image's snakeoil certificate), for the
+# chunk 4 wire tests. All are removed on exit, also on failure or interrupt. Then it
 # runs the tier R tests (go test -run '^TestTierR' with MG_TIER_R=1) and prints a summary.
 # The tests themselves skip unless MG_TIER_R=1, so `go test ./...` never needs Docker.
 #
@@ -51,11 +53,20 @@ start() {
     "$image" -c shared_buffers=32MB "$@" >/dev/null || { echo "tier-r.sh: cannot start $name from $image" >&2; return 1; }
 }
 
+start_scram() {
+  local name=$1 port=$2
+  names+=("$name")
+  docker run -d --rm --name "$name" -p "127.0.0.1:$port:5432" \
+    -e POSTGRES_HOST_AUTH_METHOD=scram-sha-256 -e POSTGRES_PASSWORD="$scram_pw" \
+    "$image" -c shared_buffers=32MB -c ssl=on -c ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem \
+    -c ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key >/dev/null || { echo "tier-r.sh: cannot start $name from $image" >&2; return 1; }
+}
+
 wait_ready() {
   local name=$1 i
   for i in $(seq 1 120); do
     if docker exec "$name" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 \
-      && docker exec "$name" psql -h 127.0.0.1 -U postgres -tAc 'SELECT 1' >/dev/null 2>&1; then
+      && docker exec -e PGPASSWORD="$scram_pw" "$name" psql -h 127.0.0.1 -U postgres -tAc 'SELECT 1' >/dev/null 2>&1; then
       return 0
     fi
     sleep 0.5
@@ -65,16 +76,20 @@ wait_ready() {
   return 1
 }
 
-main_port=$(free_port) && burst_port=$(free_port) || { echo "tier-r.sh: cannot find a free port" >&2; exit 2; }
+scram_pw=mg-tier-r-scram
+main_port=$(free_port) && burst_port=$(free_port) && scram_port=$(free_port) || { echo "tier-r.sh: cannot find a free port" >&2; exit 2; }
 start "$prefix-main" "$main_port" -c max_connections=600 -c shared_preload_libraries=pg_stat_statements || exit 2
 start "$prefix-burst" "$burst_port" -c max_connections=100 -c superuser_reserved_connections=0 || exit 2
+start_scram "$prefix-scram" "$scram_port" || exit 2
 wait_ready "$prefix-main" || exit 2
 wait_ready "$prefix-burst" || exit 2
+wait_ready "$prefix-scram" || exit 2
 version=$(docker exec "$prefix-main" psql -h 127.0.0.1 -U postgres -tAc 'SHOW server_version' 2>/dev/null)
-echo "NOTE: Postgres $version in $prefix-main (127.0.0.1:$main_port) and $prefix-burst (127.0.0.1:$burst_port)"
+echo "NOTE: Postgres $version in $prefix-main (127.0.0.1:$main_port), $prefix-burst (127.0.0.1:$burst_port) and $prefix-scram (127.0.0.1:$scram_port)"
 
 rc=0
 MG_TIER_R=1 MG_PG_ADDR="127.0.0.1:$main_port" MG_PG_BURST_ADDR="127.0.0.1:$burst_port" \
+  MG_PG_SCRAM_ADDR="127.0.0.1:$scram_port" MG_PG_SCRAM_PASSWORD="$scram_pw" \
   go test -count=1 -timeout 20m -v -run '^TestTierR' ./... >"$log" 2>&1 || rc=$?
 
 passed=$(grep -cE -- '^\s*--- PASS: TestTierR' "$log" || true)
