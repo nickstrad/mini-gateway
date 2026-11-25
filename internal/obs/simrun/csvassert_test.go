@@ -202,6 +202,115 @@ func TestCSVAssertFailsClosed(t *testing.T) {
 	})
 }
 
+func secondRun(t *testing.T, run, newID string, edit func(metrics string) string) string {
+	t.Helper()
+	dst := filepath.Join(filepath.Dir(filepath.Dir(run)), "2", "base")
+	must(t, os.MkdirAll(dst, 0o755))
+	oldID := "direct-500-connections/1/base"
+	for _, f := range []string{"metrics.csv", "histograms.csv", "run.csv"} {
+		b, err := os.ReadFile(filepath.Join(run, f))
+		must(t, err)
+		text := strings.ReplaceAll(string(b), ","+oldID+",", ","+newID+",")
+		if f == "metrics.csv" {
+			text = edit(text)
+		}
+		must(t, os.WriteFile(filepath.Join(dst, f), []byte(text), 0o644))
+	}
+	return dst
+}
+
+func editFile(t *testing.T, path string, edit func(string) string) {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	must(t, err)
+	must(t, os.WriteFile(path, []byte(edit(string(b))), 0o644))
+}
+
+func TestCSVAssertChecksEveryRunAndEveryField(t *testing.T) {
+	requireDuckDB(t)
+	const good = "-- requires: fakepg.sessions_peak\nSELECT 'x' FROM final WHERE component = 'fakepg' AND metric = 'sessions_peak' AND value <> 500;\n"
+	const secondID = "direct-500-connections/2/base"
+	headerOnly := func(s string) string { return s[:strings.IndexByte(s, '\n')+1] }
+	withoutMetric := func(s string) string {
+		var keep []string
+		for _, l := range strings.SplitAfter(s, "\n") {
+			if !strings.Contains(l, ",fakepg,sessions_peak,") {
+				keep = append(keep, l)
+			}
+		}
+		return strings.Join(keep, "")
+	}
+	failing := []struct {
+		name   string
+		mutate func(t *testing.T, root, run string)
+		want   string
+	}{
+		{"one-of-two-runs-empty", func(t *testing.T, root, run string) { secondRun(t, run, secondID, headerOnly) }, "direct-500-connections/2/base"},
+		{"one-of-two-runs-lacks-the-metric", func(t *testing.T, root, run string) { secondRun(t, run, secondID, withoutMetric) }, "no rows for the metric under test fakepg.sessions_peak"},
+		{"two-runs-share-a-run-id", func(t *testing.T, root, run string) {
+			secondRun(t, run, "direct-500-connections/1/base", func(s string) string { return s })
+		}, "run ids"},
+		{"empty-value", func(t *testing.T, root, run string) {
+			editFile(t, filepath.Join(run, "metrics.csv"), func(s string) string {
+				i := strings.Index(s, ",fakepg,sessions_peak,")
+				j := i + strings.IndexByte(s[i:], '\n')
+				k := strings.LastIndexByte(s[:j], ',')
+				return s[:k+1] + s[j:]
+			})
+		}, "empty field"},
+		{"empty-bucket-count", func(t *testing.T, root, run string) {
+			editFile(t, filepath.Join(run, "histograms.csv"), func(s string) string {
+				j := strings.IndexByte(s[strings.IndexByte(s, '\n')+1:], '\n') + strings.IndexByte(s, '\n') + 1
+				k := strings.LastIndexByte(s[:j], ',')
+				return s[:k+1] + s[j:]
+			})
+		}, "empty field"},
+	}
+	for _, tc := range failing {
+		t.Run(tc.name, func(t *testing.T) {
+			root, run := copyRun(t, "direct-500-connections")
+			tc.mutate(t, root, run)
+			out, err := csvAssert(t, nil, root, writeSQL(t, good))
+			if err == nil {
+				t.Fatalf("the runner passed\n%s", out)
+			}
+			if !strings.Contains(out, tc.want) {
+				t.Fatalf("the message does not name the reason %q\n%s", tc.want, out)
+			}
+		})
+	}
+	t.Run("two-good-runs-pass", func(t *testing.T) {
+		root, run := copyRun(t, "direct-500-connections")
+		secondRun(t, run, secondID, func(s string) string { return s })
+		if out, err := csvAssert(t, nil, root, writeSQL(t, good)); err != nil || !strings.Contains(out, "over 2 runs") {
+			t.Fatalf("%v\n%s", err, out)
+		}
+	})
+	t.Run("histogram-requirement", func(t *testing.T) {
+		root, _ := copyRun(t, "direct-500-connections")
+		sql := "-- requires: workload.latency\nSELECT 'x' FROM final_hist WHERE component = 'workload' AND metric = 'latency' AND count <= 0;\n"
+		if out, err := csvAssert(t, nil, root, writeSQL(t, sql)); err != nil {
+			t.Fatalf("%v\n%s", err, out)
+		}
+	})
+	t.Run("quoted-newlines-in-the-fixture", func(t *testing.T) {
+		run := filepath.Join(t.TempDir(), "fixture", "1", "base")
+		must(t, os.MkdirAll(run, 0o755))
+		for _, f := range []string{"metrics", "histograms", "run"} {
+			b, err := os.ReadFile(filepath.Join(repoRoot(t), "internal", "obs", "csvflush", "testdata", "fixture-"+f+".csv"))
+			must(t, err)
+			if f == "metrics" && !strings.Contains(string(b), "\"new\nline\"") {
+				t.Fatal("the fixture has no quoted newline")
+			}
+			must(t, os.WriteFile(filepath.Join(run, f+".csv"), b, 0o644))
+		}
+		sql := "-- requires: admission.zero\nSELECT 'x' FROM final WHERE component = 'admission' AND metric = 'zero' AND value <> 0;\n"
+		if out, err := csvAssert(t, nil, run, writeSQL(t, sql)); err != nil {
+			t.Fatalf("%v\n%s", err, out)
+		}
+	})
+}
+
 func TestCSVAssertFailsWithoutDuckDB(t *testing.T) {
 	out, err := csvAssert(t, []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir()}, t.TempDir())
 	if err == nil || !strings.Contains(out, "duckdb is not installed") {

@@ -14,10 +14,12 @@
 #
 # A SQL file returns the rows that VIOLATE its claim: zero rows is a pass. Its header names the
 # metrics it needs, one or more `component.metric` after `-- requires:`; the runner checks that
-# the final flush of the runs has rows for each before running the query.
+# the final flush of EVERY run has rows for each (metric or histogram rows) before running the query.
 #
 # Fails closed (exit 1), never skips: a returned row; a run directory without run.csv; a file
-# whose header or schema_version is not version 1; a required metric with no rows; a SQL file
+# whose header or schema_version is not version 1; an empty field in a column that may not be
+# empty; two run directories with one run id; a run without metric rows; a run whose final
+# flush has no rows for a required metric; a SQL file
 # without a `-- requires:` line; a scenario with SQL files and no run; no run at all; a root
 # that does not exist; DuckDB missing or not the pinned version family (1.5.x).
 # Exit status: 0 green, 1 a check failed, 2 usage or setup error.
@@ -26,17 +28,19 @@ set -o pipefail
 root=$(cd "$(dirname "$0")/.." && pwd -P)
 analysis="$root/test/analysis"
 views="$analysis/views.sql"
+guard_sql="$analysis/guard.sql"
 pinned='^v1\.5\.'
 command -v duckdb >/dev/null 2>&1 || PATH="$PATH:$HOME/.local/bin"
 
 die() { echo "csv-assert: $*" >&2; exit 1; }
-[ $# -ge 1 ] || { sed -n '2,24p' "$0" >&2; exit 2; }
-case "$1" in -h|-help|--help) sed -n '2,24p' "$0"; exit 0 ;; esac
+[ $# -ge 1 ] || { sed -n '2,25p' "$0" >&2; exit 2; }
+case "$1" in -h|-help|--help) sed -n '2,25p' "$0"; exit 0 ;; esac
 
 command -v duckdb >/dev/null 2>&1 || die "FAIL: duckdb is not installed (the pinned family is 1.5.x)"
 version=$(duckdb --version 2>&1 | head -n1)
 [[ "$version" =~ $pinned ]] || die "FAIL: duckdb version '$version' is not the pinned family 1.5.x"
 [ -f "$views" ] || die "FAIL: $views is missing"
+[ -f "$guard_sql" ] || die "FAIL: $guard_sql is missing"
 
 metrics_header='schema_version,run_id,flush_seq,t_ns,instance,component,metric,kind,tenant,outcome,reason,mode,value'
 hist_header='schema_version,run_id,flush_seq,t_ns,instance,component,metric,tenant,outcome,reason,mode,unit,bucket_lo,bucket_hi,count'
@@ -47,7 +51,8 @@ run_dirs() {
   find "$1" \( -name metrics.csv -o -name histograms.csv -o -name run.csv \) -type f -printf '%h\n' | LC_ALL=C sort -u
 }
 
-# check_run <dir>: run.csv present, every header and every schema_version is version 1.
+# check_run <dir>: run.csv present and every header is version 1. The rows are checked by
+# test/analysis/guard.sql through DuckDB, which reads quoted newlines as CSV does.
 check_run() {
   local d=$1 f want
   [ -f "$d/run.csv" ] || { echo "FAIL: $d: missing run.csv (the run did not finish)"; return 1; }
@@ -55,14 +60,19 @@ check_run() {
     [ -f "$d/$f" ] || { echo "FAIL: $d: missing $f"; return 1; }
     case $f in metrics.csv) want=$metrics_header ;; histograms.csv) want=$hist_header ;; run.csv) want=$run_header ;; esac
     [ "$(head -n1 "$d/$f")" = "$want" ] || { echo "FAIL: $d/$f: unknown schema (header is not schema version 1)"; return 1; }
-    if awk -F, 'NR > 1 && $1 != "1" { bad = 1 } END { exit !bad }' "$d/$f"; then
-      echo "FAIL: $d/$f: unknown schema version $(awk -F, 'NR > 1 && $1 != "1" { print $1; exit }' "$d/$f")"
-      return 1
-    fi
   done
-  [ "$(wc -l <"$d/run.csv")" -eq 2 ] || { echo "FAIL: $d/run.csv: want exactly one row"; return 1; }
 }
 
+# guard <dir>...: test/analysis/guard.sql over the runs; every row it returns is a failure.
+guard() {
+  local out rc=0
+  out=$( { preamble "$@"; echo "SET VARIABLE expected_runs = $#;"; cat "$guard_sql"; } \
+    | duckdb -batch -bail -csv -noheader :memory: 2>&1) || rc=$?
+  if [ $rc != 0 ]; then echo "FAIL: schema guard: duckdb exit $rc: $out"; return 1; fi
+  [ -z "$out" ] && return 0
+  printf '%s\n' "$out" | head -n 20 | sed 's/^/FAIL: /'
+  return 1
+}
 
 # preamble <dir>...: the SQL that defines the views over the given run directories.
 preamble() {
@@ -87,9 +97,16 @@ assert() {
   [ -n "$req" ] || { fail "FAIL: $sql: no '-- requires: component.metric' line (counters must move)"; return; }
   for name in $req; do
     [[ "$name" =~ ^[a-z]+\.[a-z0-9_]+$ ]] || { fail "FAIL: $sql: bad requirement '$name'"; return; }
-    out=$( { preamble "$@"; echo "SELECT count(*) FROM final WHERE component = '${name%%.*}' AND metric = '${name#*.}';"; } \
-      | duckdb -batch -bail -csv -noheader :memory: 2>&1) || { fail "FAIL: $sql: duckdb: $out"; return; }
-    [ "$out" -gt 0 ] 2>/dev/null || { fail "FAIL: $sql: no rows for the metric under test $name in the final flush ($out)"; return; }
+    out=$( { preamble "$@"; printf "%s\n" \
+      "SELECT r.run_id FROM runs r" \
+      "WHERE NOT EXISTS (SELECT 1 FROM final f WHERE f.run_id = r.run_id AND f.component = '${name%%.*}' AND f.metric = '${name#*.}')" \
+      "  AND NOT EXISTS (SELECT 1 FROM final_hist h WHERE h.run_id = r.run_id AND h.component = '${name%%.*}' AND h.metric = '${name#*.}')" \
+      "ORDER BY r.run_id;"; } | duckdb -batch -bail -csv -noheader :memory: 2>&1) || { fail "FAIL: $sql: duckdb: $out"; return; }
+    if [ -n "$out" ]; then
+      fail "FAIL: $sql: no rows for the metric under test $name in the final flush of $(printf '%s\n' "$out" | grep -c '') of $# runs:"
+      printf '%s\n' "$out" | head -n 20 | sed 's/^/  /'
+      return
+    fi
   done
   rc=0
   out=$( { preamble "$@"; cat "$sql"; } | duckdb -batch -bail -csv -noheader :memory: 2>&1) || rc=$?
@@ -114,6 +131,7 @@ if [ $mode = explicit ]; then
   [ ${#dirs[@]} -gt 0 ] || die "FAIL: no run directory under $dir"
   for d in "${dirs[@]}"; do check_run "$d" || failures=$((failures + 1)); done
   [ $failures = 0 ] || die "FAIL: $failures run directories are not complete schema version 1 runs"
+  guard "${dirs[@]}" || die "FAIL: the runs under $dir do not pass the schema guard"
   for sql in "$@"; do
     [ -f "$sql" ] || { fail "FAIL: $sql: no such SQL file"; continue; }
     assert "$sql" "${dirs[@]}"
@@ -131,6 +149,7 @@ else
   [ ${#all[@]} -gt 0 ] || die "FAIL: no run directory under $*"
   for d in "${all[@]}"; do check_run "$d" || failures=$((failures + 1)); done
   [ $failures = 0 ] || die "FAIL: $failures run directories are not complete schema version 1 runs"
+  guard "${all[@]}" || die "FAIL: the runs under $* do not pass the schema guard"
   for s in "${scenarios[@]}"; do
     sc=$(basename "$s")
     mine=()
