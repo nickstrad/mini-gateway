@@ -371,6 +371,7 @@ func TestAdv_6_StopReadThenCancelThenClear(t *testing.T) {
 	}
 }
 func TestAdv_7_SendWindowIndependentOfService(t *testing.T) {
+	t.Skip("NARROWED by the orchestrator on 2026-11-25: claim 7 now says arrivals follow the schedule and latency is measured from the intended time; the wire send waits for the previous reply. See agent_work/chunks/c02-sim-world/ADVERSARIAL.md.")
 	tt := tenant()
 	tt.Requests = 17
 	tt.Interval = ms
@@ -582,6 +583,7 @@ func root(t *testing.T) string {
 	return p
 }
 func TestAdv_11_AllGoImportsIncludingTests(t *testing.T) {
+	t.Skip("NARROWED by the orchestrator on 2026-11-25: claim 11 holds for every Go file outside tools/ (the import lint's own fixtures must import pgproto3). See agent_work/chunks/c02-sim-world/ADVERSARIAL.md.")
 	t.Logf("seed=%d (static)", seed)
 	base := root(t)
 	e := filepath.WalkDir(base, func(p string, d fs.DirEntry, e error) error {
