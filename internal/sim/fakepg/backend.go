@@ -216,7 +216,7 @@ func (b *backend) readMessage() bool {
 			return b.readHello()
 		}
 		if b.phase == phaseStartup && b.step == stepHandshake {
-			return false
+			return b.watchHandshake()
 		}
 		typ, body, ok, err := b.fr.Next()
 		if err != nil {

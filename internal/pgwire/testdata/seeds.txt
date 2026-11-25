@@ -1,0 +1,6 @@
+# Pinned seeds for the wire scenarios (simtest.Seeds reads this file).
+1
+2
+3
+7
+42

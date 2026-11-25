@@ -139,6 +139,23 @@ func (b *backend) readHello() bool {
 	}
 }
 
+func (b *backend) watchHandshake() bool {
+	for !b.eof {
+		n, err := b.end.Read(b.srv.readBuf[:])
+		if n > 0 {
+			b.srv.stats.bytesIn += int64(n)
+			b.fr.Feed(b.srv.readBuf[:n])
+			continue
+		}
+		if err == nil {
+			return false
+		}
+		b.eof = true
+	}
+	b.after = afterClose
+	return true
+}
+
 func (b *backend) hello(raw []byte) {
 	st := &b.srv.auth.stats
 	if !simtls.ValidClientHello(raw) {
