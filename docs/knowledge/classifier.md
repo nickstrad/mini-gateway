@@ -44,7 +44,20 @@ Facts a later builder needs before using `internal/work` and the chunk 5 half of
   a dirty connection.
 - Qualified column references (`t.a` outside `FROM`/`JOIN`) are never read-only-provable
   (attribute notation can call a function). Joins written with qualified columns are
-  therefore not coalescable.
+  therefore not coalescable. `IS DISTINCT FROM t.f` and the `FROM` inside `trim`,
+  `substring`, `extract` and `overlay` are expression positions, not table positions:
+  Postgres 17 calls a writing `f(t)` through all of them.
+- Postgres calls any keyword as a function after a schema qualifier (`public.select()`,
+  `public.in(1)`); only unqualified reserved words are not calls.
+- `SET LOCAL search_path = 'pg_temp'` (or `set_config('search_path', 'pg_temp', true)`)
+  followed by an unqualified `CREATE TABLE` leaves a session temp table after `COMMIT`.
+  `SET` quotes each string value (`'PG_TEMP, public'` is one schema name), while
+  `set_config` parses its value as a list and lowercases unquoted elements.
+- `EXPLAIN` option names may be quoted: `EXPLAIN ("analyze") …` executes the statement.
+- Postgres's relative-time input words (`now`, `today`, `tomorrow`, `yesterday`) make a
+  literal per-call, also through an untyped literal coerced to a column type.
+- Postgres's scanner drops a trailing `+`/`-` from a multi-character operator unless it
+  contains one of `~ ! @ # ^ & | \` ? %`: `71+-3` is `71 + -3`.
 - Error-table row ids are stable names (`shed`, `unsupported-feature`, …) and appear in the
   reply's detail line `mini-gateway error row: <id>` and in the counter key `reply_<id>`.
   Adding a row: append to `ErrRowID` and `ErrorRows`, run `scripts/gen-docs.sh`, and
