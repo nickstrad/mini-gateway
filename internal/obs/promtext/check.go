@@ -342,6 +342,9 @@ func checkHistogram(f Family) error {
 		if !h.hasInf || !h.hasCnt || h.inf != h.count {
 			return fmt.Errorf("%w: histogram %s: +Inf bucket and _count missing or unequal", ErrGrammar, f.Name)
 		}
+		if h.inf < 0 || len(h.counts) > 0 && h.counts[0] < 0 {
+			return fmt.Errorf("%w: histogram %s: a negative bucket count", ErrGrammar, f.Name)
+		}
 		for i := 1; i < len(h.les); i++ {
 			if h.les[i] <= h.les[i-1] || h.counts[i] < h.counts[i-1] {
 				return fmt.Errorf("%w: histogram %s: buckets not increasing or not cumulative", ErrGrammar, f.Name)

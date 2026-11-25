@@ -249,7 +249,7 @@ func (a *Adapter) collect(s obs.InstanceSnapshot) []series {
 	}
 	for _, p := range s.Points {
 		d, ok := a.reg.Lookup(p.Component, p.Metric)
-		if !ok {
+		if !ok || d.Kind != p.Kind {
 			continue
 		}
 		l := p.Labels
@@ -258,7 +258,7 @@ func (a *Adapter) collect(s obs.InstanceSnapshot) []series {
 	}
 	for _, h := range s.Hists {
 		d, ok := a.reg.Lookup(h.Component, h.Metric)
-		if !ok {
+		if !ok || d.Kind != obs.KindHistogram {
 			continue
 		}
 		l := h.Labels

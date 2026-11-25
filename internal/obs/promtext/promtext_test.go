@@ -237,10 +237,33 @@ func TestCheckerRejectsBadExposition(t *testing.T) {
 		"hist count differs": "# TYPE h histogram\nh_bucket{le=\"+Inf\"} 2\nh_count 3\n",
 		"reserved label":     "# TYPE a gauge\na{__x=\"1\"} 1\n",
 		"wrong family":       "# TYPE a gauge\nb 1\n",
+		"hist negative":      "# TYPE h histogram\nh_bucket{le=\"1\"} -2\nh_bucket{le=\"2\"} -1\nh_bucket{le=\"+Inf\"} -1\nh_count -1\n",
+		"hist negative inf":  "# TYPE h histogram\nh_bucket{le=\"+Inf\"} -1\nh_count -1\n",
 	}
 	for name, text := range bad {
 		if err := promtext.Check([]byte(text)); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
+	}
+}
+
+func TestPointsOfTheWrongKindAreNotExported(t *testing.T) {
+	var reg obs.Registry
+	if err := reg.Declare(obs.ComponentPool, obs.GaugeDesc("y", 0, "Y."), obs.GaugeDesc("y_total", 0, "T.")); err != nil {
+		t.Fatal(err)
+	}
+	s := obs.InstanceSnapshot{Points: []obs.Point{
+		{Component: obs.ComponentPool, Metric: "y", Kind: obs.KindCounter, Value: 2},
+		{Component: obs.ComponentPool, Metric: "y_total", Kind: obs.KindGauge, Value: -3},
+	}}
+	a := promtext.New(&reg, nil, promtext.Config{})
+	if err := a.Export(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := promtext.Check(a.Last()); err != nil {
+		t.Fatalf("%v\n%s", err, a.Last())
+	}
+	if strings.Contains(string(a.Last()), " 2\n") {
+		t.Fatalf("a point whose kind differs from its declaration was exported:\n%s", a.Last())
 	}
 }
