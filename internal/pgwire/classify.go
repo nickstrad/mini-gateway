@@ -2,6 +2,7 @@ package pgwire
 
 import (
 	"bytes"
+	"errors"
 
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
@@ -11,6 +12,8 @@ const (
 	ClassifMemoryFactor   = 80
 	ClassifMemoryConstant = 64 << 10
 )
+
+var ClassifErrConservation = errors.New("pgwire: classifier counters do not add up")
 
 type ClassifierConfig struct {
 	KeyScope            work.KeyScope
