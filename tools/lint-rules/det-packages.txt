@@ -12,3 +12,7 @@ internal/sim
 internal/sim/simnet
 internal/sim/simtoy
 internal/obs
+internal/sim/fakepg
+internal/sim/workload
+internal/sim/world
+internal/testclient

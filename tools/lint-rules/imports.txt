@@ -25,6 +25,6 @@ deny internal/pool/... internal/admission/... internal/coalesce/... internal/ret
 deny internal/proxy/... : internal/obs/... !internal/obs
 
 # pgproto3 is the one third-party package, and only the wire layer, the fake Postgres and
-# the test clients may import it. The test-client package is not built yet: the chunk that
-# adds it (chunk 4 or 6) puts its real directory here in place of internal/testclient.
+# the test client may import it. The test client is internal/testclient (built in chunk 2:
+# a sans-I/O framer, codec and session that the simulated clients and the tier R tests use).
 only github.com/jackc/pgx/v5/pgproto3 : internal/pgwire/... internal/sim/fakepg/... internal/testclient/...
