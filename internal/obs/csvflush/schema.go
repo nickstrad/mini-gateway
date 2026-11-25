@@ -23,7 +23,7 @@ type Column struct {
 func MetricsColumns() []Column {
 	return []Column{
 		{"schema_version", "integer", "Always 1 in this version."},
-		{"run_id", "text", "Set by whoever starts the run; simulator runs use <scenario>/<seed>/<arm>; also the run directory below obs.csv.dir."},
+		{"run_id", "text", "Set by whoever starts the run; simulator runs use `<scenario>/<seed>/<arm>`; also the run directory below `obs.csv.dir`."},
 		{"flush_seq", "integer", "Publish sequence number of the snapshot, from 0."},
 		{"t_ns", "integer", "Nanoseconds since the run began on the driver's clock, stamped by the adapter."},
 		{"instance", "text", "Instance id."},

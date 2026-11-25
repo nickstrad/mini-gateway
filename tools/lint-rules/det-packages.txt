@@ -17,3 +17,9 @@ internal/sim/workload
 internal/sim/world
 internal/testclient
 internal/randdist
+# Chunk 3: the snapshot-to-metric mappings of the simulator components and the metric
+# catalog. The collector itself is internal/obs (above). The adapters (csvflush, jsonstats,
+# logline, promtext), the scenario harness (simrun) and obstest are not listed: they do file
+# I/O, goroutines, encoding/json or floating point by design.
+internal/obs/simsrc
+internal/obs/catalog
