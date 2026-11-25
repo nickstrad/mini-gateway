@@ -1,0 +1,1128 @@
+{
+ "instance": "inst-1",
+ "build": "build-x",
+ "config_fingerprint": "cfg-1",
+ "seq": 0,
+ "metrics": [
+  {
+   "component": "admission",
+   "metric": "depth",
+   "kind": "gauge",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "fifo",
+   "value": 4
+  },
+  {
+   "component": "admission",
+   "metric": "depth",
+   "kind": "gauge",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "lifo",
+   "value": -2
+  },
+  {
+   "component": "admission",
+   "metric": "depth_peak",
+   "kind": "gauge",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 99
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": " lead space",
+   "outcome": "failed",
+   "reason": "",
+   "mode": "",
+   "value": 8
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": " lead space",
+   "outcome": "ok",
+   "reason": "",
+   "mode": "",
+   "value": 80
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "alpha",
+   "outcome": "failed",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "alpha",
+   "outcome": "ok",
+   "reason": "",
+   "mode": "",
+   "value": 10
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "back\\slash",
+   "outcome": "failed",
+   "reason": "",
+   "mode": "",
+   "value": 6
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "back\\slash",
+   "outcome": "ok",
+   "reason": "",
+   "mode": "",
+   "value": 60
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "beta",
+   "outcome": "failed",
+   "reason": "",
+   "mode": "",
+   "value": 2
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "beta",
+   "outcome": "ok",
+   "reason": "",
+   "mode": "",
+   "value": 20
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "comma,semi;colon",
+   "outcome": "failed",
+   "reason": "",
+   "mode": "",
+   "value": 7
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "comma,semi;colon",
+   "outcome": "ok",
+   "reason": "",
+   "mode": "",
+   "value": 70
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "eq=sign",
+   "outcome": "failed",
+   "reason": "",
+   "mode": "",
+   "value": 11
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "eq=sign",
+   "outcome": "ok",
+   "reason": "",
+   "mode": "",
+   "value": 110
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong",
+   "outcome": "failed",
+   "reason": "",
+   "mode": "",
+   "value": 9
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong",
+   "outcome": "ok",
+   "reason": "",
+   "mode": "",
+   "value": 90
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "new\nline",
+   "outcome": "failed",
+   "reason": "",
+   "mode": "",
+   "value": 5
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "new\nline",
+   "outcome": "ok",
+   "reason": "",
+   "mode": "",
+   "value": 50
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "other",
+   "outcome": "failed",
+   "reason": "",
+   "mode": "",
+   "value": 3
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "other",
+   "outcome": "ok",
+   "reason": "",
+   "mode": "",
+   "value": 30
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "quo\"te",
+   "outcome": "failed",
+   "reason": "",
+   "mode": "",
+   "value": 4
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "quo\"te",
+   "outcome": "ok",
+   "reason": "",
+   "mode": "",
+   "value": 40
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "{brace}",
+   "outcome": "failed",
+   "reason": "",
+   "mode": "",
+   "value": 12
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "{brace}",
+   "outcome": "ok",
+   "reason": "",
+   "mode": "",
+   "value": 120
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "ünïcödé",
+   "outcome": "failed",
+   "reason": "",
+   "mode": "",
+   "value": 10
+  },
+  {
+   "component": "admission",
+   "metric": "requests",
+   "kind": "counter",
+   "tenant": "ünïcödé",
+   "outcome": "ok",
+   "reason": "",
+   "mode": "",
+   "value": 100
+  },
+  {
+   "component": "admission",
+   "metric": "shed",
+   "kind": "counter",
+   "tenant": "",
+   "outcome": "",
+   "reason": "queue-full",
+   "mode": "",
+   "value": 7
+  },
+  {
+   "component": "admission",
+   "metric": "shed",
+   "kind": "counter",
+   "tenant": "",
+   "outcome": "",
+   "reason": "timeout",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "size_clamped_high",
+   "kind": "counter",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "size_clamped_low",
+   "kind": "counter",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "tenant_depth",
+   "kind": "gauge",
+   "tenant": " lead space",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 5
+  },
+  {
+   "component": "admission",
+   "metric": "tenant_depth",
+   "kind": "gauge",
+   "tenant": "alpha",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": -2
+  },
+  {
+   "component": "admission",
+   "metric": "tenant_depth",
+   "kind": "gauge",
+   "tenant": "back\\slash",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 3
+  },
+  {
+   "component": "admission",
+   "metric": "tenant_depth",
+   "kind": "gauge",
+   "tenant": "beta",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": -1
+  },
+  {
+   "component": "admission",
+   "metric": "tenant_depth",
+   "kind": "gauge",
+   "tenant": "comma,semi;colon",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 4
+  },
+  {
+   "component": "admission",
+   "metric": "tenant_depth",
+   "kind": "gauge",
+   "tenant": "eq=sign",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 8
+  },
+  {
+   "component": "admission",
+   "metric": "tenant_depth",
+   "kind": "gauge",
+   "tenant": "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 6
+  },
+  {
+   "component": "admission",
+   "metric": "tenant_depth",
+   "kind": "gauge",
+   "tenant": "new\nline",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 2
+  },
+  {
+   "component": "admission",
+   "metric": "tenant_depth",
+   "kind": "gauge",
+   "tenant": "other",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "tenant_depth",
+   "kind": "gauge",
+   "tenant": "quo\"te",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "tenant_depth",
+   "kind": "gauge",
+   "tenant": "{brace}",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 9
+  },
+  {
+   "component": "admission",
+   "metric": "tenant_depth",
+   "kind": "gauge",
+   "tenant": "ünïcödé",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 7
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_high",
+   "kind": "counter",
+   "tenant": " lead space",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_high",
+   "kind": "counter",
+   "tenant": "alpha",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_high",
+   "kind": "counter",
+   "tenant": "back\\slash",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_high",
+   "kind": "counter",
+   "tenant": "beta",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_high",
+   "kind": "counter",
+   "tenant": "comma,semi;colon",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_high",
+   "kind": "counter",
+   "tenant": "eq=sign",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_high",
+   "kind": "counter",
+   "tenant": "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_high",
+   "kind": "counter",
+   "tenant": "new\nline",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_high",
+   "kind": "counter",
+   "tenant": "other",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_high",
+   "kind": "counter",
+   "tenant": "quo\"te",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_high",
+   "kind": "counter",
+   "tenant": "{brace}",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_high",
+   "kind": "counter",
+   "tenant": "ünïcödé",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_low",
+   "kind": "counter",
+   "tenant": " lead space",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_low",
+   "kind": "counter",
+   "tenant": "alpha",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_low",
+   "kind": "counter",
+   "tenant": "back\\slash",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_low",
+   "kind": "counter",
+   "tenant": "beta",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_low",
+   "kind": "counter",
+   "tenant": "comma,semi;colon",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_low",
+   "kind": "counter",
+   "tenant": "eq=sign",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_low",
+   "kind": "counter",
+   "tenant": "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_low",
+   "kind": "counter",
+   "tenant": "new\nline",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_low",
+   "kind": "counter",
+   "tenant": "other",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_low",
+   "kind": "counter",
+   "tenant": "quo\"te",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_low",
+   "kind": "counter",
+   "tenant": "{brace}",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "wait_clamped_low",
+   "kind": "counter",
+   "tenant": "ünïcödé",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "admission",
+   "metric": "zero",
+   "kind": "counter",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "obs",
+   "metric": "adapters",
+   "kind": "gauge",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "obs",
+   "metric": "csv_bytes_written",
+   "kind": "gauge",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "obs",
+   "metric": "csv_flush_errors",
+   "kind": "counter",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "obs",
+   "metric": "csv_flushes",
+   "kind": "counter",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "obs",
+   "metric": "csv_queue_depth",
+   "kind": "gauge",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "obs",
+   "metric": "csv_rows_dropped",
+   "kind": "counter",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "obs",
+   "metric": "emit_errors",
+   "kind": "counter",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "obs",
+   "metric": "prom_tenants_tracked",
+   "kind": "gauge",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "obs",
+   "metric": "publishes",
+   "kind": "counter",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 1
+  },
+  {
+   "component": "obs",
+   "metric": "sources",
+   "kind": "gauge",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 2
+  }
+ ],
+ "histograms": [
+  {
+   "component": "admission",
+   "metric": "size",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "unit": "bytes",
+   "buckets": [
+    {
+     "lo": 1,
+     "hi": 1,
+     "count": 3
+    },
+    {
+     "lo": 4992,
+     "hi": 5023,
+     "count": 1
+    },
+    {
+     "lo": 1073741824,
+     "hi": 1082130431,
+     "count": 2
+    }
+   ]
+  },
+  {
+   "component": "admission",
+   "metric": "wait",
+   "tenant": " lead space",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "unit": "ns",
+   "buckets": [
+    {
+     "lo": 399360,
+     "hi": 401407,
+     "count": 8
+    },
+    {
+     "lo": 23986176,
+     "hi": 24117247,
+     "count": 2
+    },
+    {
+     "lo": 59861106688,
+     "hi": 60000000000,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "component": "admission",
+   "metric": "wait",
+   "tenant": "alpha",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "unit": "ns",
+   "buckets": [
+    {
+     "lo": 49920,
+     "hi": 50175,
+     "count": 1
+    },
+    {
+     "lo": 2998272,
+     "hi": 3014655,
+     "count": 2
+    },
+    {
+     "lo": 59861106688,
+     "hi": 60000000000,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "component": "admission",
+   "metric": "wait",
+   "tenant": "back\\slash",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "unit": "ns",
+   "buckets": [
+    {
+     "lo": 299008,
+     "hi": 301055,
+     "count": 6
+    },
+    {
+     "lo": 17956864,
+     "hi": 18087935,
+     "count": 2
+    },
+    {
+     "lo": 59861106688,
+     "hi": 60000000000,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "component": "admission",
+   "metric": "wait",
+   "tenant": "beta",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "unit": "ns",
+   "buckets": [
+    {
+     "lo": 99840,
+     "hi": 100351,
+     "count": 2
+    },
+    {
+     "lo": 5996544,
+     "hi": 6029311,
+     "count": 2
+    },
+    {
+     "lo": 59861106688,
+     "hi": 60000000000,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "component": "admission",
+   "metric": "wait",
+   "tenant": "comma,semi;colon",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "unit": "ns",
+   "buckets": [
+    {
+     "lo": 348160,
+     "hi": 350207,
+     "count": 7
+    },
+    {
+     "lo": 20971520,
+     "hi": 21102591,
+     "count": 2
+    },
+    {
+     "lo": 59861106688,
+     "hi": 60000000000,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "component": "admission",
+   "metric": "wait",
+   "tenant": "eq=sign",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "unit": "ns",
+   "buckets": [
+    {
+     "lo": 548864,
+     "hi": 552959,
+     "count": 11
+    },
+    {
+     "lo": 32899072,
+     "hi": 33030143,
+     "count": 2
+    },
+    {
+     "lo": 59861106688,
+     "hi": 60000000000,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "component": "admission",
+   "metric": "wait",
+   "tenant": "longlonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglonglong",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "unit": "ns",
+   "buckets": [
+    {
+     "lo": 448512,
+     "hi": 450559,
+     "count": 9
+    },
+    {
+     "lo": 26869760,
+     "hi": 27000831,
+     "count": 2
+    },
+    {
+     "lo": 59861106688,
+     "hi": 60000000000,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "component": "admission",
+   "metric": "wait",
+   "tenant": "new\nline",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "unit": "ns",
+   "buckets": [
+    {
+     "lo": 249856,
+     "hi": 250879,
+     "count": 5
+    },
+    {
+     "lo": 14942208,
+     "hi": 15007743,
+     "count": 2
+    },
+    {
+     "lo": 59861106688,
+     "hi": 60000000000,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "component": "admission",
+   "metric": "wait",
+   "tenant": "other",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "unit": "ns",
+   "buckets": [
+    {
+     "lo": 149504,
+     "hi": 150527,
+     "count": 3
+    },
+    {
+     "lo": 8978432,
+     "hi": 9043967,
+     "count": 2
+    },
+    {
+     "lo": 59861106688,
+     "hi": 60000000000,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "component": "admission",
+   "metric": "wait",
+   "tenant": "quo\"te",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "unit": "ns",
+   "buckets": [
+    {
+     "lo": 199680,
+     "hi": 200703,
+     "count": 4
+    },
+    {
+     "lo": 11993088,
+     "hi": 12058623,
+     "count": 2
+    },
+    {
+     "lo": 59861106688,
+     "hi": 60000000000,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "component": "admission",
+   "metric": "wait",
+   "tenant": "{brace}",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "unit": "ns",
+   "buckets": [
+    {
+     "lo": 598016,
+     "hi": 602111,
+     "count": 12
+    },
+    {
+     "lo": 35913728,
+     "hi": 36175871,
+     "count": 2
+    },
+    {
+     "lo": 59861106688,
+     "hi": 60000000000,
+     "count": 1
+    }
+   ]
+  },
+  {
+   "component": "admission",
+   "metric": "wait",
+   "tenant": "ünïcödé",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "unit": "ns",
+   "buckets": [
+    {
+     "lo": 499712,
+     "hi": 501759,
+     "count": 10
+    },
+    {
+     "lo": 29884416,
+     "hi": 30015487,
+     "count": 2
+    },
+    {
+     "lo": 59861106688,
+     "hi": 60000000000,
+     "count": 1
+    }
+   ]
+  }
+ ]
+}

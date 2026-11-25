@@ -1,0 +1,1 @@
+obs.publish seq=0 instance=inst-1 build=build-x config=cfg-1 points=78 histograms=13 admission.depth.fifo=4 admission.depth.lifo=-2 admission.zero=0 obs.csv_flush_errors=0 obs.csv_flushes=0 obs.csv_rows_dropped=0 obs.emit_errors=0 obs.publishes=1
