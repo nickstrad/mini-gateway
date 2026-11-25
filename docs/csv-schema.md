@@ -13,7 +13,7 @@ One run is one directory `<obs.csv.dir>/<run_id>/` with three files. Simulator r
 | # | Column | Type | Meaning |
 | --- | --- | --- | --- |
 | 1 | `schema_version` | integer | Always 1 in this version. |
-| 2 | `run_id` | text | Set by whoever starts the run; simulator runs use <scenario>/<seed>/<arm>; also the run directory below obs.csv.dir. |
+| 2 | `run_id` | text | Set by whoever starts the run; simulator runs use `<scenario>/<seed>/<arm>`; also the run directory below `obs.csv.dir`. |
 | 3 | `flush_seq` | integer | Publish sequence number of the snapshot, from 0. |
 | 4 | `t_ns` | integer | Nanoseconds since the run began on the driver's clock, stamped by the adapter. |
 | 5 | `instance` | text | Instance id. |
