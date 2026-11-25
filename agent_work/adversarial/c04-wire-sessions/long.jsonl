@@ -1,0 +1,10 @@
+{"Time":"2026-11-25T03:11:36.119748421Z","Action":"start","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/c04-wire-sessions"}
+{"Time":"2026-11-25T03:11:36.127964563Z","Action":"run","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/c04-wire-sessions","Test":"TestAdv_2_SeededHostileCampaign"}
+{"Time":"2026-11-25T03:11:36.128065408Z","Action":"output","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/c04-wire-sessions","Test":"TestAdv_2_SeededHostileCampaign","Output":"=== RUN   TestAdv_2_SeededHostileCampaign\n"}
+{"Time":"2026-11-25T03:11:36.128088831Z","Action":"output","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/c04-wire-sessions","Test":"TestAdv_2_SeededHostileCampaign","Output":"    attacks_test.go:644: seed=4042026\n"}
+{"Time":"2026-11-25T03:11:36.128108207Z","Action":"output","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/c04-wire-sessions","Test":"TestAdv_2_SeededHostileCampaign","Output":"    attacks_test.go:649: campaign seeds=4042026..4092025\n"}
+{"Time":"2026-11-25T03:11:50.802755023Z","Action":"output","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/c04-wire-sessions","Test":"TestAdv_2_SeededHostileCampaign","Output":"--- PASS: TestAdv_2_SeededHostileCampaign (14.67s)\n"}
+{"Time":"2026-11-25T03:11:50.802829701Z","Action":"pass","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/c04-wire-sessions","Test":"TestAdv_2_SeededHostileCampaign","Elapsed":14.67}
+{"Time":"2026-11-25T03:11:50.802842933Z","Action":"output","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/c04-wire-sessions","Output":"PASS\n"}
+{"Time":"2026-11-25T03:11:50.806785715Z","Action":"output","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/c04-wire-sessions","Output":"ok  \tgithub.com/nickstrad/mini-gateway/agent_work/adversarial/c04-wire-sessions\t14.687s\n"}
+{"Time":"2026-11-25T03:11:50.806840544Z","Action":"pass","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/c04-wire-sessions","Elapsed":14.687}

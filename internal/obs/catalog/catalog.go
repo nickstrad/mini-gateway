@@ -10,6 +10,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 	"github.com/nickstrad/mini-gateway/internal/obs/csvflush"
 	"github.com/nickstrad/mini-gateway/internal/obs/simsrc"
+	"github.com/nickstrad/mini-gateway/internal/obs/wiresrc"
 )
 
 // DocPath is the repository-relative path of the generated CSV schema document.
@@ -21,6 +22,9 @@ const DocPath = "docs/csv-schema.md"
 func Registry() (*obs.Registry, error) {
 	var reg obs.Registry
 	if err := reg.Declare(obs.ComponentObs, obs.SelfMetrics()...); err != nil {
+		return nil, err
+	}
+	if err := reg.Declare(obs.ComponentWire, wiresrc.Metrics()...); err != nil {
 		return nil, err
 	}
 	for _, d := range simsrc.All() {

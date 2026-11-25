@@ -84,3 +84,14 @@ func (f *Framer) Next() (byte, []byte, bool, error) {
 	f.head += total
 	return typ, body, true, nil
 }
+
+// TakeRaw pops exactly n unframed bytes from the buffer (used to read the
+// fixed 16-byte simulated TLS ClientHello after answering 'S').
+func (f *Framer) TakeRaw(n int) ([]byte, bool) {
+	if f.Buffered() < n {
+		return nil, false
+	}
+	out := append([]byte(nil), f.buf[f.head:f.head+n]...)
+	f.head += n
+	return out, true
+}

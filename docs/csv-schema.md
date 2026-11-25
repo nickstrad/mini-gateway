@@ -68,12 +68,14 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 
 | Component | Metric | Kind | Labels | Unit | Merge | Help |
 | --- | --- | --- | --- | --- | --- | --- |
+| `fakepg` | `bad_hellos` | counter | — | count | sum | Handshakes refused for a bad hello. |
 | `fakepg` | `bytes_in` | counter | — | bytes | sum | Bytes read from clients. |
 | `fakepg` | `bytes_out` | counter | — | bytes | sum | Bytes written to clients. |
 | `fakepg` | `cancels_applied` | counter | — | count | sum | Cancel requests that cancelled a statement. |
 | `fakepg` | `cancels_idle` | counter | — | count | sum | Cancel requests for an idle backend. |
 | `fakepg` | `cancels_no_match` | counter | — | count | sum | Cancel requests that matched no backend. |
 | `fakepg` | `cancels_received` | counter | — | count | sum | Cancel requests received. |
+| `fakepg` | `channel_binding_refused` | counter | — | count | sum | SCRAM exchanges refused for their channel-binding header. |
 | `fakepg` | `conns_accepted` | counter | — | count | sum | Connections accepted. |
 | `fakepg` | `conns_closed` | counter | — | count | sum | Connections closed. |
 | `fakepg` | `conns_open` | gauge | — | count | sum | Connections open, sessions and dead ends together. |
@@ -81,10 +83,16 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `fakepg` | `faults` | counter | reason | count | sum | Database faults applied, by fault kind. |
 | `fakepg` | `faults_cleared` | counter | — | count | sum | Database faults cleared. |
 | `fakepg` | `faults_no_target` | counter | — | count | sum | Database faults whose target did not exist. |
+| `fakepg` | `gss_refused` | counter | — | count | sum | GSS encryption requests answered N. |
+| `fakepg` | `handshakes` | counter | reason | count | sum | Simulated TLS handshakes by configured result (reason). |
+| `fakepg` | `handshakes_started` | counter | — | count | sum | Simulated TLS handshakes started. |
 | `fakepg` | `in_service` | gauge | — | count | sum | Statements in service. |
 | `fakepg` | `in_service_peak` | gauge | — | count | max | Most statements in service at once. |
 | `fakepg` | `param_reports` | counter | — | count | sum | ParameterStatus messages sent after startup. |
 | `fakepg` | `refused` | counter | reason | count | sum | Connections refused at startup, by reason. |
+| `fakepg` | `scram_failed` | counter | — | count | sum | SCRAM exchanges that failed. |
+| `fakepg` | `scram_ok` | counter | — | count | sum | SCRAM exchanges that authenticated. |
+| `fakepg` | `scram_started` | counter | — | count | sum | SCRAM exchanges started. |
 | `fakepg` | `sessions` | gauge | — | count | sum | Sessions counted against max_connections. |
 | `fakepg` | `sessions_peak` | gauge | — | count | max | Most sessions at once; compare with max_connections. |
 | `fakepg` | `startups_completed` | counter | — | count | sum | Startups that reached ReadyForQuery. |
@@ -96,6 +104,8 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `fakepg` | `statements_finished` | counter | — | count | sum | Statements finished. |
 | `fakepg` | `statements_started` | counter | — | count | sum | Statements started. |
 | `fakepg` | `table_rows` | gauge | — | count | sum | Rows in the table. |
+| `fakepg` | `tls_answered` | counter | outcome | count | sum | Answers to a TLS request (outcome: S, N). |
+| `fakepg` | `tls_changes` | counter | — | count | sum | TLS configuration changes. |
 | `fakepg` | `tx_begun` | counter | — | count | sum | Transactions begun. |
 | `fakepg` | `tx_committed` | counter | — | count | sum | Transactions committed. |
 | `fakepg` | `tx_log_dropped` | counter | — | count | sum | Transaction log entries not kept. |
@@ -150,6 +160,53 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `simnet` | `faults_no_target` | counter | — | count | sum | Network faults whose target did not exist. |
 | `simnet` | `listeners` | gauge | — | count | sum | Listeners open. |
 | `simnet` | `writes_refused` | counter | mode | count | sum | Writes refused by a full window, by direction. |
+| `wire` | `client_auth_failures` | counter | reason | count | sum | Client authentication failures, by cause (reason). |
+| `wire` | `client_bytes_in` | counter | — | bytes | sum | Bytes read from the client. |
+| `wire` | `client_bytes_out` | counter | — | bytes | sum | Bytes written to the client. |
+| `wire` | `client_cancel_after_tls` | counter | — | count | sum | Cancel requests received after a TLS upgrade. |
+| `wire` | `client_cancel_requests` | counter | — | count | sum | Cancel requests received from clients. |
+| `wire` | `client_extended_refused` | counter | — | count | sum | Extended-protocol messages refused. |
+| `wire` | `client_in_startup` | gauge | — | count | sum | Client sessions in startup now. |
+| `wire` | `client_in_startup_peak` | gauge | — | count | max | Most client sessions in startup at once. |
+| `wire` | `client_messages_in` | counter | — | count | sum | Messages read from the client. |
+| `wire` | `client_messages_out` | counter | — | count | sum | Messages written to the client. |
+| `wire` | `client_oversized` | counter | — | count | sum | Messages from the client refused for their size. |
+| `wire` | `client_plaintext_refused` | counter | — | count | sum | Plaintext startups refused because TLS is required. |
+| `wire` | `client_prestartup_requests` | counter | outcome, mode | count | sum | Requests before startup by kind (mode: tls, gss, cancel) and answer (outcome: S, N, none). |
+| `wire` | `client_queries_seen` | counter | — | count | sum | Simple queries received from clients. |
+| `wire` | `client_startups_begun` | counter | — | count | sum | Client sessions that began startup. |
+| `wire` | `client_startups_completed` | counter | — | count | sum | Client sessions that reached ReadyForQuery. |
+| `wire` | `client_startups_failed` | counter | reason | count | sum | Client sessions that ended before ReadyForQuery, by reason. |
+| `wire` | `client_terminated` | counter | — | count | sum | Client sessions ended by Terminate. |
+| `wire` | `client_tls_completed` | counter | mode | count | sum | Client TLS handshakes completed, by TLS version (mode). |
+| `wire` | `client_tls_failed` | counter | reason | count | sum | Client TLS handshakes that did not complete, by handshake result (reason). |
+| `wire` | `client_violations` | counter | reason | count | sum | Protocol violations by the client, by violation (reason). |
+| `wire` | `database_auth_failures` | counter | reason | count | sum | Database authentication failures, by cause (reason). |
+| `wire` | `database_bytes_in` | counter | — | bytes | sum | Bytes read from the database. |
+| `wire` | `database_bytes_out` | counter | — | bytes | sum | Bytes written to the database. |
+| `wire` | `database_end_without_marker` | counter | — | count | sum | Replies that ended without ReadyForQuery. |
+| `wire` | `database_errors` | counter | — | count | sum | ErrorResponse messages from the database. |
+| `wire` | `database_fatal_errors` | counter | — | count | sum | FATAL ErrorResponse messages from the database. |
+| `wire` | `database_in_startup` | gauge | — | count | sum | Database sessions in startup now. |
+| `wire` | `database_in_startup_peak` | gauge | — | count | max | Most database sessions in startup at once. |
+| `wire` | `database_messages_in` | counter | — | count | sum | Messages read from the database. |
+| `wire` | `database_messages_out` | counter | — | count | sum | Messages written to the database. |
+| `wire` | `database_notices` | counter | — | count | sum | NoticeResponse messages from the database. |
+| `wire` | `database_notifications` | counter | — | count | sum | NotificationResponse messages from the database. |
+| `wire` | `database_oversized` | counter | — | count | sum | Messages from the database refused for their size. |
+| `wire` | `database_parameter_status` | counter | — | count | sum | ParameterStatus messages from the database after startup. |
+| `wire` | `database_ready` | counter | mode | count | sum | ReadyForQuery messages by transaction status (mode: I, T, E). |
+| `wire` | `database_replies` | counter | — | count | sum | Query replies followed to their end marker. |
+| `wire` | `database_server_fatals` | counter | — | count | sum | FATAL errors from the database during startup. |
+| `wire` | `database_startups_begun` | counter | — | count | sum | Database sessions that began startup. |
+| `wire` | `database_startups_completed` | counter | — | count | sum | Database sessions that reached ReadyForQuery. |
+| `wire` | `database_startups_failed` | counter | reason | count | sum | Database sessions that failed to start, by error class (reason). |
+| `wire` | `database_tls_answers` | counter | outcome | count | sum | Database answers to the TLS request (outcome: S, N, none). |
+| `wire` | `database_tls_completed` | counter | mode | count | sum | Database TLS handshakes completed, by TLS version (mode). |
+| `wire` | `database_tls_failed` | counter | reason | count | sum | Database TLS handshakes that did not complete, by handshake result (reason). |
+| `wire` | `database_tls_requests` | counter | — | count | sum | TLS requests sent to the database. |
+| `wire` | `database_unknown_pass_through` | counter | — | count | sum | Well-framed unknown messages passed through. |
+| `wire` | `database_violations` | counter | reason | count | sum | Protocol violations by the database, by violation (reason). |
 | `workload` | `burst_drops` | counter | tenant | count | sum | Connections dropped by the reconnect burst. |
 | `workload` | `cancels_sent` | counter | tenant | count | sum | Cancel requests sent. |
 | `workload` | `clients` | gauge | — | count | sum | Simulated clients. |
@@ -182,4 +239,10 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `workload` | `requests` | counter | tenant, outcome | count | sum | Sent requests by final outcome. |
 | `workload` | `retries` | counter | tenant | count | sum | Request retries. |
 | `workload` | `sent` | counter | tenant | count | sum | Requests whose first statement was written. |
+| `workload` | `startup_handshakes` | counter | tenant, outcome | count | sum | Simulated TLS handshakes by result (outcome: ok, failed). |
+| `workload` | `startup_scram` | counter | tenant, outcome | count | sum | SCRAM exchanges by result (outcome: ok, failed). |
+| `workload` | `startup_scram_started` | counter | tenant | count | sum | SCRAM exchanges started. |
+| `workload` | `startup_tls_answered` | counter | tenant, outcome | count | sum | Answers to the TLS request (outcome: S, N). |
+| `workload` | `startup_tls_faults` | counter | tenant, reason | count | sum | Client TLS faults injected, by fault kind (reason). |
+| `workload` | `startup_tls_requests` | counter | tenant | count | sum | TLS requests sent before startup. |
 | `workload` | `stopped_reading` | counter | tenant | count | sum | Stop-reading faults applied. |

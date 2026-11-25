@@ -186,7 +186,49 @@ func FakeMetrics() []obs.MetricDesc {
 
 // Fake wraps srv as an obs.Source under ComponentFakepg.
 func Fake(srv *fakepg.Server) obs.Source {
-	return obs.NewSource(obs.ComponentFakepg, FakeMetrics(), srv.Snapshot, MapFake)
+	return obs.Source{Component: obs.ComponentFakepg, Metrics: fakeAll(), Collect: func(e *obs.Emitter) {
+		MapFake(srv.Snapshot(), e)
+		MapFakeAuth(srv.AuthSnapshot(), e)
+	}}
+}
+
+func fakeAll() []obs.MetricDesc { return append(FakeMetrics(), FakeAuthMetrics()...) }
+
+// FakeAuthMetrics returns the metric declarations for fakepg's TLS and SCRAM
+// startup counters (fakepg.AuthSnapshot).
+func FakeAuthMetrics() []obs.MetricDesc {
+	return []obs.MetricDesc{
+		obs.CounterDesc("tls_answered", lo, "Answers to a TLS request (outcome: S, N)."),
+		obs.CounterDesc("gss_refused", 0, "GSS encryption requests answered N."),
+		obs.CounterDesc("handshakes_started", 0, "Simulated TLS handshakes started."),
+		obs.CounterDesc("handshakes", lr, "Simulated TLS handshakes by configured result (reason)."),
+		obs.CounterDesc("bad_hellos", 0, "Handshakes refused for a bad hello."),
+		obs.CounterDesc("scram_started", 0, "SCRAM exchanges started."),
+		obs.CounterDesc("scram_ok", 0, "SCRAM exchanges that authenticated."),
+		obs.CounterDesc("scram_failed", 0, "SCRAM exchanges that failed."),
+		obs.CounterDesc("channel_binding_refused", 0, "SCRAM exchanges refused for their channel-binding header."),
+		obs.CounterDesc("tls_changes", 0, "TLS configuration changes."),
+	}
+}
+
+var handshakeResults = [fakepg.NumTLSOutcomes]string{
+	fakepg.TLSCompleted: "completed", fakepg.TLSFailed: "failed", fakepg.TLSStall: "stall", fakepg.TLSBadCertificate: "bad-certificate"}
+
+// MapFakeAuth emits every field of a fakepg.AuthSnapshot into e.
+func MapFakeAuth(a fakepg.AuthSnapshot, e *obs.Emitter) {
+	e.Counter("tls_answered", obs.Labels{Outcome: "S"}, a.TLSAnsweredYes)
+	e.Counter("tls_answered", obs.Labels{Outcome: "N"}, a.TLSAnsweredNo)
+	e.Counter("gss_refused", none, a.GSSAnsweredNo)
+	e.Counter("handshakes_started", none, a.HandshakesStarted)
+	for i, v := range a.HandshakesByResult {
+		e.Counter("handshakes", obs.Labels{Reason: handshakeResults[i]}, v)
+	}
+	e.Counter("bad_hellos", none, a.BadHellos)
+	e.Counter("scram_started", none, a.SCRAMStarted)
+	e.Counter("scram_ok", none, a.SCRAMOK)
+	e.Counter("scram_failed", none, a.SCRAMFailed)
+	e.Counter("channel_binding_refused", none, a.ChannelBindingRefs)
+	e.Counter("tls_changes", none, a.TLSChanges)
 }
 
 // MapFake emits every field of a fakepg.Snapshot into e, including zero rows
@@ -276,6 +318,12 @@ func WorkloadMetrics() []obs.MetricDesc {
 		obs.CounterDesc("cancels_sent", lt, "Cancel requests sent."),
 		obs.CounterDesc("disconnects", lt, "Disconnects by client fault."),
 		obs.CounterDesc("burst_drops", lt, "Connections dropped by the reconnect burst."),
+		obs.CounterDesc("startup_tls_requests", lt, "TLS requests sent before startup."),
+		obs.CounterDesc("startup_tls_answered", lt|lo, "Answers to the TLS request (outcome: S, N)."),
+		obs.CounterDesc("startup_handshakes", lt|lo, "Simulated TLS handshakes by result (outcome: ok, failed)."),
+		obs.CounterDesc("startup_tls_faults", lt|lr, "Client TLS faults injected, by fault kind (reason)."),
+		obs.CounterDesc("startup_scram_started", lt, "SCRAM exchanges started."),
+		obs.CounterDesc("startup_scram", lt|lo, "SCRAM exchanges by result (outcome: ok, failed)."),
 		obs.HistogramDesc("latency", lt, obs.UnitNs, "Request latency from the intended send time."),
 		obs.HistogramDesc("latency_from_send", lt, obs.UnitNs, "Request latency from the last send (coordinated-omission control)."),
 	}
@@ -348,10 +396,26 @@ func mapTenant(t workload.TenantSnapshot, e *obs.Emitter) {
 	e.Counter("cancels_sent", l, t.CancelsSent)
 	e.Counter("disconnects", l, t.Disconnects)
 	e.Counter("burst_drops", l, t.BurstDrops)
+	mapStartup(t.Name, t.Startup, e)
 	if e.Detail() {
 		e.Histogram("latency", l, t.Latency)
 		e.Histogram("latency_from_send", l, t.LatencyFromSend)
 	}
+}
+
+func mapStartup(tenant string, s workload.StartupCounters, e *obs.Emitter) {
+	l := obs.Labels{Tenant: tenant}
+	e.Counter("startup_tls_requests", l, s.TLSRequests)
+	e.Counter("startup_tls_answered", obs.Labels{Tenant: tenant, Outcome: "S"}, s.TLSAnsweredYes)
+	e.Counter("startup_tls_answered", obs.Labels{Tenant: tenant, Outcome: "N"}, s.TLSAnsweredNo)
+	e.Counter("startup_handshakes", obs.Labels{Tenant: tenant, Outcome: "ok"}, s.HandshakesOK)
+	e.Counter("startup_handshakes", obs.Labels{Tenant: tenant, Outcome: "failed"}, s.HandshakesFailed)
+	for i, v := range s.TLSFaults {
+		e.Counter("startup_tls_faults", obs.Labels{Tenant: tenant, Reason: workload.TLSFault(i).String()}, v)
+	}
+	e.Counter("startup_scram_started", l, s.SCRAMStarted)
+	e.Counter("startup_scram", obs.Labels{Tenant: tenant, Outcome: "ok"}, s.SCRAMOK)
+	e.Counter("startup_scram", obs.Labels{Tenant: tenant, Outcome: "failed"}, s.SCRAMFailed)
 }
 
 // Register registers every source in sources with c, returning the first error.
@@ -375,7 +439,7 @@ type Declared struct {
 // workload, simnet, sim).
 func All() []Declared {
 	return []Declared{
-		{obs.ComponentFakepg, FakeMetrics()},
+		{obs.ComponentFakepg, fakeAll()},
 		{obs.ComponentWorkload, WorkloadMetrics()},
 		{obs.ComponentSimnet, NetMetrics()},
 		{obs.ComponentSim, KernelMetrics()},

@@ -1,34 +1,62 @@
 flowchart TB
   N_ENGINE["Engine"]:::planned
   N_WORK["Work vocabulary"]:::planned
+  N_SIM["Simulator harness"]:::planned
   PGPROTO3[["pgproto3 (from pgx/v5)"]]:::built
+  PG[("Postgres")]:::planned
   subgraph SCOPE["Wire layer"]
-    W_FRAMER["Framer"]:::planned
+    W_FRAMER["Framer"]:::built
+    W_MSGS["Message coding"]:::built
     W_CODEC["Codec boundary"]:::planned
-    W_CLIENT["Client session machine"]:::planned
-    W_BACKEND["Database session machine"]:::planned
-    W_CYCLE["Query-cycle tracker"]:::planned
-    W_SCRAM["SCRAM-SHA-256 functions"]:::planned
+    W_CLIENT["Client session machine"]:::built
+    W_BACKEND["Database session machine"]:::built
+    W_CYCLE["Query-cycle tracker"]:::built
+    W_FRONT["Client query-phase tracker"]:::built
+    W_SCRAM["SCRAM-SHA-256 functions"]:::built
+    W_FATAL["Startup FATAL replies"]:::built
+    W_SNAPSHOT["Wire snapshot"]:::built
     W_LEXER["SQL lexer"]:::planned
     W_CLASSIFIER["Statement classifier"]:::planned
     W_ERRORS["Error contract and reply builders"]:::planned
+    W_HARNESS["Startup-only test proxy and startup fidelity runner"]:::built
+    W_WORLD["Wire scenarios"]:::built
   end
   N_ENGINE -.->|1| W_CLIENT
   N_ENGINE -.->|2| W_BACKEND
   N_ENGINE -.->|3| W_CYCLE
-  N_ENGINE -.->|4| W_CLASSIFIER
-  N_ENGINE -.->|5| W_ERRORS
-  W_CLIENT -.->|6| W_CODEC
-  W_BACKEND -.->|7| W_CODEC
-  W_CYCLE -.->|8| W_CODEC
-  W_ERRORS -.->|9| W_CODEC
-  W_CODEC -.->|10| W_FRAMER
-  W_CODEC -.->|11| PGPROTO3
-  W_CLIENT -.->|12| W_SCRAM
-  W_BACKEND -.->|13| W_SCRAM
-  W_CLASSIFIER -.->|14| W_LEXER
-  W_CLASSIFIER -.->|15| N_WORK
-  W_CYCLE -.->|16| N_WORK
+  N_ENGINE -.->|4| W_FRONT
+  N_ENGINE -.->|5| W_CLASSIFIER
+  N_ENGINE -.->|6| W_ERRORS
+  W_CLIENT -->|7| W_FRAMER
+  W_BACKEND -->|8| W_FRAMER
+  W_CYCLE -->|9| W_FRAMER
+  W_FRONT -->|10| W_FRAMER
+  W_CLIENT -->|11| W_MSGS
+  W_BACKEND -->|12| W_MSGS
+  W_CLIENT -->|13| W_FATAL
+  W_BACKEND -->|14| W_FATAL
+  W_CYCLE -->|15| W_FATAL
+  W_CLIENT -->|16| W_SCRAM
+  W_BACKEND -->|17| W_SCRAM
+  W_CLIENT -->|18| W_SNAPSHOT
+  W_BACKEND -->|19| W_SNAPSHOT
+  W_CYCLE -->|20| W_SNAPSHOT
+  W_FRONT -->|21| W_SNAPSHOT
+  W_ERRORS -.->|22| W_CODEC
+  W_CODEC -.->|23| W_FRAMER
+  W_CODEC -.->|24| PGPROTO3
+  W_CLASSIFIER -.->|25| W_LEXER
+  W_CLASSIFIER -.->|26| N_WORK
+  W_CYCLE -.->|27| N_WORK
+  W_HARNESS -->|28| W_CLIENT
+  W_HARNESS -->|29| W_BACKEND
+  W_HARNESS -->|30| W_CYCLE
+  W_HARNESS -->|31| W_FRONT
+  W_HARNESS -->|32| W_SNAPSHOT
+  W_HARNESS -->|33| N_SIM
+  W_WORLD -->|34| W_HARNESS
+  W_WORLD -->|35| N_SIM
+  W_HARNESS -->|36| PG
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned

@@ -36,13 +36,15 @@ const (
 )
 
 type startupPacket struct {
-	kind    startupKind
-	version uint32
-	user    string
-	db      string
-	appName string
-	pid     uint32
-	secret  []byte
+	unknown   []string
+	negotiate bool
+	kind      startupKind
+	version   uint32
+	user      string
+	db        string
+	appName   string
+	pid       uint32
+	secret    []byte
 }
 
 func decodeStartup(body []byte) (startupPacket, error) {
@@ -63,6 +65,9 @@ func decodeStartup(body []byte) (startupPacket, error) {
 		return startupPacket{kind: startupCancel, pid: c.ProcessID, secret: c.SecretKey}, nil
 	}
 	p := startupPacket{kind: startupNormal, version: code}
+	if code>>16 == protocol30>>16 && code != protocol30 {
+		return decodeNewerMinor(p, body[4:])
+	}
 	if code != protocol30 {
 		return p, nil
 	}

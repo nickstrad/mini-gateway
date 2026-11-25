@@ -102,6 +102,7 @@ type Server struct {
 	stmtLog    ring[StatementRecord]
 	txLog      ring[TxRecord]
 	faults     faultState
+	auth       authState
 	readBuf    [readChunk]byte
 }
 
@@ -112,6 +113,7 @@ func New(net *simnet.Net, cfg Config) (*Server, error) {
 	cfg = cfg.normalized()
 	srv := &Server{s: net.Sim(), net: net, cfg: cfg, nextPID: firstPID}
 	srv.keys = srv.s.Stream("fakepg/keys")
+	srv.initAuth()
 	srv.writeLog.cfg = cfg.WriteLog
 	srv.stmtLog.cfg = cfg.StatementLog
 	srv.txLog.cfg = cfg.StatementLog

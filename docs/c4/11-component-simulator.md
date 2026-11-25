@@ -1,8 +1,8 @@
 # C4 Level 3: Components: simulator harness
 
-**Built so far: chunks 0–3. Dashed parts are planned.** In this diagram 14 of 20 elements and 36 of 42 relationships are built. Model: diagram `component-simulator` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–4. Dashed parts are planned.** In this diagram 18 of 21 elements and 41 of 44 relationships are built. Model: diagram `component-simulator` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
-The harness owns the world around the engine. It implements the engine's transport seam, so the engine under test is the engine that ships. Several engines can run on one loop, which is how the three-instance scenarios are made. The kernel came first (chunk 1) and is proved on a toy echo protocol. Chunk 2 added the world the proxy will stand in: the fake Postgres, the simulated clients and scenarios that run the clients straight at the fake. No engine exists yet, so those direct baselines are the control arms for later chunks.
+The harness owns the world around the engine. It implements the engine's transport seam, so the engine under test is the engine that ships. Several engines can run on one loop, which is how the three-instance scenarios are made. The kernel came first (chunk 1) and is proved on a toy echo protocol. Chunk 2 added the world the proxy will stand in: the fake Postgres, the simulated clients and scenarios that run the clients straight at the fake. Chunk 4 added SCRAM login and the TLS request, answer and simulated handshake to the fake and the clients. No engine exists yet, so those direct baselines are the control arms for later chunks.
 
 A solid box or arrow is built; a dashed one is planned. An arrow points to the supplier. An arrow marked "implements" means the source implements the target's interface; every other arrow means "uses".
 
@@ -18,9 +18,10 @@ flowchart TB
     S_CLOCK["Virtual clock and timers"]:::built
     S_STREAMS["Named random streams"]:::built
     S_NET["Simulated byte streams"]:::built
-    S_FAKEPG["Fake Postgres"]:::planned
-    S_WORKLOAD["Clients and tenants"]:::planned
-    S_TESTCLIENT["Test client"]:::planned
+    S_FAKEPG["Fake Postgres"]:::built
+    S_WORKLOAD["Clients and tenants"]:::built
+    S_TESTCLIENT["Test client"]:::built
+    S_SIMTLS["Simulated TLS handshake"]:::built
     S_RANDDIST["Float generators"]:::built
     S_WORLD["Scenario world"]:::built
     S_FAULTS["Fault schedule and shrinker"]:::built
@@ -45,7 +46,7 @@ flowchart TB
   S_FAKEPG -->|13| S_STREAMS
   S_FAKEPG -->|14| PGPROTO3
   S_TESTCLIENT -->|15| PGPROTO3
-  S_FAKEPG -.->|16| N_PGWIRE
+  S_FAKEPG -->|16| N_PGWIRE
   N_ENGINE -.->|17| S_TRACE
   S_INV -.->|18| N_ENGINE
   S_SIMTEST -->|19| S_TRACE
@@ -59,19 +60,21 @@ flowchart TB
   DEVELOPER -->|27| S_SIMTEST
   S_CLI -->|28| S_TRACE
   S_WORKLOAD -->|29| S_TESTCLIENT
-  S_WORKLOAD -.->|30| S_RANDDIST
-  S_TESTCLIENT -.->|31| N_PGWIRE
-  S_WORLD -->|32| S_FAKEPG
-  S_WORLD -->|33| S_WORKLOAD
-  S_WORLD -->|34| S_TESTCLIENT
-  S_WORLD -->|35| S_SIMTEST
-  S_WORLD -->|36| PG
-  S_CLI -->|37| S_WORLD
-  S_FAKEPG -->|38| S_TRACE
-  S_WORKLOAD -->|39| S_TRACE
-  S_FAKEPG -->|40| S_INV
-  S_WORKLOAD -->|41| S_INV
-  S_WORLD -->|42| S_FAULTS
+  S_WORKLOAD -->|30| S_RANDDIST
+  S_WORLD -->|31| S_FAKEPG
+  S_WORLD -->|32| S_WORKLOAD
+  S_WORLD -->|33| S_TESTCLIENT
+  S_WORLD -->|34| S_SIMTEST
+  S_WORLD -->|35| PG
+  S_CLI -->|36| S_WORLD
+  S_FAKEPG -->|37| S_TRACE
+  S_WORKLOAD -->|38| S_TRACE
+  S_FAKEPG -->|39| S_INV
+  S_WORKLOAD -->|40| S_INV
+  S_WORLD -->|41| S_FAULTS
+  S_WORKLOAD -->|42| N_PGWIRE
+  S_FAKEPG -->|43| S_SIMTLS
+  S_WORKLOAD -->|44| S_SIMTLS
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned
@@ -89,9 +92,10 @@ flowchart TB
 | Virtual clock and timers | component | built (chunk 1) | internal/sim. 64-bit nanoseconds that saturate instead of overflowing. Cancellable timers: a cancel removes the event from the heap. A timer marked background does not count in the quiesce check. Time moves only when the loop moves it. |
 | Named random streams | component | built (chunk 1) | internal/sim. One generator per (seed, label), so a new draw in one place does not shift any other. |
 | Simulated byte streams | component | built (chunk 1) | internal/sim/simnet. Listeners and ordered byte connections with chosen fragmentation (down to one byte), latency per direction, a bounded send window (back pressure), half-close and reset. Its faults: reset, stall, half-open, half-close, chunk, refuse, dial stall, accept-then-silence, and clear. Its own snapshot. |
-| Fake Postgres | component | planned | internal/sim/fakepg. Speaks the simple-query subset in real wire bytes with its own framer; login by trust or SCRAM-SHA-256; a max_connections limit with Postgres's refusal; transaction status; a small keyed table with write, statement and transaction logs; service-time models and a capacity limit; cancel requests; every database-side fault; its own snapshot. **So far:** Built in chunk 2 (internal/sim/fakepg): all of it with trust login, and the 24 database-side fault kinds that need no TLS. Not built: SCRAM-SHA-256 login, and the two TLS faults (answers N to a TLS request; a certificate that fails verification) (chunk 4). |
-| Clients and tenants | component | planned | internal/sim/workload. Simulated clients grouped in tenants: open-loop arrivals (constant or Poisson) and closed-loop think time, latency measured from the intended send time, uniform, Zipf or fixed keys, transactions of several statements, retries with backoff, every client-side fault, its own snapshot. A client sends one request at a time; later arrivals wait in its bounded backlog. Also a hand-driven client (Probe) for tests. **So far:** Built in chunk 2 (internal/sim/workload): all of it, with the client-side faults that need no TLS (half a message, stops reading, disconnects, reconnect burst, cancel, aggressive retry). Not built: the four TLS client faults (stalls after a TLS request, fails the handshake, plaintext after a TLS request, a second TLS request) (chunk 4). |
-| Test client | component | planned | internal/testclient. A Postgres client with no I/O: bytes in, messages out. Its own framer, a message codec, and a session machine (phase, status byte, key data, parameters) with login by trust or SCRAM-SHA-256. Used by the simulated clients on simulated streams and by the tier R tests on TCP. **So far:** Built in chunk 2 (internal/testclient): the framer, the codec and the session machine, with trust login. Not built: SCRAM-SHA-256 login (chunk 4). |
+| Fake Postgres | component | built (chunk 4) | internal/sim/fakepg. Speaks the simple-query subset in real wire bytes with its own framer; login by trust or SCRAM-SHA-256; answers a TLS request S or N and plays the simulated handshake; a max_connections limit with Postgres's refusal; transaction status; a small keyed table with write, statement and transaction logs; service-time models and a capacity limit; cancel requests; every database-side fault (the TLS ones — answers N, a handshake that fails or stalls, a certificate that fails verification — are a setting that can change during a run, not fault kinds); its own snapshots. |
+| Clients and tenants | component | built (chunk 4) | internal/sim/workload. Simulated clients grouped in tenants: open-loop arrivals (constant or Poisson) and closed-loop think time, latency measured from the intended send time, uniform, Zipf or fixed keys, transactions of several statements, retries with backoff; login by trust or SCRAM-SHA-256, with a TLS request first when the tenant asks; every client-side fault (the four TLS ones — stall after the request, bad hello, plaintext after the request, a second request — are a per-tenant setting); its own snapshot. A client sends one request at a time; later arrivals wait in its bounded backlog. Also a hand-driven client (Probe) for tests. |
+| Test client | component | built (chunk 4) | internal/testclient. A Postgres client with no I/O: bytes in, messages out. Its own framer, a message codec, and a session machine (phase, status byte, key data, parameters) with trust login. It hands the data of each authentication message to its caller, which is how the simulated clients run SCRAM. Used by the simulated clients on simulated streams and by the tier R tests on TCP. |
+| Simulated TLS handshake | component | built (chunk 4) | internal/sim/simtls. A handshake as an exchange with an outcome, not cryptography: a 16-byte client hello (or a bad one) and a 16-byte server reply that says completed with a TLS version, bad certificate, or alert. Models the outcome and the duration only. |
 | Float generators | component | built (chunk 2) | internal/randdist. The only two functions that use floating point: exponential gaps for Poisson arrivals, and a Zipf generator. Kept outside internal/sim, where float syntax is forbidden. |
 | Scenario world | component | built (chunk 2) | internal/sim/world. The scenario type; the driver interface (start, connect, inject, run, observe, stop) and its simulator implementation; five direct baselines with no proxy (500 connections, reconnect burst, 1,000 identical reads, open-loop overload, mixed transactions); the write-log and transaction checks; the fidelity runner, which plays one script against the fake and compares the transcript with Postgres 17's, recorded for CI or live in tier R. |
 | Fault schedule and shrinker | component | built (chunk 1) | internal/sim. Timed faults, each recorded in the trace when it is applied. A package registers the fault kinds it can apply. A schedule can be decoded from bytes for the fuzzer, and a delete-one-fault shrinker cuts a failing schedule down. Faults are injected only from outside the code under test. |
@@ -102,7 +106,7 @@ flowchart TB
 | Toy echo protocol | component | built (chunk 1) | internal/sim/simtoy. A line-echo client and server with a planted-bug switch, and eleven named scenarios that cover every network fault. Used only to test the harness itself. |
 | Developer or reader | person | built (chunk 1) | Runs simulator scenarios from a seed, replays a failure from its printed REPLAY line, runs make test / chaos / bench. |
 | Engine | neighbouring container | planned | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code. |
-| Wire layer | neighbouring container | planned | internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the statement classifier, the error contract. The only product package that imports pgproto3. |
+| Wire layer | neighbouring container | planned | internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the statement classifier, the error contract, the wire snapshot. The only product package allowed to import pgproto3. Its test packages pgwiretest and wireworld run the session machines in the simulator. **So far:** Built in chunk 4 (internal/pgwire): the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the query-cycle tracker, the client query-phase tracker, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest (startup-only proxy, startup fidelity runner) and wireworld (19 wire scenarios). Not built: the codec boundary (no file in the package imports pgproto3 yet), the SQL lexer, the statement classifier, the error contract and its reply builders (chunk 5). No engine exists yet, so only the test proxy drives the machines. |
 | pgproto3 (from pgx/v5) | softwareSystem, external | built (chunk 2) | Go package github.com/jackc/pgx/v5/pgproto3: Postgres wire message structs with Encode and Decode. The one external dependency, used for message encoding only. |
 | Postgres | softwareSystem, external | planned | One ordinary Postgres server. Sees at most the fleet's connection budget, all logged in as one role. |
 
@@ -125,7 +129,7 @@ flowchart TB
 | 13 | Fake Postgres | Named random streams | built | Service-time jitter, one stream per connection; cancel keys | Go |
 | 14 | Fake Postgres | pgproto3 (from pgx/v5) | built | Wire messages | Go import |
 | 15 | Test client | pgproto3 (from pgx/v5) | built | Wire messages | Go import |
-| 16 | Fake Postgres | Wire layer | planned | Reuses the SCRAM functions | Go |
+| 16 | Fake Postgres | Wire layer | built | Reuses the SCRAM functions (server side) and the NegotiateProtocolVersion encoder | Go |
 | 17 | Engine | Decision trace and digests | planned | Appends each decision | Go |
 | 18 | Invariants and quiesce check | Engine | planned | Reads snapshots at every event and at the end | Go |
 | 19 | Seeds, replay, sweep | Decision trace and digests | built | Compares the digests of the two runs; prints the trace tail on failure | Go |
@@ -139,16 +143,18 @@ flowchart TB
 | 27 | Developer or reader | Seeds, replay, sweep | built | Runs seed sweeps and fuzz targets | scripts/sweep.sh, scripts/fuzz.sh, go test |
 | 28 | cmd/mgsim | Decision trace and digests | built | Prints the digests and, on request, every trace record | Go |
 | 29 | Clients and tenants | Test client | built | Every client frames, decodes and tracks its session with it | Go |
-| 30 | Clients and tenants | Float generators | planned | Poisson gaps and Zipf keys | Go |
-| 31 | Test client | Wire layer | planned | Reuses the SCRAM functions | Go |
-| 32 | Scenario world | Fake Postgres | built | Starts the fake for a scenario; reads its snapshot and logs for the checks | Go |
-| 33 | Scenario world | Clients and tenants | built | Starts the scenario's clients; reads their snapshot; the fidelity runner drives a Probe | Go |
-| 34 | Scenario world | Test client | built | Turns the messages of a fidelity exchange into transcript tokens | Go |
-| 35 | Scenario world | Seeds, replay, sweep | built | Its scenario tests run the pinned seeds and the sweep, every seed twice | Go test |
-| 36 | Scenario world | Postgres | built | Tier R: plays the fidelity script and three baselines over TCP; on request rewrites the recorded transcript that CI replays | scripts/tier-r.sh, Docker, go test |
-| 37 | cmd/mgsim | Scenario world | built | Looks up a world scenario by name, runs it and prints its result table | Go |
-| 38 | Fake Postgres | Decision trace and digests | built | Appends accepts, statements, writes, cancels and fired faults; writes its state for the state digest | Go |
-| 39 | Clients and tenants | Decision trace and digests | built | Appends arrivals, sends, completions and retries; writes its state for the state digest | Go |
-| 40 | Fake Postgres | Invariants and quiesce check | built | Registers its conservation laws, the connection limit and its quiesce check | Go |
-| 41 | Clients and tenants | Invariants and quiesce check | built | Registers request conservation per tenant and its quiesce check | Go |
-| 42 | Scenario world | Fault schedule and shrinker | built | Scenario fault schedules; random schedules decoded from fuzz input | Go |
+| 30 | Clients and tenants | Float generators | built | Poisson gaps and Zipf keys | Go |
+| 31 | Scenario world | Fake Postgres | built | Starts the fake for a scenario; reads its snapshot and logs for the checks | Go |
+| 32 | Scenario world | Clients and tenants | built | Starts the scenario's clients; reads their snapshot; the fidelity runner drives a Probe | Go |
+| 33 | Scenario world | Test client | built | Turns the messages of a fidelity exchange into transcript tokens | Go |
+| 34 | Scenario world | Seeds, replay, sweep | built | Its scenario tests run the pinned seeds and the sweep, every seed twice | Go test |
+| 35 | Scenario world | Postgres | built | Tier R: plays the fidelity script and three baselines over TCP; on request rewrites the recorded transcript that CI replays | scripts/tier-r.sh, Docker, go test |
+| 36 | cmd/mgsim | Scenario world | built | Looks up a world scenario by name, runs it and prints its result table | Go |
+| 37 | Fake Postgres | Decision trace and digests | built | Appends accepts, statements, writes, cancels and fired faults; writes its state for the state digest | Go |
+| 38 | Clients and tenants | Decision trace and digests | built | Appends arrivals, sends, completions and retries; writes its state for the state digest | Go |
+| 39 | Fake Postgres | Invariants and quiesce check | built | Registers its conservation laws, the connection limit and its quiesce check | Go |
+| 40 | Clients and tenants | Invariants and quiesce check | built | Registers request conservation per tenant and its quiesce check | Go |
+| 41 | Scenario world | Fault schedule and shrinker | built | Scenario fault schedules; random schedules decoded from fuzz input | Go |
+| 42 | Clients and tenants | Wire layer | built | Reuses the SCRAM functions (client side) | Go |
+| 43 | Fake Postgres | Simulated TLS handshake | built | Reads the client hello; replies with the configured outcome | Go |
+| 44 | Clients and tenants | Simulated TLS handshake | built | Sends the client hello, or a bad one; reads the reply | Go |

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/nickstrad/mini-gateway/internal/pgwire"
 	"github.com/nickstrad/mini-gateway/internal/sim"
 	"github.com/nickstrad/mini-gateway/internal/sim/simnet"
 )
@@ -106,6 +107,12 @@ type backend struct {
 	resetLeft   time.Duration
 	dying       bool
 	stream      *rand.Rand
+	step        startStep
+	overTLS     bool
+	sslDone     bool
+	gssDone     bool
+	tlsTimer    sim.Timer
+	scram       *pgwire.ScramServer
 }
 
 func (b *backend) OnEvent(_ *simnet.End, ev simnet.Event) {
@@ -207,6 +214,12 @@ func (b *backend) readMessage() bool {
 			b.drainMuted()
 			return false
 		}
+		if b.phase == phaseStartup && b.step == stepHello {
+			return b.readHello()
+		}
+		if b.phase == phaseStartup && b.step == stepHandshake {
+			return b.watchHandshake()
+		}
 		typ, body, ok, err := b.fr.Next()
 		if err != nil {
 			b.protocolFatal(err.Error())
@@ -240,6 +253,10 @@ func (b *backend) readMessage() bool {
 
 func (b *backend) dispatch(typ byte, body []byte) {
 	if b.phase == phaseStartup {
+		if b.step == stepSASLFirst || b.step == stepSASLFinal {
+			b.authMessage(typ, body)
+			return
+		}
 		b.startup(body)
 		return
 	}
@@ -280,8 +297,11 @@ func (b *backend) startup(body []byte) {
 	// cancel request (uncounting its slot), protocol version, restart window,
 	// max_connections, missing/unknown user, and unknown database.
 	switch pkt.kind {
-	case startupSSL, startupGSS:
-		b.emit([]byte{'N'})
+	case startupSSL:
+		b.answerSSL()
+		return
+	case startupGSS:
+		b.answerGSS()
 		return
 	case startupCancel:
 		b.uncount()
@@ -290,8 +310,11 @@ func (b *backend) startup(body []byte) {
 		return
 	}
 	if pkt.version != protocol30 {
-		b.refuseWith(RefuseProtocol, errorf("FATAL", "0A000", "unsupported frontend protocol %d.%d: server supports 3.0 to 3.0", pkt.version>>16, pkt.version&0xffff))
+		b.refuseProtocol(pkt.version)
 		return
+	}
+	if pkt.negotiate || len(pkt.unknown) > 0 {
+		b.emit(pgwire.AppendNegotiateProtocolVersion(nil, protocol30, pkt.unknown))
 	}
 	if b.refuse {
 		if b.refuseAs == RefuseStartingUp {
@@ -307,6 +330,11 @@ func (b *backend) startup(body []byte) {
 	}
 	if pkt.db == "" {
 		pkt.db = pkt.user
+	}
+	if b.srv.cfg.Auth == AuthSCRAM {
+		b.user, b.db, b.appName = pkt.user, pkt.db, pkt.appName
+		b.beginAuth()
+		return
 	}
 	if !allowed(b.srv.cfg.Users, pkt.user) {
 		b.refuseWith(RefuseUnknownUser, errorf("FATAL", "28000", "role %q does not exist", pkt.user))
@@ -483,6 +511,7 @@ func (b *backend) finalize() {
 	b.phase = phaseClosed
 	b.pumpTimer.Cancel()
 	b.resetTimer.Cancel()
+	b.tlsTimer.Cancel()
 	if r := b.cur; r != nil {
 		b.leaveService(r)
 		b.cur = nil

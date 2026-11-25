@@ -1,0 +1,13 @@
+# Startup conversation of Postgres 17 (scripts/tier-r.sh, MG_TIER_R_UPDATE=1); replayed against the fake in CI.
+tls-request-ssl-off: N
+tls-request-ssl-on: S
+gss-request: G
+scram-login: R:10[SCRAM-SHA-256] R:11 R:12 R:0 S*14 K Z:I params[DateStyle,IntervalStyle,TimeZone,application_name,client_encoding,default_transaction_read_only,in_hot_standby,integer_datetimes,is_superuser,scram_iterations,server_encoding,server_version,session_authorization,standard_conforming_strings]
+scram-login-over-tls: R:10[SCRAM-SHA-256-PLUS,SCRAM-SHA-256] R:11 R:12 R:0 S*14 K Z:I params[DateStyle,IntervalStyle,TimeZone,application_name,client_encoding,default_transaction_read_only,in_hot_standby,integer_datetimes,is_superuser,scram_iterations,server_encoding,server_version,session_authorization,standard_conforming_strings]
+y-header-over-tls-with-plus-offered: R:10[SCRAM-SHA-256-PLUS,SCRAM-SHA-256] E:FATAL:28000 EOF
+wrong-password: R:10[SCRAM-SHA-256] R:11 E:FATAL:28P01 EOF
+unknown-user: R:10[SCRAM-SHA-256] R:11 E:FATAL:28P01 EOF
+unknown-database: R:10[SCRAM-SHA-256] R:11 R:12 R:0 E:FATAL:3D000 EOF
+protocol-version-2: E-legacy:"FATAL:  unsupported frontend protocol 2.0: server supports 3.0 to 3.0\n"
+protocol-version-4: E:FATAL:0A000 EOF
+protocol-version-3.2-negotiated: v:0[_pq_.mg_option] R:10[SCRAM-SHA-256] R:11 R:12 R:0 S*14 K Z:I params[DateStyle,IntervalStyle,TimeZone,application_name,client_encoding,default_transaction_read_only,in_hot_standby,integer_datetimes,is_superuser,scram_iterations,server_encoding,server_version,session_authorization,standard_conforming_strings]

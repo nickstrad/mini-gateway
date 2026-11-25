@@ -127,6 +127,9 @@ type Tenant struct {
 	Backlog      int
 	Disconnect   []Disconnect
 	ConnectFirst bool
+	Password     string
+	TLS          TLSRequest
+	TLSFault     TLSFault
 }
 
 // Config configures a simulated Workload targeting Addr over simnet.

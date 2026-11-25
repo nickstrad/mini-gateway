@@ -44,6 +44,7 @@ type Msg struct {
 	Auth      uint32
 	Fields    []string
 	Values    [][]byte
+	Data      []byte
 }
 
 // MsgName returns a human-readable Postgres message name for a wire type byte.
@@ -87,6 +88,7 @@ func Decode(typ byte, body []byte) (Msg, error) {
 			return m, fmt.Errorf("testclient: authentication message of %d bytes", len(body))
 		}
 		m.Auth = binary.BigEndian.Uint32(body)
+		m.Data = append([]byte(nil), body[4:]...)
 	case MsgParamStatus:
 		var p pgproto3.ParameterStatus
 		if err := p.Decode(body); err != nil {

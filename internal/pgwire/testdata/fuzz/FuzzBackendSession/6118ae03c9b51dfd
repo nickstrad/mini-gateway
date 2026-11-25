@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("N")
+int(169)
+byte('&')
