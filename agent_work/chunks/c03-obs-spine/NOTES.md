@@ -354,35 +354,25 @@ For the orchestrator to accept or refuse.
 
 ## Gate result (build stage)
 
-`scripts/gate.sh c03-obs-spine` on a clean tree at `f1d3759` (2026-11-25): every check passes
-except **G3 unit**, which fails only on the two chunk 1 adversarial attacks described under
-"Deviations" (all 22 product and adversarial packages otherwise `ok`, including
-`agent_work/adversarial/c02-sim-world`). G0 all, G1 detlint/importlint/boundlint/paniccheck,
-G2 comments, G3 race (`./internal/obs/csvflush/...`), G4 markers, G4 sweep (200 seeds, 607 s),
-G5 fuzz (7 × 20 s), G6 tier R (Postgres 17.11), G7 csv (DuckDB v1.5.5, 10 run directories from
-the sweep: 5 baselines × seeds 1 and 42, 4 scenarios with SQL files, 5 SQL files), G8
-gen-docs, G9 site, G10 extra (45 s): pass. `overall=fail` until the orchestrator rules on the
-two attacks. `result.json` was not committed (builder rules).
+Repair round: `scripts/gate.sh c03-obs-spine` on a clean tree at `e1f4798` (2026-11-25, 767 s):
+every check passes except **G3 unit**, which fails only on the four c03 attacks listed under
+"Repair round" (`TestAdv_2_PrometheusHistoryIndependence` and
+`TestAdv_12_RuntimeDeclarationDocumentationGap`, narrowed; `TestAdv_8_CounterGaugeFamilyCollision`
+and `TestAdv_8_HistogramGaugeSeriesCollision`, whose setup asserts the declarations the fix
+refuses). The other 21 packages pass, including `agent_work/adversarial/c01-sim-kernel` (now that
+the orchestrator excluded `internal/obs/csvflush` from its determinism walk) and
+`c02-sim-world`. Pass: G0 all, G1 detlint/importlint/boundlint/paniccheck, G2 comments, G3 race,
+G4 markers, G4 sweep (200 seeds, 377 s), G5 fuzz (7 × 20 s), G6 tier R (Postgres 17.11), G7 csv
+(DuckDB v1.5.5, 10 run directories, 4 scenarios with SQL files), G8 gen-docs, G9 site, G10 extra
+(42 s). `overall=fail` until the orchestrator rules on the four attacks. `result.json` was not
+committed (builder rules).
 
 ## Deviations
 
-- **Gate G3 is red on two chunk 1 adversarial tests, by construction of this brief.**
-  `agent_work/adversarial/c01-sim-kernel/determinism_test.go` walks every non-test Go file
-  under `internal/obs/...` (skipping only directories named `simtest` and `obstest`) and fails
-  on any `os` import, wall-clock call, channel, goroutine or float. When it was written,
-  `internal/obs` was only the measurement half. This brief requires adapters as packages under
-  `internal/obs/`, with the CSV adapter doing the file I/O ("keep file I/O in this adapter
-  package") and running its own goroutine with a bounded queue in real-process mode. Every
-  avoidable hit was removed (the Prometheus checker is integer-only, the harness and the
-  catalog have no `os`, the adapter takes its clock from the owner); what remains is exactly
-  `internal/obs/csvflush/reader.go` and `writer.go` (`os`; `chan`, `go`, `select`, send):
-  `TestAdv_10_AliasedEntropyAndClock`, `TestAdv_10_ConcurrencyAndFloatingSyntax`. I may not
-  edit `agent_work/adversarial/`. Proposed resolution for the orchestrator: narrow those two
-  attacks to the packages of `tools/lint-rules/det-packages.txt` (the scope the builder rules
-  give the determinism rule; `csvflush` is deliberately not in it, and is in
-  `race-packages.txt` instead), or add `csvflush` to their skip list. Every other check of
-  G3, and every product package, passes.
-
+- **Gate G3 (before the repair round) was red on two chunk 1 adversarial tests** that walked
+  `internal/obs/csvflush` (file I/O and a goroutine, which the brief requires). The orchestrator
+  has since excluded `csvflush` from that walk (`agent_work/chunks/c01-sim-kernel/ADVERSARIAL.md`);
+  those tests now pass.
 - **Size.** Product Go (non-test) added by this chunk: 4,170 lines after the repair round
   (3,949 before it; the repair added 272 and removed 51), against the brief's ~1,400
   (up to 2×). The excess is test machinery that lives in non-test files because other packages
