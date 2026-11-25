@@ -17,3 +17,4 @@ internal/sim/workload
 internal/sim/world
 internal/testclient
 internal/randdist
+internal/work
