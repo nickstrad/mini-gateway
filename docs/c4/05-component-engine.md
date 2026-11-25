@@ -1,6 +1,6 @@
 # C4 Level 3: Components: engine
 
-**Built so far: chunks 0–2. Dashed parts are planned.** In this diagram 0 of 18 elements and 0 of 20 relationships are built. Model: diagram `component-engine` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–3. Dashed parts are planned.** In this diagram 0 of 18 elements and 0 of 20 relationships are built. Model: diagram `component-engine` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 The engine is where the seams meet. The transport seam below it has two implementations. The pipeline above calls each core through a small stage interface, so a core can be replaced by a pass-through (which is how each scenario's ablation run is made).
 
@@ -77,7 +77,7 @@ flowchart TB
 | Coalescer | neighbouring container | planned | internal/coalesce. Identical provably-read-only statements share one database read. Never writes. |
 | Pool | neighbouring container | planned | internal/pool. Hard-capped database connections, creation limiter, leases per transaction, the one breaker, the dirty-connection table. |
 | Retry policy | neighbouring container | planned | internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached the database, within a 10% budget. |
-| Observability | neighbouring container | planned | internal/obs. Snapshot conventions (the one raw export), integer histogram, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health. **So far:** Built in chunk 1: the integer histogram, the conservation check and gauge, and the snapshot test helpers (obstest). Not built: the instance snapshot, the collector, the adapter interface and every adapter, fleet merge, health. |
+| Observability | neighbouring container | planned | internal/obs and its sub-packages; test/analysis; scripts/csv-assert.sh. Snapshot conventions (the one raw export), integer histogram, metric registry, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health, and the SQL assertions over flushed files. **So far:** Built in chunks 1 and 3: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP. |
 | Work vocabulary | neighbouring container | planned | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
 
 ## Relationships

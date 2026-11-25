@@ -7,7 +7,7 @@ Three C4 levels plus a deployment view: system context, containers (two views), 
 ## Diagrams
 
 <!-- diagram-table:start -->
-**Built so far: chunks 0–2. Dashed parts are planned.** The Built column counts the elements of each diagram that exist in the code.
+**Built so far: chunks 0–3. Dashed parts are planned.** The Built column counts the elements of each diagram that exist in the code.
 
 | # | Level | File | Built | Shows |
 | --- | --- | --- | --- | --- |
@@ -22,7 +22,7 @@ Three C4 levels plus a deployment view: system context, containers (two views), 
 | 9 | Components | [09-component-coalescer.md](09-component-coalescer.md) | 0 of 9 | internal/coalesce: the join rule, the flight table, waiters, the flight's own deadline, the shared reply |
 | 10 | Components | [10-component-retry.md](10-component-retry.md) | 0 of 7 | internal/retry: the policy interface, its two policies, the budget |
 | 11 | Components | [11-component-simulator.md](11-component-simulator.md) | 14 of 20 | internal/sim and its sub-packages, internal/testclient and internal/randdist: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, the test client, the scenario world with its baselines and fidelity runner, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol |
-| 12 | Components | [12-component-observability.md](12-component-observability.md) | 3 of 21 | internal/obs: the one raw export (snapshots), the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus |
+| 12 | Components | [12-component-observability.md](12-component-observability.md) | 20 of 28 | internal/obs: the one raw export (snapshots), the metric registry, the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus |
 <!-- diagram-table:end -->
 
 ## Where each required part is drawn

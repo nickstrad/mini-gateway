@@ -1,6 +1,6 @@
 # C4 Level 2: Containers: the request path
 
-**Built so far: chunks 0–2. Dashed parts are planned.** In this diagram 0 of 13 elements and 0 of 14 relationships are built. Model: diagram `container` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–3. Dashed parts are planned.** In this diagram 0 of 13 elements and 0 of 14 relationships are built. Model: diagram `container` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 Containers are Go packages inside one process. The shell does all socket I/O and makes no decisions. The engine is one single-threaded state machine that calls the wire layer and the four pure cores. Observability hangs off the side: the engine publishes snapshots, the admin listener serves them.
 
@@ -59,7 +59,7 @@ flowchart TB
 | Coalescer | container | planned | internal/coalesce. Identical provably-read-only statements share one database read. Never writes. |
 | Pool | container | planned | internal/pool. Hard-capped database connections, creation limiter, leases per transaction, the one breaker, the dirty-connection table. |
 | Retry policy | container | planned | internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached the database, within a 10% budget. |
-| Observability | container | planned | internal/obs. Snapshot conventions (the one raw export), integer histogram, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health. **So far:** Built in chunk 1: the integer histogram, the conservation check and gauge, and the snapshot test helpers (obstest). Not built: the instance snapshot, the collector, the adapter interface and every adapter, fleet merge, health. |
+| Observability | container | planned | internal/obs and its sub-packages; test/analysis; scripts/csv-assert.sh. Snapshot conventions (the one raw export), integer histogram, metric registry, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health, and the SQL assertions over flushed files. **So far:** Built in chunks 1 and 3: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP. |
 | Configuration | container | planned | internal/config. The config file, the static fleet block (instance count N; fleet budgets divided by N), and load-time validation that fails closed. |
 | Postgres | softwareSystem, external | planned | One ordinary Postgres server. Sees at most the fleet's connection budget, all logged in as one role. |
 | Metrics and log readers | softwareSystem, external | planned | Everything that reads what the adapters produce: a Prometheus fed through an OpenTelemetry Collector or by direct scrape, flushed CSV files read by tests and DuckDB, log readers. They merge across instances; no component knows about them. The observability component view shows them one by one. |

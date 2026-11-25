@@ -31,7 +31,7 @@ from pathlib import Path
 # REL_BUILT relationship id -> chunk number, or None. Leave it empty unless the rule is
 #           wrong for one arrow. The rule: a relationship is built when both its ends are.
 #           A chunk number forces "built", None forces "planned".
-LANDED = 2
+LANDED = 3
 
 BUILT = {
     # chunk 1 — simulator kernel (diagram 11)
@@ -53,7 +53,25 @@ BUILT = {
     # chunk 1 — measurement half of internal/obs (diagram 12)
     "o-hist": 1,      # internal/obs: histogram.go
     "o-conserve": 1,  # internal/obs: snapshot.go
-    "o-obstest": 1,   # internal/obs/obstest
+    "o-obstest": 1,   # internal/obs/obstest (chunk 3 added conformance.go and golden.go)
+    # chunk 3 — observability spine (diagram 12)
+    "o-contract": 3,  # internal/obs: Snapshotter in snapshot.go (chunk 1); the import rules of chunk 3 in tools/lint-rules/imports.txt
+    "o-registry": 3,  # internal/obs: metric.go
+    "o-instance": 3,  # internal/obs: instance.go
+    "o-detail": 3,    # internal/obs: detail.go, Config.Detail and the emitter in collector.go
+    "o-collector": 3, # internal/obs: collector.go, self.go
+    "o-adapter": 3,   # internal/obs: Adapter in collector.go; the conformance test in obstest/conformance.go
+    "o-merge": 3,     # internal/obs: merge.go
+    "o-prom": 3,      # internal/obs/promtext (promtext.go; the checker and decoder in check.go)
+    "o-json": 3,      # internal/obs/jsonstats
+    "o-csv": 3,       # internal/obs/csvflush (schema.go, writer.go, reader.go)
+    "o-log": 3,       # internal/obs/logline
+    "o-simsrc": 3,    # internal/obs/simsrc
+    "o-catalog": 3,   # internal/obs/catalog; scripts/gen-docs.sh, scripts/gen-docs.d/c03-csv-schema.sh; docs/csv-schema.md
+    "o-simrun": 3,    # internal/obs/simrun
+    "o-assert": 3,    # scripts/csv-assert.sh, test/analysis (views.sql, guard.sql, five assertion files); make csv-assert
+    "csvfiles": 3,    # written by internal/obs/csvflush; described in docs/csv-schema.md
+    "duckdb": 3,      # the command-line tool, pinned to 1.5.x in scripts/csv-assert.sh
 }
 
 PARTIAL = {
@@ -71,11 +89,13 @@ PARTIAL = {
                   "request, a second TLS request) (chunk 4).",
     "s-testclient": "Built in chunk 2 (internal/testclient): the framer, the codec and the session machine, with trust "
                     "login. Not built: SCRAM-SHA-256 login (chunk 4).",
-    "c-obs": "Built in chunk 1: the integer histogram, the conservation check and gauge, and the snapshot test helpers "
-             "(obstest). Not built: the instance snapshot, the collector, the adapter interface and every adapter, "
-             "fleet merge, health.",
-    "o-contract": "Built in chunk 1: the Snapshotter interface, and the obstest check that a snapshot is a plain struct "
-                  "with no time and no map. Not built: the instance snapshot and the components that fill it (chunk 3 on).",
+    "c-obs": "Built in chunks 1 and 3: everything except the OTLP push adapter (chunk 15) and the health rules that "
+             "read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario "
+             "harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP.",
+    "o-health": "Built in chunk 3 (internal/obs: health.go): the three states, the rule table (overall state is the "
+                "worst rule), the collector rule and the JSON body. Not built: the rules for shedding, an open "
+                "breaker, the limit's floor, draining and a database outage, and any rule that gives failed "
+                "(chunk 6 on).",
 }
 
 REL_BUILT = {
@@ -102,6 +122,13 @@ REL_BUILT = {
     "s9": 2,    # the pgproto3 requirement entered go.mod in chunk 2
     "s13": 1,   # cmd/mgsim and go test run scenarios from a seed since chunk 1
     "s16": 2,   # scripts/tier-r.sh
+    # Diagram 12 arrows that are wholly true of the code although one end is only partly built:
+    "o4": 3,    # Collector.Health evaluates a HealthTable (obs/health.go)
+    "o22": 2,   # simtoy, fakepg and workload tests call obstest.RequirePlain, MergeMoved, NeverMoved
+    "o34": 3,   # simsrc maps sim.Snapshot, simnet.Snapshot, fakepg.Snapshot, workload.Snapshot
+    "o40": 3,   # simrun wraps world.SimDriver and calls world.Drive
+    "o50": 2,   # obs.Gauge and obs.Conserve in fakepg/snapshot.go and workload/snapshot.go
+    "o51": 2,   # obs.Histogram in workload/workload.go; obs.HistogramSnapshot in world/check.go
 }
 # =========================================================================== end of AS BUILT
 
@@ -184,11 +211,12 @@ system("telemetry", "Metrics and log readers",
        "component knows about them. The observability component view shows them one by one.", tags=("external",))
 system("csvfiles", "Flushed CSV files",
        "One directory per run on local disk: run.csv, metrics.csv, histograms.csv, schema version 1 (PLAN.md section "
-       "7.7). Same columns in every flush; every tenant has its own rows. Nothing has to be running to read them.",
+       "7.7; columns in docs/csv-schema.md). Same columns in every flush; every tenant has its own rows; run.csv "
+       "is written last, so a run without it did not finish. Nothing has to be running to read them.",
        tech="CSV files", tags=("external",))
 system("duckdb", "DuckDB (analysis tool)",
-       "The DuckDB command-line tool, run after a run by test and benchmark scripts and by hand. Reads the flushed "
-       "files with read_csv and runs SQL assertions and report queries. Never imported, linked or started by the proxy.",
+       "The DuckDB command-line tool (version family 1.5.x), run after a run by scripts/csv-assert.sh and by hand. "
+       "Reads the flushed files with read_csv and runs SQL over them. Never imported, linked or started by the proxy.",
        tech="DuckDB CLI, SQL", tags=("external",))
 system("otelcol", "OpenTelemetry Collector",
        "Receives the proxy's OTLP/HTTP push, batches it and exposes the metrics on a Prometheus endpoint. Dev setup: "
@@ -233,8 +261,9 @@ container("c-retry", "Retry policy",
           "internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached "
           "the database, within a 10% budget.", tech="Go, pure core")
 container("c-obs", "Observability",
-          "internal/obs. Snapshot conventions (the one raw export), integer histogram, collector, the adapter interface and "
-          "its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health.",
+          "internal/obs and its sub-packages; test/analysis; scripts/csv-assert.sh. Snapshot conventions (the one raw "
+          "export), integer histogram, metric registry, collector, the adapter interface and its adapters (Prometheus "
+          "text, JSON, CSV flush, log line, OTLP push), fleet merge, health, and the SQL assertions over flushed files.",
           tech="Go, standard library")
 container("c-config", "Configuration",
           "internal/config. The config file, the static fleet block (instance count N; fleet budgets divided by N), "
@@ -635,46 +664,90 @@ rel("m28", "s-cli", "s-trace", "Prints the digests and, on request, every trace 
 P = "c-obs"
 comp(P, "o-contract", "Snapshot conventions",
      "The one common raw export. What every component's Snapshot() returns: a plain struct of monotonic counters and "
-     "current gauges. No wall-clock time, no map order, no telemetry imports. Nothing else leaves a component.")
+     "current gauges. No wall-clock time, no map order, no telemetry imports. Nothing else leaves a component; an "
+     "import rule keeps components and the simulator from importing any adapter.")
 comp(P, "o-hist", "Integer histogram",
      "Fixed array, fixed relative error, no allocation on record; record, merge, percentile. Out-of-range values are "
      "clamped and counted.")
 comp(P, "o-conserve", "Conservation check and gauge",
      "A check that a total equals the sum of its parts (for example written = delivered + discarded + in flight); "
      "its error names each term and which side is higher. A gauge type that keeps a value and its peak.")
-comp(P, "o-obstest", "Snapshot test helpers",
+comp(P, "o-obstest", "Snapshot and adapter test helpers",
      "internal/obs/obstest. Test plumbing: checks that a snapshot is a plain struct of integers (no time, no map), "
-     "and that every counter in it moved in at least one test.", tags=("test",))
+     "and that every counter in it moved in at least one test. Also the conformance test every adapter must pass "
+     "(values, labels, determinism, no kept reference, errors counted), its shared fixture, and the golden-file "
+     "helper.", tags=("test",))
+comp(P, "o-registry", "Metric registry",
+     "Every exported metric is declared first: component, name, kind (counter, gauge, histogram), which of the four "
+     "labels it has (tenant, outcome, reason, mode), unit, merge rule (sum, or max for a high-water mark), and "
+     "whether it is a headline metric. Refuses a bad or repeated name and names that would clash in Prometheus.")
+comp(P, "o-instance", "Instance snapshot",
+     "What the collector publishes and all an adapter gets: instance id, build, config fingerprint, publish "
+     "sequence number, and sorted lists of points (integer values) and histogram points. No time, no map.")
+comp(P, "o-detail", "Detail gate",
+     "The obs.detail setting. Off: the collector folds every tenant into one and drops histogram points, and a "
+     "detail histogram holds no buckets (a record is one nil check). On: per-tenant rows and full histograms.")
 comp(P, "o-collector", "Collector",
-     "Assembles one instance snapshot from the component snapshots, with instance id, build and config fingerprint. "
-     "Keeps the last published copy; readers never wait on the engine. The only reader of component snapshots.")
+     "Components register as sources: their metric declarations, their Snapshot and a mapping from it to points. "
+     "At each publish it assembles one instance snapshot (with instance id, build and config fingerprint), refusing "
+     "an undeclared, mistyped, duplicate or missing metric, and hands it to every attached adapter. Keeps the last "
+     "published snapshot and gives out copies. Counts its own work (publishes, emit errors, export errors per "
+     "adapter, CSV flushes and drops) as component obs. The only path from a component snapshot to an adapter.")
 comp(P, "o-adapter", "Adapter interface",
-     "The one interface every output form implements: take the published instance snapshot, produce output. One "
-     "conformance test for all adapters. Components cannot see past it, so none knows about CSV, DuckDB, OTel or "
-     "Prometheus.")
+     "The one interface every output form implements: a name, and take the published instance snapshot and produce "
+     "output. A failed export is counted by the collector and never reaches the publisher. One conformance test for "
+     "all adapters. Components cannot see past it, so none knows about CSV, DuckDB, OTel or Prometheus.")
 comp(P, "o-merge", "Fleet merge",
-     "Merges instance snapshots: counters and gauges sum, histograms merge, ratios are recomputed, never averaged.")
+     "Merges instance snapshots: each metric by its declared rule (sum, or max for a high-water mark), histograms "
+     "bucket by bucket. Refuses an undeclared metric, a kind or unit clash and an integer overflow. Ratios are "
+     "never stored, so they are recomputed from the merged counts, never averaged.")
 comp(P, "o-health", "Health",
-     "Three states: ok; degraded while shedding, while the breaker is open, at the limit's floor, or draining; failed "
-     "only when this instance cannot work. A database outage is degraded.")
+     "Three states, the worst over a table of named rules, with a reason per rule and a JSON body. The collector "
+     "rule: degraded before the first publish, and while the latest publish had metric errors or an adapter's export "
+     "failed. Other rules: degraded while shedding, while the breaker is open, at the limit's floor, or draining; "
+     "failed only when this instance cannot work. A database outage is degraded.")
 comp(P, "o-prom", "Prometheus text exporter",
-     "Low-cardinality labels and a bounded tenant label (configured tenants up to a cap, the rest as other).")
+     "internal/obs/promtext. Names mg_<component>_<metric>, low-cardinality labels and a bounded tenant label: "
+     "configured tenants, or the first active ones, up to a cap; quiet tenants lose their slot; the rest are summed "
+     "as other. Histograms are re-bucketed onto a short bound list. Holds the exposition-grammar checker the tests use.")
 comp(P, "o-json", "JSON stats exporter",
-     "The full snapshot, including every active tenant.")
+     "internal/obs/jsonstats. The full snapshot, including every active tenant; it decodes back to an equal snapshot.")
 comp(P, "o-csv", "CSV flush adapter",
-     "Flushes snapshots to disk at each publish and at the end of a run, in a stable versioned schema with unbounded "
-     "per-tenant rows. The testing path: tests assert on the files with no Collector or Prometheus running. "
-     "Bounded size; drop-and-count on a write error.")
+     "internal/obs/csvflush. Flushes snapshots to disk at each publish and at the end of a run, in a stable versioned "
+     "schema with unbounded per-tenant rows. The testing path: tests assert on the files with no Collector or "
+     "Prometheus running. Bounded size; drop-and-count at the cap, on a write error and on a full queue. Writes in "
+     "the caller (simulator and tests) or through a bounded queue that never blocks the caller (real process). "
+     "Holds the reader and the round-trip check: the final flush read back equals the snapshot.")
 comp(P, "o-log", "Log-line exporter",
-     "One structured line per interval.")
+     "internal/obs/logline. One structured line per publish: sequence number, instance, build, config fingerprint "
+     "and the headline metrics. At most 1,024 bytes.")
 comp(P, "o-otlp", "OTLP/HTTP push exporter",
      "The final adapter and the proxy's end of the production path. Hand-written on the standard library, no SDK. "
      "Cumulative sums, gauges, short-list histogram buckets, bounded tenant label. Bounded queue, timeout, "
      "drop-and-count when the Collector is down. Lands in the last build chunk and touches no component.")
-rel("o1", "n-engine", "o-collector", "Hands over every component's snapshot at each publish", "Go, plain structs")
-rel("o2", "o-collector", "o-contract", "Assembles the instance snapshot", "Go")
+comp(P, "o-simsrc", "Simulator source mappings",
+     "internal/obs/simsrc. The metric declarations and the snapshot-to-points mappings of the four simulator "
+     "components that exist: the kernel, simnet, the fake Postgres and the workload. It lives here because the "
+     "simulator packages are frozen; a later component writes the same two functions in its own package.",
+     tags=("test",))
+comp(P, "o-catalog", "Metric catalog and schema document",
+     "internal/obs/catalog. The registry of every source the product registers, and the generator of "
+     "docs/csv-schema.md (columns of the three files and every metric). Its test fails when the committed document "
+     "differs from the code; scripts/gen-docs.sh regenerates or checks it.")
+comp(P, "o-simrun", "Scenario flush harness",
+     "internal/obs/simrun. Runs a simulator world scenario with a collector that publishes on the virtual clock and "
+     "with the CSV, JSON, Prometheus and log adapters attached, then checks every output against the final "
+     "snapshot. Its tests run the five direct baselines twice per seed and compare the files byte for byte.",
+     tags=("test",))
+comp(P, "o-assert", "SQL assertions and their runner",
+     "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema "
+     "version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each "
+     "assertion file; a returned row is a violation. Fails closed and never skips. The first assertion files check "
+     "the direct baselines' counts.", tech="Bash, SQL", tags=("test",))
+rel("o1", "n-engine", "o-collector", "Registers each component as a source and publishes once per interval", "Go, plain structs")
+rel("o2", "o-collector", "o-contract", "Calls every source's Snapshot and mapping at each publish", "Go")
 rel("o3", "o-contract", "o-hist", "Histograms inside snapshots", "Go")
-rel("o4", "o-collector", "o-health", "Derives the health state and its reasons", "Go")
+rel("o4", "o-collector", "o-health", "Evaluates the rule table on its last snapshot", "Go")
 rel("o5", "n-shell", "o-prom", "Admin listener serves /metrics", "HTTP")
 rel("o6", "n-shell", "o-json", "Admin listener serves /stats", "HTTP")
 rel("o7", "n-shell", "o-health", "Admin listener serves /health", "HTTP")
@@ -684,17 +757,41 @@ rel("o10", "o-csv", "o-adapter", "Implements the adapter interface", "Go", "impl
 rel("o11", "o-log", "o-adapter", "Implements the adapter interface", "Go", "implementation")
 rel("o12", "o-otlp", "o-adapter", "Implements the adapter interface", "Go", "implementation")
 rel("o13", "o-otlp", "otelcol", "Pushes metrics every interval", "OTLP/HTTP JSON")
-rel("o14", "o-merge", "o-contract", "Merges snapshots from several instances", "Go")
-rel("o15", "o-adapter", "o-collector", "Receives the last published snapshot; all an adapter can read", "Go")
+rel("o14", "o-merge", "o-instance", "Merges the snapshots of several instances into one", "Go")
+rel("o15", "o-adapter", "o-collector", "Is attached to it and receives each published snapshot; all an adapter can read", "Go")
 rel("o16", "o-csv", "csvfiles", "Flushes rows at each publish and at the end of a run", "Files, schema version 1")
 rel("o17", "duckdb", "csvfiles", "Reads the files directly", "read_csv, SQL")
 rel("o18", "n-e2e", "o-csv", "Turns the flush on for every run; checks the final flush equals the snapshot", "Go test")
-rel("o19", "n-e2e", "duckdb", "Runs SQL assertions and report queries after a run", "scripts/csv-assert.sh")
+rel("o19", "n-e2e", "o-assert", "Runs the SQL assertions after a run", "scripts/csv-assert.sh")
 rel("o20", "prom", "otelcol", "Scrapes the Collector's Prometheus endpoint", "HTTP")
 rel("o21", "prom", "n-shell", "Can scrape /metrics directly instead (no Collector)", "HTTP admin port")
 rel("o22", "n-sim", "o-obstest", "Scenario tests check that snapshots are plain and that every counter moves", "Go test")
 rel("o23", "o-obstest", "o-contract", "Checks a snapshot against the conventions", "Go test")
 rel("o24", "o-contract", "o-conserve", "Counters in a snapshot are checked for conservation; gauges keep their peak", "Go")
+rel("o25", "o-collector", "o-instance", "Assembles, sorts and publishes one; keeps the last", "Go")
+rel("o26", "o-collector", "o-registry", "Checks every emitted point against its declaration", "Go")
+rel("o27", "o-collector", "o-detail", "Folds tenants and drops histogram points when detail is off", "Go")
+rel("o28", "o-detail", "o-hist", "A detail histogram wraps one when detail is on", "Go")
+rel("o29", "o-instance", "o-hist", "Histogram points carry its bucket lists", "Go")
+rel("o31", "o-prom", "o-registry", "Reads each metric's kind, unit and help text", "Go")
+rel("o32", "o-log", "o-registry", "Reads which metrics are headline", "Go")
+rel("o33", "o-merge", "o-registry", "Reads each metric's merge rule", "Go")
+rel("o34", "o-simsrc", "n-sim", "Reads the snapshots of the kernel, simnet, the fake Postgres and the workload", "Go")
+rel("o35", "o-simsrc", "o-collector", "Registers one source per simulator component, with its metric declarations", "Go")
+rel("o37", "o-catalog", "o-simsrc", "Lists every metric it declares", "Go")
+rel("o38", "o-catalog", "o-csv", "Reads the column lists of the three files", "Go")
+rel("o39", "o-catalog", "o-registry", "Builds the full registry, the collector's own metrics included", "Go")
+rel("o40", "o-simrun", "n-sim", "Runs a world scenario through the simulator driver; publishes from a timer on the virtual clock", "Go")
+rel("o41", "o-simrun", "o-collector", "Creates it, attaches the four adapters, publishes every 100 ms of virtual time and at the end", "Go")
+rel("o42", "o-simrun", "o-simsrc", "Takes the sources of the scenario's world", "Go")
+rel("o43", "o-simrun", "o-csv", "Checks the final flush read back equals the final snapshot", "Go")
+rel("o44", "o-simrun", "o-prom", "Checks the text with the grammar checker", "Go")
+rel("o45", "o-simrun", "o-json", "Checks the document decodes to the final snapshot", "Go")
+rel("o46", "o-simrun", "o-assert", "Its tests run the runner over the baseline runs and over planted bad runs", "Go test")
+rel("o47", "o-assert", "duckdb", "Runs the guard, the views and each assertion file", "DuckDB CLI")
+rel("o48", "o-assert", "csvfiles", "Finds the run directories and checks the three headers", "Bash")
+rel("o50", "n-sim", "o-conserve", "The fake Postgres and the workload keep gauges with peaks and check conservation", "Go")
+rel("o51", "n-sim", "o-hist", "The workload records latencies in it; the world checks read its snapshots", "Go")
 
 # --------------------------------------------------------------------------- deployment (N = 3)
 ENV = "fleet-of-3"
@@ -823,16 +920,19 @@ component_diagram("component-simulator", "Components: simulator harness", "11-co
                   "baselines are the control arms for later chunks.",
                   ["developer", "n-engine", "n-pgwire", "pgproto3", "pg"], ["m%d" % i for i in range(1, 43)])
 component_diagram("component-observability", "Components: observability", "12-component-observability", "c-obs",
-                  "internal/obs: the one raw export (snapshots), the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus",
+                  "internal/obs: the one raw export (snapshots), the metric registry, the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus",
                   "The hard rule: one common raw export, then the collector interface, then adapters. Components fill "
                   "plain structs; the collector assembles them; every output form is an adapter that reads only what the "
                   "collector publishes. No component knows about CSV, DuckDB, OTel or Prometheus, and adding an adapter "
                   "touches no component. Two paths leave the process. The testing path: the CSV flush adapter writes "
                   "files, and tests and DuckDB read them with nothing else running. The production path: the OTLP "
                   "adapter pushes to an OpenTelemetry Collector, which Prometheus scrapes. DuckDB is an analysis tool "
-                  "over files, never a dependency of the proxy.",
+                  "over files, never a dependency of the proxy. Chunk 3 built the spine before the proxy's "
+                  "components: so far the sources are the simulator's kernel, network, fake Postgres and workload, "
+                  "and the scenario flush harness is what publishes.",
                   ["n-engine", "n-shell", "n-e2e", "n-sim", "csvfiles", "duckdb", "otelcol", "prom"],
-                  ["o%d" % i for i in (1, 2, 3, 24, 4, 15, 8, 9, 10, 11, 12, 5, 6, 7, 16, 18, 17, 19, 13, 20, 21, 14, 22, 23)])
+                  ["o%d" % i for i in (1, 2, 25, 26, 27, 3, 24, 28, 29, 4, 15, 8, 9, 10, 11, 12, 31, 32, 5, 6, 7, 16, 18, 17, 19,
+                                         13, 20, 21, 14, 33, 22, 23, 50, 51, 34, 35, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48)])
 
 
 # --------------------------------------------------------------------------- output

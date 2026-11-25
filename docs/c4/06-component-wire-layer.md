@@ -1,6 +1,6 @@
 # C4 Level 3: Components: wire layer
 
-**Built so far: chunks 0–2. Dashed parts are planned.** In this diagram 1 of 12 elements and 0 of 16 relationships are built. Model: diagram `component-wire` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–3. Dashed parts are planned.** In this diagram 1 of 12 elements and 0 of 16 relationships are built. Model: diagram `component-wire` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 pgproto3 gives message structs and nothing else. The framer, the session machines, SCRAM, transaction tracking, classification and error mapping are ours. Everything here is a pure state machine that accepts bytes in any fragments.
 
