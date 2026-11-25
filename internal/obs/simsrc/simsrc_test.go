@@ -83,6 +83,8 @@ func TestMappingsMoveEveryMetric(t *testing.T) {
 	add(obs.ComponentSimnet, simsrc.NetMetrics(), s, p)
 	s, p = emitFilled(t, obs.ComponentFakepg, simsrc.FakeMetrics(), simsrc.MapFake)
 	add(obs.ComponentFakepg, simsrc.FakeMetrics(), s, p)
+	s, p = emitFilled(t, obs.ComponentFakepg, simsrc.FakeAuthMetrics(), simsrc.MapFakeAuth)
+	add(obs.ComponentFakepg, simsrc.FakeAuthMetrics(), s, p)
 	s, p = emitFilled(t, obs.ComponentWorkload, simsrc.WorkloadMetrics(), simsrc.MapWorkload)
 	add(obs.ComponentWorkload, simsrc.WorkloadMetrics(), s, p, ".Total.", ".Lo", ".Hi", ".Count", ".Min", ".Max", "ClampedLow", "ClampedHigh")
 	for _, r := range rs {
