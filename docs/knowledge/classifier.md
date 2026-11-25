@@ -57,7 +57,7 @@ Facts a later builder needs before using `internal/work` and the chunk 5 half of
 - Postgres's relative-time input words (`now`, `today`, `tomorrow`, `yesterday`) make a
   literal per-call, also through an untyped literal coerced to a column type.
 - Postgres's scanner drops a trailing `+`/`-` from a multi-character operator unless it
-  contains one of `~ ! @ # ^ & | \` ? %`: `71+-3` is `71 + -3`.
+  contains one of `` ~ ! @ # ^ & | ` ? % ``: `71+-3` is `71 + -3`.
 - Error-table row ids are stable names (`shed`, `unsupported-feature`, …) and appear in the
   reply's detail line `mini-gateway error row: <id>` and in the counter key `reply_<id>`.
   Adding a row: append to `ErrRowID` and `ErrorRows`, run `scripts/gen-docs.sh`, and
