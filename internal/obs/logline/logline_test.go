@@ -71,13 +71,18 @@ func subject() obstest.Subject {
 	}
 }
 
+// TestConformance proves logline passes all five obstest.Conformance checks at Headline fidelity.
 func TestConformance(t *testing.T) { obstest.Conformance(t, subject()) }
 
+// TestGolden proves Render matches the committed testdata/fixture.log golden file.
 func TestGolden(t *testing.T) {
 	s, reg := obstest.FixtureSnapshot(t)
 	obstest.Golden(t, *update, "fixture.log", logline.Render(reg, s))
 }
 
+// TestOneBoundedLineInFixedOrder proves Render emits a single newline-terminated
+// line within MaxLineBytes, appends truncated=1 when full, preserves fixed key
+// order, and caps and quotes hostile string values at 32 bytes.
 func TestOneBoundedLineInFixedOrder(t *testing.T) {
 	var reg obs.Registry
 	var descs []obs.MetricDesc

@@ -40,8 +40,10 @@ func subject() obstest.Subject {
 	}
 }
 
+// TestConformance proves jsonstats passes all five obstest.Conformance checks at Exact fidelity.
 func TestConformance(t *testing.T) { obstest.Conformance(t, subject()) }
 
+// TestGolden proves Render matches the committed testdata/fixture.json golden file.
 func TestGolden(t *testing.T) {
 	s, _ := obstest.FixtureSnapshot(t)
 	b, err := jsonstats.Render(s)
@@ -51,6 +53,8 @@ func TestGolden(t *testing.T) {
 	obstest.Golden(t, *update, "fixture.json", b)
 }
 
+// TestEveryTenantAndStableOrder proves JSON output keeps every hostile tenant
+// unbounded and preserves deterministic top-level field order.
 func TestEveryTenantAndStableOrder(t *testing.T) {
 	s, _ := obstest.FixtureSnapshot(t)
 	d := jsonstats.FromSnapshot(s)

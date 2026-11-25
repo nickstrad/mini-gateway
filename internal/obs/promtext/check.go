@@ -10,14 +10,18 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 )
 
+// ErrGrammar is returned by Parse, Check, and Decode on any Prometheus
+// exposition syntax or semantic violation.
 var ErrGrammar = errors.New("promtext: exposition grammar")
 
+// Sample is one parsed Prometheus sample line.
 type Sample struct {
 	Name   string
 	Labels [][2]string
 	Value  int64
 }
 
+// Label returns the value of label name in s, or "" if absent.
 func (s Sample) Label(name string) string {
 	for _, kv := range s.Labels {
 		if kv[0] == name {
@@ -27,6 +31,7 @@ func (s Sample) Label(name string) string {
 	return ""
 }
 
+// Family is one contiguous # HELP / # TYPE / samples block in Prometheus text.
 type Family struct {
 	Name    string
 	Type    string
@@ -55,6 +60,9 @@ func validLabelName(s string) bool {
 	return validMetricName(s) && !strings.Contains(s, ":") && !strings.HasPrefix(s, "__")
 }
 
+// Parse parses Prometheus text exposition into contiguous families, enforcing
+// integer-only sample values, valid escapes, unique labels, unique series, and
+// contiguous family blocks.
 func Parse(text []byte) ([]Family, error) {
 	if len(text) > 0 && text[len(text)-1] != '\n' {
 		return nil, gerr(0, "the text does not end with a newline")
@@ -163,6 +171,7 @@ func parseSample(line string) (Sample, error) {
 	if len(fields) < 1 || len(fields) > 2 || fields[0] == "" {
 		return s, errors.New("bad value or timestamp")
 	}
+	// This project exports integers only; float sample text is rejected here.
 	v, err := strconv.ParseInt(fields[0], 10, 64)
 	if err != nil {
 		return s, fmt.Errorf("value %q is not an integer (this project exports integers only)", fields[0])
@@ -258,6 +267,9 @@ func unescape(s string, quote bool) (string, error) {
 	return b.String(), nil
 }
 
+// Check validates Prometheus exposition text: syntax, required # TYPE headers,
+// counter _total suffix and non-negativity, and histogram bucket monotonicity,
+// non-negativity, +Inf presence, and _count equality.
 func Check(text []byte) error {
 	fams, err := Parse(text)
 	if err != nil {
@@ -357,6 +369,8 @@ func checkHistogram(f Family) error {
 	return nil
 }
 
+// Decode turns valid Prometheus text back into an obs.InstanceSnapshot using
+// reg to recover component, metric name, kind, and unit for conformance tests.
 func Decode(reg *obs.Registry, text []byte) (obs.InstanceSnapshot, error) {
 	fams, err := Parse(text)
 	if err != nil {

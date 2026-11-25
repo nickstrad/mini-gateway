@@ -7,16 +7,23 @@ import (
 	"unicode/utf8"
 )
 
+// State is the three-state health verdict for one check or the whole instance.
+// Values are ordered by severity so max(a, b) computes the worst state.
 type State uint8
 
 const (
+	// StateOK means the check or instance is operating normally.
 	StateOK State = iota
+	// StateDegraded means the instance is still answering, with reduced health
+	// (for example shedding, open breaker, draining, or export errors).
 	StateDegraded
+	// StateFailed means the instance cannot work at all.
 	StateFailed
 )
 
 var stateNames = [...]string{"ok", "degraded", "failed"}
 
+// String returns "ok", "degraded", or "failed".
 func (s State) String() string {
 	if int(s) < len(stateNames) {
 		return stateNames[s]
@@ -24,30 +31,39 @@ func (s State) String() string {
 	return "unknown"
 }
 
+// CheckResult is the evaluated outcome of one named health rule.
 type CheckResult struct {
 	Name   string
 	State  State
 	Reason string
 }
 
+// Rule is a named health check evaluated purely over an InstanceSnapshot.
 type Rule struct {
 	Name  string
 	Check func(s InstanceSnapshot) (State, string)
 }
 
+// Health is the overall health verdict (worst across Checks) and each check's detail.
 type Health struct {
 	State  State
 	Checks []CheckResult
 }
 
+// MaxHealthRules caps the number of rules a HealthTable accepts.
 const MaxHealthRules = 64
 
+// ErrBadRule is returned by HealthTable.Add for invalid, duplicate, or excess rules.
 var ErrBadRule = errors.New("obs: bad health rule")
 
+// HealthTable holds an ordered table of named health rules that later chunks
+// extend as new proxy components land.
 type HealthTable struct {
 	rules []Rule
 }
 
+// Add registers r in t, rejecting invalid names, nil callbacks, duplicates, or
+// rules past MaxHealthRules.
 func (t *HealthTable) Add(r Rule) error {
 	if !validName(r.Name) || r.Check == nil {
 		return ErrBadRule
@@ -64,6 +80,7 @@ func (t *HealthTable) Add(r Rule) error {
 	return nil
 }
 
+// Names returns the registered rule names in evaluation order.
 func (t *HealthTable) Names() []string {
 	out := make([]string, len(t.rules))
 	for i, r := range t.rules {
@@ -72,6 +89,8 @@ func (t *HealthTable) Names() []string {
 	return out
 }
 
+// Evaluate runs every rule against s and returns a Health whose overall State
+// is the worst state returned by any rule.
 func (t *HealthTable) Evaluate(s InstanceSnapshot) Health {
 	h := Health{Checks: make([]CheckResult, 0, len(t.rules))}
 	for _, r := range t.rules {
@@ -85,8 +104,13 @@ func (t *HealthTable) Evaluate(s InstanceSnapshot) Health {
 	return h
 }
 
+// CheckCollector is the rule name of the collector's built-in self-check.
 const CheckCollector = "collector"
 
+// CollectorRule returns the collector's self-check rule: degraded before the
+// first publish or while the latest publish had emit or adapter export errors,
+// recovering to ok once they clear. It never reports StateFailed because an
+// export failure does not stop the instance from serving traffic.
 func CollectorRule() Rule {
 	return Rule{Name: CheckCollector, Check: func(s InstanceSnapshot) (State, string) {
 		if s.Value(ComponentObs, MetricPublishes, Labels{}) == 0 {
@@ -109,6 +133,8 @@ func CollectorRule() Rule {
 	}}
 }
 
+// Health evaluates t against the last published snapshot with the collector's
+// own obs metrics refreshed to reflect the latest publish immediately.
 func (c *Collector) Health(t *HealthTable) Health {
 	if !c.published {
 		var empty InstanceSnapshot
@@ -117,6 +143,8 @@ func (c *Collector) Health(t *HealthTable) Health {
 	return t.Evaluate(c.selfView())
 }
 
+// AppendJSON appends the JSON health object to b without importing encoding/json
+// so internal/obs stays within the determinism lint's allowed import set.
 func (h Health) AppendJSON(b []byte) []byte {
 	b = append(b, `{"state":`...)
 	b = AppendJSONString(b, h.State.String())
@@ -138,6 +166,9 @@ func (h Health) AppendJSON(b []byte) []byte {
 
 const hexDigits = "0123456789abcdef"
 
+// AppendJSONString appends s as a JSON string literal, matching encoding/json's
+// escaping (including HTML-safe <, >, &, U+2028/U+2029, and invalid UTF-8 bytes)
+// without importing encoding/json.
 func AppendJSONString(b []byte, s string) []byte {
 	b = append(b, '"')
 	for i := 0; i < len(s); {

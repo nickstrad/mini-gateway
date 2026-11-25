@@ -6,6 +6,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 )
 
+// TestHeadlineFidelityNeedsEveryHeadlineValue proves Headline conformance
+// rejects adapters that omit any untenanted headline metric or report a wrong value.
 func TestHeadlineFidelityNeedsEveryHeadlineValue(t *testing.T) {
 	var reg obs.Registry
 	err := reg.Declare(obs.ComponentPool, obs.CounterDesc("a", 0, "A.").AsHeadline(), obs.CounterDesc("b", 0, "B.").AsHeadline(),

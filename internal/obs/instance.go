@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// Point is one scalar counter or gauge measurement inside an InstanceSnapshot.
 type Point struct {
 	Component string
 	Metric    string
@@ -14,6 +15,8 @@ type Point struct {
 	Value     int64
 }
 
+// HistPoint is one full-resolution integer histogram measurement inside an
+// InstanceSnapshot. Only non-empty buckets are stored.
 type HistPoint struct {
 	Component string
 	Metric    string
@@ -22,6 +25,7 @@ type HistPoint struct {
 	Buckets   []Bucket
 }
 
+// Count returns the total number of samples across all buckets of h.
 func (h HistPoint) Count() int64 {
 	n := int64(0)
 	for _, b := range h.Buckets {
@@ -30,6 +34,9 @@ func (h HistPoint) Count() int64 {
 	return n
 }
 
+// InstanceSnapshot is the immutable, sorted output of one Collector publish.
+// By design it carries no timestamp: adapters that need a timestamp (CSV flush,
+// OTLP) stamp it from their own clock so snapshots obey the replay law.
 type InstanceSnapshot struct {
 	Instance          string
 	Build             string
@@ -39,6 +46,8 @@ type InstanceSnapshot struct {
 	Hists             []HistPoint
 }
 
+// ComparePoint orders two points by (Component, Metric, Labels), matching the
+// canonical row order required by CSV schema version 1.
 func ComparePoint(a, b Point) int {
 	if c := strings.Compare(a.Component, b.Component); c != 0 {
 		return c
@@ -49,6 +58,7 @@ func ComparePoint(a, b Point) int {
 	return CompareLabels(a.Labels, b.Labels)
 }
 
+// CompareHist orders two histogram points by (Component, Metric, Labels).
 func CompareHist(a, b HistPoint) int {
 	if c := strings.Compare(a.Component, b.Component); c != 0 {
 		return c
@@ -66,6 +76,7 @@ func compareBucket(a, b Bucket) int {
 	return cmp.Compare(a.Hi, b.Hi)
 }
 
+// Clone returns a deep copy of s so callers cannot mutate a published snapshot.
 func (s InstanceSnapshot) Clone() InstanceSnapshot {
 	out := s
 	out.Points = slices.Clone(s.Points)
@@ -74,12 +85,15 @@ func (s InstanceSnapshot) Clone() InstanceSnapshot {
 		h.Buckets = slices.Clone(h.Buckets)
 		out.Hists[i] = h
 	}
+	// Preserve nil vs empty slice so Equal and tests see an exact copy.
 	if s.Hists == nil {
 		out.Hists = nil
 	}
 	return out
 }
 
+// Sort puts Points, Hists, and each histogram's Buckets into canonical order.
+// Point and Hist lookups rely on this ordering for binary search.
 func (s *InstanceSnapshot) Sort() {
 	slices.SortFunc(s.Points, ComparePoint)
 	slices.SortFunc(s.Hists, CompareHist)
@@ -88,6 +102,7 @@ func (s *InstanceSnapshot) Sort() {
 	}
 }
 
+// Point looks up a scalar point by key using binary search on a sorted snapshot.
 func (s InstanceSnapshot) Point(component, metric string, l Labels) (Point, bool) {
 	i, found := slices.BinarySearchFunc(s.Points, Point{Component: component, Metric: metric, Labels: l}, ComparePoint)
 	if !found {
@@ -96,11 +111,14 @@ func (s InstanceSnapshot) Point(component, metric string, l Labels) (Point, bool
 	return s.Points[i], true
 }
 
+// Value returns the integer value of a scalar point, or 0 if absent.
 func (s InstanceSnapshot) Value(component, metric string, l Labels) int64 {
 	p, _ := s.Point(component, metric, l)
 	return p.Value
 }
 
+// Sum returns the sum of all scalar points matching (component, metric) across
+// all label sets.
 func (s InstanceSnapshot) Sum(component, metric string) int64 {
 	n := int64(0)
 	for _, p := range s.Points {
@@ -111,6 +129,7 @@ func (s InstanceSnapshot) Sum(component, metric string) int64 {
 	return n
 }
 
+// Hist looks up a histogram point by key using binary search on a sorted snapshot.
 func (s InstanceSnapshot) Hist(component, metric string, l Labels) (HistPoint, bool) {
 	i, found := slices.BinarySearchFunc(s.Hists, HistPoint{Component: component, Metric: metric, Labels: l}, CompareHist)
 	if !found {
@@ -119,6 +138,8 @@ func (s InstanceSnapshot) Hist(component, metric string, l Labels) (HistPoint, b
 	return s.Hists[i], true
 }
 
+// Tenants returns the sorted, deduplicated list of non-empty tenant labels
+// present in s's scalar points and histograms.
 func (s InstanceSnapshot) Tenants() []string {
 	var out []string
 	for _, p := range s.Points {
@@ -135,6 +156,7 @@ func (s InstanceSnapshot) Tenants() []string {
 	return slices.Compact(out)
 }
 
+// Equal reports whether a and b have identical metadata, points, and histogram buckets.
 func Equal(a, b InstanceSnapshot) bool {
 	if a.Instance != b.Instance || a.Build != b.Build || a.ConfigFingerprint != b.ConfigFingerprint || a.Seq != b.Seq {
 		return false

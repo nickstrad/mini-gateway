@@ -7,6 +7,9 @@ import (
 	"testing"
 )
 
+// Golden compares got against testdata/<name>, or rewrites the file when update
+// is true. Callers pass their own -update flag value so obstest registers no
+// package-level flags that could clash across test binaries.
 func Golden(t testing.TB, update bool, name string, got []byte) {
 	t.Helper()
 	path := filepath.Join("testdata", name)

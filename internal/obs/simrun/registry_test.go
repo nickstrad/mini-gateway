@@ -7,6 +7,9 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs/catalog"
 )
 
+// TestEveryDeclaredMetricIsEmittedAndEveryEmittedOneDocumented proves every
+// metric exported by baseline runs is in catalog.Registry (docs/csv-schema.md)
+// and every catalog metric is emitted by at least one baseline run.
 func TestEveryDeclaredMetricIsEmittedAndEveryEmittedOneDocumented(t *testing.T) {
 	baselineRuns(t)
 	reg, err := catalog.Registry()

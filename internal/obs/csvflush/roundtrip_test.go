@@ -55,6 +55,9 @@ func tenantSnapshots() (first, final obs.InstanceSnapshot) {
 	return first, final
 }
 
+// TestRoundTripRejectsDuplicateAndFabricatedRows proves RoundTrip allows valid
+// persisted tenant rows while rejecting duplicates, out-of-order rows, mutated
+// persisted values, and fabricated tenant points or histograms.
 func TestRoundTripRejectsDuplicateAndFabricatedRows(t *testing.T) {
 	first, final := tenantSnapshots()
 	clean := completedRun(t, first, final)
@@ -115,6 +118,8 @@ func TestRoundTripRejectsDuplicateAndFabricatedRows(t *testing.T) {
 	})
 }
 
+// TestCarriageReturnsInLabelsRoundTrip proves CR and CRLF sequences inside
+// quoted instance and tenant labels survive CSV flush and RoundTrip verbatim.
 func TestCarriageReturnsInLabelsRoundTrip(t *testing.T) {
 	names := []string{"a\r\nb", "c\rd", "e\r\r\nf", "g\r", "\r\n"}
 	s := obs.InstanceSnapshot{Instance: "i\r\nj"}

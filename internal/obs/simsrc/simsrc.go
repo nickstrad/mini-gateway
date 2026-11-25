@@ -1,3 +1,6 @@
+// Package simsrc declares metrics and maps raw Snapshot() structs from the
+// frozen simulator components (sim, simnet, fakepg, workload) into obs.Emitter
+// without modifying internal/sim/... or introducing circular imports.
 package simsrc
 
 import (
@@ -19,6 +22,7 @@ const (
 	lm = obs.LabelMode
 )
 
+// KernelMetrics returns the metric declarations for the simulator kernel (sim).
 func KernelMetrics() []obs.MetricDesc {
 	return []obs.MetricDesc{
 		obs.CounterDesc("steps", 0, "Events the kernel has run.").AsHeadline(),
@@ -36,10 +40,12 @@ func KernelMetrics() []obs.MetricDesc {
 	}
 }
 
+// Kernel wraps s as an obs.Source under ComponentSim.
 func Kernel(s *sim.Sim) obs.Source {
 	return obs.NewSource(obs.ComponentSim, KernelMetrics(), s.Snapshot, MapKernel)
 }
 
+// MapKernel emits every field of a sim.Snapshot into e.
 func MapKernel(k sim.Snapshot, e *obs.Emitter) {
 	e.Counter("steps", none, k.Steps)
 	e.Counter("scheduled", none, k.Scheduled)
@@ -55,11 +61,13 @@ func MapKernel(k sim.Snapshot, e *obs.Emitter) {
 	e.Counter("invariant_checks", none, k.InvariantChecks)
 }
 
+// Direction mode label values for simnet byte and chunk counters.
 const (
 	DirUp   = "up"
 	DirDown = "down"
 )
 
+// NetMetrics returns the metric declarations for the simulated network (simnet).
 func NetMetrics() []obs.MetricDesc {
 	return []obs.MetricDesc{
 		obs.GaugeDesc("listeners", 0, "Listeners open."),
@@ -82,10 +90,13 @@ func NetMetrics() []obs.MetricDesc {
 	}
 }
 
+// Net wraps n as an obs.Source under ComponentSimnet.
 func Net(n *simnet.Net) obs.Source {
 	return obs.NewSource(obs.ComponentSimnet, NetMetrics(), n.Snapshot, MapNet)
 }
 
+// MapNet emits every field of a simnet.Snapshot into e, including zero rows for
+// every fixed close reason, direction, and network fault kind.
 func MapNet(s simnet.Snapshot, e *obs.Emitter) {
 	e.Gauge("listeners", none, s.Listeners)
 	e.Counter("dials_attempted", none, s.DialsAttempted)
@@ -127,6 +138,7 @@ func MapNet(s simnet.Snapshot, e *obs.Emitter) {
 	e.Counter("faults_no_target", none, f.NoTarget)
 }
 
+// FakeMetrics returns the metric declarations for the fake Postgres server (fakepg).
 func FakeMetrics() []obs.MetricDesc {
 	return []obs.MetricDesc{
 		obs.CounterDesc("conns_accepted", 0, "Connections accepted.").AsHeadline(),
@@ -172,10 +184,13 @@ func FakeMetrics() []obs.MetricDesc {
 	}
 }
 
+// Fake wraps srv as an obs.Source under ComponentFakepg.
 func Fake(srv *fakepg.Server) obs.Source {
 	return obs.NewSource(obs.ComponentFakepg, FakeMetrics(), srv.Snapshot, MapFake)
 }
 
+// MapFake emits every field of a fakepg.Snapshot into e, including zero rows
+// for every refusal reason, statement kind, and database fault kind.
 func MapFake(s fakepg.Snapshot, e *obs.Emitter) {
 	e.Counter("conns_accepted", none, s.ConnsAccepted)
 	e.Counter("conns_closed", none, s.ConnsClosed)
@@ -231,6 +246,7 @@ func MapFake(s fakepg.Snapshot, e *obs.Emitter) {
 	e.Counter("faults_no_target", none, s.Faults.NoTarget)
 }
 
+// WorkloadMetrics returns the metric declarations for the simulated clients (workload).
 func WorkloadMetrics() []obs.MetricDesc {
 	return []obs.MetricDesc{
 		obs.GaugeDesc("clients", 0, "Simulated clients.").AsHeadline(),
@@ -265,12 +281,16 @@ func WorkloadMetrics() []obs.MetricDesc {
 	}
 }
 
+// Workload wraps w as an obs.Source under ComponentWorkload.
 func Workload(w *workload.Workload) obs.Source {
 	return obs.NewSource(obs.ComponentWorkload, WorkloadMetrics(), w.Snapshot, MapWorkload)
 }
 
 var outcomes = []workload.Outcome{workload.OutcomeOK, workload.OutcomeError, workload.OutcomeLost, workload.OutcomeTimedOut, workload.OutcomeClientLeft}
 
+// MapWorkload emits client counts, fault counts, and each tenant's metrics into e.
+// Workload.Total is omitted because it is the sum over tenants, which readers
+// compute or obtain automatically when obs.detail is off.
 func MapWorkload(s workload.Snapshot, e *obs.Emitter) {
 	e.Gauge("clients", none, s.Clients)
 	e.Gauge("finished", none, s.Finished)
@@ -287,6 +307,8 @@ func MapWorkload(s workload.Snapshot, e *obs.Emitter) {
 	}
 }
 
+// TenantLabel disambiguates duplicate tenant names in ts by appending "#<index>"
+// to later occurrences so the emitter never rejects them as duplicate points.
 func TenantLabel(ts []workload.TenantSnapshot, i int) string {
 	for j := 0; j < i; j++ {
 		if ts[j].Name == ts[i].Name {
@@ -332,6 +354,7 @@ func mapTenant(t workload.TenantSnapshot, e *obs.Emitter) {
 	}
 }
 
+// Register registers every source in sources with c, returning the first error.
 func Register(c *obs.Collector, sources ...obs.Source) error {
 	for _, s := range sources {
 		if err := c.Register(s); err != nil {
@@ -341,11 +364,15 @@ func Register(c *obs.Collector, sources ...obs.Source) error {
 	return nil
 }
 
+// Declared pairs a component name with its full slice of MetricDesc declarations
+// for assembly in internal/obs/catalog.
 type Declared struct {
 	Component string
 	Metrics   []obs.MetricDesc
 }
 
+// All returns the declarations of all four simulator components (fakepg,
+// workload, simnet, sim).
 func All() []Declared {
 	return []Declared{
 		{obs.ComponentFakepg, FakeMetrics()},

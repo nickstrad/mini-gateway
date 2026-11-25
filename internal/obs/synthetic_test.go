@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// Shared synthetic component source used by collector, merge, and benchmark tests.
 type synth struct {
 	requests map[Labels]int64
 	inUse    int64

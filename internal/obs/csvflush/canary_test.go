@@ -7,6 +7,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs/simrun"
 )
 
+// TestRoundTripCatchesAPlantedBugInABaselineRun proves Run.Check passes cleanly
+// on direct-open-loop-overload and fails when either planted-bug canary is enabled.
 func TestRoundTripCatchesAPlantedBugInABaselineRun(t *testing.T) {
 	for name, plant := range map[string]func(*csvflush.Config){
 		"none":             nil,

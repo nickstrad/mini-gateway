@@ -46,6 +46,8 @@ func hasPrefixAny(s string, prefixes []string) bool {
 	return false
 }
 
+// TestOneRawExportImportRule parses every Go file in the collector, simulator,
+// mapping, and adapter trees to prove the one-direction dependency boundary holds.
 func TestOneRawExportImportRule(t *testing.T) {
 	root := repoRoot(t)
 	forbidden := append(append([]string{}, adapters...), "internal/obs/simrun", "internal/obs/catalog")

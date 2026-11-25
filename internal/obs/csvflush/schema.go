@@ -1,25 +1,37 @@
+// Package csvflush implements the schema version 1 CSV flush adapter and its
+// exact round-trip reader.
+//
+// Each run writes three files under <dir>/<run_id>/: metrics.csv (scalar points),
+// histograms.csv (non-empty full-resolution buckets), and run.csv (written last
+// at Close so incomplete or stopped runs fail closed). It supports both
+// synchronous simulator flushes and non-blocking async flushes for real processes.
 package csvflush
 
+// SchemaVersion is the CSV flush schema version written in column 1 of every row.
 const SchemaVersion = 1
 
+// File names created inside each run directory.
 const (
 	MetricsFile    = "metrics.csv"
 	HistogramsFile = "histograms.csv"
 	RunFile        = "run.csv"
 )
 
+// Run tier identifiers recorded in run.csv.
 const (
 	TierSim   = "S"
 	TierReal  = "R"
 	TierBench = "bench"
 )
 
+// Column describes one schema column for header construction and doc generation.
 type Column struct {
 	Name    string
 	Type    string
 	Meaning string
 }
 
+// MetricsColumns returns the schema version 1 column specification for metrics.csv.
 func MetricsColumns() []Column {
 	return []Column{
 		{"schema_version", "integer", "Always 1 in this version."},
@@ -38,6 +50,7 @@ func MetricsColumns() []Column {
 	}
 }
 
+// HistogramsColumns returns the schema version 1 column specification for histograms.csv.
 func HistogramsColumns() []Column {
 	return []Column{
 		{"schema_version", "integer", "Always 1 in this version."},
@@ -58,6 +71,7 @@ func HistogramsColumns() []Column {
 	}
 }
 
+// RunColumns returns the schema version 1 column specification for run.csv.
 func RunColumns() []Column {
 	return []Column{
 		{"schema_version", "integer", "Always 1 in this version."},
@@ -82,6 +96,11 @@ func names(cs []Column) []string {
 	return out
 }
 
-func MetricsHeader() []string    { return names(MetricsColumns()) }
+// MetricsHeader returns the ordered CSV header names of metrics.csv.
+func MetricsHeader() []string { return names(MetricsColumns()) }
+
+// HistogramsHeader returns the ordered CSV header names of histograms.csv.
 func HistogramsHeader() []string { return names(HistogramsColumns()) }
-func RunHeader() []string        { return names(RunColumns()) }
+
+// RunHeader returns the ordered CSV header names of run.csv.
+func RunHeader() []string { return names(RunColumns()) }

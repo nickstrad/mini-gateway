@@ -1,3 +1,6 @@
+// Package jsonstats implements the JSON stats adapter, serializing the full
+// obs.InstanceSnapshot—every tenant and every full-resolution histogram bucket—
+// in deterministic struct-field order.
 package jsonstats
 
 import (
@@ -8,8 +11,10 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 )
 
+// AdapterName is the name under which Adapter attaches to obs.Collector.
 const AdapterName = "json"
 
+// Metric is the JSON wire representation of one scalar obs.Point.
 type Metric struct {
 	Component string `json:"component"`
 	Metric    string `json:"metric"`
@@ -21,12 +26,14 @@ type Metric struct {
 	Value     int64  `json:"value"`
 }
 
+// Bucket is the JSON wire representation of one inclusive obs.Bucket.
 type Bucket struct {
 	Lo    int64 `json:"lo"`
 	Hi    int64 `json:"hi"`
 	Count int64 `json:"count"`
 }
 
+// Histogram is the JSON wire representation of one full-resolution obs.HistPoint.
 type Histogram struct {
 	Component string   `json:"component"`
 	Metric    string   `json:"metric"`
@@ -38,6 +45,8 @@ type Histogram struct {
 	Buckets   []Bucket `json:"buckets"`
 }
 
+// Document is the top-level JSON payload for one published snapshot. Using
+// structs and slices rather than maps keeps field and row order deterministic.
 type Document struct {
 	Instance          string      `json:"instance"`
 	Build             string      `json:"build"`
@@ -47,6 +56,8 @@ type Document struct {
 	Histograms        []Histogram `json:"histograms"`
 }
 
+// FromSnapshot copies s into a JSON-ready Document without retaining any slice
+// backing storage from s.
 func FromSnapshot(s obs.InstanceSnapshot) Document {
 	d := Document{Instance: s.Instance, Build: s.Build, ConfigFingerprint: s.ConfigFingerprint, Seq: s.Seq,
 		Metrics: make([]Metric, 0, len(s.Points)), Histograms: make([]Histogram, 0, len(s.Hists))}
@@ -65,6 +76,7 @@ func FromSnapshot(s obs.InstanceSnapshot) Document {
 	return d
 }
 
+// Snapshot converts d back into an obs.InstanceSnapshot.
 func (d Document) Snapshot() obs.InstanceSnapshot {
 	s := obs.InstanceSnapshot{Instance: d.Instance, Build: d.Build, ConfigFingerprint: d.ConfigFingerprint, Seq: d.Seq}
 	for _, m := range d.Metrics {
@@ -86,6 +98,7 @@ func (d Document) Snapshot() obs.InstanceSnapshot {
 	return s
 }
 
+// Render encodes s as indented JSON bytes with deterministic field order.
 func Render(s obs.InstanceSnapshot) ([]byte, error) {
 	var b bytes.Buffer
 	enc := json.NewEncoder(&b)
@@ -96,6 +109,7 @@ func Render(s obs.InstanceSnapshot) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
+// Decode parses JSON bytes produced by Render back into an obs.InstanceSnapshot.
 func Decode(b []byte) (obs.InstanceSnapshot, error) {
 	var d Document
 	if err := json.Unmarshal(b, &d); err != nil {
@@ -104,15 +118,20 @@ func Decode(b []byte) (obs.InstanceSnapshot, error) {
 	return d.Snapshot(), nil
 }
 
+// Adapter implements obs.Adapter, caching the latest rendered JSON and
+// optionally writing each publish to w.
 type Adapter struct {
 	w    io.Writer
 	last []byte
 }
 
+// New creates a JSON stats Adapter that writes rendered snapshots to w when w is non-nil.
 func New(w io.Writer) *Adapter { return &Adapter{w: w} }
 
+// Name returns AdapterName ("json").
 func (a *Adapter) Name() string { return AdapterName }
 
+// Export renders s, retains the bytes for Last, and writes them to w if set.
 func (a *Adapter) Export(s obs.InstanceSnapshot) error {
 	b, err := Render(s)
 	if err != nil {
@@ -126,4 +145,5 @@ func (a *Adapter) Export(s obs.InstanceSnapshot) error {
 	return err
 }
 
+// Last returns the most recently rendered JSON payload.
 func (a *Adapter) Last() []byte { return a.last }

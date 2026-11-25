@@ -13,8 +13,11 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 )
 
+// ErrMismatch is returned by RoundTrip when the final flushed CSV rows do not
+// match the final in-memory snapshot exactly.
 var ErrMismatch = errors.New("csvflush: flushed files differ from the snapshot")
 
+// MetricRow is one decoded row from metrics.csv.
 type MetricRow struct {
 	RunID    string
 	FlushSeq int64
@@ -23,6 +26,7 @@ type MetricRow struct {
 	Point    obs.Point
 }
 
+// HistRow is one decoded bucket row from histograms.csv.
 type HistRow struct {
 	RunID    string
 	FlushSeq int64
@@ -32,12 +36,14 @@ type HistRow struct {
 	Bucket   obs.Bucket
 }
 
+// RunRow is the single decoded summary row from run.csv.
 type RunRow struct {
 	Info       RunInfo
 	Flushes    int64
 	DurationNs int64
 }
 
+// Run holds every decoded row of a completed run directory.
 type Run struct {
 	Metrics []MetricRow
 	Hists   []HistRow
@@ -66,6 +72,10 @@ func readCSV(path string, header []string) ([][]string, error) {
 	return recs[1:], nil
 }
 
+// keepCarriageReturns doubles \r\n before encoding/csv parses the buffer.
+// Writer always terminates records with \n, so any \r\n in the file lives
+// inside a quoted field; Go's encoding/csv strips one \r before \n inside
+// quoted fields, so doubling preserves the original carriage return verbatim.
 func keepCarriageReturns(b []byte) []byte {
 	return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\r\r\n"))
 }
@@ -92,6 +102,9 @@ func kindOf(s string) (obs.Kind, error) {
 	return 0, fmt.Errorf("kind %q", s)
 }
 
+// Read parses run.csv, metrics.csv, and histograms.csv from runDir, checking
+// schema version 1 headers, column counts, schema_version cells, and integer
+// fields. A missing run.csv causes Read to fail.
 func Read(runDir string) (*Run, error) {
 	out := &Run{}
 	rp := filepath.Join(runDir, RunFile)
@@ -136,6 +149,7 @@ func Read(runDir string) (*Run, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Convert CSV's exclusive bucket_hi back to obs.Bucket's inclusive Hi.
 		out.Hists = append(out.Hists, HistRow{RunID: rec[1], FlushSeq: v[0], TNs: v[1], Instance: rec[4],
 			Point:  obs.HistPoint{Component: rec[5], Metric: rec[6], Labels: obs.Labels{Tenant: rec[7], Outcome: rec[8], Reason: rec[9], Mode: rec[10]}, Unit: obs.Unit(rec[11])},
 			Bucket: obs.Bucket{Lo: v[2], Hi: v[3] - 1, Count: v[4]}})
@@ -143,6 +157,7 @@ func Read(runDir string) (*Run, error) {
 	return out, nil
 }
 
+// Snapshot reconstructs the InstanceSnapshot of instance at flush sequence seq.
 func (r *Run) Snapshot(instance string, seq int64) obs.InstanceSnapshot {
 	s := obs.InstanceSnapshot{Instance: instance, Seq: seq}
 	for _, m := range r.Metrics {
@@ -164,6 +179,7 @@ func (r *Run) Snapshot(instance string, seq int64) obs.InstanceSnapshot {
 	return s
 }
 
+// FlushSeqs returns the sorted, distinct flush_seq values present for instance.
 func (r *Run) FlushSeqs(instance string) []int64 {
 	var out []int64
 	for _, m := range r.Metrics {
@@ -175,6 +191,10 @@ func (r *Run) FlushSeqs(instance string) []int64 {
 	return slices.Compact(out)
 }
 
+// RoundTrip reads runDir back from disk and verifies that the final flush for
+// each snapshot in final has strictly ordered, duplicate-free rows matching
+// every scalar point and histogram bucket value for value. An extra tenant row
+// is accepted only if the immediately preceding flush held the exact same row.
 func RoundTrip(runDir string, final ...obs.InstanceSnapshot) error {
 	run, err := Read(runDir)
 	if err != nil {

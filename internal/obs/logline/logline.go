@@ -1,3 +1,6 @@
+// Package logline implements the structured one-line publish log adapter.
+// Each publish formats one key=value line capped at MaxLineBytes containing
+// snapshot metadata and every untenanted Headline metric in fixed order.
 package logline
 
 import (
@@ -10,22 +13,30 @@ import (
 )
 
 const (
-	AdapterName   = "log"
-	MaxLineBytes  = 1024
+	// AdapterName is the name under which Adapter attaches to obs.Collector.
+	AdapterName = "log"
+	// MaxLineBytes bounds every rendered line including its trailing newline.
+	MaxLineBytes = 1024
+	// TruncatedMark is appended before the newline when headline metrics exceed MaxLineBytes.
 	TruncatedMark = " truncated=1"
 	maxValueBytes = 32
 )
 
+// Adapter implements obs.Adapter, rendering one bounded log line per publish.
 type Adapter struct {
 	reg  *obs.Registry
 	w    io.Writer
 	last []byte
 }
 
+// New creates a logline Adapter consulting reg to select Headline metrics and
+// writing each rendered line to w when w is non-nil.
 func New(reg *obs.Registry, w io.Writer) *Adapter { return &Adapter{reg: reg, w: w} }
 
+// Name returns AdapterName ("log").
 func (a *Adapter) Name() string { return AdapterName }
 
+// Export renders one log line for s, saves it for Last, and writes it to w if set.
 func (a *Adapter) Export(s obs.InstanceSnapshot) error {
 	a.last = Render(a.reg, s)
 	if a.w == nil {
@@ -35,8 +46,11 @@ func (a *Adapter) Export(s obs.InstanceSnapshot) error {
 	return err
 }
 
+// Last returns the most recently rendered log line.
 func (a *Adapter) Last() []byte { return a.last }
 
+// Key formats a point's log key as component.metric[.outcome][.reason][.mode],
+// replacing characters outside [A-Za-z0-9._-] with underscores.
 func Key(p obs.Point) string {
 	k := p.Component + "." + p.Metric
 	for _, v := range []string{p.Labels.Outcome, p.Labels.Reason, p.Labels.Mode} {
@@ -52,6 +66,9 @@ func Key(p obs.Point) string {
 	}, k)
 }
 
+// Render formats s as a single newline-terminated log line of at most
+// MaxLineBytes bytes, starting with fixed metadata fields followed by every
+// untenanted Headline point in snapshot order.
 func Render(reg *obs.Registry, s obs.InstanceSnapshot) []byte {
 	b := make([]byte, 0, MaxLineBytes+1)
 	b = append(b, "obs.publish"...)
@@ -89,8 +106,10 @@ func appendKV(b []byte, k, v string) []byte {
 	return append(b, v...)
 }
 
+// ErrBadLine is returned by Parse when a line does not match the obs.publish grammar.
 var ErrBadLine = errors.New("logline: bad line")
 
+// Parse splits a rendered obs.publish line back into ordered [key, value] pairs.
 func Parse(line []byte) ([][2]string, error) {
 	s := strings.TrimSuffix(string(line), "\n")
 	if !strings.HasPrefix(s, "obs.publish") || strings.ContainsAny(s, "\n") {

@@ -12,20 +12,32 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 )
 
+// Fidelity describes how much of an InstanceSnapshot an adapter is expected to
+// preserve when checked by Conformance.
 type Fidelity uint8
 
 const (
+	// Exact requires every scalar point and every full-resolution histogram
+	// bucket to decode back equal to the input snapshot (JSON, CSV).
 	Exact Fidelity = iota
+	// Folded requires untenanted points to match exactly and tenant-labelled
+	// points and histogram counts to preserve totals after folding (Prometheus).
 	Folded
+	// Headline requires every untenanted Headline metric in the snapshot to
+	// appear with its exact value (structured one-line log).
 	Headline
 )
 
+// Instance binds one freshly constructed adapter under test to helpers that
+// read its raw bytes and decode them back into an obs.InstanceSnapshot.
 type Instance struct {
 	Adapter obs.Adapter
 	Output  func(t testing.TB) []byte
 	Decoded func(t testing.TB) obs.InstanceSnapshot
 }
 
+// Subject describes an adapter tested by Conformance, including a failing mode
+// to prove collector error isolation and an optional LabelPolicy validator.
 type Subject struct {
 	Name        string
 	Fidelity    Fidelity
@@ -34,6 +46,9 @@ type Subject struct {
 	LabelPolicy func(decoded obs.InstanceSnapshot) error
 }
 
+// HostileTenants exercises quoting, escaping, truncation, folding, and UTF-8
+// handling across every adapter using quotes, newlines, backslashes, commas,
+// leading spaces, a 160-byte name, non-ASCII text, and the literal name "other".
 var HostileTenants = []string{
 	"alpha", "beta", "other", `quo"te`, "new\nline", `back\slash`, "comma,semi;colon", " lead space",
 	strings.Repeat("long", 40), "ünïcödé", "eq=sign", "{brace}",
@@ -82,6 +97,9 @@ func (f *fixtureState) emit(e *obs.Emitter) {
 	e.Histogram("size", obs.Labels{}, h.Snapshot())
 }
 
+// Fixture returns a Collector with a deterministic synthetic admission source
+// covering HostileTenants, zero counters, negative gauges, high-water marks,
+// and clamped histograms, along with a step function that advances its counters.
 func Fixture(t testing.TB) (*obs.Collector, func()) {
 	t.Helper()
 	f := &fixtureState{}
@@ -92,6 +110,7 @@ func Fixture(t testing.TB) (*obs.Collector, func()) {
 	return c, func() { f.round++ }
 }
 
+// FixtureSnapshot publishes one round of Fixture and returns the snapshot and registry.
 func FixtureSnapshot(t testing.TB) (obs.InstanceSnapshot, *obs.Registry) {
 	t.Helper()
 	c, _ := Fixture(t)
@@ -102,11 +121,13 @@ func FixtureSnapshot(t testing.TB) (obs.InstanceSnapshot, *obs.Registry) {
 	return s, c.Registry()
 }
 
+// Check is one named check in the reusable adapter conformance suite.
 type Check struct {
 	Name string
 	Run  func(t testing.TB, sub Subject, snap obs.InstanceSnapshot, reg *obs.Registry)
 }
 
+// Conformance runs all five adapter conformance checks as subtests against sub.
 func Conformance(t *testing.T, sub Subject) {
 	snap, reg := FixtureSnapshot(t)
 	for _, c := range Checks() {
@@ -114,6 +135,8 @@ func Conformance(t *testing.T, sub Subject) {
 	}
 }
 
+// Checks returns the five conformance checks every adapter must pass: values,
+// labels, deterministic, no-retained-reference, and error-counted-not-propagated.
 func Checks() []Check {
 	return []Check{
 		{"values", func(t testing.TB, sub Subject, snap obs.InstanceSnapshot, reg *obs.Registry) {
@@ -195,6 +218,7 @@ func Checks() []Check {
 			if _, err := c.Publish(); err != nil {
 				t.Fatalf("an adapter error reached the collector: %v", err)
 			}
+			// A second publish observes the export_errors counter incremented by publish 1.
 			s, err := c.Publish()
 			if err != nil {
 				t.Fatal(err)
@@ -206,6 +230,8 @@ func Checks() []Check {
 	}
 }
 
+// Scribble overwrites every point, bucket, and metadata field of s in place to
+// detect adapters that alias snapshot memory instead of copying or encoding it.
 func Scribble(s *obs.InstanceSnapshot) {
 	for i := range s.Points {
 		s.Points[i].Value = -7777
@@ -278,6 +304,7 @@ func compare(f Fidelity, reg *obs.Registry, want, got obs.InstanceSnapshot) erro
 	switch f {
 	case Exact:
 		w, g := want, got
+		// Build and ConfigFingerprint live in run.csv (not metrics.csv) for CSV, so compare points and histograms here.
 		w.Build, w.ConfigFingerprint, g.Build, g.ConfigFingerprint = "", "", "", ""
 		if !obs.Equal(w, g) {
 			return fmt.Errorf("decoded output differs from the snapshot: %d/%d points, %d/%d histograms; first difference: %s",

@@ -1,3 +1,5 @@
+// Package catalog assembles the canonical metric registry of every component
+// wired into mini-gateway and renders the generated docs/csv-schema.md document.
 package catalog
 
 import (
@@ -10,8 +12,12 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs/simsrc"
 )
 
+// DocPath is the repository-relative path of the generated CSV schema document.
 const DocPath = "docs/csv-schema.md"
 
+// Registry returns the combined metric registry for the collector and every
+// component registered in the product. Each later component chunk adds its
+// declarations here so docs/csv-schema.md stays complete.
 func Registry() (*obs.Registry, error) {
 	var reg obs.Registry
 	if err := reg.Declare(obs.ComponentObs, obs.SelfMetrics()...); err != nil {
@@ -43,6 +49,8 @@ func columns(b *bytes.Buffer, title string, cs []csvflush.Column) {
 	b.WriteString("\n")
 }
 
+// Markdown renders docs/csv-schema.md from the CSV schema column definitions
+// and every metric declared in Registry.
 func Markdown() ([]byte, error) {
 	reg, err := Registry()
 	if err != nil {

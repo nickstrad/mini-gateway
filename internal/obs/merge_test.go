@@ -49,6 +49,9 @@ func mustMerge(t *testing.T, reg *Registry, snaps ...InstanceSnapshot) InstanceS
 	return m
 }
 
+// TestMergeOfInstancesEqualsOneInstanceThatSawEverything proves across 300
+// random seeds that merging 1–5 partitioned instance snapshots equals a single
+// instance snapshot that observed all events.
 func TestMergeOfInstancesEqualsOneInstanceThatSawEverything(t *testing.T) {
 	reg := synthRegistry(t)
 	for seed := uint64(0); seed < uint64(seeds()); seed++ {
@@ -69,6 +72,8 @@ func TestMergeOfInstancesEqualsOneInstanceThatSawEverything(t *testing.T) {
 	}
 }
 
+// TestMergeIsAssociativeAndCommutative proves Merge satisfies associativity and
+// commutativity on counters, gauges, high-water marks, and histograms.
 func TestMergeIsAssociativeAndCommutative(t *testing.T) {
 	reg := synthRegistry(t)
 	for seed := uint64(0); seed < uint64(seeds()); seed++ {
@@ -88,6 +93,8 @@ func TestMergeIsAssociativeAndCommutative(t *testing.T) {
 	}
 }
 
+// TestHighWaterMergesByMaxAndCountersBySum proves MergeMax takes the maximum
+// while MergeSum adds counters and additive gauges.
 func TestHighWaterMergesByMaxAndCountersBySum(t *testing.T) {
 	reg := synthRegistry(t)
 	mk := func(largest, inUse, events int64) InstanceSnapshot {
@@ -103,6 +110,8 @@ func TestHighWaterMergesByMaxAndCountersBySum(t *testing.T) {
 	}
 }
 
+// TestMergeRefusesUndeclaredAndKindClash proves Merge rejects undeclared
+// metrics and conflicting kinds for the same metric key.
 func TestMergeRefusesUndeclaredAndKindClash(t *testing.T) {
 	reg := synthRegistry(t)
 	a := InstanceSnapshot{Points: []Point{{Component: ComponentPool, Metric: "ghost", Kind: KindCounter, Value: 1}}}
@@ -116,6 +125,8 @@ func TestMergeRefusesUndeclaredAndKindClash(t *testing.T) {
 	}
 }
 
+// TestMergeBucketsAddsPerBucket proves MergeBuckets sums counts for matching
+// bounds and preserves disjoint buckets in sorted order.
 func TestMergeBucketsAddsPerBucket(t *testing.T) {
 	a := []Bucket{{1, 1, 2}, {5, 6, 1}}
 	b := []Bucket{{0, 0, 1}, {5, 6, 4}, {9, 9, 1}}

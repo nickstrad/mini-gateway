@@ -62,6 +62,9 @@ func emitFilled[T any](t *testing.T, component string, metrics []obs.MetricDesc,
 	return s, f.paths
 }
 
+// TestMappingsMoveEveryMetric fills every field of sim, simnet, fakepg, and
+// workload snapshots by reflection to prove every declared metric moves and no
+// snapshot field is silently dropped by its mapping.
 func TestMappingsMoveEveryMetric(t *testing.T) {
 	type result struct {
 		comp    string
@@ -117,6 +120,8 @@ func TestMappingsMoveEveryMetric(t *testing.T) {
 	}
 }
 
+// TestDuplicateTenantNamesGetDistinctLabels proves TenantLabel disambiguates
+// repeated tenant names with "#<index>" suffixes.
 func TestDuplicateTenantNamesGetDistinctLabels(t *testing.T) {
 	ts := []workload.TenantSnapshot{{Name: "app"}, {Name: "app"}, {Name: "web"}}
 	if a, b, c := simsrc.TenantLabel(ts, 0), simsrc.TenantLabel(ts, 1), simsrc.TenantLabel(ts, 2); a != "app" || b != "app#1" || c != "web" {
@@ -124,6 +129,8 @@ func TestDuplicateTenantNamesGetDistinctLabels(t *testing.T) {
 	}
 }
 
+// TestSourcesReadLiveComponents proves the four simsrc wrappers read live
+// simulator components end to end and observe counters moving after RunFor.
 func TestSourcesReadLiveComponents(t *testing.T) {
 	s := sim.New(sim.Config{Seed: 1, Scenario: "simsrc"})
 	n := simnet.New(s)

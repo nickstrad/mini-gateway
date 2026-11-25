@@ -28,6 +28,8 @@ func filesSize(t *testing.T, dir string) int64 {
 	return n
 }
 
+// TestByteCapCountsTheHeaders proves MaxBytes includes the CSV header bytes on
+// both the first flush (sync and async) and on a zero-flush Close.
 func TestByteCapCountsTheHeaders(t *testing.T) {
 	s, _ := obstest.FixtureSnapshot(t)
 	free := newWriter(t, config(t.TempDir()))
@@ -71,6 +73,8 @@ func TestByteCapCountsTheHeaders(t *testing.T) {
 	}
 }
 
+// TestRowsOfOneFlushAreOrderedBySeqThenInstance proves multi-snapshot Flush
+// writes rows ordered by (flush_seq, instance) regardless of argument order.
 func TestRowsOfOneFlushAreOrderedBySeqThenInstance(t *testing.T) {
 	p := func(v int64) []obs.Point {
 		return []obs.Point{{Component: obs.ComponentPool, Metric: "requests", Kind: obs.KindCounter, Value: v}}

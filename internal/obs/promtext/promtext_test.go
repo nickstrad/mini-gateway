@@ -62,6 +62,8 @@ func subject(cfg promtext.Config) obstest.Subject {
 	}
 }
 
+// TestConformance proves promtext passes all five obstest.Conformance checks
+// at Folded fidelity under default, bounded, and configured-tenant policies.
 func TestConformance(t *testing.T) {
 	t.Run("default", func(t *testing.T) {
 		sub := subject(promtext.Config{})
@@ -74,6 +76,8 @@ func TestConformance(t *testing.T) {
 	})
 }
 
+// TestGolden proves Export matches the committed testdata/fixture.prom golden file
+// and passes the exposition grammar checker.
 func TestGolden(t *testing.T) {
 	s, reg := obstest.FixtureSnapshot(t)
 	a := promtext.New(reg, nil, promtext.Config{TenantMax: 4})
@@ -125,6 +129,8 @@ func manyTenants(n int) (*obs.Registry, func(round int) obs.InstanceSnapshot) {
 	}
 }
 
+// TestTenantLabelBoundWithTenThousandHostileTenants proves 10,000 hostile tenant
+// names never exceed TenantMax+1 label values while preserving folded totals.
 func TestTenantLabelBoundWithTenThousandHostileTenants(t *testing.T) {
 	reg, snap := manyTenants(10_000)
 	for _, max := range []int{0, 1, 32, 100} {
@@ -157,6 +163,8 @@ func TestTenantLabelBoundWithTenThousandHostileTenants(t *testing.T) {
 	}
 }
 
+// TestQuietTenantsAreEvicted proves a tenant quiet for EvictAfter publishes loses
+// its slot, folds its totals into "other", and frees the slot for an active tenant.
 func TestQuietTenantsAreEvicted(t *testing.T) {
 	var reg obs.Registry
 	_ = reg.Declare(obs.ComponentAdmission, obs.CounterDesc("requests", obs.LabelTenant, "Requests."))
@@ -199,6 +207,8 @@ func TestQuietTenantsAreEvicted(t *testing.T) {
 	}
 }
 
+// TestRebucketIsCumulativeOnTheShortList proves Rebucket maps full-resolution
+// duration buckets into the 16 cumulative DefaultExportBuckets bounds.
 func TestRebucketIsCumulativeOnTheShortList(t *testing.T) {
 	h := obs.NewDurationHistogram()
 	for _, v := range []int64{50_000, 100_000, 100_001, 3_000_000, 59_000_000_000, 70_000_000_000} {
@@ -213,6 +223,8 @@ func TestRebucketIsCumulativeOnTheShortList(t *testing.T) {
 	}
 }
 
+// TestCheckerRejectsBadExposition proves promtext.Check rejects 20 malformed
+// exposition texts including negative counters, negative buckets, and bad escapes.
 func TestCheckerRejectsBadExposition(t *testing.T) {
 	good := "# HELP a_total A.\n# TYPE a_total counter\na_total{x=\"1\"} 1\n"
 	if err := promtext.Check([]byte(good)); err != nil {
@@ -247,6 +259,8 @@ func TestCheckerRejectsBadExposition(t *testing.T) {
 	}
 }
 
+// TestPointsOfTheWrongKindAreNotExported proves promtext skips points whose kind
+// disagrees with their registry declaration so forged snapshots cannot clash.
 func TestPointsOfTheWrongKindAreNotExported(t *testing.T) {
 	var reg obs.Registry
 	if err := reg.Declare(obs.ComponentPool, obs.GaugeDesc("y", 0, "Y."), obs.GaugeDesc("y_total", 0, "T.")); err != nil {

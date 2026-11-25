@@ -6,6 +6,9 @@ import (
 	"testing"
 )
 
+// TestMergeChecksEveryPointAndHistogramAgainstTheRegistry proves Merge validates
+// singleton and multi-snapshot points and histograms against reg, rejecting
+// undeclared names, wrong kinds, and wrong units.
 func TestMergeChecksEveryPointAndHistogramAgainstTheRegistry(t *testing.T) {
 	reg := synthRegistry(t)
 	ghost := InstanceSnapshot{Points: []Point{{Component: ComponentPool, Metric: "ghost", Kind: KindCounter, Value: 1}}}
@@ -38,6 +41,8 @@ func TestMergeChecksEveryPointAndHistogramAgainstTheRegistry(t *testing.T) {
 	}
 }
 
+// TestMergeWithoutARegistrySumsAndDoesNotPanic proves Merge with a nil or empty
+// registry sums values cleanly without panicking.
 func TestMergeWithoutARegistrySumsAndDoesNotPanic(t *testing.T) {
 	a := InstanceSnapshot{Points: []Point{{Component: ComponentPool, Metric: "events", Kind: KindCounter, Value: 2}}}
 	for _, reg := range []*Registry{nil, {}} {
@@ -51,6 +56,8 @@ func TestMergeWithoutARegistrySumsAndDoesNotPanic(t *testing.T) {
 	}
 }
 
+// TestMergeRefusesOverflow proves Merge and MergeBuckets return ErrMergeOverflow
+// instead of wrapping signed 64-bit sums while MergeMax still handles MaxInt64.
 func TestMergeRefusesOverflow(t *testing.T) {
 	reg := synthRegistry(t)
 	mk := func(metric string, kind Kind, v int64) InstanceSnapshot {

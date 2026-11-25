@@ -17,6 +17,8 @@ var (
 	out    = flag.String("out", "", "write the generated docs/csv-schema.md to this path instead of checking it")
 )
 
+// TestCSVSchemaDocumentIsGeneratedFromTheCode proves docs/csv-schema.md matches
+// catalog.Markdown() byte-for-byte (or rewrites it under -update / -out).
 func TestCSVSchemaDocumentIsGeneratedFromTheCode(t *testing.T) {
 	want, err := catalog.Markdown()
 	if err != nil {
@@ -42,6 +44,8 @@ func TestCSVSchemaDocumentIsGeneratedFromTheCode(t *testing.T) {
 	}
 }
 
+// TestEveryDeclaredMetricIsInTheDocument proves every metric in catalog.Registry
+// and every metrics.csv column appears in the generated Markdown document.
 func TestEveryDeclaredMetricIsInTheDocument(t *testing.T) {
 	reg, err := catalog.Registry()
 	if err != nil {

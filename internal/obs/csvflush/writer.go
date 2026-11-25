@@ -19,15 +19,21 @@ import (
 )
 
 const (
-	AdapterName      = "csv"
-	DefaultMaxBytes  = int64(1) << 30
-	DefaultQueueCap  = 64
-	MaxQueueCap      = 4096
+	// AdapterName is the name under which Writer attaches to obs.Collector.
+	AdapterName = "csv"
+	// DefaultMaxBytes is the default 1 GiB cap on total bytes written to a run directory.
+	DefaultMaxBytes = int64(1) << 30
+	// DefaultQueueCap is the default async flush channel capacity.
+	DefaultQueueCap = 64
+	// MaxQueueCap clamps Config.QueueCap so the async queue stays bounded.
+	MaxQueueCap = 4096
+	// MaxTrackedRows caps persisted row keys kept for tenant-row persistence.
 	MaxTrackedRows   = 1 << 20
 	maxRunIDLen      = 200
 	maxRunIDSegments = 8
 )
 
+// Sentinel errors returned by Writer setup, Flush, Close, and Err.
 var (
 	ErrDropped  = errors.New("csvflush: flush not written")
 	ErrStopped  = errors.New("csvflush: writer stopped after the size cap or a write error")
@@ -36,6 +42,7 @@ var (
 	ErrNoClock  = errors.New("csvflush: no clock")
 )
 
+// RunInfo supplies the static metadata recorded in run.csv on Close.
 type RunInfo struct {
 	RunID             string
 	Scenario          string
@@ -55,6 +62,9 @@ const (
 	plantStaleValue
 )
 
+// Config configures a CSV flush Writer. Clock is required so the adapter stamps
+// t_ns from the caller's clock (virtual time in the simulator, monotonic clock
+// in a real process) while snapshots themselves remain timeless.
 type Config struct {
 	Dir      string
 	Run      RunInfo
@@ -89,6 +99,8 @@ type tracked struct {
 	isH   bool
 }
 
+// Writer implements obs.Adapter and obs.FlushReporter, appending flushed
+// snapshots to metrics.csv and histograms.csv and writing run.csv last on Close.
 type Writer struct {
 	cfg    Config
 	runDir string
@@ -113,6 +125,8 @@ type Writer struct {
 	writeErr    atomic.Pointer[error]
 }
 
+// ValidRunID validates that id is a safe relative path of 1 to 8 segments using
+// only [A-Za-z0-9._=-] and '/', with no empty, "." or ".." segments.
 func ValidRunID(id string) error {
 	if id == "" || len(id) > maxRunIDLen {
 		return fmt.Errorf("%w: %q must be 1 to %d bytes", ErrBadRunID, id, maxRunIDLen)
@@ -135,6 +149,9 @@ func ValidRunID(id string) error {
 	return nil
 }
 
+// New creates a Writer for <cfg.Dir>/<cfg.Run.RunID>/, removing any leftover
+// CSV files from an earlier run with the same id so reruns never mix files or
+// leave a stale run.csv behind.
 func New(cfg Config) (*Writer, error) {
 	if err := ValidRunID(cfg.Run.RunID); err != nil {
 		return nil, err
@@ -176,7 +193,10 @@ func createFile(path string) (io.WriteCloser, error) {
 	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 }
 
-func (w *Writer) Name() string   { return AdapterName }
+// Name returns AdapterName ("csv").
+func (w *Writer) Name() string { return AdapterName }
+
+// RunDir returns the directory path holding this run's three CSV files.
 func (w *Writer) RunDir() string { return w.runDir }
 
 func (w *Writer) loop() {
@@ -189,8 +209,12 @@ func (w *Writer) loop() {
 	}
 }
 
+// Export implements obs.Adapter by flushing a single instance snapshot.
 func (w *Writer) Export(s obs.InstanceSnapshot) error { return w.Flush(s) }
 
+// Flush stamps t_ns from Config.Clock, clones and sorts snaps by (Seq, Instance),
+// and either writes them synchronously or enqueues them without blocking in
+// Async mode (dropping and counting if the queue is full).
 func (w *Writer) Flush(snaps ...obs.InstanceSnapshot) error {
 	if w.closed {
 		return ErrClosed
@@ -237,6 +261,7 @@ func (w *Writer) write(j job) error {
 		return ErrStopped
 	}
 	mb, hb := w.render(j)
+	// Account for pending CSV headers before opening files so flush 0 never exceeds MaxBytes.
 	size := int64(len(mb)+len(hb)) + w.pendingHeaderBytes()
 	if w.bytes.Load()+size > w.cfg.MaxBytes {
 		w.stop(j, fmt.Errorf("%w: the flush of %d bytes would pass obs.csv.max_bytes %d", ErrDropped, size, w.cfg.MaxBytes))
@@ -338,6 +363,7 @@ func (w *Writer) render(j job) ([]byte, []byte) {
 				buckets = buckets[:len(buckets)-1]
 			}
 			for _, b := range buckets {
+				// obs.Bucket.Hi is inclusive; CSV schema v1 writes bucket_hi exclusive (b.Hi+1).
 				_ = hw.Write([]string{ver, run, seq, t, s.Instance, h.Component, h.Metric,
 					h.Labels.Tenant, h.Labels.Outcome, h.Labels.Reason, h.Labels.Mode, string(h.Unit),
 					strconv.FormatInt(b.Lo, 10), strconv.FormatInt(b.Hi+1, 10), strconv.FormatInt(b.Count, 10)})
@@ -362,6 +388,9 @@ func compareKey(a, b rowKey) int {
 	return obs.CompareLabels(a.labels, b.labels)
 }
 
+// persist keeps every previously emitted row key for s.Instance in later
+// flushes with its last value (generalizing tenant-row persistence) and re-sorts
+// the flush into canonical order.
 func (w *Writer) persist(s obs.InstanceSnapshot) ([]obs.Point, []obs.HistPoint) {
 	points := slices.Clone(s.Points)
 	hists := slices.Clone(s.Hists)
@@ -369,6 +398,7 @@ func (w *Writer) persist(s obs.InstanceSnapshot) ([]obs.Point, []obs.HistPoint) 
 		w.track(tracked{key: rowKey{s.Instance, p.Component, p.Metric, p.Labels}, point: p})
 	}
 	for _, h := range s.Hists {
+		// Prefix histogram keys with \x00 so a histogram and a scalar metric cannot collide in w.rows.
 		w.track(tracked{key: rowKey{s.Instance, h.Component, "\x00" + h.Metric, h.Labels}, hist: h, isH: true})
 	}
 	for _, r := range w.rows {
@@ -400,6 +430,11 @@ func (w *Writer) track(t tracked) {
 	w.rows = slices.Insert(w.rows, i, t)
 }
 
+// Close drains any queued async flushes, writes the last snapshot if it had
+// been dropped from a full queue (without decrementing drop counters), closes
+// metrics.csv and histograms.csv, and writes run.csv last. If the writer
+// stopped at MaxBytes or on a write error, run.csv is withheld so downstream
+// assertions fail closed. When Config.Strict is true, Close returns Err().
 func (w *Writer) Close() error {
 	if w.closed {
 		return ErrClosed
@@ -472,6 +507,8 @@ func (w *Writer) finish() error {
 	return f.Close()
 }
 
+// FlushStats implements obs.FlushReporter using atomic loads so the collector
+// or concurrent readers can inspect writer stats safely while Async mode runs.
 func (w *Writer) FlushStats() obs.FlushStats {
 	depth := int64(0)
 	if w.queue != nil {
@@ -481,6 +518,7 @@ func (w *Writer) FlushStats() obs.FlushStats {
 		BytesWritten: w.bytes.Load(), QueueDepth: depth}
 }
 
+// Err returns any write error or drop count recorded during the writer's lifetime.
 func (w *Writer) Err() error {
 	var errs []error
 	if p := w.writeErr.Load(); p != nil {

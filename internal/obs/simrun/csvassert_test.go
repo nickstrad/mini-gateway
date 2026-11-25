@@ -119,6 +119,8 @@ func writeSQL(t *testing.T, body string) string {
 	return p
 }
 
+// TestCSVAssertBaselineCountsFromFlushedFiles proves all five baseline SQL
+// assertions pass over flushed CSV files under DuckDB 1.5.x.
 func TestCSVAssertBaselineCountsFromFlushedFiles(t *testing.T) {
 	requireDuckDB(t)
 	out, err := csvAssert(t, nil, baselineRuns(t))
@@ -130,6 +132,9 @@ func TestCSVAssertBaselineCountsFromFlushedFiles(t *testing.T) {
 	}
 }
 
+// TestCSVAssertFailsClosed proves scripts/csv-assert.sh exits non-zero naming
+// the reason on planted wrong numbers, missing metrics, missing run.csv, bad
+// schema versions/headers, bad SQL, missing roots, and wrong DuckDB versions.
 func TestCSVAssertFailsClosed(t *testing.T) {
 	requireDuckDB(t)
 	const good = "-- requires: fakepg.sessions_peak\nSELECT 'x' FROM final WHERE component = 'fakepg' AND metric = 'sessions_peak' AND value <> 500;\n"
@@ -226,6 +231,10 @@ func editFile(t *testing.T, path string, edit func(string) string) {
 	must(t, os.WriteFile(path, []byte(edit(string(b))), 0o644))
 }
 
+// TestCSVAssertChecksEveryRunAndEveryField proves multi-run validation fails
+// when any run is empty, lacks a required metric, duplicates a run_id, or holds
+// an empty required numeric cell, while passing valid multi-run, histogram, and
+// quoted-newline inputs.
 func TestCSVAssertChecksEveryRunAndEveryField(t *testing.T) {
 	requireDuckDB(t)
 	const good = "-- requires: fakepg.sessions_peak\nSELECT 'x' FROM final WHERE component = 'fakepg' AND metric = 'sessions_peak' AND value <> 500;\n"
@@ -311,6 +320,8 @@ func TestCSVAssertChecksEveryRunAndEveryField(t *testing.T) {
 	})
 }
 
+// TestCSVAssertFailsWithoutDuckDB proves scripts/csv-assert.sh fails closed
+// rather than skipping when duckdb is absent from PATH and ~/.local/bin.
 func TestCSVAssertFailsWithoutDuckDB(t *testing.T) {
 	out, err := csvAssert(t, []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir()}, t.TempDir())
 	if err == nil || !strings.Contains(out, "duckdb is not installed") {

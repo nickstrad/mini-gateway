@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+// TestDetailOffDropsHistogramsAtTheEmitter proves Emitter.Histogram suppresses
+// histograms and clamp counters when detail is off while still rejecting invalid calls.
 func TestDetailOffDropsHistogramsAtTheEmitter(t *testing.T) {
 	h := NewDurationHistogram()
 	h.Record(5000)
@@ -59,6 +61,9 @@ type flakyAdapter struct{ err error }
 func (f *flakyAdapter) Name() string                  { return "flaky" }
 func (f *flakyAdapter) Export(InstanceSnapshot) error { return f.err }
 
+// TestCollectorHealthFollowsTheLatestPublishAndRecovers proves Collector.Health
+// degrades immediately on publish 1 adapter or emit errors and recovers to ok once
+// the failing adapter or source clears.
 func TestCollectorHealthFollowsTheLatestPublishAndRecovers(t *testing.T) {
 	ht := healthTable(t)
 	c := NewCollector(Config{Instance: "i"})
@@ -106,6 +111,9 @@ func TestCollectorHealthFollowsTheLatestPublishAndRecovers(t *testing.T) {
 	}
 }
 
+// TestRegistryRefusesExpositionNameClashes proves Declare refuses declarations
+// within one component whose Prometheus suffixes (_total, _bucket, _count, _sum,
+// or clamp counters) would collide.
 func TestRegistryRefusesExpositionNameClashes(t *testing.T) {
 	clashes := [][]MetricDesc{
 		{CounterDesc("x", 0, "C."), GaugeDesc("x_total", 0, "G.")},
@@ -130,6 +138,9 @@ func TestRegistryRefusesExpositionNameClashes(t *testing.T) {
 	}
 }
 
+// TestEveryMetricWithoutATenantLabelIsEmittedAtEveryCollect proves non-tenant
+// closed-label metrics return ErrMissing when omitted, while tenant-labelled
+// metrics remain optional when no tenants exist.
 func TestEveryMetricWithoutATenantLabelIsEmittedAtEveryCollect(t *testing.T) {
 	descs := []MetricDesc{CounterDesc("refusals", LabelReason, "R."), CounterDesc("requests", LabelTenant|LabelOutcome, "Q.")}
 	for _, detail := range []bool{true, false} {
@@ -144,6 +155,8 @@ func TestEveryMetricWithoutATenantLabelIsEmittedAtEveryCollect(t *testing.T) {
 	}
 }
 
+// TestOpenLabelsAreOptionalAndNeedANonTenantLabel proves WithOpenLabels requires
+// a non-tenant label and exempts that metric from requiring a row when empty.
 func TestOpenLabelsAreOptionalAndNeedANonTenantLabel(t *testing.T) {
 	var reg Registry
 	for _, d := range []MetricDesc{CounterDesc("a", 0, "A.").WithOpenLabels(), CounterDesc("b", LabelTenant|LabelReason, "B.").WithOpenLabels()} {

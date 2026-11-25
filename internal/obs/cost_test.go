@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+// TestRecordingAllocatesNothing proves all five hot-path recording operations
+// (counter, gauge, histogram, detail histogram on/off) allocate zero bytes.
 func TestRecordingAllocatesNothing(t *testing.T) {
 	var c Counter
 	var g Gauge
@@ -32,6 +34,7 @@ func TestRecordingAllocatesNothing(t *testing.T) {
 	}
 }
 
+// BenchmarkRecordCounter measures hot-path Counter.Inc latency.
 func BenchmarkRecordCounter(b *testing.B) {
 	var c Counter
 	for b.Loop() {
@@ -39,6 +42,7 @@ func BenchmarkRecordCounter(b *testing.B) {
 	}
 }
 
+// BenchmarkRecordHistogram measures full-resolution duration histogram recording.
 func BenchmarkRecordHistogram(b *testing.B) {
 	h := NewDurationHistogram()
 	v := int64(1)
@@ -48,6 +52,8 @@ func BenchmarkRecordHistogram(b *testing.B) {
 	}
 }
 
+// BenchmarkRecordDetail compares DetailHistogram recording time and held memory
+// with obs.detail off vs on.
 func BenchmarkRecordDetail(b *testing.B) {
 	for _, detail := range []bool{false, true} {
 		b.Run("detail="+strconv.FormatBool(detail), func(b *testing.B) {
@@ -62,6 +68,8 @@ func BenchmarkRecordDetail(b *testing.B) {
 	}
 }
 
+// BenchmarkPublish measures Collector.Publish latency and allocations across
+// 1, 32, and 1,000 tenants with obs.detail off vs on.
 func BenchmarkPublish(b *testing.B) {
 	for _, tenants := range []int{1, 32, 1000} {
 		for _, detail := range []bool{false, true} {

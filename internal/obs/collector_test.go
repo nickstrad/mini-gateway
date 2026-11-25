@@ -21,6 +21,8 @@ func (f *fakeAdapter) Export(s InstanceSnapshot) error {
 	return f.err
 }
 
+// TestUndeclaredMetricIsAnError proves emitting an undeclared metric fails
+// Collect/Publish, keeps declared points intact, and increments obs.emit_errors.
 func TestUndeclaredMetricIsAnError(t *testing.T) {
 	c := NewCollector(Config{Instance: "i"})
 	err := c.Register(Source{Component: ComponentPool, Metrics: []MetricDesc{CounterDesc("a", 0, "A.")},
@@ -47,6 +49,9 @@ func TestUndeclaredMetricIsAnError(t *testing.T) {
 	}
 }
 
+// TestEmitterRefusesWrongKindLabelDuplicateNegativeAndMissing proves the
+// emitter rejects wrong kinds, undeclared labels, duplicates, negative counters,
+// and missing unlabelled metrics.
 func TestEmitterRefusesWrongKindLabelDuplicateNegativeAndMissing(t *testing.T) {
 	descs := []MetricDesc{CounterDesc("c", LabelReason, "C."), GaugeDesc("g", 0, "G."), CounterDesc("must", 0, "M.")}
 	cases := []struct {
@@ -82,6 +87,8 @@ func TestEmitterRefusesWrongKindLabelDuplicateNegativeAndMissing(t *testing.T) {
 	}
 }
 
+// TestRegistrationRules proves Collector.Register and Attach reject invalid or
+// duplicate sources, declarations, and adapters without leaving partial state.
 func TestRegistrationRules(t *testing.T) {
 	c := NewCollector(Config{})
 	ok := Source{Component: ComponentPool, Metrics: []MetricDesc{CounterDesc("a", 0, "A.")}, Collect: func(*Emitter) {}}
@@ -119,6 +126,9 @@ func TestRegistrationRules(t *testing.T) {
 	}
 }
 
+// TestPublishSequenceLastCopyAndAdapterErrors proves publish sequencing,
+// isolated deep-copy Last() reads, non-propagating adapter errors, and health
+// degradation on failing adapters.
 func TestPublishSequenceLastCopyAndAdapterErrors(t *testing.T) {
 	s := newSynth()
 	c := synthCollector(t, "i1", s, true)
@@ -181,6 +191,8 @@ func healthTable(t *testing.T) *HealthTable {
 	return &ht
 }
 
+// TestSnapshotIsSortedAndHasNoTime proves collected snapshots are strictly
+// sorted, repeatable across collects, and carry no timestamp field.
 func TestSnapshotIsSortedAndHasNoTime(t *testing.T) {
 	s := newSynth()
 	r := rand.New(rand.NewPCG(1, 2))
@@ -211,6 +223,8 @@ func TestSnapshotIsSortedAndHasNoTime(t *testing.T) {
 	}
 }
 
+// TestDetailOffFoldsTenantsAndHoldsNoHistogram proves obs.detail=false folds
+// tenant metrics to the empty tenant, drops histograms, and holds zero bucket bytes.
 func TestDetailOffFoldsTenantsAndHoldsNoHistogram(t *testing.T) {
 	s := newSynth()
 	r := rand.New(rand.NewPCG(3, 4))
@@ -254,6 +268,8 @@ func TestDetailOffFoldsTenantsAndHoldsNoHistogram(t *testing.T) {
 	}
 }
 
+// TestHealthTableWorstWinsAndJSON proves HealthTable rejects duplicates,
+// takes the worst state across rules, and encodes valid JSON with escapes.
 func TestHealthTableWorstWinsAndJSON(t *testing.T) {
 	var ht HealthTable
 	add := func(name string, st State, reason string) {
@@ -287,6 +303,8 @@ func TestHealthTableWorstWinsAndJSON(t *testing.T) {
 	}
 }
 
+// TestCollectorSelfCheck proves CollectorRule starts degraded before the first
+// publish and becomes ok once a clean publish completes.
 func TestCollectorSelfCheck(t *testing.T) {
 	c := NewCollector(Config{Instance: "i"})
 	ht := healthTable(t)
@@ -301,6 +319,8 @@ func TestCollectorSelfCheck(t *testing.T) {
 	}
 }
 
+// TestAppendJSONStringMatchesEncodingJSON proves the hand-written escaper
+// matches encoding/json byte-for-byte on edge cases and 2,000 random byte strings.
 func TestAppendJSONStringMatchesEncodingJSON(t *testing.T) {
 	r := rand.New(rand.NewPCG(9, 9))
 	inputs := []string{"", "plain", "q\"b\\s", "\x00\x01\x1f\t\r\n", "<a>&", "  ", "héllo wörld", "\xff\xfe"}

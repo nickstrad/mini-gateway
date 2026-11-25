@@ -1,3 +1,6 @@
+// Package promtext implements the Prometheus text exposition adapter, bounded
+// tenant-label tracking with quiet-tenant eviction, histogram re-bucketing onto
+// a fixed short bound list, and an in-repo exposition grammar checker and decoder.
 package promtext
 
 import (
@@ -12,25 +15,37 @@ import (
 )
 
 const (
-	AdapterName       = "prom"
-	Prefix            = "mg_"
-	OtherTenant       = "other"
-	DefaultTenantMax  = 32
-	MaxTenantMax      = 1024
+	// AdapterName is the name under which Adapter attaches to obs.Collector.
+	AdapterName = "prom"
+	// Prefix is prepended to every Prometheus metric family name.
+	Prefix = "mg_"
+	// OtherTenant is the folded label value for unslotted, evicted, or hostile tenants.
+	OtherTenant = "other"
+	// DefaultTenantMax is the default cap on individually labelled tenants (obs.prom_tenant_max).
+	DefaultTenantMax = 32
+	// MaxTenantMax clamps Config.TenantMax to bound exporter cardinality.
+	MaxTenantMax = 1024
+	// DefaultEvictAfter is the default number of quiet publishes before a tenant slot is evicted.
 	DefaultEvictAfter = 60
+	// MaxTenantLabelLen caps the byte length of any tenant name allowed to hold a slot.
 	MaxTenantLabelLen = 64
-	MaxExportBuckets  = 32
+	// MaxExportBuckets caps custom ExportBuckets slices.
+	MaxExportBuckets = 32
 )
 
+// DefaultExportBuckets holds the 16 fixed nanosecond bounds (100 µs to 60 s)
+// used when re-bucketing duration histograms for Prometheus exposition.
 var DefaultExportBuckets = []int64{
 	100_000, 250_000, 500_000, 1_000_000, 2_500_000, 5_000_000, 10_000_000, 25_000_000,
 	50_000_000, 100_000_000, 250_000_000, 500_000_000, 1_000_000_000, 2_500_000_000, 10_000_000_000, 60_000_000_000,
 }
 
+// SizeBuckets holds the 16 powers-of-4 bounds used for bytes and count histograms.
 var SizeBuckets = []int64{
 	1, 4, 16, 64, 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304, 16777216, 67108864, 268435456, 1073741824,
 }
 
+// Config configures tenant-label bounds, eviction, and export buckets for Adapter.
 type Config struct {
 	TenantMax     int
 	Tenants       []string
@@ -44,6 +59,12 @@ type slot struct {
 	lastActive int64
 }
 
+// Adapter implements obs.Adapter and obs.TenantReporter, rendering snapshots as
+// Prometheus text while enforcing the low-cardinality label policy.
+//
+// Because slot assignment and eviction depend on which tenants changed since
+// prior publishes, output is a deterministic function of Config and the full
+// history of exported snapshots.
 type Adapter struct {
 	cfg        Config
 	reg        *obs.Registry
@@ -56,6 +77,8 @@ type Adapter struct {
 	prevSig    []int64
 }
 
+// New creates a Prometheus text Adapter using reg for metric metadata and
+// clamping TenantMax, EvictAfter, and ExportBuckets to safe defaults.
 func New(reg *obs.Registry, w io.Writer, cfg Config) *Adapter {
 	if cfg.TenantMax <= 0 {
 		cfg.TenantMax = DefaultTenantMax
@@ -86,16 +109,25 @@ func strictlyIncreasing(b []int64) bool {
 	return true
 }
 
+// Labelable reports whether t may hold its own Prometheus tenant label slot.
+// Empty names, the reserved "other" bucket, names over 64 bytes, and invalid
+// UTF-8 always fold into OtherTenant.
 func Labelable(t string) bool {
 	return t != "" && t != OtherTenant && len(t) <= MaxTenantLabelLen && utf8.ValidString(t)
 }
 
+// Name returns AdapterName ("prom").
 func (a *Adapter) Name() string { return AdapterName }
 
+// TenantsTracked implements obs.TenantReporter, returning the number of active
+// tenant slots currently held (at most TenantMax).
 func (a *Adapter) TenantsTracked() int64 { return int64(len(a.slots)) }
 
+// Last returns the most recently rendered Prometheus exposition text.
 func (a *Adapter) Last() []byte { return a.last }
 
+// Export updates tenant slots and eviction state, renders s to Prometheus text,
+// retains the output for Last, and writes it to w if set.
 func (a *Adapter) Export(s obs.InstanceSnapshot) error {
 	a.publishes++
 	a.updateSlots(s)
@@ -116,6 +148,8 @@ func (a *Adapter) slotOf(t string) int {
 	return -1
 }
 
+// signatures summarizes each tenant's cumulative counter and histogram counts
+// so updateSlots can tell whether a tenant was active since the prior publish.
 func signatures(s obs.InstanceSnapshot) ([]string, []int64) {
 	tenants := s.Tenants()
 	sig := make([]int64, len(tenants))
@@ -144,6 +178,7 @@ func (a *Adapter) updateSlots(s obs.InstanceSnapshot) {
 		}
 	}
 	a.slots = slices.DeleteFunc(a.slots, func(sl slot) bool { return a.publishes-sl.lastActive >= a.cfg.EvictAfter })
+	// Evict before admitting new tenants so freed slots are filled on the same publish.
 	for i, t := range tenants {
 		if len(a.slots) >= a.cfg.TenantMax {
 			break
@@ -195,6 +230,8 @@ type series struct {
 	count  int64
 }
 
+// FamilyName returns the Prometheus metric family name mg_<component>_<metric>,
+// appending _total for counters.
 func FamilyName(component, metric string, k obs.Kind) string {
 	n := Prefix + component + "_" + metric
 	if k == obs.KindCounter {
@@ -210,6 +247,10 @@ func (a *Adapter) boundsFor(u obs.Unit) []int64 {
 	return SizeBuckets
 }
 
+// Rebucket maps full-resolution integer histogram buckets onto a strictly
+// increasing export bound list and returns cumulative bucket counts plus total.
+// Each bucket is placed at the first bound >= b.Hi (conservative upper bound,
+// within the histogram's < 0.79% relative bucket width).
 func Rebucket(bounds []int64, buckets []obs.Bucket) ([]int64, int64) {
 	cum := make([]int64, len(bounds))
 	total := int64(0)
@@ -249,6 +290,8 @@ func (a *Adapter) collect(s obs.InstanceSnapshot) []series {
 	}
 	for _, p := range s.Points {
 		d, ok := a.reg.Lookup(p.Component, p.Metric)
+		// Skip points whose kind disagrees with the registry so a forged
+		// snapshot cannot synthesize a colliding series name or negative counter.
 		if !ok || d.Kind != p.Kind {
 			continue
 		}
@@ -294,6 +337,7 @@ func (a *Adapter) render(s obs.InstanceSnapshot) []byte {
 			b.WriteString(x.family + "_bucket" + labelText(x.comp, x.labels, strconv.FormatInt(bound, 10)) + " " + strconv.FormatInt(x.hist[i], 10) + "\n")
 		}
 		b.WriteString(x.family + "_bucket" + labelText(x.comp, x.labels, "+Inf") + " " + strconv.FormatInt(x.count, 10) + "\n")
+		// _sum is omitted deliberately: the snapshot carries no exact sum, and a bucket-midpoint estimate would fabricate data.
 		b.WriteString(x.family + "_count" + labelText(x.comp, x.labels, "") + " " + strconv.FormatInt(x.count, 10) + "\n")
 	}
 	return b.Bytes()

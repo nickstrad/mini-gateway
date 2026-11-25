@@ -1,3 +1,6 @@
+// Package simrun wraps world.SimDriver with an obs.Collector and all four
+// adapters (csvflush, jsonstats, promtext, logline) so simulator scenarios
+// publish on the virtual clock without internal/sim importing any adapter.
 package simrun
 
 import (
@@ -19,13 +22,19 @@ import (
 )
 
 const (
+	// DefaultInterval is the default virtual-clock publish period in simulated scenarios.
 	DefaultInterval = 100 * time.Millisecond
-	DefaultArm      = "base"
-	Instance        = "sim-1"
-	Build           = "sim"
-	MaxPublishes    = 100_000
+	// DefaultArm is the arm name written into run_id when Options.Arm is empty.
+	DefaultArm = "base"
+	// Instance is the instance id stamped onto simulated snapshots.
+	Instance = "sim-1"
+	// Build is the build id stamped onto simulated snapshots and run.csv.
+	Build = "sim"
+	// MaxPublishes bounds periodic publishes per scenario run.
+	MaxPublishes = 100_000
 )
 
+// Options configures a flushed scenario run. Dir is required.
 type Options struct {
 	Interval  time.Duration
 	FlushAt   []sim.Time
@@ -36,6 +45,8 @@ type Options struct {
 	Prom      promtext.Config
 }
 
+// Run captures the world result, collector, final snapshot, CSV directory, and
+// outputs of all four attached adapters after Scenario completes.
 type Run struct {
 	Result    *world.Result
 	Collector *obs.Collector
@@ -50,10 +61,12 @@ type Run struct {
 	PublishAt []sim.Time
 }
 
+// RunID formats the schema v1 simulator run identifier "<scenario>/<seed>/<arm>".
 func RunID(scenario string, seed int64, arm string) string {
 	return scenario + "/" + strconv.FormatInt(seed, 10) + "/" + arm
 }
 
+// ConfigFingerprint builds a deterministic fingerprint for a scenario run.
 func ConfigFingerprint(sc world.Scenario, seed int64) string {
 	return fmt.Sprintf("%s-d%d", sc.Name, int64(sc.Duration))
 }
@@ -79,6 +92,9 @@ func (d *driver) Connect(c workload.Config) error {
 	if err := d.run.Collector.Register(simsrc.Workload(d.Workload)); err != nil {
 		return err
 	}
+	// Publish once at t=0 right after all sources are registered, then schedule
+	// periodic and extra FlushAt publishes as background timers so they never
+	// prevent quiesce or look like leaked timers.
 	d.publish()
 	d.schedule(sim.Later(d.S.Now(), d.opt.Interval))
 	for _, at := range d.opt.FlushAt {
@@ -106,6 +122,9 @@ func (d *driver) publish() {
 	d.run.PublishAt = append(d.run.PublishAt, d.S.Now())
 }
 
+// Scenario runs sc with seed while publishing to CSV, JSON, Prometheus, and
+// logline adapters on the virtual clock, publishes a final snapshot after Stop,
+// and closes the CSV writer to commit run.csv.
 func Scenario(sc world.Scenario, seed int64, opt Options) (*Run, error) {
 	if opt.Interval <= 0 {
 		opt.Interval = DefaultInterval
@@ -162,8 +181,12 @@ func Scenario(sc world.Scenario, seed int64, opt Options) (*Run, error) {
 	return run, errors.Join(errors.Join(d.errs...), cerr)
 }
 
+// Baseline looks up a named baseline scenario from world.
 func Baseline(name string) (world.Scenario, bool) { return world.Lookup(name) }
 
+// Check verifies every adapter's final output against Final: exact CSV round
+// trip, valid Prometheus exposition grammar, exact JSON round trip, one log
+// line per publish, and matching final publish sequence number.
 func (r *Run) Check() error {
 	var errs []error
 	if err := csvflush.RoundTrip(r.RunDir, r.Final); err != nil {

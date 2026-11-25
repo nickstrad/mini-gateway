@@ -112,6 +112,8 @@ func runCheck(t *testing.T, c Check, sub Subject) (bool, string) {
 	return r.failed, r.msg
 }
 
+// TestConformanceCatchesBrokenAdapters proves the conformance suite passes a
+// compliant toy adapter and fails the exact expected checks for six broken ones.
 func TestConformanceCatchesBrokenAdapters(t *testing.T) {
 	boom := errors.New("boom")
 	cases := []struct {

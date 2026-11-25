@@ -1,5 +1,6 @@
 package obs
 
+// Metric names exported under ComponentObs for the collector and its adapters.
 const (
 	MetricPublishes          = "publishes"
 	MetricExportErrors       = "export_errors"
@@ -16,6 +17,8 @@ const (
 	MetricPromTenantsTracked = "prom_tenants_tracked"
 )
 
+// SelfMetrics returns the declarations of the collector's own metrics under
+// ComponentObs.
 func SelfMetrics() []MetricDesc {
 	return []MetricDesc{
 		CounterDesc(MetricPublishes, 0, "Snapshots published by the collector, this one included.").AsHeadline(),
@@ -38,6 +41,8 @@ func (c *Collector) selfSource() Source {
 	return Source{Component: ComponentObs, Metrics: SelfMetrics(), Collect: c.emitSelf}
 }
 
+// emitSelf counts the in-progress publish in obs.publishes (c.seq+1); adapter
+// stats and error gauges reflect the state accumulated before this publish runs.
 func (c *Collector) emitSelf(e *Emitter) {
 	c.emitSelfAt(e, c.seq+1)
 }
@@ -80,6 +85,9 @@ func boolValue(b bool) int64 {
 	return 0
 }
 
+// selfView replaces the obs points in c.last with the collector's live post-publish
+// state so Collector.Health reflects publish N right after publish N instead of
+// lagging by one publish interval.
 func (c *Collector) selfView() InstanceSnapshot {
 	e := Emitter{reg: &c.reg, component: ComponentObs, detail: c.cfg.Detail}
 	c.emitSelfAt(&e, c.seq)

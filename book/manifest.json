@@ -27,7 +27,7 @@
       "chunk": 3,
       "title": "Numbers without a framework: snapshots, a collector, exporters",
       "file": "book/chapters/03-observability-spine.md",
-      "status": "planned"
+      "status": "live"
     },
     {
       "number": 4,

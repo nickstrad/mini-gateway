@@ -44,6 +44,8 @@ func files(t *testing.T, dir string) []byte {
 	return out
 }
 
+// TestScenarioFlush proves every baseline scenario runs with all four adapters,
+// passes round-trip and replay byte-identity checks, and matches simulator counts.
 func TestScenarioFlush(t *testing.T) {
 	for _, sc := range world.Scenarios() {
 		t.Run(sc.Name, func(t *testing.T) {
@@ -106,6 +108,8 @@ func checkBaselineCounts(t *testing.T, name string, s obs.InstanceSnapshot, r *w
 	}
 }
 
+// TestPublishIsAnEventOnTheVirtualClockAndFlushAtWorks proves periodic and
+// explicit FlushAt publishes run on the virtual clock and stamp exact t_ns values.
 func TestPublishIsAnEventOnTheVirtualClockAndFlushAtWorks(t *testing.T) {
 	sc, _ := world.Lookup("direct-1000-identical-reads")
 	at := sim.Time(20_500_000)
@@ -136,6 +140,8 @@ func TestPublishIsAnEventOnTheVirtualClockAndFlushAtWorks(t *testing.T) {
 	}
 }
 
+// TestDetailOffExportsNoHistogramAndNoTenant proves DetailOff suppresses
+// histograms and folds per-tenant workload counters into the empty tenant.
 func TestDetailOffExportsNoHistogramAndNoTenant(t *testing.T) {
 	sc, _ := world.Lookup("direct-mixed-transactions")
 	r, err := simrun.Scenario(sc, 1, simrun.Options{Dir: t.TempDir(), DetailOff: true})

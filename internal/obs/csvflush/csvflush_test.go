@@ -106,8 +106,11 @@ func subject() obstest.Subject {
 	}
 }
 
+// TestConformance proves csvflush passes all five obstest.Conformance checks at Exact fidelity.
 func TestConformance(t *testing.T) { obstest.Conformance(t, subject()) }
 
+// TestGoldenHeader pins the exact schema version 1 header lines of metrics.csv,
+// histograms.csv, and run.csv.
 func TestGoldenHeader(t *testing.T) {
 	want := map[string]string{
 		csvflush.MetricsFile:    "schema_version,run_id,flush_seq,t_ns,instance,component,metric,kind,tenant,outcome,reason,mode,value",
@@ -154,6 +157,8 @@ func twoFlushes(t testing.TB, cfg csvflush.Config) (*csvflush.Writer, obs.Instan
 	return w, last
 }
 
+// TestGoldenFilesAndByteIdentity proves equal inputs produce byte-identical CSV
+// files matching the committed fixture golden files.
 func TestGoldenFilesAndByteIdentity(t *testing.T) {
 	var outs [][]byte
 	for i := 0; i < 2; i++ {
@@ -174,6 +179,8 @@ func TestGoldenFilesAndByteIdentity(t *testing.T) {
 	}
 }
 
+// TestRowsSortedZeroRowsPresentIntegersOnly proves flushed rows are strictly
+// sorted, keep zero-valued unlabelled metrics, contain only integers, and pass RoundTrip.
 func TestRowsSortedZeroRowsPresentIntegersOnly(t *testing.T) {
 	w, last := twoFlushes(t, config(t.TempDir()))
 	if err := w.Close(); err != nil {
@@ -210,6 +217,8 @@ func TestRowsSortedZeroRowsPresentIntegersOnly(t *testing.T) {
 	}
 }
 
+// TestTenantRowsPersistAfterTheTenantGoesQuiet proves a tenant's rows remain in
+// later flushes with their last value after the source stops emitting that tenant.
 func TestTenantRowsPersistAfterTheTenantGoesQuiet(t *testing.T) {
 	var reg obs.Registry
 	_ = reg.Declare(obs.ComponentAdmission, obs.CounterDesc("requests", obs.LabelTenant, "R."))
@@ -251,6 +260,9 @@ func TestTenantRowsPersistAfterTheTenantGoesQuiet(t *testing.T) {
 	}
 }
 
+// TestSizeCapIsCountedAndAFailureInTestMode proves hitting obs.csv.max_bytes
+// stops writing, withholds run.csv, counts errors/drops, fails Close in strict
+// mode, and carries on in real-process mode.
 func TestSizeCapIsCountedAndAFailureInTestMode(t *testing.T) {
 	for _, strict := range []bool{true, false} {
 		cfg := config(t.TempDir())
@@ -290,6 +302,8 @@ func TestSizeCapIsCountedAndAFailureInTestMode(t *testing.T) {
 	}
 }
 
+// TestWriteErrorIsCountedAndAFailureInTestMode proves an injected write error is
+// reported to the collector, counts dropped rows, and fails Close in strict mode.
 func TestWriteErrorIsCountedAndAFailureInTestMode(t *testing.T) {
 	cfg := config(t.TempDir())
 	csvflush.SetCreate(&cfg, failingCreate(500))
@@ -315,6 +329,9 @@ func bucketRows(s obs.InstanceSnapshot) int64 {
 	return n
 }
 
+// TestAsyncWriterNeverBlocksTheCaller proves a full async queue drops and counts
+// without blocking Publish, keeps run.csv absent until Close, never decreases
+// drop counters at Close, and lands the final snapshot on Close.
 func TestAsyncWriterNeverBlocksTheCaller(t *testing.T) {
 	cfg := config(t.TempDir())
 	cfg.Async, cfg.Strict, cfg.QueueCap = true, false, 4
@@ -378,6 +395,8 @@ func TestAsyncWriterNeverBlocksTheCaller(t *testing.T) {
 	}
 }
 
+// TestAsyncWriterUnderConcurrentStatsReads proves FlushStats is race-free while
+// the async writer goroutine drains concurrent publishes.
 func TestAsyncWriterUnderConcurrentStatsReads(t *testing.T) {
 	cfg := config(t.TempDir())
 	cfg.Async, cfg.QueueCap = true, 2
@@ -407,6 +426,8 @@ func TestAsyncWriterUnderConcurrentStatsReads(t *testing.T) {
 	}
 }
 
+// TestRoundTripCatchesPlantedBugs proves RoundTrip detects both PlantDropLastBucket
+// and PlantStaleValue on the shared fixture.
 func TestRoundTripCatchesPlantedBugs(t *testing.T) {
 	for name, plant := range map[string]func(*csvflush.Config){
 		"drop-last-bucket": csvflush.PlantDropLastBucket,
@@ -430,6 +451,8 @@ func TestRoundTripCatchesPlantedBugs(t *testing.T) {
 	}
 }
 
+// TestReadRejectsIncompleteOrForeignRuns proves Read refuses a directory without
+// run.csv and refuses rows carrying an unknown schema_version.
 func TestReadRejectsIncompleteOrForeignRuns(t *testing.T) {
 	w, _ := twoFlushes(t, config(t.TempDir()))
 	if _, err := csvflush.Read(w.RunDir()); err == nil {
@@ -449,6 +472,8 @@ func TestReadRejectsIncompleteOrForeignRuns(t *testing.T) {
 	}
 }
 
+// TestRunIDValidation proves ValidRunID rejects path traversal, empty segments,
+// whitespace, and overlong paths while accepting canonical simulator run IDs.
 func TestRunIDValidation(t *testing.T) {
 	for _, id := range []string{"", "../x", "a//b", "/abs", "a/./b", "sp ace", strings.Repeat("a/", 9) + "a"} {
 		if csvflush.ValidRunID(id) == nil {
@@ -460,6 +485,7 @@ func TestRunIDValidation(t *testing.T) {
 	}
 }
 
+// BenchmarkFlushFixture compares caller-side Export latency in sync vs async mode.
 func BenchmarkFlushFixture(b *testing.B) {
 	s, _ := obstest.FixtureSnapshot(b)
 	for _, async := range []bool{false, true} {
