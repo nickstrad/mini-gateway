@@ -307,7 +307,6 @@ func (b *backend) terminate() {
 	}
 	b.msg = nil
 	b.out = nil
-	b.outBuf = nil
 	b.emit(encError(nil, errorf("FATAL", "57P01", "terminating connection due to administrator command")))
 	b.after = afterClose
 	b.advance()

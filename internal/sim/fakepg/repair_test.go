@@ -263,3 +263,25 @@ func TestMatchRowsRefusesOverflowingSizes(t *testing.T) {
 		}
 	}
 }
+
+func TestTerminateDuringABackPressuredReplyKeepsTheFraming(t *testing.T) {
+	w := newWorld(t, fakepg.Config{})
+	p := w.client()
+	from := len(p.Events())
+	p.StopReading(true)
+	p.Query("SELECT repeat('x', 1000) FROM generate_series(1, 20000)")
+	w.run(10 * time.Millisecond)
+	w.s.ApplyFault(sim.Fault{Kind: fakepg.FaultTerminate, Target: id(p)})
+	w.run(time.Millisecond)
+	p.StopReading(false)
+	w.run(time.Second)
+	got := p.TraceFrom(from)
+	if strings.Contains(got, "protocol-error") || !strings.HasSuffix(got, "E:57P01 eof") {
+		tail := got
+		if len(tail) > 80 {
+			tail = tail[len(tail)-80:]
+		}
+		t.Fatalf("after a terminate under back pressure: ...%s", tail)
+	}
+	w.done(p)
+}
