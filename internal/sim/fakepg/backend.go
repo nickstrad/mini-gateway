@@ -51,6 +51,7 @@ type run struct {
 	readFound bool
 	described bool
 	tooLarge  bool
+	rows      int64
 }
 
 type segment struct {
@@ -482,6 +483,7 @@ func (b *backend) finalize() {
 		srv.logStatement(b, r, "", true)
 	}
 	if b.tx != nil {
+		srv.logTx(b, b.tx, TxLost)
 		srv.stats.txLost++
 		srv.stats.txOpen--
 		b.tx = nil

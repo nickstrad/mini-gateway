@@ -402,6 +402,7 @@ func (b *backend) write(r *run) *pgError {
 	if st.Kind == KindInsert && b.rowsWithPending()+1 > b.srv.cfg.MaxRows {
 		return &errTableFull
 	}
+	r.rows = n
 	if n > 0 {
 		w := pendingWrite{op: st.Kind, key: st.Key, value: st.Value, text: st.Text, tag: st.Tag, stmtSeq: r.seq}
 		if b.tx == nil {
@@ -463,9 +464,14 @@ func (srv *Server) apply(b *backend, txID int64, w pendingWrite) {
 	if srv.cfg.plant.doubleApply {
 		times = 2
 	}
+	srv.applyCalls++
+	if srv.applyCalls == srv.cfg.plant.dropWrite {
+		return
+	}
 	for i := 0; i < times; i++ {
-		switch w.op {
-		case KindDelete:
+		switch {
+		case srv.cfg.plant.phantomFrom > 0 && srv.applyCalls >= srv.cfg.plant.phantomFrom:
+		case w.op == KindDelete:
 			srv.del(w.key)
 		default:
 			if srv.put(w.key, w.value) != nil {
@@ -486,14 +492,14 @@ func (b *backend) commit() *pgError {
 		b.rollback()
 		return &errTableFull
 	}
-	b.tx = nil
-	b.srv.stats.txOpen--
 	if tx.failed {
-		b.srv.stats.txRolledBack++
-		b.restoreSettings(tx)
+		b.rollback()
 		return nil
 	}
+	b.tx = nil
+	b.srv.stats.txOpen--
 	b.srv.stats.txCommitted++
+	b.srv.logTx(b, tx, TxCommitted)
 	for _, w := range tx.writes {
 		b.srv.apply(b, tx.id, w)
 	}
@@ -505,6 +511,7 @@ func (b *backend) rollback() {
 	b.tx = nil
 	b.srv.stats.txOpen--
 	b.srv.stats.txRolledBack++
+	b.srv.logTx(b, tx, TxRolledBack)
 	b.restoreSettings(tx)
 }
 
@@ -559,7 +566,7 @@ func (b *backend) txControl(k Kind) *pgError {
 
 func (srv *Server) logStatement(b *backend, r *run, code string, aborted bool) {
 	srv.stmtLog.add(StatementRecord{Seq: r.seq, Backend: b.id, TxID: r.txID, Kind: r.st.Kind, Tag: r.st.Tag,
-		Text: r.st.Text, Start: r.start, End: srv.s.Now(), Code: code, Aborted: aborted})
+		Text: r.st.Text, Start: r.start, End: srv.s.Now(), Code: code, Aborted: aborted, Rows: r.rows})
 }
 
 func (srv *Server) cancel(pid uint32, secret []byte) {

@@ -55,6 +55,8 @@ type Snapshot struct {
 	WriteLogDropped     int64
 	StatementLogLen     int64
 	StatementLogDropped int64
+	TxLogLen            int64
+	TxLogDropped        int64
 	Faults              FaultSnapshot
 }
 
@@ -95,6 +97,8 @@ func (srv *Server) Snapshot() Snapshot {
 		WriteLogDropped:     srv.writeLog.dropped,
 		StatementLogLen:     int64(len(srv.stmtLog.items)),
 		StatementLogDropped: srv.stmtLog.dropped,
+		TxLogLen:            int64(len(srv.txLog.items)),
+		TxLogDropped:        srv.txLog.dropped,
 		Faults:              FaultSnapshot{ByKind: srv.faults.counts, Cleared: srv.faults.cleared, NoTarget: srv.faults.noTarget},
 	}
 }

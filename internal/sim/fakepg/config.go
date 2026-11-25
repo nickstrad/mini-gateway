@@ -88,6 +88,9 @@ type Config struct {
 type plant struct {
 	doubleApply bool
 	idleInTx    bool
+	dropWrite   int64
+	phantomFrom int64
+	skipClear   sim.FaultKind
 }
 
 func (c Config) normalized() Config {

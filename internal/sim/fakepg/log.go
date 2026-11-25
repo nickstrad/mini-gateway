@@ -15,6 +15,22 @@ type WriteRecord struct {
 	At      sim.Time
 }
 
+type TxOutcome uint8
+
+const (
+	TxCommitted TxOutcome = iota + 1
+	TxRolledBack
+	TxLost
+)
+
+type TxRecord struct {
+	TxID    int64
+	Backend int64
+	Outcome TxOutcome
+	Writes  int64
+	At      sim.Time
+}
+
 type StatementRecord struct {
 	Seq     int64
 	Backend int64
@@ -26,6 +42,7 @@ type StatementRecord struct {
 	End     sim.Time
 	Code    string
 	Aborted bool
+	Rows    int64
 }
 
 type ring[T any] struct {

@@ -73,24 +73,26 @@ type stats struct {
 }
 
 type Server struct {
-	s        *sim.Sim
-	net      *simnet.Net
-	cfg      Config
-	l        *simnet.Listener
-	backends []*backend
-	nextPID  uint32
-	keys     *rand.Rand
-	table    []row
-	waitQ    []*backend
-	slots    int
-	stmtSeq  int64
-	writeSeq int64
-	txSeq    int64
-	stats    stats
-	writeLog ring[WriteRecord]
-	stmtLog  ring[StatementRecord]
-	faults   faultState
-	readBuf  [readChunk]byte
+	s          *sim.Sim
+	net        *simnet.Net
+	cfg        Config
+	l          *simnet.Listener
+	backends   []*backend
+	nextPID    uint32
+	keys       *rand.Rand
+	table      []row
+	waitQ      []*backend
+	slots      int
+	stmtSeq    int64
+	writeSeq   int64
+	txSeq      int64
+	applyCalls int64
+	stats      stats
+	writeLog   ring[WriteRecord]
+	stmtLog    ring[StatementRecord]
+	txLog      ring[TxRecord]
+	faults     faultState
+	readBuf    [readChunk]byte
 }
 
 func New(net *simnet.Net, cfg Config) (*Server, error) {
@@ -99,6 +101,7 @@ func New(net *simnet.Net, cfg Config) (*Server, error) {
 	srv.keys = srv.s.Stream("fakepg/keys")
 	srv.writeLog.cfg = cfg.WriteLog
 	srv.stmtLog.cfg = cfg.StatementLog
+	srv.txLog.cfg = cfg.StatementLog
 	for _, r := range cfg.Rows {
 		if err := srv.put(r.Key, r.Value); err != nil {
 			return nil, err
@@ -231,6 +234,11 @@ func (srv *Server) Rows() []Row {
 
 func (srv *Server) WriteLog() []WriteRecord         { return srv.writeLog.all() }
 func (srv *Server) StatementLog() []StatementRecord { return srv.stmtLog.all() }
+func (srv *Server) TransactionLog() []TxRecord      { return srv.txLog.all() }
+
+func (srv *Server) logTx(b *backend, tx *txn, o TxOutcome) {
+	srv.txLog.add(TxRecord{TxID: tx.id, Backend: b.id, Outcome: o, Writes: int64(len(tx.writes)), At: srv.s.Now()})
+}
 
 func (srv *Server) quiesce() error {
 	st := &srv.stats
