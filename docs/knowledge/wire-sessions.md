@@ -13,13 +13,20 @@ Facts a later builder (chunk 6's shell and engine, chunk 7's pool) needs before 
   for the database side).
 - `n < len(b)` only when the machine is done with startup (ready or closed). After
   `ActReady` the rest of the bytes belong to the query phase: `FrontendTracker` (client) and
-  `ReplyTracker` (database). The machines never consume past their last startup message.
+  `CycleTracker` (database; `NewCycleTracker`). The machines never consume past their last startup message.
 - After `ActStartTLS` the shell must read **exactly** the 8 bytes of the request (it is a
   separate `Receive` call in the tests) and hand the socket to TLS. Bytes the machine sees
   before `HandshakeDone` are a violation (`bytes-before-handshake`), not data.
 - `ClientConfig.Keys` (one `KeyIssuer`) and `Random` must be shared by all sessions of an
   instance: keys are unique per issuer (sequential process ids from a random base, random
-  secrets). `MockSecret` is required for SCRAM (salts of unknown users).
+  secrets). Two independent issuers are not coordinated. `MockSecret` is required for SCRAM
+  (salts of unknown users); leave `MockIterations` at 0 and the mock challenge takes the
+  tenant table's most common iteration count and salt length, so keep every verifier the same
+  shape or unknown users can be told apart by `i=`/`s=`.
+- `HandshakeDone` classifies by outcome on both sides: deadline → `deadline`, violation →
+  `protocol-violation` (`bad-handshake`), anything else that is not completed → `tls-failed`;
+  out-of-range values are clamped. A ready session ignores every startup event.
+- The SCRAM pure functions refuse any message above `MaxScramMessage` (2,048 bytes).
 - Deadlines are events: the shell owns the timers (`DefaultClientStartupTimeout` 5 s,
   `DefaultConnectTimeout` 2 s).
 
@@ -36,6 +43,10 @@ Facts a later builder (chunk 6's shell and engine, chunk 7's pool) needs before 
   protocol 2.0: server supports 3.0 to 3.0\n"` + NUL, no length word. 4.0 gets a normal
   `FATAL 0A000`. 3.x with x > 0, or any `_pq_.` option, gets `NegotiateProtocolVersion`
   (newest 3.0, the unknown options listed) and the login continues.
+- A second encryption request gets `FATAL 0A000 unsupported frontend protocol 1234.5679:
+  server supports 3.0 to 3.0` (`.5680` for GSS), not another `N` (seen live for the repeated
+  `SSLRequest`). Postgres tracks `ssl_done`/`gss_done`; a refused `SSLRequest` clears
+  `gss_done` and a refused GSS request clears `ssl_done`. The fake follows that rule.
 - Unknown user under SCRAM: Postgres runs a mock exchange and fails at the end with the same
   `28P01` as a wrong password. Unknown database: `R12 R0` and then `FATAL 3D000`.
 - `scripts/tier-r.sh` now starts a third container (`-scram`: scram-sha-256, password
@@ -59,3 +70,10 @@ after a virtual duration. The fake's answer is `fakepg.Config.TLS` (`Answer` `N`
 then), and relays queries with the two trackers. A database login failure is sent to the
 client as `FATAL 08006 could not connect to the database: <class>`. It is a test harness, not
 the engine of chunk 6.
+
+## Merging with chunk 5
+
+`internal/sim/fakepg` imports `internal/pgwire` (shared SCRAM and encoders). An in-package
+test of `internal/pgwire` (`package pgwire`) must therefore not import `fakepg` (import
+cycle in tests); use an external test package (`package pgwire_test`), as
+`client_sim_test.go` does.
