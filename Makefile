@@ -8,6 +8,7 @@
 #   make ci               scripts/ci-fast.sh, exactly what CI runs
 #   make lint             the four lints only (gate check G1)
 #   make site             build the Pages site into _site/
+#   make csv-assert RUNS=<dir> [SQL=<files>]   SQL assertions over flushed CSV runs (DuckDB)
 #
 # test, chaos and bench fail with "not built yet" while their marker file exists under
 # scripts/.not-built/, so a green target is never a stub. The chunk that builds a target
@@ -16,7 +17,7 @@
 SHELL := /bin/bash
 NOT_BUILT := scripts/.not-built
 
-.PHONY: test chaos bench gate ci lint site
+.PHONY: test chaos bench gate ci lint site csv-assert
 
 test:
 	@if [ -e $(NOT_BUILT)/make-test ]; then echo "make test: not built yet" >&2; exit 1; fi
@@ -41,3 +42,7 @@ lint:
 
 site:
 	scripts/site.sh _site
+
+csv-assert:
+	@[ -n "$(RUNS)" ] || { echo "usage: make csv-assert RUNS=<root or run directory> [SQL=<sql files>]" >&2; exit 2; }
+	scripts/csv-assert.sh $(RUNS) $(SQL)

@@ -20,7 +20,7 @@ func productAST(t *testing.T, visit func(string, *ast.File)) {
 				return e
 			}
 			if d.IsDir() {
-				if d.Name() == "simtest" || d.Name() == "obstest" {
+				if d.Name() == "simtest" || d.Name() == "obstest" || d.Name() == "csvflush" {
 					return filepath.SkipDir
 				}
 				return nil

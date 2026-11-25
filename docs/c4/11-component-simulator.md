@@ -1,6 +1,6 @@
 # C4 Level 3: Components: simulator harness
 
-**Built so far: chunks 0–2. Dashed parts are planned.** In this diagram 14 of 20 elements and 36 of 42 relationships are built. Model: diagram `component-simulator` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–3. Dashed parts are planned.** In this diagram 14 of 20 elements and 36 of 42 relationships are built. Model: diagram `component-simulator` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 The harness owns the world around the engine. It implements the engine's transport seam, so the engine under test is the engine that ships. Several engines can run on one loop, which is how the three-instance scenarios are made. The kernel came first (chunk 1) and is proved on a toy echo protocol. Chunk 2 added the world the proxy will stand in: the fake Postgres, the simulated clients and scenarios that run the clients straight at the fake. No engine exists yet, so those direct baselines are the control arms for later chunks.
 

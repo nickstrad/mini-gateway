@@ -1,6 +1,6 @@
 # C4 Level 2: Containers: drivers and seams
 
-**Built so far: chunks 0–2. Dashed parts are planned.** In this diagram 2 of 13 elements and 3 of 18 relationships are built. Model: diagram `container-seams` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–3. Dashed parts are planned.** In this diagram 2 of 13 elements and 3 of 18 relationships are built. Model: diagram `container-seams` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 The verdict on the backend interface, drawn. There is no generic backend interface. There are three seams: the engine's byte transport (implemented by the shell with TCP and by the simulator), the wire layer (the only product package that imports pgproto3), and the work vocabulary (the only thing the cores see). A second protocol would be a sibling of the wire layer producing the same vocabulary.
 

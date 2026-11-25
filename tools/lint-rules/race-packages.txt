@@ -1,3 +1,5 @@
 # Packages the gate and CI also test with the race detector: one `go test` package pattern
 # per line ("./internal/shell/..."). '#' lines and blank lines are ignored. A line that
 # matches no package is a gate failure. Empty at chunk 0.
+# Chunk 3: the CSV flush adapter's real-process mode (writer goroutine, bounded queue).
+./internal/obs/csvflush/...

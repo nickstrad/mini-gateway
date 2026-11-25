@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "id": "mini-gateway",
  "title": "mini-gateway — target architecture",
- "revision": "target-approved-2026-11-24-rulings+built-through-chunk-2",
+ "revision": "target-approved-2026-11-24-rulings+built-through-chunk-3",
  "defaultDiagramId": "context",
  "model": {
   "elements": [
@@ -94,8 +94,8 @@
     "id": "csvfiles",
     "kind": "softwareSystem",
     "name": "Flushed CSV files",
-    "description": "One directory per run on local disk: run.csv, metrics.csv, histograms.csv, schema version 1 (PLAN.md section 7.7). Same columns in every flush; every tenant has its own rows. Nothing has to be running to read them.",
-    "status": "planned",
+    "description": "One directory per run on local disk: run.csv, metrics.csv, histograms.csv, schema version 1 (PLAN.md section 7.7; columns in docs/csv-schema.md). Same columns in every flush; every tenant has its own rows; run.csv is written last, so a run without it did not finish. Nothing has to be running to read them.",
+    "status": "existing",
     "tags": [
      "external"
     ],
@@ -110,8 +110,8 @@
     "id": "duckdb",
     "kind": "softwareSystem",
     "name": "DuckDB (analysis tool)",
-    "description": "The DuckDB command-line tool, run after a run by test and benchmark scripts and by hand. Reads the flushed files with read_csv and runs SQL assertions and report queries. Never imported, linked or started by the proxy.",
-    "status": "planned",
+    "description": "The DuckDB command-line tool (version family 1.5.x), run after a run by scripts/csv-assert.sh and by hand. Reads the flushed files with read_csv and runs SQL over them. Never imported, linked or started by the proxy.",
+    "status": "existing",
     "tags": [
      "external"
     ],
@@ -454,11 +454,11 @@
     "id": "c-obs",
     "kind": "container",
     "name": "Observability",
-    "description": "internal/obs. Snapshot conventions (the one raw export), integer histogram, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health.",
+    "description": "internal/obs and its sub-packages; test/analysis; scripts/csv-assert.sh. Snapshot conventions (the one raw export), integer histogram, metric registry, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health, and the SQL assertions over flushed files.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunk 1: the integer histogram, the conservation check and gauge, and the snapshot test helpers (obstest). Not built: the instance snapshot, the collector, the adapter interface and every adapter, fleet merge, health."
+     "Built in chunks 1 and 3: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP."
     ],
     "docIds": [],
     "sourceIds": [
@@ -479,7 +479,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunk 1: the integer histogram, the conservation check and gauge, and the snapshot test helpers (obstest). Not built: the instance snapshot, the collector, the adapter interface and every adapter, fleet merge, health."
+     "Built in chunks 1 and 3: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP."
     ],
     "docIds": [],
     "sourceIds": [
@@ -1559,12 +1559,10 @@
     "id": "o-contract",
     "kind": "component",
     "name": "Snapshot conventions",
-    "description": "The one common raw export. What every component's Snapshot() returns: a plain struct of monotonic counters and current gauges. No wall-clock time, no map order, no telemetry imports. Nothing else leaves a component.",
-    "status": "planned",
+    "description": "The one common raw export. What every component's Snapshot() returns: a plain struct of monotonic counters and current gauges. No wall-clock time, no map order, no telemetry imports. Nothing else leaves a component; an import rule keeps components and the simulator from importing any adapter.",
+    "status": "existing",
     "tags": [],
-    "plannedNotes": [
-     "Built in chunk 1: the Snapshotter interface, and the obstest check that a snapshot is a plain struct with no time and no map. Not built: the instance snapshot and the components that fill it (chunk 3 on)."
-    ],
+    "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -1605,8 +1603,8 @@
    {
     "id": "o-obstest",
     "kind": "component",
-    "name": "Snapshot test helpers",
-    "description": "internal/obs/obstest. Test plumbing: checks that a snapshot is a plain struct of integers (no time, no map), and that every counter in it moved in at least one test.",
+    "name": "Snapshot and adapter test helpers",
+    "description": "internal/obs/obstest. Test plumbing: checks that a snapshot is a plain struct of integers (no time, no map), and that every counter in it moved in at least one test. Also the conformance test every adapter must pass (values, labels, determinism, no kept reference, errors counted), its shared fixture, and the golden-file helper.",
     "status": "existing",
     "tags": [
      "test"
@@ -1620,11 +1618,56 @@
     "technology": "Go"
    },
    {
+    "id": "o-registry",
+    "kind": "component",
+    "name": "Metric registry",
+    "description": "Every exported metric is declared first: component, name, kind (counter, gauge, histogram), which of the four labels it has (tenant, outcome, reason, mode), unit, merge rule (sum, or max for a high-water mark), and whether it is a headline metric. Refuses a bad or repeated name and names that would clash in Prometheus.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-instance",
+    "kind": "component",
+    "name": "Instance snapshot",
+    "description": "What the collector publishes and all an adapter gets: instance id, build, config fingerprint, publish sequence number, and sorted lists of points (integer values) and histogram points. No time, no map.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-detail",
+    "kind": "component",
+    "name": "Detail gate",
+    "description": "The obs.detail setting. Off: the collector folds every tenant into one and drops histogram points, and a detail histogram holds no buckets (a record is one nil check). On: per-tenant rows and full histograms.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
     "id": "o-collector",
     "kind": "component",
     "name": "Collector",
-    "description": "Assembles one instance snapshot from the component snapshots, with instance id, build and config fingerprint. Keeps the last published copy; readers never wait on the engine. The only reader of component snapshots.",
-    "status": "planned",
+    "description": "Components register as sources: their metric declarations, their Snapshot and a mapping from it to points. At each publish it assembles one instance snapshot (with instance id, build and config fingerprint), refusing an undeclared, mistyped, duplicate or missing metric, and hands it to every attached adapter. Keeps the last published snapshot and gives out copies. Counts its own work (publishes, emit errors, export errors per adapter, CSV flushes and drops) as component obs. The only path from a component snapshot to an adapter.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1638,8 +1681,8 @@
     "id": "o-adapter",
     "kind": "component",
     "name": "Adapter interface",
-    "description": "The one interface every output form implements: take the published instance snapshot, produce output. One conformance test for all adapters. Components cannot see past it, so none knows about CSV, DuckDB, OTel or Prometheus.",
-    "status": "planned",
+    "description": "The one interface every output form implements: a name, and take the published instance snapshot and produce output. A failed export is counted by the collector and never reaches the publisher. One conformance test for all adapters. Components cannot see past it, so none knows about CSV, DuckDB, OTel or Prometheus.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1653,8 +1696,8 @@
     "id": "o-merge",
     "kind": "component",
     "name": "Fleet merge",
-    "description": "Merges instance snapshots: counters and gauges sum, histograms merge, ratios are recomputed, never averaged.",
-    "status": "planned",
+    "description": "Merges instance snapshots: each metric by its declared rule (sum, or max for a high-water mark), histograms bucket by bucket. Refuses an undeclared metric, a kind or unit clash and an integer overflow. Ratios are never stored, so they are recomputed from the merged counts, never averaged.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1668,10 +1711,12 @@
     "id": "o-health",
     "kind": "component",
     "name": "Health",
-    "description": "Three states: ok; degraded while shedding, while the breaker is open, at the limit's floor, or draining; failed only when this instance cannot work. A database outage is degraded.",
+    "description": "Three states, the worst over a table of named rules, with a reason per rule and a JSON body. The collector rule: degraded before the first publish, and while the latest publish had metric errors or an adapter's export failed. Other rules: degraded while shedding, while the breaker is open, at the limit's floor, or draining; failed only when this instance cannot work. A database outage is degraded.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 3 (internal/obs: health.go): the three states, the rule table (overall state is the worst rule), the collector rule and the JSON body. Not built: the rules for shedding, an open breaker, the limit's floor, draining and a database outage, and any rule that gives failed (chunk 6 on)."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -1683,8 +1728,8 @@
     "id": "o-prom",
     "kind": "component",
     "name": "Prometheus text exporter",
-    "description": "Low-cardinality labels and a bounded tenant label (configured tenants up to a cap, the rest as other).",
-    "status": "planned",
+    "description": "internal/obs/promtext. Names mg_<component>_<metric>, low-cardinality labels and a bounded tenant label: configured tenants, or the first active ones, up to a cap; quiet tenants lose their slot; the rest are summed as other. Histograms are re-bucketed onto a short bound list. Holds the exposition-grammar checker the tests use.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1698,8 +1743,8 @@
     "id": "o-json",
     "kind": "component",
     "name": "JSON stats exporter",
-    "description": "The full snapshot, including every active tenant.",
-    "status": "planned",
+    "description": "internal/obs/jsonstats. The full snapshot, including every active tenant; it decodes back to an equal snapshot.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1713,8 +1758,8 @@
     "id": "o-csv",
     "kind": "component",
     "name": "CSV flush adapter",
-    "description": "Flushes snapshots to disk at each publish and at the end of a run, in a stable versioned schema with unbounded per-tenant rows. The testing path: tests assert on the files with no Collector or Prometheus running. Bounded size; drop-and-count on a write error.",
-    "status": "planned",
+    "description": "internal/obs/csvflush. Flushes snapshots to disk at each publish and at the end of a run, in a stable versioned schema with unbounded per-tenant rows. The testing path: tests assert on the files with no Collector or Prometheus running. Bounded size; drop-and-count at the cap, on a write error and on a full queue. Writes in the caller (simulator and tests) or through a bounded queue that never blocks the caller (real process). Holds the reader and the round-trip check: the final flush read back equals the snapshot.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1728,8 +1773,8 @@
     "id": "o-log",
     "kind": "component",
     "name": "Log-line exporter",
-    "description": "One structured line per interval.",
-    "status": "planned",
+    "description": "internal/obs/logline. One structured line per publish: sequence number, instance, build, config fingerprint and the headline metrics. At most 1,024 bytes.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1753,6 +1798,72 @@
     ],
     "parentId": "c-obs",
     "technology": "Go"
+   },
+   {
+    "id": "o-simsrc",
+    "kind": "component",
+    "name": "Simulator source mappings",
+    "description": "internal/obs/simsrc. The metric declarations and the snapshot-to-points mappings of the four simulator components that exist: the kernel, simnet, the fake Postgres and the workload. It lives here because the simulator packages are frozen; a later component writes the same two functions in its own package.",
+    "status": "existing",
+    "tags": [
+     "test"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-catalog",
+    "kind": "component",
+    "name": "Metric catalog and schema document",
+    "description": "internal/obs/catalog. The registry of every source the product registers, and the generator of docs/csv-schema.md (columns of the three files and every metric). Its test fails when the committed document differs from the code; scripts/gen-docs.sh regenerates or checks it.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-simrun",
+    "kind": "component",
+    "name": "Scenario flush harness",
+    "description": "internal/obs/simrun. Runs a simulator world scenario with a collector that publishes on the virtual clock and with the CSV, JSON, Prometheus and log adapters attached, then checks every output against the final snapshot. Its tests run the five direct baselines twice per seed and compare the files byte for byte.",
+    "status": "existing",
+    "tags": [
+     "test"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-assert",
+    "kind": "component",
+    "name": "SQL assertions and their runner",
+    "description": "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The first assertion files check the direct baselines' counts.",
+    "status": "existing",
+    "tags": [
+     "test"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Bash, SQL"
    },
    {
     "id": "d-clients",
@@ -3980,7 +4091,7 @@
     "id": "o1",
     "sourceId": "n-engine",
     "targetId": "o-collector",
-    "label": "Hands over every component's snapshot at each publish",
+    "label": "Registers each component as a source and publishes once per interval",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
@@ -3993,8 +4104,8 @@
     "id": "o2",
     "sourceId": "o-collector",
     "targetId": "o-contract",
-    "label": "Assembles the instance snapshot",
-    "status": "planned",
+    "label": "Calls every source's Snapshot and mapping at each publish",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4007,7 +4118,7 @@
     "sourceId": "o-contract",
     "targetId": "o-hist",
     "label": "Histograms inside snapshots",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4019,8 +4130,8 @@
     "id": "o4",
     "sourceId": "o-collector",
     "targetId": "o-health",
-    "label": "Derives the health state and its reasons",
-    "status": "planned",
+    "label": "Evaluates the rule table on its last snapshot",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4072,7 +4183,7 @@
     "sourceId": "o-prom",
     "targetId": "o-adapter",
     "label": "Implements the adapter interface",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4085,7 +4196,7 @@
     "sourceId": "o-json",
     "targetId": "o-adapter",
     "label": "Implements the adapter interface",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4098,7 +4209,7 @@
     "sourceId": "o-csv",
     "targetId": "o-adapter",
     "label": "Implements the adapter interface",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4111,7 +4222,7 @@
     "sourceId": "o-log",
     "targetId": "o-adapter",
     "label": "Implements the adapter interface",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4148,9 +4259,9 @@
    {
     "id": "o14",
     "sourceId": "o-merge",
-    "targetId": "o-contract",
-    "label": "Merges snapshots from several instances",
-    "status": "planned",
+    "targetId": "o-instance",
+    "label": "Merges the snapshots of several instances into one",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4162,8 +4273,8 @@
     "id": "o15",
     "sourceId": "o-adapter",
     "targetId": "o-collector",
-    "label": "Receives the last published snapshot; all an adapter can read",
-    "status": "planned",
+    "label": "Is attached to it and receives each published snapshot; all an adapter can read",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4176,7 +4287,7 @@
     "sourceId": "o-csv",
     "targetId": "csvfiles",
     "label": "Flushes rows at each publish and at the end of a run",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4189,7 +4300,7 @@
     "sourceId": "duckdb",
     "targetId": "csvfiles",
     "label": "Reads the files directly",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4213,8 +4324,8 @@
    {
     "id": "o19",
     "sourceId": "n-e2e",
-    "targetId": "duckdb",
-    "label": "Runs SQL assertions and report queries after a run",
+    "targetId": "o-assert",
+    "label": "Runs the SQL assertions after a run",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
@@ -4254,7 +4365,7 @@
     "sourceId": "n-sim",
     "targetId": "o-obstest",
     "label": "Scenario tests check that snapshots are plain and that every counter moves",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4267,7 +4378,7 @@
     "sourceId": "o-obstest",
     "targetId": "o-contract",
     "label": "Checks a snapshot against the conventions",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4280,7 +4391,319 @@
     "sourceId": "o-contract",
     "targetId": "o-conserve",
     "label": "Counters in a snapshot are checked for conservation; gauges keep their peak",
-    "status": "planned",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o25",
+    "sourceId": "o-collector",
+    "targetId": "o-instance",
+    "label": "Assembles, sorts and publishes one; keeps the last",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o26",
+    "sourceId": "o-collector",
+    "targetId": "o-registry",
+    "label": "Checks every emitted point against its declaration",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o27",
+    "sourceId": "o-collector",
+    "targetId": "o-detail",
+    "label": "Folds tenants and drops histogram points when detail is off",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o28",
+    "sourceId": "o-detail",
+    "targetId": "o-hist",
+    "label": "A detail histogram wraps one when detail is on",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o29",
+    "sourceId": "o-instance",
+    "targetId": "o-hist",
+    "label": "Histogram points carry its bucket lists",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o31",
+    "sourceId": "o-prom",
+    "targetId": "o-registry",
+    "label": "Reads each metric's kind, unit and help text",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o32",
+    "sourceId": "o-log",
+    "targetId": "o-registry",
+    "label": "Reads which metrics are headline",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o33",
+    "sourceId": "o-merge",
+    "targetId": "o-registry",
+    "label": "Reads each metric's merge rule",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o34",
+    "sourceId": "o-simsrc",
+    "targetId": "n-sim",
+    "label": "Reads the snapshots of the kernel, simnet, the fake Postgres and the workload",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o35",
+    "sourceId": "o-simsrc",
+    "targetId": "o-collector",
+    "label": "Registers one source per simulator component, with its metric declarations",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o37",
+    "sourceId": "o-catalog",
+    "targetId": "o-simsrc",
+    "label": "Lists every metric it declares",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o38",
+    "sourceId": "o-catalog",
+    "targetId": "o-csv",
+    "label": "Reads the column lists of the three files",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o39",
+    "sourceId": "o-catalog",
+    "targetId": "o-registry",
+    "label": "Builds the full registry, the collector's own metrics included",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o40",
+    "sourceId": "o-simrun",
+    "targetId": "n-sim",
+    "label": "Runs a world scenario through the simulator driver; publishes from a timer on the virtual clock",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o41",
+    "sourceId": "o-simrun",
+    "targetId": "o-collector",
+    "label": "Creates it, attaches the four adapters, publishes every 100 ms of virtual time and at the end",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o42",
+    "sourceId": "o-simrun",
+    "targetId": "o-simsrc",
+    "label": "Takes the sources of the scenario's world",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o43",
+    "sourceId": "o-simrun",
+    "targetId": "o-csv",
+    "label": "Checks the final flush read back equals the final snapshot",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o44",
+    "sourceId": "o-simrun",
+    "targetId": "o-prom",
+    "label": "Checks the text with the grammar checker",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o45",
+    "sourceId": "o-simrun",
+    "targetId": "o-json",
+    "label": "Checks the document decodes to the final snapshot",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o46",
+    "sourceId": "o-simrun",
+    "targetId": "o-assert",
+    "label": "Its tests run the runner over the baseline runs and over planted bad runs",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
+   },
+   {
+    "id": "o47",
+    "sourceId": "o-assert",
+    "targetId": "duckdb",
+    "label": "Runs the guard, the views and each assertion file",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "DuckDB CLI"
+   },
+   {
+    "id": "o48",
+    "sourceId": "o-assert",
+    "targetId": "csvfiles",
+    "label": "Finds the run directories and checks the three headers",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Bash"
+   },
+   {
+    "id": "o50",
+    "sourceId": "n-sim",
+    "targetId": "o-conserve",
+    "label": "The fake Postgres and the workload keep gauges with peaks and check conservation",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o51",
+    "sourceId": "n-sim",
+    "targetId": "o-hist",
+    "label": "The workload records latencies in it; the world checks read its snapshots",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -6282,6 +6705,15 @@
      "elementId": "o-obstest"
     },
     {
+     "elementId": "o-registry"
+    },
+    {
+     "elementId": "o-instance"
+    },
+    {
+     "elementId": "o-detail"
+    },
+    {
      "elementId": "o-collector"
     },
     {
@@ -6307,6 +6739,18 @@
     },
     {
      "elementId": "o-otlp"
+    },
+    {
+     "elementId": "o-simsrc"
+    },
+    {
+     "elementId": "o-catalog"
+    },
+    {
+     "elementId": "o-simrun"
+    },
+    {
+     "elementId": "o-assert"
     },
     {
      "elementId": "n-engine"
@@ -6341,10 +6785,25 @@
      "relationshipId": "o2"
     },
     {
+     "relationshipId": "o25"
+    },
+    {
+     "relationshipId": "o26"
+    },
+    {
+     "relationshipId": "o27"
+    },
+    {
      "relationshipId": "o3"
     },
     {
      "relationshipId": "o24"
+    },
+    {
+     "relationshipId": "o28"
+    },
+    {
+     "relationshipId": "o29"
     },
     {
      "relationshipId": "o4"
@@ -6366,6 +6825,12 @@
     },
     {
      "relationshipId": "o12"
+    },
+    {
+     "relationshipId": "o31"
+    },
+    {
+     "relationshipId": "o32"
     },
     {
      "relationshipId": "o5"
@@ -6401,10 +6866,61 @@
      "relationshipId": "o14"
     },
     {
+     "relationshipId": "o33"
+    },
+    {
      "relationshipId": "o22"
     },
     {
      "relationshipId": "o23"
+    },
+    {
+     "relationshipId": "o50"
+    },
+    {
+     "relationshipId": "o51"
+    },
+    {
+     "relationshipId": "o34"
+    },
+    {
+     "relationshipId": "o35"
+    },
+    {
+     "relationshipId": "o37"
+    },
+    {
+     "relationshipId": "o38"
+    },
+    {
+     "relationshipId": "o39"
+    },
+    {
+     "relationshipId": "o40"
+    },
+    {
+     "relationshipId": "o41"
+    },
+    {
+     "relationshipId": "o42"
+    },
+    {
+     "relationshipId": "o43"
+    },
+    {
+     "relationshipId": "o44"
+    },
+    {
+     "relationshipId": "o45"
+    },
+    {
+     "relationshipId": "o46"
+    },
+    {
+     "relationshipId": "o47"
+    },
+    {
+     "relationshipId": "o48"
     }
    ],
    "legend": {
@@ -6484,7 +7000,7 @@
    "id": "plan",
    "title": "mini-gateway PLAN.md (approved 2026-11-24)",
    "url": "https://github.com/nickstrad/mini-gateway/blob/main/PLAN.md",
-   "notes": "Target architecture. Built so far: chunks 0–2. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
+   "notes": "Target architecture. Built so far: chunks 0–3. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
   }
  ]
 }

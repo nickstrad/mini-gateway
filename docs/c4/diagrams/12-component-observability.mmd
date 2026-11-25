@@ -3,49 +3,80 @@ flowchart TB
   N_SHELL["Shell and binary"]:::planned
   N_E2E["End-to-end suite and load generator"]:::planned
   N_SIM["Simulator harness"]:::planned
-  CSVFILES[["Flushed CSV files"]]:::planned
-  DUCKDB[["DuckDB (analysis tool)"]]:::planned
+  CSVFILES[["Flushed CSV files"]]:::built
+  DUCKDB[["DuckDB (analysis tool)"]]:::built
   OTELCOL[["OpenTelemetry Collector"]]:::planned
   PROM[["Prometheus"]]:::planned
   subgraph SCOPE["Observability"]
-    O_CONTRACT["Snapshot conventions"]:::planned
+    O_CONTRACT["Snapshot conventions"]:::built
     O_HIST["Integer histogram"]:::built
     O_CONSERVE["Conservation check and gauge"]:::built
-    O_OBSTEST["Snapshot test helpers"]:::built
-    O_COLLECTOR["Collector"]:::planned
-    O_ADAPTER["Adapter interface"]:::planned
-    O_MERGE["Fleet merge"]:::planned
+    O_OBSTEST["Snapshot and adapter test helpers"]:::built
+    O_REGISTRY["Metric registry"]:::built
+    O_INSTANCE["Instance snapshot"]:::built
+    O_DETAIL["Detail gate"]:::built
+    O_COLLECTOR["Collector"]:::built
+    O_ADAPTER["Adapter interface"]:::built
+    O_MERGE["Fleet merge"]:::built
     O_HEALTH["Health"]:::planned
-    O_PROM["Prometheus text exporter"]:::planned
-    O_JSON["JSON stats exporter"]:::planned
-    O_CSV["CSV flush adapter"]:::planned
-    O_LOG["Log-line exporter"]:::planned
+    O_PROM["Prometheus text exporter"]:::built
+    O_JSON["JSON stats exporter"]:::built
+    O_CSV["CSV flush adapter"]:::built
+    O_LOG["Log-line exporter"]:::built
     O_OTLP["OTLP/HTTP push exporter"]:::planned
+    O_SIMSRC["Simulator source mappings"]:::built
+    O_CATALOG["Metric catalog and schema document"]:::built
+    O_SIMRUN["Scenario flush harness"]:::built
+    O_ASSERT["SQL assertions and their runner"]:::built
   end
   N_ENGINE -.->|1| O_COLLECTOR
-  O_COLLECTOR -.->|2| O_CONTRACT
-  O_CONTRACT -.->|3| O_HIST
-  O_CONTRACT -.->|4| O_CONSERVE
-  O_COLLECTOR -.->|5| O_HEALTH
-  O_ADAPTER -.->|6| O_COLLECTOR
-  O_PROM -.->|7 implements| O_ADAPTER
-  O_JSON -.->|8 implements| O_ADAPTER
-  O_CSV -.->|9 implements| O_ADAPTER
-  O_LOG -.->|10 implements| O_ADAPTER
-  O_OTLP -.->|11 implements| O_ADAPTER
-  N_SHELL -.->|12| O_PROM
-  N_SHELL -.->|13| O_JSON
-  N_SHELL -.->|14| O_HEALTH
-  O_CSV -.->|15| CSVFILES
-  N_E2E -.->|16| O_CSV
-  DUCKDB -.->|17| CSVFILES
-  N_E2E -.->|18| DUCKDB
-  O_OTLP -.->|19| OTELCOL
-  PROM -.->|20| OTELCOL
-  PROM -.->|21| N_SHELL
-  O_MERGE -.->|22| O_CONTRACT
-  N_SIM -.->|23| O_OBSTEST
-  O_OBSTEST -.->|24| O_CONTRACT
+  O_COLLECTOR -->|2| O_CONTRACT
+  O_COLLECTOR -->|3| O_INSTANCE
+  O_COLLECTOR -->|4| O_REGISTRY
+  O_COLLECTOR -->|5| O_DETAIL
+  O_CONTRACT -->|6| O_HIST
+  O_CONTRACT -->|7| O_CONSERVE
+  O_DETAIL -->|8| O_HIST
+  O_INSTANCE -->|9| O_HIST
+  O_COLLECTOR -->|10| O_HEALTH
+  O_ADAPTER -->|11| O_COLLECTOR
+  O_PROM -->|12 implements| O_ADAPTER
+  O_JSON -->|13 implements| O_ADAPTER
+  O_CSV -->|14 implements| O_ADAPTER
+  O_LOG -->|15 implements| O_ADAPTER
+  O_OTLP -.->|16 implements| O_ADAPTER
+  O_PROM -->|17| O_REGISTRY
+  O_LOG -->|18| O_REGISTRY
+  N_SHELL -.->|19| O_PROM
+  N_SHELL -.->|20| O_JSON
+  N_SHELL -.->|21| O_HEALTH
+  O_CSV -->|22| CSVFILES
+  N_E2E -.->|23| O_CSV
+  DUCKDB -->|24| CSVFILES
+  N_E2E -.->|25| O_ASSERT
+  O_OTLP -.->|26| OTELCOL
+  PROM -.->|27| OTELCOL
+  PROM -.->|28| N_SHELL
+  O_MERGE -->|29| O_INSTANCE
+  O_MERGE -->|30| O_REGISTRY
+  N_SIM -->|31| O_OBSTEST
+  O_OBSTEST -->|32| O_CONTRACT
+  N_SIM -->|33| O_CONSERVE
+  N_SIM -->|34| O_HIST
+  O_SIMSRC -->|35| N_SIM
+  O_SIMSRC -->|36| O_COLLECTOR
+  O_CATALOG -->|37| O_SIMSRC
+  O_CATALOG -->|38| O_CSV
+  O_CATALOG -->|39| O_REGISTRY
+  O_SIMRUN -->|40| N_SIM
+  O_SIMRUN -->|41| O_COLLECTOR
+  O_SIMRUN -->|42| O_SIMSRC
+  O_SIMRUN -->|43| O_CSV
+  O_SIMRUN -->|44| O_PROM
+  O_SIMRUN -->|45| O_JSON
+  O_SIMRUN -->|46| O_ASSERT
+  O_ASSERT -->|47| DUCKDB
+  O_ASSERT -->|48| CSVFILES
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned
