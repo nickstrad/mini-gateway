@@ -509,3 +509,13 @@ Rows the orchestrator may add to `agent_work/INDEX.md`:
 | `test/analysis/c05-reject-list/` | CSV-flush SQL assertions for the reject-list scenario |
 | `agent_work/chunks/c05-classifier/gate/extra.sh` | Chunk 5 gate extra: reject-list scenarios across processes, SET canary |
 | `docs/knowledge/classifier.md` | Facts about the classifier, the error table and the reply builders for later chunks |
+
+## Gate result
+
+`scripts/gate.sh c05-classifier` at the build stage on commit `de4cecf` (clean tree),
+2026-11-25: **overall pass, counts_for_landing true**. G0–G3 pass (unit 33 s); G4 markers
+pass, sweep pass (200 seeds per scenario, 385 s); G5 fuzz pass (9 targets, 20 s each);
+G6 tier R pass (Postgres 17.11, 78 s); G7 csv `skip-not-built` (chunk 3's runner); G8
+gen-docs pass; G9 site pass; G10 extra pass (40 reject-list runs replayed across
+processes, SET canary caught). `result.json` was not committed; the orchestrator reruns
+the gate. Only this notes section changed after the gated commit.
