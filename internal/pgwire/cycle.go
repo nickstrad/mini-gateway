@@ -46,7 +46,7 @@ var backendTypes = func() [256]bool {
 	return t
 }()
 
-type ReplyTracker struct {
+type CycleTracker struct {
 	st          *DatabaseWireSnapshot
 	fr          Framer
 	offset      int64
@@ -55,11 +55,11 @@ type ReplyTracker struct {
 	midMessage  bool
 }
 
-func NewReplyTracker(maxMessage int, stats *WireStats) *ReplyTracker {
+func NewCycleTracker(maxMessage int, stats *WireStats) *CycleTracker {
 	if stats == nil {
 		stats = &WireStats{}
 	}
-	t := &ReplyTracker{st: &stats.snap.Database}
+	t := &CycleTracker{st: &stats.snap.Database}
 	t.fr.Max = maxMessage
 	for c := 0; c < 256; c++ {
 		switch byte(c) {
@@ -71,14 +71,14 @@ func NewReplyTracker(maxMessage int, stats *WireStats) *ReplyTracker {
 	return t
 }
 
-func (t *ReplyTracker) QuerySent()         { t.outstanding++ }
-func (t *ReplyTracker) Outstanding() int64 { return t.outstanding }
-func (t *ReplyTracker) Closed() bool       { return t.closed }
-func (t *ReplyTracker) Offset() int64      { return t.offset }
-func (t *ReplyTracker) BufferCap() int     { return t.fr.BufferCap() }
-func (t *ReplyTracker) MidMessage() bool   { return t.fr.Pending() > 0 && !t.closed }
+func (t *CycleTracker) QuerySent()         { t.outstanding++ }
+func (t *CycleTracker) Outstanding() int64 { return t.outstanding }
+func (t *CycleTracker) Closed() bool       { return t.closed }
+func (t *CycleTracker) Offset() int64      { return t.offset }
+func (t *CycleTracker) BufferCap() int     { return t.fr.BufferCap() }
+func (t *CycleTracker) MidMessage() bool   { return t.fr.Pending() > 0 && !t.closed }
 
-func (t *ReplyTracker) Receive(evs []CycleEvent, b []byte) ([]CycleEvent, int) {
+func (t *CycleTracker) Receive(evs []CycleEvent, b []byte) ([]CycleEvent, int) {
 	n := 0
 	for n < len(b) && !t.closed {
 		c, done, err := t.fr.Take(b[n:])
@@ -106,13 +106,13 @@ func (t *ReplyTracker) Receive(evs []CycleEvent, b []byte) ([]CycleEvent, int) {
 	return evs, n
 }
 
-func (t *ReplyTracker) violation(evs []CycleEvent, v Violation) []CycleEvent {
+func (t *CycleTracker) violation(evs []CycleEvent, v Violation) []CycleEvent {
 	t.st.Violations[v]++
 	t.closed = true
 	return append(evs, CycleEvent{Kind: CycleViolation, Violation: v, End: t.offset, InCycle: t.outstanding > 0})
 }
 
-func (t *ReplyTracker) event(f Frame) CycleEvent {
+func (t *CycleTracker) event(f Frame) CycleEvent {
 	ev := CycleEvent{Kind: CycleMessage, Type: f.Type, Len: f.Len, End: t.offset, Known: backendTypes[f.Type],
 		InCycle: t.outstanding > 0}
 	if !ev.Known {
@@ -178,7 +178,7 @@ func statusIndex(b byte) int {
 	return 0
 }
 
-func (t *ReplyTracker) PeerClosed(evs []CycleEvent) []CycleEvent {
+func (t *CycleTracker) PeerClosed(evs []CycleEvent) []CycleEvent {
 	if t.closed {
 		return evs
 	}
@@ -300,4 +300,8 @@ func (t *FrontendTracker) Receive(evs []FrontEvent, b []byte) ([]FrontEvent, int
 	}
 	t.st.BytesIn += int64(n)
 	return evs, n
+}
+
+func NewReplyTracker(maxMessage int, stats *WireStats) *CycleTracker {
+	return NewCycleTracker(maxMessage, stats)
 }

@@ -155,7 +155,7 @@ func FuzzCycle(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte, k int, mode uint8) {
 		run := func(pieces [][]byte) string {
 			st := &WireStats{}
-			tr := NewReplyTracker(4096, st)
+			tr := NewCycleTracker(4096, st)
 			for i := 0; i < int(mode%3); i++ {
 				tr.QuerySent()
 			}

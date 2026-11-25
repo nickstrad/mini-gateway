@@ -44,9 +44,9 @@ func describeCycle(evs []CycleEvent) string {
 	return sb.String()
 }
 
-func runCycle(stream []byte, queries int, eof bool, chunk func([]byte) [][]byte) (string, *ReplyTracker, *WireStats) {
+func runCycle(stream []byte, queries int, eof bool, chunk func([]byte) [][]byte) (string, *CycleTracker, *WireStats) {
 	st := &WireStats{}
-	tr := NewReplyTracker(0, st)
+	tr := NewCycleTracker(0, st)
 	for i := 0; i < queries; i++ {
 		tr.QuerySent()
 	}
@@ -155,7 +155,7 @@ func TestCycleTrackerFatalEndsTheStreamWithoutAMarker(t *testing.T) {
 func TestCycleTrackerStreamsManyRowsWithoutBuffering(t *testing.T) {
 	const rows = 200_000
 	st := &WireStats{}
-	tr := NewReplyTracker(0, st)
+	tr := NewCycleTracker(0, st)
 	tr.QuerySent()
 	row := dataRow(strings.Repeat("v", 90))
 	var evs []CycleEvent

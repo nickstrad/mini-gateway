@@ -112,15 +112,15 @@ func busyStats(t *testing.T) *WireStats {
 	ok2[0].in = append(append([]byte(nil), ok2[0].in...), noticeMsg()...)
 	feedBackend(t, st, BackendTLSDisable, ok2)
 
-	tr := NewReplyTracker(0, st)
+	tr := NewCycleTracker(0, st)
 	tr.QuerySent()
 	tr.Receive(nil, cat(noticeMsg(), AppendParameterStatus(nil, "a", "b"), AppendMessageHeader(nil, 'A', 0), AppendMessageHeader(nil, 'q', 0),
 		AppendErrorResponse(nil, SeverityError, "1", "x"), AppendReadyForQuery(nil, 'E'), AppendReadyForQuery(nil, 'T'), AppendReadyForQuery(nil, 'I')))
 	tr.QuerySent()
 	tr.Receive(nil, AppendFatal(nil, "57P01", "x"))
 	tr.PeerClosed(nil)
-	NewReplyTracker(0, st).Receive(nil, AppendMessageHeader(nil, 'Z', 9))
-	NewReplyTracker(0, st).Receive(nil, AppendMessageHeader(nil, 'D', MaxRelayedMessage+1))
+	NewCycleTracker(0, st).Receive(nil, AppendMessageHeader(nil, 'Z', 9))
+	NewCycleTracker(0, st).Receive(nil, AppendMessageHeader(nil, 'D', MaxRelayedMessage+1))
 	ft := NewFrontendTracker(0, st)
 	ft.Receive(nil, cat(AppendQuery(nil, []byte("x")), AppendMessageHeader(nil, 'P', 0), AppendTerminate(nil)))
 	NewFrontendTracker(0, st).Receive(nil, AppendMessageHeader(nil, '?', 0))

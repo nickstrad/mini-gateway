@@ -164,7 +164,7 @@ type session struct {
 	bReply  []byte
 	conn    sim.Timer
 	front   *pgwire.FrontendTracker
-	reply   *pgwire.ReplyTracker
+	reply   *pgwire.CycleTracker
 	cout    []byte
 	bout    []byte
 	closing bool
@@ -439,7 +439,7 @@ func (ss *session) backendReady(a pgwire.Action) {
 	p.s.Trace(kindDBReady, ss.id, ss.bend.ID(), int64(a.Key.ProcessID), 0)
 	ss.phase = phaseRelay
 	ss.front = pgwire.NewFrontendTracker(p.cfg.Client.MaxMessage, &p.stats)
-	ss.reply = pgwire.NewReplyTracker(p.cfg.Backend.MaxMessage, &p.stats)
+	ss.reply = pgwire.NewCycleTracker(p.cfg.Backend.MaxMessage, &p.stats)
 	ss.writeClient(ss.held)
 	ss.held = nil
 	if len(ss.early) > 0 {
