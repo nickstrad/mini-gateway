@@ -490,11 +490,13 @@ func clsWantTrace(sc clsScenario) string {
 func clsScenarioTest(t *testing.T, sc clsScenario) {
 	simtest.Sweep(t, func(t *testing.T, seed int64) {
 		var last *clsOutcome
-		simtest.RequireDeterministic(t, seed, func(seed int64) *sim.Sim {
+		s := simtest.RequireDeterministic(t, seed, func(seed int64) *sim.Sim {
 			s, o := clsRunScenario(seed, sc)
 			last = o
 			return s
 		})
+		d := s.Digests()
+		t.Logf("digests %s seed=%d trace=%s state=%s", t.Name(), seed, d.Trace, d.State)
 		if err := last.check(); err != nil {
 			t.Fatalf("%v\n%s", err, simtest.ReplayCommand(t, seed))
 		}
