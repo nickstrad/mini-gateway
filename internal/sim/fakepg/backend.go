@@ -50,6 +50,7 @@ type run struct {
 	readVal   string
 	readFound bool
 	described bool
+	tooLarge  bool
 }
 
 type segment struct {

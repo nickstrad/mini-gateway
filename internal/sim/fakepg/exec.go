@@ -93,6 +93,11 @@ func (b *backend) startNext() {
 		r.state = runDone
 		return
 	}
+	if st.Kind == KindRows && rowHeaderLen(st.Size)*st.Rows > b.srv.cfg.MaxReplyBytes {
+		r.tooLarge = true
+		r.state = runDone
+		return
+	}
 	if b.armed(pointBefore) {
 		b.after = afterReset
 		r.state = runHeld
@@ -314,6 +319,9 @@ func (b *backend) execute(r *run) *pgError {
 	if r.cancelled {
 		return &pgError{severity: "ERROR", code: "57014", message: "canceling statement due to user request"}
 	}
+	if r.tooLarge {
+		return &pgError{severity: "ERROR", code: "54000", message: "fakepg: reply larger than the configured limit"}
+	}
 	if b.tx != nil && b.tx.failed && st.Kind != KindCommit && st.Kind != KindRollback {
 		return &pgError{severity: "ERROR", code: "25P02", message: "current transaction is aborted, commands ignored until end of transaction block"}
 	}
@@ -356,8 +364,9 @@ func (b *backend) readReply(r *run) {
 	}
 	b.emit(out)
 	if f := &b.srv.faults; f.bloatRows > 0 {
-		b.emitRows("x", f.bloatSize, f.bloatRows)
-		n += f.bloatRows
+		rows := min(f.bloatRows, b.srv.cfg.MaxReplyBytes/rowHeaderLen(f.bloatSize))
+		b.emitRows("x", f.bloatSize, rows)
+		n += rows
 	}
 	b.emit(encCommand(nil, "SELECT "+strconv.FormatInt(n, 10)))
 }

@@ -269,3 +269,15 @@ func TestLargeReplyIsStreamedUnderBackPressure(t *testing.T) {
 	}
 	w.done(p)
 }
+
+func TestReplyLargerThanTheLimitIsRefused(t *testing.T) {
+	w := newWorld(t, fakepg.Config{MaxReplyBytes: 1 << 20})
+	p := w.client()
+	if got := w.exchange(p, "SELECT repeat('x', 1000) FROM generate_series(1, 2000)"); got != "E:54000 ZI" {
+		t.Fatalf("got %s", got)
+	}
+	if got := w.exchange(p, "SELECT repeat('x', 1000) FROM generate_series(1, 1000)"); !strings.HasSuffix(got, "C:SELECT 1000 ZI") {
+		t.Fatalf("a reply under the limit: %s", got)
+	}
+	w.done(p)
+}

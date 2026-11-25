@@ -16,6 +16,8 @@ const (
 	DefaultAfterDelay     = 10 * time.Millisecond
 	MaxStallWindows       = 64
 	MaxDelayedSegments    = 1024
+	DefaultMaxReplyBytes  = 64 << 20
+	MaxReplyBytesLimit    = 1 << 32
 	readChunk             = 4096
 	outFill               = 64 << 10
 	firstPID              = 10_000
@@ -74,6 +76,7 @@ type Config struct {
 	Service        Service
 	Capacity       int
 	MaxMessage     int
+	MaxReplyBytes  int64
 	WriteLog       LogConfig
 	StatementLog   LogConfig
 	ServerVersion  string
@@ -96,6 +99,12 @@ func (c Config) normalized() Config {
 	}
 	if c.MaxRows <= 0 {
 		c.MaxRows = DefaultMaxRows
+	}
+	if c.MaxReplyBytes <= 0 {
+		c.MaxReplyBytes = DefaultMaxReplyBytes
+	}
+	if c.MaxReplyBytes > MaxReplyBytesLimit {
+		c.MaxReplyBytes = MaxReplyBytesLimit
 	}
 	if c.MaxMessage <= 0 {
 		c.MaxMessage = DefaultMaxMessage
