@@ -38,9 +38,31 @@ connect stall, fragment, half-open), so they show in both snapshots and in the t
 - A client `Close` (FIN) is noticed by a busy backend only after its statement ends; a
   `Reset` is noticed at once and aborts the statement. A reset discards the bytes in
   flight, so a client that writes and resets at the same instant never reached the database.
-- The workload client never pipelines: requests wait in the client's backlog, and latency is
-  measured from the intended send time (`TenantSnapshot.Latency`); `LatencyFromSend` is the
-  coordinated-omission control.
+- The workload client never pipelines: arrivals (intended sends) follow the schedule
+  whatever the server does, requests wait in the client's backlog, the wire send of the next
+  request happens at the instant the previous reply's `ReadyForQuery` arrives, and latency is
+  measured from the intended send time (`TenantSnapshot.Latency`; a retry keeps it);
+  `LatencyFromSend` is the coordinated-omission control. "Sent in a window" therefore lags
+  "intended" under a slow server; count arrivals (`Intended`), not `Sent`.
+- `Retry.OnCodes` applies to query `ERROR`s as well as startup and mid-query `FATAL`s; a
+  retried transaction re-runs its original statements.
+- Exact write checks: `world.CheckWriteLog(res)` (or `world.CheckWrites` on raw logs) needs
+  the write, statement and transaction logs complete (no dropped entries). It requires a
+  bijection between write log records and committed write statements that changed a row
+  (`StatementRecord.Rows > 0`, transaction outcome from `Server.TransactionLog()`), and that
+  replaying the write log over `Config.Rows` gives the final table. Use it in any scenario
+  whose claim is about writes.
+- `MaxRows` holds inside transactions: an insert that would pass it gets `53100`, and a
+  commit that no longer fits (other sessions inserted meanwhile) is refused with `53100`
+  and rolled back.
+- Every clearable fakepg fault kind has a case in `TestEachDatabaseFault` that checks the
+  fault's own effect is gone after the clear; `TestEveryClearPathIsChecked` disables each
+  clear path in turn (`fakepg.PlantSkipClear`, test-only) and fails if a case still passes.
+  A new fault kind needs such a case (or a place in `oneShotKinds`).
+- `pgproto3` may appear only under the directories of the importlint `only` rule, in every Go
+  file outside `tools/`, tests and nested modules included
+  (`internal/testclient/imports_test.go`). The phase-1 probe is kept as `main.go.txt` for
+  that reason.
 - Float code is not allowed anywhere under `internal/sim/` (an adversarial chunk 1 test scans
   it). The Poisson and Zipf generators live in `internal/randdist`, allow-listed in
   `tools/lint-rules/detlint-allow.txt`. The Zipf exponent is configured in thousandths.
