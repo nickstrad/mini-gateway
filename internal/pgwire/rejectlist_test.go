@@ -1,0 +1,95 @@
+package pgwire
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/nickstrad/mini-gateway/internal/work"
+)
+
+func TestRejectRulesExamplesClassifyAsDocumented(t *testing.T) {
+	seen := map[work.RejectReason]bool{}
+	for _, r := range RejectRules {
+		if seen[r.Reason] {
+			t.Errorf("reason %s listed twice", r.Reason)
+		}
+		seen[r.Reason] = true
+		if r.Reason == work.RejectExtendedProtocol {
+			continue
+		}
+		u := ClassifyQuery([]byte(r.Example), false)
+		if u.Class != work.ClassReject || u.Reason != r.Reason {
+			t.Errorf("example %q: %s, want reject %s", r.Example, clsDescribe(u), r.Reason)
+		}
+	}
+	for x := work.RejectSessionSet; x < work.NumRejectReasons; x++ {
+		if !seen[x] {
+			t.Errorf("reason %s has no rule in the table", x)
+		}
+	}
+	for _, f := range RejectAllowedForms {
+		if u := ClassifyQuery([]byte(f.Example), false); u.Class == work.ClassReject {
+			t.Errorf("allowed form %q is rejected: %s", f.Example, u.Reason)
+		}
+	}
+}
+
+func TestAllowListIsSortedAndCoalesceIsASubset(t *testing.T) {
+	for i := 1; i < len(AllowList); i++ {
+		if AllowList[i-1].Name >= AllowList[i].Name {
+			t.Errorf("allow-list not sorted or duplicate at %q", AllowList[i].Name)
+		}
+	}
+	for _, e := range AllowList {
+		if got, ok := AllowLookup(e.Name); !ok || got != e {
+			t.Errorf("lookup %q failed", e.Name)
+		}
+		for _, bad := range append(append([]string{}, rejSessionAdvisory...), "set_config", "nextval", "setval", "currval", "lastval", "txid_current", "pg_notify", "setseed", "dblink") {
+			if e.Name == bad {
+				t.Errorf("%q must not be on the allow-list", bad)
+			}
+		}
+	}
+	if _, ok := AllowLookup("no_such_function"); ok {
+		t.Error("lookup found a missing name")
+	}
+	for _, name := range []string{"now", "random", "pg_backend_pid", "clock_timestamp", "pg_sleep", "current_setting", "gen_random_uuid"} {
+		if e, ok := AllowLookup(name); !ok || e.Coalesce {
+			t.Errorf("%q must be read-only-provable but not coalescable", name)
+		}
+	}
+}
+
+const rejDocsEnv = "MG_GEN_DOCS_DIR"
+
+func rejDocs() map[string]string {
+	return map[string]string{
+		"error-contract.md": ErrorRowsMarkdown(),
+		"reject-list.md":    RejectListMarkdown(),
+	}
+}
+
+func TestClassifierWriteContractDocs(t *testing.T) {
+	dir := os.Getenv(rejDocsEnv)
+	if dir == "" {
+		t.Skip("set " + rejDocsEnv + " to write the generated documents (scripts/gen-docs.sh does)")
+	}
+	for name, body := range rejDocs() {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestClassifierContractDocsMatchTheCode(t *testing.T) {
+	for name, body := range rejDocs() {
+		got, err := os.ReadFile(filepath.Join("..", "..", "docs", name))
+		if err != nil {
+			t.Fatalf("%v: run scripts/gen-docs.sh", err)
+		}
+		if string(got) != body {
+			t.Errorf("docs/%s differs from the code: run scripts/gen-docs.sh", name)
+		}
+	}
+}
