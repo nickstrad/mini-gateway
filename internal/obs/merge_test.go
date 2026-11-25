@@ -119,7 +119,10 @@ func TestMergeRefusesUndeclaredAndKindClash(t *testing.T) {
 func TestMergeBucketsAddsPerBucket(t *testing.T) {
 	a := []Bucket{{1, 1, 2}, {5, 6, 1}}
 	b := []Bucket{{0, 0, 1}, {5, 6, 4}, {9, 9, 1}}
-	got := MergeBuckets(a, b)
+	got, err := MergeBuckets(a, b)
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := []Bucket{{0, 0, 1}, {1, 1, 2}, {5, 6, 5}, {9, 9, 1}}
 	if len(got) != len(want) {
 		t.Fatalf("%v", got)
