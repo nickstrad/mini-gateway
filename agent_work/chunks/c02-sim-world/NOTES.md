@@ -8,7 +8,7 @@ Durable facts for later builders: `docs/knowledge/sim-world.md`.
 
 | Deliverable | Where |
 | --- | --- |
-| Fake Postgres on simnet | `internal/sim/fakepg/`: `config.go`, `server.go` (accept, table, invariants, state), `backend.go` (per-connection state machine and output pump), `exec.go` (statements, transactions, writes, cancel), `settings.go` (SET/RESET/SHOW/DISCARD, `ParameterStatus`), `match.go` (statement splitter and matcher), `frame.go` (server framer), `proto.go` (the one file importing `pgproto3`), `fault.go` (24 fault kinds), `log.go` (write and statement logs), `snapshot.go` |
+| Fake Postgres on simnet | `internal/sim/fakepg/`: `config.go`, `server.go` (accept, table, invariants, state), `backend.go` (per-connection state machine and output pump), `exec.go` (statements, transactions, writes, cancel), `settings.go` (SET/RESET/SHOW/DISCARD, `ParameterStatus`), `match.go` (statement splitter and matcher), `frame.go` (server framer), `proto.go` (the one file importing `pgproto3`), `fault.go` (24 fault kinds), `log.go` (write, statement and transaction logs), `snapshot.go` |
 | Test client (sans-I/O) | `internal/testclient/`: `frame.go` (client framer), `msg.go` (codec, the one file importing `pgproto3`), `session.go` (client state machine: phase, status byte, key data, parameters) |
 | Simulated clients | `internal/sim/workload/`: `config.go`, `workload.go`, `client.go` (client actor), `keys.go` (uniform/Zipf/fixed key choice), `fault.go` (6 client fault kinds), `snapshot.go`, `probe.go` (a hand-driven client used by tests and by the fidelity runner) |
 | Float generators, isolated | `internal/randdist/randdist.go` (Poisson gaps, Zipf); allow-listed in `tools/lint-rules/detlint-allow.txt` |
@@ -71,9 +71,12 @@ The simulator API itself (`internal/sim`, `simnet`, `simtest`, `obs`) is unchang
    else `Service.Fixed`; plus a uniform integer draw in `[0, JitterMax]` from the backend's
    own stream (`fakepg/service/<conn id>`); plus every `PerKey` entry for its key; plus the
    `pg_sleep` argument; plus the slow-connection fault's extra. Then for each stall window
-   `[From, To)` that overlaps `[start, start + time)` the window's extra is added once
-   (statements starting in or in service during the window). The boundary fault replaces
-   all of it with exactly its value.
+   `[From, To)` that overlaps `[start, start + time]` the window's extra is added once
+   (statements starting in or in service during the window; a zero-time statement starting
+   in the window counts). A window injected with `pg.stall-window` also adds its extra to
+   every statement already in service at that instant (to the remaining time if the server
+   is frozen). The boundary fault replaces all of it with exactly its value, and an injected
+   window does not extend statements while the boundary fault is on.
 9. **Snapshot reads.** A read takes its value when its service starts (after any capacity
    wait), from the transaction's own pending writes first, else the table. Writes apply at
    statement end outside a transaction, at `COMMIT` inside one. There are no row locks: two
@@ -93,9 +96,12 @@ The simulator API itself (`internal/sim`, `simnet`, `simtest`, `obs`) is unchang
 13. **`RowDescription` is sent when a SELECT-like statement starts** (constant, `txid`, read,
     `pg_sleep`, rows, `SHOW` of a known setting), as Postgres 17 does. The first tier R run
     found this: a terminated `pg_sleep` shows `T1` before `FATAL 57P01`.
-14. **Logs.** Write log and statement log are rings with a cap (`LogConfig.Cap`, default
-    1,048,576, max 16,777,216) or count-only (`LogCountOnly`); every entry pushed out or not
-    kept is counted (`WriteLogDropped`, `StatementLogDropped`). Exact checks
+14. **Logs.** Write log, statement log and transaction log are rings with a cap
+    (`LogConfig.Cap`, default 1,048,576, max 16,777,216) or count-only (`LogCountOnly`); the
+    transaction log uses the statement log's configuration. Every entry pushed out or not
+    kept is counted (`WriteLogDropped`, `StatementLogDropped`, `TxLogDropped`). A statement
+    record carries the rows a write changed (`Rows`); a transaction record its outcome
+    (committed, rolled back, lost) and number of pending writes. Exact checks
     (`world.CheckWriteLog`) refuse to run on a log that dropped entries.
 15. **Client tagging.** With `Tenant.Tag` each statement starts with `/*c<client id>*/`; the
     fake records the comment as the statement's `Tag` in both logs. Off by default so
@@ -104,10 +110,13 @@ The simulator API itself (`internal/sim`, `simnet`, `simtest`, `obs`) is unchang
     loop: on the schedule, whatever the server does; closed loop: think time after the previous
     reply). It is *sent* when its first statement is written. The client never pipelines, so
     with a slow server requests wait in the client's backlog and the wait is part of the
-    latency. Claim 7 is proved as "arrivals in a window = the intended number" (see the table).
+    latency. Claim 7 is narrowed accordingly (see "Narrowed claims").
 17. **Retries** are per request, scheduled as events: `Retry{Max, Backoff, Cap, OnConnect,
     OnLost, OnTimeout, OnCodes}`, backoff `Backoff * 2^(attempt-1)` capped at `Cap`, no jitter.
-    A retried request keeps its intended time. Off by default (`Max = 0`).
+    `OnCodes` applies to a query `ERROR` (since the repair round) as well as to startup and
+    mid-query `FATAL`s. A retried request keeps its intended time and re-runs its original
+    statements (a failed transaction's `ROLLBACK` does not replace them). Off by default
+    (`Max = 0`).
 18. **The direct baselines' ablation.** Section 6.2 asks that "mechanism off must fail the
     invariant". The baselines have no mechanism: they are the control arms. What stands in:
     the planted-bug canaries (below), the coordinated-omission control
@@ -117,7 +126,7 @@ The simulator API itself (`internal/sim`, `simnet`, `simtest`, `obs`) is unchang
 
 Splitting (`fakepg.Split`): on `;` outside single-quoted strings and `/* */` comments;
 pieces that are empty or only comments are dropped; more than 64 statements in one message
-gives `ERROR 54000`. Matching: tokens (words, numbers with `.`, single-quoted strings with
+gives `ERROR 54000` (inside an explicit transaction it fails the transaction: `E`). Matching: tokens (words, numbers with `.`, single-quoted strings with
 `''`, punctuation, comments skipped; a leading comment becomes the tag); keywords are
 case-insensitive; at most 64 tokens. Exactly these shapes, everything else is
 `ERROR 42601 syntax error at or near "<first token>"`:
@@ -132,14 +141,14 @@ case-insensitive; at most 64 tokens. Exactly these shapes, everything else is
 | `SELECT pg_sleep(<seconds, decimal>)` | sleep (max 1 h) | `T` `D ''` `C SELECT 1` |
 | `SELECT repeat('<s>', <n>) FROM generate_series(<lo>, <hi>)` | rows (row size ≤ 1 MiB, ≤ 10,000,000 rows) | `T` `D`×count `C SELECT count` |
 | `UPDATE kv SET v = '<v>' WHERE k = '<k>'` | update | `C UPDATE 0/1` |
-| `INSERT INTO kv VALUES ('<k>', '<v>')`, also `INSERT INTO kv (k, v) VALUES (…)` | insert | `C INSERT 0 1`, or `ERROR 23505` if the key exists |
+| `INSERT INTO kv VALUES ('<k>', '<v>')`, also `INSERT INTO kv (k, v) VALUES (…)` | insert | `C INSERT 0 1`, or `ERROR 23505` if the key exists, or `ERROR 53100` if the table (with the transaction's own pending inserts and deletes) would pass `MaxRows` |
 | `DELETE FROM kv WHERE k = '<k>'` | delete | `C DELETE 0/1` |
 | `SET [SESSION] <name> = / TO <value>` | set | `C SET`; unknown name without a dot `42704`; read-only `55P02` |
 | `RESET <name>` / `RESET ALL` | reset | `C RESET` |
 | `SHOW <name>` | show | `T` `D` `C SHOW`, unknown `42704` |
 | `DISCARD ALL` | discard | `C DISCARD ALL`; inside a transaction `ERROR 25001` |
 | `BEGIN`, `BEGIN WORK/TRANSACTION`, `START TRANSACTION` | begin | `C BEGIN`; again inside one: `WARNING 25001` notice first |
-| `COMMIT`, `END` (+ `WORK/TRANSACTION`) | commit | `C COMMIT`; in a failed transaction `C ROLLBACK`; outside one `WARNING 25P01` first |
+| `COMMIT`, `END` (+ `WORK/TRANSACTION`) | commit | `C COMMIT`; in a failed transaction `C ROLLBACK`; outside one `WARNING 25P01` first; `ERROR 53100` and rolled back if its inserts no longer fit in `MaxRows` (an implicit transaction's commit reports the same error before `ReadyForQuery`) |
 | `ROLLBACK`, `ABORT` (+ `WORK/TRANSACTION`) | rollback | `C ROLLBACK`; outside one `WARNING 25P01` first |
 | empty string, only `;` | — | `EmptyQueryResponse` |
 
@@ -162,9 +171,16 @@ or 0 = all backends / the server. Clear = `FaultClear` (55) with `Arg1` = the ki
 application is in the trace (kernel `fault` record; armed faults add `pg.fire` when they
 fire) and counted in `Snapshot.Faults.ByKind` (clears in `Cleared`, missing targets in
 `NoTarget`). One named subtest each in `fakepg/fault_test.go: TestEachDatabaseFault`; each
-asserts the observation, the counter, the trace record, and that after the clear (or after
-the fault, for one-shot kinds) a fresh client completes `SELECT 1`.
-`TestEveryFaultKindHasACase` fails if a kind has no case.
+asserts the observation, the counter, the trace record, that after the clear the fault's
+own effect is gone (an `after` check per clearable case: rows arrive together again, whole
+pieces on the old and a new connection, one row for a read, a fast reply on the formerly
+slow connection, two sessions accepted, a transaction that commits, …), and that after the
+clear (or after the fault, for one-shot kinds) a fresh client completes `SELECT 1`.
+`TestEveryFaultKindHasACase` fails if a kind has no case; `TestEveryClearPathIsChecked`
+disables each kind's clear path in turn (test-only `PlantSkipClear`) and fails if a clear
+case still passes or a clearable kind has no clear case. One-shot kinds (no clear path):
+terminate, dirty-state, param-status, kill, half-open; targeted resets and targeted garbage
+are one-shot per backend.
 
 | Catalog entry | Kind (no.) | Target, args | What the client observes, in order (subtest) | Clear |
 | --- | --- | --- | --- | --- |
@@ -174,23 +190,23 @@ the fault, for one-shot kinds) a fresh client completes `SELECT 1`.
 | connect stalls | `pg.connect-stall` (35) | — (simnet dial stall) | nothing, not even `connected` (connect-stall) | new dials complete |
 | slow first byte | `pg.first-byte` (36) | Arg2 = delay | every reply's first byte waits the delay (slow-first-byte: ≥ 150 ms) | off |
 | slow trickle of rows | `pg.trickle` (37) | Arg2 = gap | row messages one at a time, exactly the gap apart (slow-trickle: 10 ms) | off |
-| fragmented delivery, down to one byte, inside headers | `pg.fragment` (38) | backend or 0; Arg2 = piece size | same messages; simnet delivers one byte per piece (fragment-to-one-byte); target 0 also applies to new connections | simnet chunk cleared on all |
-| reset now / before / during / after a reply / mid-transaction | `pg.reset` (39) | Arg1 point 0–4 (`PointNow` needs a target); target 0 arms all backends until cleared, a target arms one shot | now: `reset`; before: query reaches the database, `reset`, no reply byte; during: `T D reset` (cut one byte into the second message); after: full reply then `reset` 10 ms later; mid-transaction: `C:BEGIN ZT` then `reset`, transaction counted lost | disarms |
-| garbage bytes / impossible lengths | `pg.garbage` (40) | Arg1 0 random 64 bytes, 1 length 2, 2 length 0x7ffffff0; next reply then close | `T protocol-error` (lengths), closed without `ReadyForQuery` (random) | off |
+| fragmented delivery, down to one byte, inside headers | `pg.fragment` (38) | backend or 0; Arg2 = piece size | same messages; simnet delivers one byte per piece (fragment-to-one-byte); target 0 also applies to new connections, and a later targeted fault does not change that | simnet chunk cleared on all |
+| reset now / before / during / after a reply / mid-transaction | `pg.reset` (39) | Arg1 point 0–4 (`PointNow` needs a target); target 0 arms all backends until cleared, a target arms one shot | now: `reset`; before: query reaches the database, `reset`, no reply byte; during: `T D reset` (cut one byte into the second message); after: full reply then `reset` 10 ms later (reset-after-reply, and one shot: reset-after-reply-one-target); mid-transaction: `C:BEGIN ZT` then `reset`, transaction counted lost; a delayed reset waits while the server is frozen | disarms |
+| garbage bytes / impossible lengths | `pg.garbage` (40) | Arg1 0 random 64 bytes, 1 length 2, 2 length 0x7ffffff0; next reply then close; a targeted fault keeps its own mode and does not change the server-wide one | `T protocol-error` (lengths), closed without `ReadyForQuery` (random) | off |
 | a non-Postgres reply | `pg.not-postgres` (41) | next reply (startup too) is an HTTP 400 then close | `connected protocol-error` | off |
 | reply without its end marker (probe B9) | `pg.terminate` (42) | backend or 0 | in-flight statement aborted: `E:57P01` (FATAL) then `eof`, no `ReadyForQuery` | one-shot |
-| very large rows, very many rows | `pg.bloat` (43) | Arg1 rows, Arg2 bytes per row, added to every read reply | `rows 1001 bytes 1000001` for one real row plus 1,000 × 1,000 B (the rows statement covers this without a fault) | off |
-| unexpected state at checkout | `pg.dirty-state` (44) | backend; Arg1 0 open transaction, 1 changed `search_path` | `SELECT 1` ends `ZT`; or `SHOW search_path` = `fakepg_dirty` | one-shot |
-| unexpected `ParameterStatus` | `pg.param-status` (45) | backend or 0 | unsolicited `S:application_name` = `fakepg-surprise-N` while idle | one-shot |
+| very large rows, very many rows | `pg.bloat` (43) | Arg1 rows, Arg2 bytes per row, added to every read reply | `rows 1001 bytes 1000001` for one real row plus 1,000 × 1,000 B (the rows statement covers this without a fault); on the two-column read the bloat rows have two columns (`t` second) | off |
+| unexpected state at checkout | `pg.dirty-state` (44) | backend; Arg1 0 open transaction, 1 changed `search_path`; a backend still in startup is not a target (counted `NoTarget`) | `SELECT 1` ends `ZT`; or `SHOW search_path` = `fakepg_dirty` | one-shot |
+| unexpected `ParameterStatus` | `pg.param-status` (45) | backend or 0; backends still in startup are skipped (none ready: `NoTarget`) | unsolicited `S:application_name` = `fakepg-surprise-N` while idle | one-shot |
 | killed | `pg.kill` (46) | — | every connection `reset` at once; table kept | one-shot |
-| frozen | `pg.freeze` (47) | Arg2 duration (0 = until clear) | nothing moves: replies and new startups wait; service timers pause; after the clear the reply arrives | thaws |
-| restarted cold | `pg.restart` (48) | Arg2 window (0 = until clear) | all `reset`; new connections `E:57P03 eof` during the window; afterwards accepted; table kept | ends the window |
-| `max_connections` reached | `pg.max-conn` (49) | Arg1 = limit override | `E:53300 eof` | limit restored |
+| frozen | `pg.freeze` (47) | Arg2 duration (0 = until clear) | nothing moves: replies and new startups wait; service timers and delayed resets pause; after the clear the reply arrives | thaws |
+| restarted cold | `pg.restart` (48) | Arg2 window (0 = until clear) | all `reset`; new connections `E:57P03 eof` during the window; afterwards accepted; table kept (restarted-cold: 100 ms window; restarted-until-clear) | ends the window |
+| `max_connections` reached | `pg.max-conn` (49) | Arg1 = limit override, clamped to `[0, Config.MaxConnections]` (the configured limit stays a hard ceiling) | `E:53300 eof` | limit restored |
 | latency exactly at a timeout boundary | `pg.boundary` (50) | Arg2 = exact service time | reply at exactly the value plus the round trip (250.1 ms) | off |
 | some connections slow, others fine | `pg.slow-conn` (51) | backend; Arg2 extra per statement | target slow, other fast | per target |
 | half-open | `pg.half-open` (52) | backend (simnet half-open, server gone) | nothing ever; the fake has dropped the backend; the client's close ends it as simnet `HalfOpen` | one-shot |
 | asymmetric latency | `pg.asym` (53) | Arg2 extra on every byte sent down | reply 30 ms later than service (40.1 ms) | off |
-| backend stall window (150–200 ms spec stall) | `pg.stall-window` (54) | Arg1 window length, Arg2 extra | statements starting or in service in the window take the extra (160.1 ms) | restores the configured windows |
+| backend stall window (150–200 ms spec stall) | `pg.stall-window` (54) | Arg1 window length, Arg2 extra | statements starting or in service in the window take the extra (160.1 ms), including those already in service when it is injected | restores the configured windows |
 
 Not here, by the brief: answers `N` to a TLS request when the proxy requires TLS, and a
 certificate that fails verification (chunk 4).
@@ -309,15 +325,15 @@ Thresholds there are exact counts except the burst (accepted ≤ 100, refused �
 | --- | --- | --- |
 | 1 | Message types and status bytes match Postgres 17 on the probe script | `world/fidelity_test.go: TestFidelityAgainstRecordedPostgres17` (CI); `world/tierr_test.go: TestTierRFidelity` (live); `fakepg/fakepg_test.go: TestStartupSequenceMatchesPostgres17`, `TestEncryptionRequestsAnsweredN` |
 | 2 | Status after every sequence; a read in service never sees a later commit; rolled-back writes never apply | `fakepg/fakepg_test.go: TestTransactionStatusTable` (18 sequences, B1–B7 among them), `TestSessionStateAndParameterStatus`; `fakepg/semantics_test.go: TestReadInServiceDoesNotSeeLaterCommit`, `TestTransactionWritesApplyAtCommitAndVanishAtRollback`; fidelity step B10 |
-| 3 | The write log is exact: every applied write once, none missing, none duplicated | `fakepg/semantics_test.go: TestWriteLogHasEveryAppliedWriteOnce`, `TestTransactionWritesApplyAtCommitAndVanishAtRollback`; `world/check.go: CheckWriteLog` in scenario `direct-mixed-transactions` (all seeds); canary `fakepg/canary_test.go: TestPlantedBugDoubleWriteIsCaughtByTheWriteLogCheck` |
-| 4 | `max_connections` is a hard bound; the refusal is the real one | `fakepg/semantics_test.go: TestMaxConnectionsRefusesWithRealError`; registered invariant `fakepg.conservation` (sessions ≤ limit after every event); scenario `direct-reconnect-burst`; tier R `TestTierRReconnectBurst` (the same code and text from real Postgres) |
-| 5 | Every database fault: injectable, does what is defined above, counted, traced, cleared → fresh exchange succeeds | `fakepg/fault_test.go: TestEachDatabaseFault` (31 subtests), `TestEveryFaultKindHasACase`; `world/property_test.go: TestScenarioRandomFaultSchedules` |
+| 3 | The write log is exact: every applied write once, none missing, none duplicated | `fakepg/semantics_test.go: TestWriteLogHasEveryAppliedWriteOnce`, `TestTransactionWritesApplyAtCommitAndVanishAtRollback`; `fakepg/repair_test.go: TestInsertInsideATransactionRespectsMaxRows`, `TestCommitThatNoLongerFitsIsRolledBack` (write log replayed against the table); `world/check.go: CheckWriteLog` (bijection with committed row-changing writes + replay) in scenario `direct-mixed-transactions` (all seeds); `world/check_test.go: TestCheckWritesFindsEveryKindOfMismatch`; canaries `fakepg/canary_test.go: TestPlantedBugDoubleWriteIsCaughtByTheWriteLogCheck`, `TestPlantedBugDroppedWriteIsCaughtByTheWriteLogCheck`, `TestPlantedBugPhantomWriteIsCaughtByTheWriteLogCheck` |
+| 4 | `max_connections` is a hard bound; the refusal is the real one | `fakepg/semantics_test.go: TestMaxConnectionsRefusesWithRealError`; `fakepg/repair_test.go: TestMaxConnFaultCannotRaiseTheConfiguredLimit`; registered invariant `fakepg.conservation` (sessions ≤ limit after every event); scenario `direct-reconnect-burst`; tier R `TestTierRReconnectBurst` (the same code and text from real Postgres) |
+| 5 | Every database fault: injectable, does what is defined above, counted, traced, cleared → its effect is gone and a fresh exchange succeeds | `fakepg/fault_test.go: TestEachDatabaseFault` (34 subtests), `TestEveryFaultKindHasACase`, `TestEveryClearPathIsChecked` (each clear path disabled must fail its case); `fakepg/repair_test.go`: the stall-window, targeted-fragment, targeted-garbage, ready-only, bloat and freeze tests; `world/property_test.go: TestScenarioRandomFaultSchedules` |
 | 6 | Every client fault does what is defined above | `workload/clientfault_test.go`: all tests; `workload/snapshot_test.go: TestWorkloadSnapshotCountersMoveAndConserve`; scenario `direct-reconnect-burst` |
-| 7 | Arrivals in a window = intended, whatever the server speed; latency from the intended send time | `workload/generator_test.go: TestOpenLoopArrivalsEqualIntendedWhateverTheServerSpeed` (exactly 500 in the window at service 0, 1 ms and 20 ms with capacity 1; times exactly on schedule), `TestLatencyIsMeasuredFromIntendedSendTime` (a 200 ms stall: 17 requests above 50 ms from the intended time, exactly 1 from the send time), `TestPoissonInterArrivalMean`, `TestZipfSharesMatchTheCalculation`, `TestClosedLoopThinkTime`; `world/overload_test.go: TestOverloadLatencyGrowsWithTheBacklog` |
+| 7 | NARROWED (see "Narrowed claims"): arrivals (intended sends) in a window = the schedule, whatever the server speed; each request's latency is measured exactly from its intended time; the wire send waits for the previous reply | `workload/generator_test.go: TestOpenLoopArrivalsIgnoreABusyClientAndLatencyIsExact` (the adversary's 17-arrival case: at 40 ms intended 17, sent 1, backlog 16; every latency = completion − intended time, each send at the instant the previous reply ended, histogram min/max = the trace), `TestRetriedRequestKeepsItsIntendedTime`, `TestOpenLoopArrivalsEqualIntendedWhateverTheServerSpeed` (exactly 500 in the window at service 0, 1 ms and 20 ms with capacity 1; times exactly on schedule), `TestLatencyIsMeasuredFromIntendedSendTime` (a 200 ms stall: 17 requests above 50 ms from the intended time, exactly 1 from the send time), `TestPoissonInterArrivalMean`, `TestZipfSharesMatchTheCalculation`, `TestClosedLoopThinkTime`; `world/overload_test.go: TestOverloadLatencyGrowsWithTheBacklog` |
 | 8 | Cancel affects exactly the targeted backend's running statement | `fakepg/semantics_test.go: TestCancelHitsOnlyTheTargetBackend` (wrong key nothing, right key only that backend, idle nothing); `workload/clientfault_test.go: TestClientSendsACancel` |
 | 9 | Replay law for every baseline and random fault schedules; the world always quiesces after faults clear | `world/scenario_test.go: TestScenario`; `world/property_test.go: TestScenarioRandomFaultSchedules` (500 seeds green during the build; 200 in the gate sweep), `FuzzWorldSchedule`; `fakepg/snapshot_test.go: TestSnapshotsAreIdenticalForOneSeed`; `workload/snapshot_test.go: TestWorkloadSnapshotsAreIdenticalForOneSeed`; gate extra (two processes) |
 | 10 | 500 clients → 500 connections; burst → refusals by the database; 1,000 identical reads → 1,000 database reads | scenarios `direct-500-connections`, `direct-reconnect-burst`, `direct-1000-identical-reads` (`TestScenario`); tier R `TestTierRManyConnections`, `TestTierRReconnectBurst`, `TestTierRIdenticalReads` |
-| 11 | `pgproto3` imported only in `fakepg` and the test client; `go.mod` has exactly one requirement | gate G1 importlint (`only … pgproto3 : internal/pgwire/... internal/sim/fakepg/... internal/testclient/...`, `require github.com/jackc/pgx/v5`); G0 `go mod tidy -diff` |
+| 11 | `pgproto3` imported only in `fakepg` and the test client — in every Go file outside `tools/` (tests, nested modules, testdata included); `go.mod` has exactly one requirement | `testclient/imports_test.go: TestPgproto3IsImportedOnlyWhereTheRulesAllowInEveryGoFileOutsideTools` (today: `fakepg/proto.go`, `testclient/msg.go`, `testclient/session_test.go`); gate G1 importlint (`only … pgproto3 : internal/pgwire/... internal/sim/fakepg/... internal/testclient/...`, `require github.com/jackc/pgx/v5`); G0 `go mod tidy -diff` |
 
 The property test found two real bugs while it was being written (both fixed): a request
 that was sent, lost, retried and then refused at connect was counted "failed before send"
@@ -329,12 +345,19 @@ forever. Fixed with `Config.MaxReplyBytes` (`TestReplyLargerThanTheLimitIsRefuse
 ## Planted-bug canaries
 
 Switches are the unexported `fakepg.Config.plant` fields, reachable only through
-`fakepg/export_test.go` (`PlantDoubleApply`, `PlantIdleInTx`):
+`fakepg/export_test.go` (`PlantDoubleApply`, `PlantIdleInTx`, `PlantDropWrite`,
+`PlantPhantomWritesFrom`, `PlantSkipClear`):
 
 - **double apply**: every write is applied and logged twice. `TestPlantedBugDoubleWriteIsCaughtByTheWriteLogCheck`
   requires `direct-mixed-transactions` to PASS without it and FAIL ("applied twice") with it, seeds 1–3.
 - **idle in transaction**: `ReadyForQuery` says `I` inside a transaction.
   `TestPlantedBugIdleInTransactionIsCaughtByTheStatusTable` requires the status table to fail.
+- **dropped write**: the nth commit-time apply silently does nothing (no table change, no log,
+  no counter). `TestPlantedBugDroppedWriteIsCaughtByTheWriteLogCheck` (n = 1, 5, 40; seeds 1–3)
+  requires "missing from the write log".
+- **phantom writes**: from the nth apply on, writes are logged and counted but not applied.
+  `TestPlantedBugPhantomWriteIsCaughtByTheWriteLogCheck` requires "replaying the write log".
+- **skip clear**: one kind's clear is counted but does nothing. `TestEveryClearPathIsChecked`.
 
 ## Observability
 
@@ -343,7 +366,7 @@ Switches are the unexported `fakepg.Config.plant` fields, reachable only through
   bad startup, starting up, protocol); statements started, finished, aborted, errors, by
   kind; in service and waiting (value, peak); writes applied; transactions begun, committed,
   rolled back, lost, open; cancels received, applied, idle, no match; bytes in and out;
-  parameter reports; table rows; log lengths and dropped entries; faults by kind, cleared,
+  parameter reports; table rows; log lengths and dropped entries (write, statement, transaction); faults by kind, cleared,
   no target. `Snapshot.Check()` checks the four conservation laws.
 - `workload.Snapshot()`: clients, finished; faults by kind and no target; per tenant and
   total: intended, sent, not yet sent and in flight (value, peak), dropped, failed before
@@ -367,8 +390,8 @@ Switches are the unexported `fakepg.Config.plant` fields, reachable only through
 | What grows | What removes or bounds it | Gauge |
 | --- | --- | --- |
 | The fake's backend table | removed on close | `ConnsOpen`, `Sessions` |
-| Write log, statement log | ring cap (`LogConfig.Cap`) or count-only; dropped entries counted | `WriteLogLen`/`WriteLogDropped`, `StatementLogLen`/`StatementLogDropped` |
-| The table | `Config.MaxRows` (default 1,048,576): an insert beyond it is `ERROR 53100` | `TableRows` |
+| Write log, statement log, transaction log | ring cap (`LogConfig.Cap`; the transaction log uses the statement log's) or count-only; dropped entries counted | `WriteLogLen`/`WriteLogDropped`, `StatementLogLen`/`StatementLogDropped`, `TxLogLen`/`TxLogDropped` |
+| The table | `Config.MaxRows` (default 1,048,576): an insert beyond it is `ERROR 53100`, inside a transaction too (counting its pending inserts and deletes), and a commit that no longer fits is refused with `53100` and rolled back | `TableRows` |
 | Per-backend output queue | simnet window (back pressure); delayed segments ≤ 1,024 | `BytesOut` |
 | Bytes of one reply | `Config.MaxReplyBytes` (default 64 MiB, at most 4 GiB): a rows statement above it is `ERROR 54000` before any row; the bloat fault is clamped to it | — |
 | Capacity wait queue | at most one entry per backend | `Waiting` |
@@ -392,25 +415,104 @@ Switches are the unexported `fakepg.Config.plant` fields, reachable only through
   linux/amd64 (floats).
 - One connection table entry per dial for the run (simnet `MaxConns`); 1,000 clients fit
   easily.
+- The write-log replay check compares only the final table: a phantom write that a later
+  write to the same key overwrites is invisible to it (the bijection check still needs a
+  committed row-changing statement for every record).
+- An `UPDATE` committed after another session deleted its row re-creates the row (no row
+  locks; last commit wins), and the `MaxRows` commit check counts it as an insert.
 - simnet gives a writer no reset when its peer has closed (Postgres would get `EPIPE` or
   `ECONNRESET`), so a backend keeps writing a reply to a closed client until the reply ends;
   `MaxReplyBytes` bounds that.
 
 ## Deviations
 
-- **Size.** Product code is about 6,100 lines (testclient 413, fakepg 2,962, workload 1,718,
-  world 872, randdist 23, cmd 99 new), above the brief's ~1,800 × 2. The chunk is complete,
-  so no split request; the bulk is the fault catalog (24 database kinds) and the client
-  state machine. Tests are about 2,600 lines (65 test and fuzz functions, more than 80
-  table subtests), smaller than the product code: they are table-driven.
-- **Claim 7 wording.** The client never pipelines, so "sent in a window" lags "intended"
-  under a slow server; what is exact is the number of arrivals (intended requests) in the
-  window and that every intended request is eventually sent (see decision 16).
+- **Size.** Product code is about 6,450 lines after the repair round (testclient 413, fakepg
+  3,159, workload 1,729, world 931, randdist 23, cmd 203 including chunk 1's `main.go`), above
+  the brief's ~1,800 × 2. The chunk is complete, so no split request; the bulk is the fault
+  catalog (24 database kinds) and the client state machine. Tests are about 3,850 lines (98
+  test and fuzz functions, 34 fault subtests, 24 clear-path canary subtests), still smaller
+  than the product code: they are table-driven.
+- **Claim 7** is narrowed (see "Narrowed claims"); **claim 11** holds for every Go file
+  outside `tools/` (the scope the repair brief set).
 - **Tier R** runs its three baselines directly (goroutines + test client), not through a
   real-Postgres `Driver` (that driver needs the real binary, chunk 6). The identical-read
   test uses 100 connections × 10 reads instead of 1,000 connections (VM memory).
 - `scripts/tier-r.sh` was marked for chunk 6; the brief moved it here, so its header and
   marker changed in this chunk.
+
+## Narrowed claims
+
+For the orchestrator to accept or refuse. The code was not bent to fit the original wording.
+
+**Claim 7 (open-loop generation).** Original: "the number of requests sent in a window equals
+the intended number regardless of server speed, and latency is measured from intended send
+time". The brief's own deliverable text says how a busy client behaves: "a client that is
+busy does not delay the next intended send (requests queue in the client and their wait
+counts as latency)". That is the built design: requests queue in the client. The Postgres
+protocol does not strictly forbid pipelining simple `Query` messages (fidelity step B4 sends
+three and gets three replies), but a workload request is a conversation on one session
+(transactions of several statements with think time between them); a later request's
+`Query` written while an earlier request's transaction is open would run inside that
+transaction, and after an error would get `25P02`. So a client runs one request at a time
+per connection, and "sent" (first statement on the wire) lags "intended" when the server is
+slow. The precise claim, proved by `TestOpenLoopArrivalsIgnoreABusyClientAndLatencyIsExact`,
+`TestRetriedRequestKeepsItsIntendedTime`, `TestOpenLoopArrivalsEqualIntendedWhateverTheServerSpeed`
+and `TestLatencyIsMeasuredFromIntendedSendTime`:
+
+- Arrivals (intended sends) are independent of the server: request k of an open-loop client
+  is intended at its scheduled time (start + spread offset + the constant or Poisson gaps),
+  so the number intended in any window is the scheduled number at any server speed.
+- The wire send of a request happens when it reaches the head of the client's backlog and
+  the connection is idle: at the very instant the previous request's last `ReadyForQuery`
+  arrives (or when the connection becomes ready). Sent ≤ Intended at every instant, Sent =
+  Intended once the backlog has drained, and Intended = Sent + NotYetSent + Dropped +
+  FailedBeforeSend after every event (registered invariant).
+- Each request's latency is exactly (arrival of its final `ReadyForQuery`) − (its intended
+  time), retries included (a retry keeps the first intended time), and is recorded once, for
+  outcomes `ok` and `error`; lost, timed-out, client-left, connect-failed and dropped requests
+  are counted by outcome and not in the latency histogram. `LatencyFromSend` measures from the
+  last attempt's send.
+
+The adversary's `TestAdv_7_SendWindowIndependentOfService` asserts the original wording
+(sent = intended at 40 ms) and still fails; under the narrowed claim that is expected.
+
+**Claim 11 (pgproto3 imports).** Holds for every Go file in the repository outside `tools/`,
+tests, nested modules and testdata included (`TestPgproto3IsImportedOnlyWhereTheRulesAllowInEveryGoFileOutsideTools`).
+The adversary's `TestAdv_11_AllGoImportsIncludingTests` still fails, now only on five files
+under `tools/detlint/cmd/importlint/testdata/mod/internal/`: importlint's own test inputs in a
+nested fixture module, which must import `pgproto3` to test the rule (some of them are the
+violations importlint must find). The repair brief scopes the claim to outside `tools/`.
+The adversary's test is not wrong for the original wording; it is outside the narrowed one.
+
+## Repair round
+
+Repair builder (Opus), 2026-11-25, on `work/c02-sim-world` from `ddb6126`. Every finding was
+reproduced first (the regression tests below failed before their fix).
+
+| Item | Result |
+| --- | --- |
+| Review 1 (BLOCKER) transactional `INSERT` bypasses `MaxRows`, phantom write logged | fixed `6fc0e83`: check at the statement (pending net rows) and at commit (`53100`, rolled back); `apply` never logs a write it did not apply. Tests `fakepg/repair_test.go: TestInsertInsideATransactionRespectsMaxRows`, `TestCommitThatNoLongerFitsIsRolledBack` |
+| Review 2 (BLOCKER) stall window misses statements in service and a zero-time statement at `From` | fixed `6fc0e83`: an injected window extends in-service timers (or the frozen remainder); overlap uses `[start, end]`. Tests `TestStallWindowExtendsStatementsAlreadyInService`, `TestStallWindowExtendsAFrozenStatement`, `TestStallWindowCatchesAZeroTimeStatementAtItsStart` |
+| Review 3 (MAJOR) clear-and-recover cannot fail for fragment, trickle, bloat | fixed `42ac9a6`: an `after` check per clearable case; `TestEveryClearPathIsChecked` disables each kind's clear (all 18 clearable kinds, 24 cases) and requires failure. Also checked in a scratch copy by editing `clearFault` itself: the reviewer's M7b, M7c, M7d and three more (slow-conn, targeted silent query, max-conn) each fail `TestEachDatabaseFault` |
+| Review 4 (MAJOR) `CheckWriteLog` misses dropped writes | fixed `c29a164`: transaction log + `StatementRecord.Rows`; bijection between committed row-changing writes and the write log, plus replay against the table. Tests `world/check_test.go: TestCheckWritesFindsEveryKindOfMismatch` (13 cases), canaries `TestPlantedBugDroppedWriteIsCaughtByTheWriteLogCheck`, `TestPlantedBugPhantomWriteIsCaughtByTheWriteLogCheck`. The reviewer's M9 (drop every write with `stmtSeq % 5 == 0`) now fails `TestScenario/direct-mixed-transactions` ("missing from the write log") |
+| Review 5 (MAJOR) `FaultMaxConn` above `MaxConnections` breaks the invariant | fixed `6fc0e83`: the override is clamped to `[0, MaxConnections]`. Test `TestMaxConnFaultCannotRaiseTheConfiguredLimit` |
+| Review 6 (MAJOR) targeted fragment / garbage clobber the server-wide settings | fixed `6fc0e83`: the server-wide fragment is set only for target 0; garbage mode is per backend for targeted faults. Tests `TestTargetedFragmentKeepsTheServerWideFragment`, `TestTargetedGarbageKeepsTheServerWideMode` |
+| Review 7 (MAJOR) `int64` overflow in `matchRows` | fixed `6fc0e83`: `n` bounded before the multiply; the series length is computed without overflow. Test `TestMatchRowsRefusesOverflowingSizes`; `FuzzMatch` now asserts `Size ≥ 0`, `Rows ≥ 0` and seeds the overflow inputs |
+| Review 8 (MAJOR) `Retry.OnCodes` ignored for query errors; failed transaction mutates its statements | fixed `b8be7ad`: the error exit goes through the retry policy; the original statements are kept (`orig`), the `ROLLBACK` is appended to a clipped copy. Tests `workload/repair_test.go: TestRetryOnCodesRetriesAQueryError`, `TestRetryOnCodesIgnoresOtherCodes`, `TestRetriedTransactionRunsItsOriginalStatements` |
+| Review 9 (MINOR) ready-only faults counted on a starting backend | fixed `6fc0e83`: `applyTo` reports whether it applied. Test `TestReadyOnlyFaultsOnAStartingBackendCountAsNoTarget` |
+| Review 10 (MINOR) bloat rows have one column on a two-column read | fixed `6fc0e83`: bloat rows carry the second column. Test `TestBloatOnATwoColumnReadKeepsTheColumnCount` |
+| Review 11 (MINOR) freeze does not hold a delayed reset | fixed `6fc0e83`: the reset timer's remainder is held and re-armed at the thaw. Test `TestFreezeHoldsADelayedReset` |
+| Review 12 (MINOR) stale stop-reading timer; wrong-key secret all zeros | fixed `b8be7ad`: the resume timer is stored and cancelled (test `TestStopReadingTimerOfAClearedFaultDoesNotResumeALaterOne`); the wrong key flips one bit of the real secret (no test can force a zero random secret; `TestClientSendsACancel` still covers the wrong-key path) |
+| Review checklist "compounds" (1): terminate under back pressure tears the framing | fixed `7335d64`: the already-encoded bytes go out before the `FATAL`. Test `TestTerminateDuringABackPressuredReplyKeepsTheFraming`. (Compound 2 is review 8.) |
+| Adversarial claim 2 `TestAdv_2_StatementLimitErrorAbortsTransaction` | fixed `6fc0e83`: the 64-statement error fails an explicit transaction. Test `TestStatementLimitErrorFailsTheTransaction`; the attack now holds |
+| Adversarial claim 3 `TestAdv_3_FullTableCommitMustNotLogPhantom` | fixed `6fc0e83` (review 1); the attack now holds |
+| Adversarial claim 5 `TestAdv_5_StallHitsAlreadyServing` | fixed `6fc0e83` (review 2); the attack now holds |
+| Adversarial claim 7 `TestAdv_7_SendWindowIndependentOfService` | narrowed (above); latency accounting made exact and tested (`2f008a0`) |
+| Adversarial claim 11 `TestAdv_11_AllGoImportsIncludingTests` | fixed outside `tools/` (`9bd436b`): the phase-1 probe (`agent_work/phase1/probes/pgwire/main.go`, its own module) is kept as `main.go.txt`, runnable from a scratch copy (command in `agent_work/INDEX.md`); repository-wide test added. Still fails on the `tools/` lint fixtures (narrowed, above). `PLAN.md` line 25 still names `main.go`; the orchestrator owns that file |
+| Brief item 5: test gaps | `CheckWriteLog` detects missing writes (above); direct tests for exported fakepg and workload behaviour that had none (`3a22f13`: `fakepg/api_test.go`, `workload/api_test.go`: `Kind.IsWrite`, `CodeValue`, config defaults and limits, `New`'s refusals, fault and outcome names, transaction log, log ring, server framer, workload configuration errors, key names, `Done`, the `Probe` API). The remaining exported functions without a direct test are the simnet handler callbacks (`OnEvent`), exercised by every test |
+
+Commit granularity: the first commit (`6fc0e83`) holds several fakepg defect fixes that touch
+the same functions; each has its own regression test named above.
 
 ## Commands
 
@@ -423,4 +525,5 @@ go run ./cmd/mgsim list; go run ./cmd/mgsim run direct-reconnect-burst -seed 7
 RUN_DIR=/tmp/tr scripts/tier-r.sh                     # tier R (Docker); MG_TIER_R_UPDATE=1 rewrites the recording
 go test -run '^$' -fuzz '^FuzzServerInput$' -fuzztime 60s ./internal/sim/fakepg
 scripts/gate.sh c02-sim-world
+go test -count=1 ./agent_work/adversarial/...      # claims 7 and 11 attacks fail as described under "Narrowed claims"
 ```
