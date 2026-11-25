@@ -1,6 +1,6 @@
 # C4 Level 3: Components: retry policy
 
-**Built so far: chunks 0–1. Dashed parts are planned.** In this diagram 0 of 7 elements and 0 of 7 relationships are built. Model: diagram `component-retry` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–2. Dashed parts are planned.** In this diagram 0 of 7 elements and 0 of 7 relationships are built. Model: diagram `component-retry` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 The default policy is Off. Failures after anything reached the database are never retried under any policy.
 

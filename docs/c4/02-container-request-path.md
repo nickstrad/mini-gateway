@@ -1,6 +1,6 @@
 # C4 Level 2: Containers: the request path
 
-**Built so far: chunks 0–1. Dashed parts are planned.** In this diagram 0 of 13 elements and 0 of 14 relationships are built. Model: diagram `container` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–2. Dashed parts are planned.** In this diagram 0 of 13 elements and 0 of 14 relationships are built. Model: diagram `container` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 Containers are Go packages inside one process. The shell does all socket I/O and makes no decisions. The engine is one single-threaded state machine that calls the wire layer and the four pure cores. Observability hangs off the side: the engine publishes snapshots, the admin listener serves them.
 

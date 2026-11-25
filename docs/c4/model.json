@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "id": "mini-gateway",
  "title": "mini-gateway — target architecture",
- "revision": "target-approved-2026-11-24-rulings+built-through-chunk-1",
+ "revision": "target-approved-2026-11-24-rulings+built-through-chunk-2",
  "defaultDiagramId": "context",
  "model": {
   "elements": [
@@ -159,7 +159,7 @@
     "kind": "softwareSystem",
     "name": "pgproto3 (from pgx/v5)",
     "description": "Go package github.com/jackc/pgx/v5/pgproto3: Postgres wire message structs with Encode and Decode. The one external dependency, used for message encoding only.",
-    "status": "planned",
+    "status": "existing",
     "tags": [
      "external"
     ],
@@ -528,13 +528,13 @@
     "id": "c-sim",
     "kind": "container",
     "name": "Simulator harness",
-    "description": "internal/sim, internal/sim/simnet, fakepg, workload, simtest, simtoy, cmd/mgsim. A deterministic single-threaded world: virtual clock, simulated byte streams, a fake Postgres, simulated clients, faults, replay. Test code; built before any proxy code.",
+    "description": "internal/sim and its sub-packages simnet, fakepg, workload, world, simtest and simtoy; internal/testclient; internal/randdist; cmd/mgsim; scripts/tier-r.sh. A deterministic single-threaded world: virtual clock, simulated byte streams, a fake Postgres, simulated clients, scenarios with a driver interface, faults, replay. Its fake Postgres is checked against a real Postgres 17. Test code; built before any proxy code.",
     "status": "planned",
     "tags": [
      "test"
     ],
     "plannedNotes": [
-     "Built in chunk 1: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy) and cmd/mgsim. Not built: the fake Postgres and the simulated clients (chunk 2). No engine exists yet, so the harness drives only the toy protocol."
+     "Built in chunks 1 and 2: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: SCRAM login and the TLS faults in the fake and the clients (chunk 4). No engine exists yet, so the harness drives the fake Postgres and the toy protocol, and nothing implements the engine's transport seam."
     ],
     "docIds": [],
     "sourceIds": [
@@ -555,7 +555,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunk 1: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy) and cmd/mgsim. Not built: the fake Postgres and the simulated clients (chunk 2). No engine exists yet, so the harness drives only the toy protocol."
+     "Built in chunks 1 and 2: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: SCRAM login and the TLS faults in the fake and the clients (chunk 4). No engine exists yet, so the harness drives the fake Postgres and the toy protocol, and nothing implements the engine's transport seam."
     ],
     "docIds": [],
     "sourceIds": [
@@ -1388,10 +1388,12 @@
     "id": "s-fakepg",
     "kind": "component",
     "name": "Fake Postgres",
-    "description": "internal/sim/fakepg. Speaks the simple-query subset in real wire bytes; connection limit; transaction status; a small keyed table with a write log; service-time models; every database-side fault; its own snapshot.",
+    "description": "internal/sim/fakepg. Speaks the simple-query subset in real wire bytes with its own framer; login by trust or SCRAM-SHA-256; a max_connections limit with Postgres's refusal; transaction status; a small keyed table with write, statement and transaction logs; service-time models and a capacity limit; cancel requests; every database-side fault; its own snapshot.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 2 (internal/sim/fakepg): all of it with trust login, and the 24 database-side fault kinds that need no TLS. Not built: SCRAM-SHA-256 login, and the two TLS faults (answers N to a TLS request; a certificate that fails verification) (chunk 4)."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -1403,8 +1405,42 @@
     "id": "s-workload",
     "kind": "component",
     "name": "Clients and tenants",
-    "description": "internal/sim/workload. Simulated clients: tenants, open-loop arrivals measured from intended send time, Zipf keys, transactions, disconnects, cancels, aggressive retries.",
+    "description": "internal/sim/workload. Simulated clients grouped in tenants: open-loop arrivals (constant or Poisson) and closed-loop think time, latency measured from the intended send time, uniform, Zipf or fixed keys, transactions of several statements, retries with backoff, every client-side fault, its own snapshot. A client sends one request at a time; later arrivals wait in its bounded backlog. Also a hand-driven client (Probe) for tests.",
     "status": "planned",
+    "tags": [],
+    "plannedNotes": [
+     "Built in chunk 2 (internal/sim/workload): all of it, with the client-side faults that need no TLS (half a message, stops reading, disconnects, reconnect burst, cancel, aggressive retry). Not built: the four TLS client faults (stalls after a TLS request, fails the handshake, plaintext after a TLS request, a second TLS request) (chunk 4)."
+    ],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go"
+   },
+   {
+    "id": "s-testclient",
+    "kind": "component",
+    "name": "Test client",
+    "description": "internal/testclient. A Postgres client with no I/O: bytes in, messages out. Its own framer, a message codec, and a session machine (phase, status byte, key data, parameters) with login by trust or SCRAM-SHA-256. Used by the simulated clients on simulated streams and by the tier R tests on TCP.",
+    "status": "planned",
+    "tags": [],
+    "plannedNotes": [
+     "Built in chunk 2 (internal/testclient): the framer, the codec and the session machine, with trust login. Not built: SCRAM-SHA-256 login (chunk 4)."
+    ],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go, pgproto3"
+   },
+   {
+    "id": "s-randdist",
+    "kind": "component",
+    "name": "Float generators",
+    "description": "internal/randdist. The only two functions that use floating point: exponential gaps for Poisson arrivals, and a Zipf generator. Kept outside internal/sim, where float syntax is forbidden.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1412,7 +1448,22 @@
      "plan"
     ],
     "parentId": "c-sim",
-    "technology": "Go, pgproto3"
+    "technology": "Go"
+   },
+   {
+    "id": "s-world",
+    "kind": "component",
+    "name": "Scenario world",
+    "description": "internal/sim/world. The scenario type; the driver interface (start, connect, inject, run, observe, stop) and its simulator implementation; five direct baselines with no proxy (500 connections, reconnect burst, 1,000 identical reads, open-loop overload, mixed transactions); the write-log and transaction checks; the fidelity runner, which plays one script against the fake and compares the transcript with Postgres 17's, recorded for CI or live in tier R.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go"
    },
    {
     "id": "s-faults",
@@ -1478,7 +1529,7 @@
     "id": "s-cli",
     "kind": "component",
     "name": "cmd/mgsim",
-    "description": "Lists the named scenarios; runs one from a seed outside go test, prints its digests (and the trace on request) and exits 1 with the REPLAY line when it fails.",
+    "description": "Lists the named scenarios (toy and world); runs one from a seed outside go test, prints its digests (and the trace on request; for a world scenario also its result table) and exits 1 with the REPLAY line when it fails.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -2226,8 +2277,8 @@
     "id": "s9",
     "sourceId": "c-sim",
     "targetId": "pgproto3",
-    "label": "The fake Postgres and the simulated clients speak real wire bytes",
-    "status": "planned",
+    "label": "The fake Postgres and the test client encode and decode real wire messages, in one file each",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2279,7 +2330,7 @@
     "sourceId": "developer",
     "targetId": "c-sim",
     "label": "Runs a scenario from a seed; replays a failure",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2299,6 +2350,19 @@
      "plan"
     ],
     "technology": "make"
+   },
+   {
+    "id": "s16",
+    "sourceId": "c-sim",
+    "targetId": "pg",
+    "label": "Tier R of the simulated world: the fidelity script and three direct baselines run against a real Postgres 17, to show the fake is faithful",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "scripts/tier-r.sh, Docker, TCP"
    },
    {
     "id": "s15",
@@ -3383,7 +3447,7 @@
     "id": "m2",
     "sourceId": "s-cli",
     "targetId": "s-toy",
-    "label": "Looks up a scenario by name and runs it; the toy scenarios are the only ones so far",
+    "label": "Looks up a toy scenario by name and runs it",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -3449,7 +3513,7 @@
     "sourceId": "s-workload",
     "targetId": "s-net",
     "label": "Opens client connections; sends and reads",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3462,7 +3526,7 @@
     "sourceId": "s-fakepg",
     "targetId": "s-net",
     "label": "Accepts database connections; replies",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3487,8 +3551,8 @@
     "id": "m10",
     "sourceId": "s-faults",
     "targetId": "s-fakepg",
-    "label": "Slow, kill, freeze, refuse, garbage",
-    "status": "planned",
+    "label": "Applies the database fault kinds the fake registered: refuse, silence, slow, reset, garbage, kill, freeze, restart and more",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3500,8 +3564,8 @@
     "id": "m11",
     "sourceId": "s-faults",
     "targetId": "s-workload",
-    "label": "Disconnect, stop reading, retry storm",
-    "status": "planned",
+    "label": "Applies the client fault kinds the workload registered: half a message, stop reading, disconnect, reconnect burst, cancel",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3513,8 +3577,8 @@
     "id": "m12",
     "sourceId": "s-workload",
     "targetId": "s-streams",
-    "label": "Arrivals, keys, tenants",
-    "status": "planned",
+    "label": "Arrivals, keys, request mix and retries, one stream each per client",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3526,8 +3590,8 @@
     "id": "m13",
     "sourceId": "s-fakepg",
     "targetId": "s-streams",
-    "label": "Service times",
-    "status": "planned",
+    "label": "Service-time jitter, one stream per connection; cancel keys",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3540,7 +3604,7 @@
     "sourceId": "s-fakepg",
     "targetId": "pgproto3",
     "label": "Wire messages",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3550,10 +3614,10 @@
    },
    {
     "id": "m15",
-    "sourceId": "s-workload",
+    "sourceId": "s-testclient",
     "targetId": "pgproto3",
     "label": "Wire messages",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3567,6 +3631,188 @@
     "targetId": "n-pgwire",
     "label": "Reuses the SCRAM functions",
     "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m29",
+    "sourceId": "s-workload",
+    "targetId": "s-testclient",
+    "label": "Every client frames, decodes and tracks its session with it",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m30",
+    "sourceId": "s-workload",
+    "targetId": "s-randdist",
+    "label": "Poisson gaps and Zipf keys",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m31",
+    "sourceId": "s-testclient",
+    "targetId": "n-pgwire",
+    "label": "Reuses the SCRAM functions",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m32",
+    "sourceId": "s-world",
+    "targetId": "s-fakepg",
+    "label": "Starts the fake for a scenario; reads its snapshot and logs for the checks",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m33",
+    "sourceId": "s-world",
+    "targetId": "s-workload",
+    "label": "Starts the scenario's clients; reads their snapshot; the fidelity runner drives a Probe",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m34",
+    "sourceId": "s-world",
+    "targetId": "s-testclient",
+    "label": "Turns the messages of a fidelity exchange into transcript tokens",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m35",
+    "sourceId": "s-world",
+    "targetId": "s-simtest",
+    "label": "Its scenario tests run the pinned seeds and the sweep, every seed twice",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
+   },
+   {
+    "id": "m36",
+    "sourceId": "s-world",
+    "targetId": "pg",
+    "label": "Tier R: plays the fidelity script and three baselines over TCP; on request rewrites the recorded transcript that CI replays",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "scripts/tier-r.sh, Docker, go test"
+   },
+   {
+    "id": "m37",
+    "sourceId": "s-cli",
+    "targetId": "s-world",
+    "label": "Looks up a world scenario by name, runs it and prints its result table",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m38",
+    "sourceId": "s-fakepg",
+    "targetId": "s-trace",
+    "label": "Appends accepts, statements, writes, cancels and fired faults; writes its state for the state digest",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m39",
+    "sourceId": "s-workload",
+    "targetId": "s-trace",
+    "label": "Appends arrivals, sends, completions and retries; writes its state for the state digest",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m40",
+    "sourceId": "s-fakepg",
+    "targetId": "s-inv",
+    "label": "Registers its conservation laws, the connection limit and its quiesce check",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m41",
+    "sourceId": "s-workload",
+    "targetId": "s-inv",
+    "label": "Registers request conservation per tenant and its quiesce check",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m42",
+    "sourceId": "s-world",
+    "targetId": "s-faults",
+    "label": "Scenario fault schedules; random schedules decoded from fuzz input",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4600,6 +4846,9 @@
     },
     {
      "relationshipId": "c10"
+    },
+    {
+     "relationshipId": "s16"
     }
    ],
    "legend": {
@@ -5015,7 +5264,7 @@
    "id": "component-wire",
    "kind": "component",
    "title": "Components: wire layer",
-   "status": "planned",
+   "status": "mixed",
    "nodes": [
     {
      "elementId": "w-framer"
@@ -5764,6 +6013,15 @@
      "elementId": "s-workload"
     },
     {
+     "elementId": "s-testclient"
+    },
+    {
+     "elementId": "s-randdist"
+    },
+    {
+     "elementId": "s-world"
+    },
+    {
      "elementId": "s-faults"
     },
     {
@@ -5792,6 +6050,9 @@
     },
     {
      "elementId": "pgproto3"
+    },
+    {
+     "elementId": "pg"
     }
    ],
    "edges": [
@@ -5878,6 +6139,48 @@
     },
     {
      "relationshipId": "m28"
+    },
+    {
+     "relationshipId": "m29"
+    },
+    {
+     "relationshipId": "m30"
+    },
+    {
+     "relationshipId": "m31"
+    },
+    {
+     "relationshipId": "m32"
+    },
+    {
+     "relationshipId": "m33"
+    },
+    {
+     "relationshipId": "m34"
+    },
+    {
+     "relationshipId": "m35"
+    },
+    {
+     "relationshipId": "m36"
+    },
+    {
+     "relationshipId": "m37"
+    },
+    {
+     "relationshipId": "m38"
+    },
+    {
+     "relationshipId": "m39"
+    },
+    {
+     "relationshipId": "m40"
+    },
+    {
+     "relationshipId": "m41"
+    },
+    {
+     "relationshipId": "m42"
     }
    ],
    "legend": {
@@ -6181,7 +6484,7 @@
    "id": "plan",
    "title": "mini-gateway PLAN.md (approved 2026-11-24)",
    "url": "https://github.com/nickstrad/mini-gateway/blob/main/PLAN.md",
-   "notes": "Target architecture. Built so far: chunks 0–1. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
+   "notes": "Target architecture. Built so far: chunks 0–2. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
   }
  ]
 }

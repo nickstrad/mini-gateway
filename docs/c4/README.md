@@ -7,21 +7,21 @@ Three C4 levels plus a deployment view: system context, containers (two views), 
 ## Diagrams
 
 <!-- diagram-table:start -->
-**Built so far: chunks 0–1. Dashed parts are planned.** The Built column counts the elements of each diagram that exist in the code.
+**Built so far: chunks 0–2. Dashed parts are planned.** The Built column counts the elements of each diagram that exist in the code.
 
 | # | Level | File | Built | Shows |
 | --- | --- | --- | --- | --- |
-| 1 | System context | [01-system-context.md](01-system-context.md) | 1 of 7 | mini-gateway, its clients, its operator, the one Postgres behind it, the readers of its metrics, and its one external library |
+| 1 | System context | [01-system-context.md](01-system-context.md) | 2 of 7 | mini-gateway, its clients, its operator, the one Postgres behind it, the readers of its metrics, and its one external library |
 | 2 | Containers | [02-container-request-path.md](02-container-request-path.md) | 0 of 13 | The Go packages inside one mini-gateway process and how a request passes through them |
-| 3 | Containers | [03-container-drivers-and-seams.md](03-container-drivers-and-seams.md) | 1 of 13 | Who drives the engine (the shell or the simulator), where the Postgres codec boundary is, and the work vocabulary the cores are written against |
+| 3 | Containers | [03-container-drivers-and-seams.md](03-container-drivers-and-seams.md) | 2 of 13 | Who drives the engine (the shell or the simulator), where the Postgres codec boundary is, and the work vocabulary the cores are written against |
 | 4 | Deployment | [04-deployment-fleet.md](04-deployment-fleet.md) | 0 of 10 | The supported multi-instance deployment: static fleet config, per-instance enforcement, no run-time coordination |
 | 5 | Components | [05-component-engine.md](05-component-engine.md) | 0 of 18 | internal/proxy: the transport seam, the two connection tables, the request pipeline and its stage seams, the reply relay |
-| 6 | Components | [06-component-wire-layer.md](06-component-wire-layer.md) | 0 of 12 | internal/pgwire: the pgproto3 codec boundary, our framer, both session machines, the classifier, the error contract |
+| 6 | Components | [06-component-wire-layer.md](06-component-wire-layer.md) | 1 of 12 | internal/pgwire: the pgproto3 codec boundary, our framer, both session machines, the classifier, the error contract |
 | 7 | Components | [07-component-admission.md](07-component-admission.md) | 0 of 12 | internal/admission: the rate gate, per-tenant queues, both CoDel modes behind one interface, the dispatcher, the adaptive limit |
 | 8 | Components | [08-component-pool.md](08-component-pool.md) | 0 of 10 | internal/pool: the hard cap, the creation limiter, leases per transaction, the breaker, the dirty-connection table |
 | 9 | Components | [09-component-coalescer.md](09-component-coalescer.md) | 0 of 9 | internal/coalesce: the join rule, the flight table, waiters, the flight's own deadline, the shared reply |
 | 10 | Components | [10-component-retry.md](10-component-retry.md) | 0 of 7 | internal/retry: the policy interface, its two policies, the budget |
-| 11 | Components | [11-component-simulator.md](11-component-simulator.md) | 11 of 16 | internal/sim and its sub-packages: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol |
+| 11 | Components | [11-component-simulator.md](11-component-simulator.md) | 14 of 20 | internal/sim and its sub-packages, internal/testclient and internal/randdist: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, the test client, the scenario world with its baselines and fidelity runner, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol |
 | 12 | Components | [12-component-observability.md](12-component-observability.md) | 3 of 21 | internal/obs: the one raw export (snapshots), the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus |
 <!-- diagram-table:end -->
 

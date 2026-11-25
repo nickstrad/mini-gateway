@@ -1,6 +1,6 @@
 # C4 Level 1: System context
 
-**Built so far: chunks 0–1. Dashed parts are planned.** In this diagram 1 of 7 elements and 0 of 7 relationships are built. Model: diagram `context` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–2. Dashed parts are planned.** In this diagram 2 of 7 elements and 0 of 7 relationships are built. Model: diagram `context` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 Clients speak the Postgres wire protocol to mini-gateway as if it were the database. The proxy holds the only connections to Postgres. Metrics leave through exporters; nothing inside the proxy depends on who reads them.
 
@@ -14,7 +14,7 @@ flowchart TB
   GW["mini-gateway"]:::planned
   PG[("Postgres")]:::planned
   TELEMETRY[["Metrics and log readers"]]:::planned
-  PGPROTO3[["pgproto3 (from pgx/v5)"]]:::planned
+  PGPROTO3[["pgproto3 (from pgx/v5)"]]:::built
   APP -.->|1| GW
   OPERATOR -.->|2| GW
   DEVELOPER -.->|3| GW
@@ -40,7 +40,7 @@ flowchart TB
 | mini-gateway | softwareSystem | planned | A proxy that speaks the Postgres wire protocol (simple-query subset) in front of one Postgres: a hard-capped connection pool lent per transaction, per-tenant admission with two CoDel modes, read coalescing, an off-by-default retry policy, snapshot observability. Terminates client TLS; logs clients in with SCRAM-SHA-256. Runs as N independent instances. |
 | Postgres | softwareSystem, external | planned | One ordinary Postgres server. Sees at most the fleet's connection budget, all logged in as one role. |
 | Metrics and log readers | softwareSystem, external | planned | Everything that reads what the adapters produce: a Prometheus fed through an OpenTelemetry Collector or by direct scrape, flushed CSV files read by tests and DuckDB, log readers. They merge across instances; no component knows about them. The observability component view shows them one by one. |
-| pgproto3 (from pgx/v5) | softwareSystem, external | planned | Go package github.com/jackc/pgx/v5/pgproto3: Postgres wire message structs with Encode and Decode. The one external dependency, used for message encoding only. |
+| pgproto3 (from pgx/v5) | softwareSystem, external | built (chunk 2) | Go package github.com/jackc/pgx/v5/pgproto3: Postgres wire message structs with Encode and Decode. The one external dependency, used for message encoding only. |
 
 ## Relationships
 
