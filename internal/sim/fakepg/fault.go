@@ -178,7 +178,7 @@ func (srv *Server) applyKind(f sim.Fault) bool {
 	case FaultBloat:
 		fs.bloatRows, fs.bloatSize = min(max(f.Arg1, 1), MaxRowCount), min(max(f.Arg2, 0), MaxRowSize)
 	case FaultMaxConn:
-		fs.maxConnOn, fs.maxConn = true, max(f.Arg1, 0)
+		fs.maxConnOn, fs.maxConn = true, min(max(f.Arg1, 0), int64(srv.cfg.MaxConnections))
 	case FaultBoundary:
 		fs.boundaryOn, fs.boundary = true, time.Duration(max(f.Arg2, 0))
 	case FaultStallWindow:
@@ -204,14 +204,13 @@ func (srv *Server) applyTargeted(f sim.Fault) bool {
 			return true
 		}
 	case FaultFragment:
-		fs.fragment = max(f.Arg2, 1)
 		if f.Target == 0 {
+			fs.fragment = max(f.Arg2, 1)
 			for _, b := range srv.targets(0) {
 				srv.netFault(simnet.FaultChunk, b.id, simnet.DirDown, fs.fragment)
 			}
 			return true
 		}
-		fs.fragment = 0
 	case FaultReset:
 		p := point(min(max(f.Arg1, 0), int64(numPoints)-1))
 		if f.Target == 0 {
@@ -222,8 +221,8 @@ func (srv *Server) applyTargeted(f sim.Fault) bool {
 			return true
 		}
 	case FaultGarbage:
-		fs.garbageMode = min(max(f.Arg1, 0), GarbageHugeLength)
 		if f.Target == 0 {
+			fs.garbageMode = garbageMode(f.Arg1)
 			fs.garbageOn = true
 			return true
 		}
@@ -232,17 +231,24 @@ func (srv *Server) applyTargeted(f sim.Fault) bool {
 			return false
 		}
 	}
-	ts := srv.targets(f.Target)
-	if len(ts) == 0 {
-		return false
+	hit := false
+	for _, b := range srv.targets(f.Target) {
+		if srv.applyTo(b, f) {
+			hit = true
+		}
 	}
-	for _, b := range ts {
-		srv.applyTo(b, f)
-	}
-	return true
+	return hit
 }
 
-func (srv *Server) applyTo(b *backend, f sim.Fault) {
+func garbageMode(arg int64) int64 { return min(max(arg, 0), GarbageHugeLength) }
+
+func (srv *Server) applyTo(b *backend, f sim.Fault) bool {
+	switch f.Kind {
+	case FaultDirtyState, FaultParamStatus:
+		if b.phase != phaseReady {
+			return false
+		}
+	}
 	switch f.Kind {
 	case FaultSilentQuery:
 		b.muteQueries = true
@@ -253,11 +259,12 @@ func (srv *Server) applyTo(b *backend, f sim.Fault) {
 		if p == PointNow {
 			_ = b.end.Reset()
 			b.finalize()
-			return
+			return true
 		}
 		b.arm[p] = true
 	case FaultGarbage:
 		b.garbage = true
+		b.garbageMode = garbageMode(f.Arg1)
 	case FaultTerminate:
 		b.terminate()
 	case FaultDirtyState:
@@ -270,6 +277,7 @@ func (srv *Server) applyTo(b *backend, f sim.Fault) {
 		srv.netFault(simnet.FaultHalfOpen, b.id, 1, 0)
 		b.finalize()
 	}
+	return true
 }
 
 func (b *backend) armed(p point) bool {
@@ -306,9 +314,6 @@ func (b *backend) terminate() {
 }
 
 func (b *backend) dirty(mode int64) {
-	if b.phase != phaseReady {
-		return
-	}
 	if mode == DirtySetting {
 		if i := findSetting(b.settings, "search_path"); i >= 0 {
 			b.settings[i].value = "fakepg_dirty"
@@ -321,9 +326,6 @@ func (b *backend) dirty(mode int64) {
 }
 
 func (b *backend) surprise() {
-	if b.phase != phaseReady {
-		return
-	}
 	b.srv.faults.surprises++
 	v := SurpriseApp + "-" + strconv.FormatInt(b.srv.faults.surprises, 10)
 	if i := findSetting(b.settings, "application_name"); i >= 0 {
@@ -345,6 +347,25 @@ func (srv *Server) addStall(window, extra time.Duration) {
 		kept = kept[1:]
 	}
 	srv.faults.stalls = append(kept, Stall{From: now, To: sim.Later(now, window), Extra: extra})
+	if extra > 0 && !srv.faults.boundaryOn {
+		srv.stallInService(extra)
+	}
+}
+
+func (srv *Server) stallInService(extra time.Duration) {
+	for _, b := range srv.backends {
+		r := b.cur
+		if r == nil || r.state != runServing {
+			continue
+		}
+		if srv.faults.frozen || !r.timer.Pending() {
+			r.remaining = sim.AddDurations(r.remaining, extra)
+			continue
+		}
+		at := sim.Later(r.timer.When(), extra)
+		r.timer.Cancel()
+		r.timer = srv.s.At(at, func() { b.serviceDone(r) })
+	}
 }
 
 func (srv *Server) kill() {
@@ -363,6 +384,11 @@ func (srv *Server) freeze(d time.Duration) {
 			if r := b.cur; r != nil && r.state == runServing && r.timer.Pending() {
 				r.remaining = r.timer.When().Sub(now)
 				r.timer.Cancel()
+			}
+			if b.resetTimer.Pending() {
+				b.resetLeft = b.resetTimer.When().Sub(now)
+				b.resetTimer.Cancel()
+				b.resetHeld = true
 			}
 			b.pumpTimer.Cancel()
 		}
@@ -385,6 +411,10 @@ func (srv *Server) thaw() {
 	for _, b := range srv.targets(0) {
 		if r := b.cur; r != nil && r.state == runServing && !r.timer.Pending() {
 			r.timer = srv.s.After(r.remaining, func() { b.serviceDone(r) })
+		}
+		if b.resetHeld {
+			b.resetHeld = false
+			b.resetTimer = srv.s.After(b.resetLeft, b.delayedReset)
 		}
 	}
 	srv.admitWaiter()

@@ -56,7 +56,8 @@ func FuzzFramer(f *testing.F) {
 
 func FuzzMatch(f *testing.F) {
 	for _, s := range []string{"SELECT 1", "SELECT v FROM kv WHERE k = 'a'", "BEGIN; SELECT 1; COMMIT", "/*c1*/ UPDATE kv SET v = 'x' WHERE k = 'y'",
-		"SELECT pg_sleep(0.05)", "SELECT repeat('x', 100) FROM generate_series(1, 200000)", "SET a.b TO 'c'", "'", "/*", "SELECT ''''", ";;;"} {
+		"SELECT pg_sleep(0.05)", "SELECT repeat('x', 100) FROM generate_series(1, 200000)", "SET a.b TO 'c'", "'", "/*", "SELECT ''''", ";;;",
+		"SELECT repeat('ab', 5000000000000000000) FROM generate_series(1, 1)", "SELECT repeat('x', 1) FROM generate_series(-9223372036854775808, 9223372036854775807)"} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, q string) {
@@ -66,7 +67,7 @@ func FuzzMatch(f *testing.F) {
 		}
 		for _, p := range parts {
 			st := fakepg.Match(p)
-			if st.Kind >= fakepg.NumKinds || st.Rows > fakepg.MaxRowCount || st.Size > fakepg.MaxRowSize || st.Sleep > fakepg.MaxSleep || st.Sleep < 0 {
+			if st.Kind >= fakepg.NumKinds || st.Rows > fakepg.MaxRowCount || st.Rows < 0 || st.Size > fakepg.MaxRowSize || st.Size < 0 || st.Sleep > fakepg.MaxSleep || st.Sleep < 0 {
 				t.Fatalf("%q matched out of bounds: %+v", p, st)
 			}
 		}

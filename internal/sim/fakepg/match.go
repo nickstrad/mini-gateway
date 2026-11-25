@@ -398,12 +398,27 @@ func matchRows(st *Stmt, c []token) {
 	if err1 != nil || err2 != nil || err3 != nil || len(c[0].text) == 0 {
 		return
 	}
-	size := n * int64(len(c[0].text))
-	count := hi - lo + 1
-	if n < 0 || size > MaxRowSize || count < 0 || count > MaxRowCount {
+	unit := int64(len(c[0].text))
+	if n < 0 || n > MaxRowSize/unit {
+		return
+	}
+	size := n * unit
+	count, ok := seriesLen(lo, hi)
+	if !ok {
 		return
 	}
 	st.Kind, st.Const, st.Size, st.Rows = KindRows, c[0].text, size, count
+}
+
+func seriesLen(lo, hi int64) (int64, bool) {
+	if hi < lo {
+		return 0, hi == lo-1
+	}
+	d := uint64(hi) - uint64(lo)
+	if d >= MaxRowCount {
+		return 0, false
+	}
+	return int64(d) + 1, true
 }
 
 func parseSeconds(s string) (time.Duration, bool) {

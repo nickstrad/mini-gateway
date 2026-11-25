@@ -58,6 +58,7 @@ type segment struct {
 	rows    int64
 	size    int64
 	unit    string
+	second  []byte
 	readyAt sim.Time
 	trickle time.Duration
 }
@@ -99,6 +100,9 @@ type backend struct {
 	resetTimer  sim.Timer
 	arm         [numPoints]bool
 	garbage     bool
+	garbageMode int64
+	resetHeld   bool
+	resetLeft   time.Duration
 	dying       bool
 	stream      *rand.Rand
 }
@@ -366,13 +370,13 @@ func (b *backend) emit(data []byte) {
 	b.out = append(b.out, segment{data: data, readyAt: at})
 }
 
-func (b *backend) emitRows(unit string, size, rows int64) {
+func (b *backend) emitRows(unit string, size, rows int64, second []byte) {
 	if rows <= 0 {
 		return
 	}
 	b.emit(nil)
 	seg := &b.out[len(b.out)-1]
-	seg.unit, seg.size, seg.rows, seg.trickle = unit, size, rows, b.srv.faults.trickle
+	seg.unit, seg.size, seg.rows, seg.second, seg.trickle = unit, size, rows, second, b.srv.faults.trickle
 }
 
 func (b *backend) pump() bool {
@@ -421,7 +425,7 @@ func (b *backend) pump() bool {
 		}
 		b.rowBuf = b.rowBuf[:0]
 		for seg.rows > 0 && (len(b.rowBuf) == 0 || (seg.trickle == 0 && len(b.rowBuf) < outFill)) {
-			b.rowBuf = appendRepeatRow(b.rowBuf, seg.unit, seg.size)
+			b.rowBuf = appendRepeatRow(b.rowBuf, seg.unit, seg.size, seg.second)
 			seg.rows--
 		}
 		b.outBuf = b.rowBuf
@@ -445,16 +449,22 @@ func (b *backend) doAfter() {
 }
 
 func (b *backend) scheduleReset() {
-	if b.resetTimer.Pending() {
+	if b.resetTimer.Pending() || b.resetHeld {
 		return
 	}
-	b.resetTimer = b.srv.s.After(b.srv.cfg.AfterDelay, func() {
-		if b.phase == phaseClosed {
-			return
-		}
-		_ = b.end.Reset()
-		b.finalize()
-	})
+	if b.srv.faults.frozen {
+		b.resetHeld, b.resetLeft = true, b.srv.cfg.AfterDelay
+		return
+	}
+	b.resetTimer = b.srv.s.After(b.srv.cfg.AfterDelay, b.delayedReset)
+}
+
+func (b *backend) delayedReset() {
+	if b.phase == phaseClosed {
+		return
+	}
+	_ = b.end.Reset()
+	b.finalize()
 }
 
 func (b *backend) finalize() {

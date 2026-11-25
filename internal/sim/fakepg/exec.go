@@ -23,6 +23,7 @@ type txn struct {
 	failed   bool
 	writes   []pendingWrite
 	saved    []setting
+	netRows  int
 }
 
 const MaxTxWrites = 1 << 16
@@ -38,7 +39,9 @@ func (b *backend) beginMessage(q string) {
 	texts := Split(q)
 	b.firstReply = true
 	if len(texts) > MaxStatements {
+		b.srv.stats.errors++
 		b.emit(encError(nil, errorf("ERROR", "54000", "fakepg: more than %d statements in one query", MaxStatements)))
+		b.failMessage()
 		b.endMessage()
 		return
 	}
@@ -236,7 +239,7 @@ func (srv *Server) serviceTime(b *backend, r *run) time.Duration {
 	start := srv.s.Now()
 	for _, w := range srv.faults.stalls {
 		end := sim.Later(start, d)
-		if start < w.To && end > w.From {
+		if start < w.To && (end > w.From || start >= w.From) {
 			d = sim.AddDurations(d, w.Extra)
 		}
 	}
@@ -284,7 +287,10 @@ func (b *backend) failMessage() {
 
 func (b *backend) endMessage() {
 	if b.tx != nil && !b.tx.explicit {
-		b.commit()
+		if e := b.commit(); e != nil {
+			b.srv.stats.errors++
+			b.emit(encError(nil, *e))
+		}
 	}
 	b.msgImplicit = false
 	b.reportChanges()
@@ -337,14 +343,14 @@ func (b *backend) execute(r *run) *pgError {
 	case KindSleep:
 		b.emit(encCommand(encDataRow(nil, []byte{}), "SELECT 1"))
 	case KindRows:
-		b.emitRows(st.Const, st.Size, st.Rows)
+		b.emitRows(st.Const, st.Size, st.Rows, nil)
 		b.emit(encCommand(nil, "SELECT "+strconv.FormatInt(st.Rows, 10)))
 	case KindUpdate, KindInsert, KindDelete:
 		return b.write(r)
 	case KindSet, KindReset, KindShow, KindDiscard:
 		return b.session(st)
 	case KindBegin, KindCommit, KindRollback:
-		b.txControl(st.Kind)
+		return b.txControl(st.Kind)
 	default:
 		return &pgError{severity: "ERROR", code: "42601", message: "syntax error at or near \"" + st.Word + "\""}
 	}
@@ -364,8 +370,12 @@ func (b *backend) readReply(r *run) {
 	}
 	b.emit(out)
 	if f := &b.srv.faults; f.bloatRows > 0 {
-		rows := min(f.bloatRows, b.srv.cfg.MaxReplyBytes/rowHeaderLen(f.bloatSize))
-		b.emitRows("x", f.bloatSize, rows)
+		var second []byte
+		if r.st.Const == "sleep" {
+			second = []byte("t")
+		}
+		rows := min(f.bloatRows, b.srv.cfg.MaxReplyBytes/repeatRowLen(f.bloatSize, second))
+		b.emitRows("x", f.bloatSize, rows, second)
 		n += rows
 	}
 	b.emit(encCommand(nil, "SELECT "+strconv.FormatInt(n, 10)))
@@ -389,8 +399,8 @@ func (b *backend) write(r *run) *pgError {
 		n = boolInt(exists)
 		tag = "DELETE " + strconv.FormatInt(n, 10)
 	}
-	if st.Kind == KindInsert && !exists && b.tx == nil && len(b.srv.table) >= b.srv.cfg.MaxRows {
-		return &pgError{severity: "ERROR", code: "53100", message: "fakepg: table full"}
+	if st.Kind == KindInsert && b.rowsWithPending()+1 > b.srv.cfg.MaxRows {
+		return &errTableFull
 	}
 	if n > 0 {
 		w := pendingWrite{op: st.Kind, key: st.Key, value: st.Value, text: st.Text, tag: st.Tag, stmtSeq: r.seq}
@@ -401,10 +411,51 @@ func (b *backend) write(r *run) *pgError {
 				return &pgError{severity: "ERROR", code: "54000", message: "fakepg: too many writes in one transaction"}
 			}
 			b.tx.writes = append(b.tx.writes, w)
+			b.tx.netRows += netRowChange(st.Kind)
 		}
 	}
 	b.emit(encCommand(nil, tag))
 	return nil
+}
+
+var errTableFull = pgError{severity: "ERROR", code: "53100", message: "fakepg: table full"}
+
+func netRowChange(k Kind) int {
+	switch k {
+	case KindInsert:
+		return 1
+	case KindDelete:
+		return -1
+	}
+	return 0
+}
+
+func (b *backend) rowsWithPending() int {
+	n := len(b.srv.table)
+	if b.tx != nil {
+		n += b.tx.netRows
+	}
+	return n
+}
+
+func (srv *Server) rowsAfter(writes []pendingWrite) int {
+	n := len(srv.table)
+	present := map[string]bool{}
+	for _, w := range writes {
+		was, known := present[w.key]
+		if !known {
+			_, was = srv.get(w.key)
+		}
+		now := w.op != KindDelete
+		switch {
+		case now && !was:
+			n++
+		case !now && was:
+			n--
+		}
+		present[w.key] = now
+	}
+	return n
 }
 
 func (srv *Server) apply(b *backend, txID int64, w pendingWrite) {
@@ -417,7 +468,9 @@ func (srv *Server) apply(b *backend, txID int64, w pendingWrite) {
 		case KindDelete:
 			srv.del(w.key)
 		default:
-			_ = srv.put(w.key, w.value)
+			if srv.put(w.key, w.value) != nil {
+				return
+			}
 		}
 		srv.writeSeq++
 		srv.stats.writes++
@@ -427,19 +480,24 @@ func (srv *Server) apply(b *backend, txID int64, w pendingWrite) {
 	}
 }
 
-func (b *backend) commit() {
+func (b *backend) commit() *pgError {
 	tx := b.tx
+	if !tx.failed && b.srv.rowsAfter(tx.writes) > b.srv.cfg.MaxRows {
+		b.rollback()
+		return &errTableFull
+	}
 	b.tx = nil
 	b.srv.stats.txOpen--
 	if tx.failed {
 		b.srv.stats.txRolledBack++
 		b.restoreSettings(tx)
-		return
+		return nil
 	}
 	b.srv.stats.txCommitted++
 	for _, w := range tx.writes {
 		b.srv.apply(b, tx.id, w)
 	}
+	return nil
 }
 
 func (b *backend) rollback() {
@@ -461,7 +519,7 @@ var (
 	warnAlreadyTx = pgError{severity: "WARNING", code: "25001", message: "there is already a transaction in progress"}
 )
 
-func (b *backend) txControl(k Kind) {
+func (b *backend) txControl(k Kind) *pgError {
 	switch k {
 	case KindBegin:
 		switch {
@@ -482,7 +540,9 @@ func (b *backend) txControl(k Kind) {
 			if b.tx.failed {
 				tag = "ROLLBACK"
 			}
-			b.commit()
+			if e := b.commit(); e != nil {
+				return e
+			}
 		}
 		b.emit(encCommand(nil, tag))
 	case KindRollback:
@@ -494,6 +554,7 @@ func (b *backend) txControl(k Kind) {
 		}
 		b.emit(encCommand(nil, "ROLLBACK"))
 	}
+	return nil
 }
 
 func (srv *Server) logStatement(b *backend, r *run, code string, aborted bool) {
@@ -523,8 +584,11 @@ func (srv *Server) cancel(pid uint32, secret []byte) {
 func (b *backend) garbled() bool {
 	f := &b.srv.faults
 	switch {
-	case f.garbageOn || b.garbage:
+	case b.garbage:
 		b.garbage = false
+		b.srv.s.Trace(kindFire, b.id, int64(FaultGarbage), b.garbageMode, 0)
+		b.emit(b.garbageBytes(b.garbageMode))
+	case f.garbageOn:
 		b.srv.s.Trace(kindFire, b.id, int64(FaultGarbage), f.garbageMode, 0)
 		b.emit(b.garbageBytes(f.garbageMode))
 	case f.notPostgres:
@@ -554,7 +618,7 @@ func (b *backend) garbageBytes(mode int64) []byte {
 
 func segLen(seg segment) int64 {
 	if seg.rows > 0 {
-		return rowHeaderLen(seg.size)
+		return repeatRowLen(seg.size, seg.second)
 	}
 	return int64(len(seg.data))
 }

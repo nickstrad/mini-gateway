@@ -147,13 +147,28 @@ func encNotice(dst []byte, e pgError) []byte {
 
 func rowHeaderLen(size int64) int64 { return 1 + 4 + 2 + 4 + size }
 
-func appendRepeatRow(dst []byte, unit string, size int64) []byte {
+func repeatRowLen(size int64, second []byte) int64 {
+	if second == nil {
+		return rowHeaderLen(size)
+	}
+	return rowHeaderLen(size) + 4 + int64(len(second))
+}
+
+func appendRepeatRow(dst []byte, unit string, size int64, second []byte) []byte {
+	cols := uint16(1)
+	if second != nil {
+		cols = 2
+	}
 	dst = append(dst, 'D')
-	dst = binary.BigEndian.AppendUint32(dst, uint32(rowHeaderLen(size)-1))
-	dst = binary.BigEndian.AppendUint16(dst, 1)
+	dst = binary.BigEndian.AppendUint32(dst, uint32(repeatRowLen(size, second)-1))
+	dst = binary.BigEndian.AppendUint16(dst, cols)
 	dst = binary.BigEndian.AppendUint32(dst, uint32(size))
 	for i := int64(0); i < size; i++ {
 		dst = append(dst, unit[i%int64(len(unit))])
+	}
+	if second != nil {
+		dst = binary.BigEndian.AppendUint32(dst, uint32(len(second)))
+		dst = append(dst, second...)
 	}
 	return dst
 }
