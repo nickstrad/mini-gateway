@@ -27,7 +27,7 @@ func RejectListMarkdown() string {
 	}
 	b.WriteString("\n## Words that end a proof\n\n")
 	b.WriteString("Read-only-provable fails when any of these appears as an unquoted word anywhere in the statement: " + rejWords(rejWriteKeywords) + "; or `FOR` followed by " + rejWords(rejLockStrength) + " (a locking clause).\n\n")
-	b.WriteString("Coalescable fails when any of these appears as an unquoted word: " + rejWords(rejPerCallKeywords) + ".\n\n")
+	b.WriteString("Coalescable fails when any of these appears as an unquoted word: " + rejWords(rejPerCallKeywords) + "; when any name (quoted or not, in any schema) is one of the time types " + rejWords(rejTemporalTypes) + ", because text cast to them can name the current time; and when any string literal contains (in any case) one of " + rejWords(rejRelativeTimeWords) + " or holds an escape the classifier does not decode.\n\n")
 	b.WriteString("Operators allowed in a read-only-provable statement: " + rejWords(rejOperators) + ".\n")
 	return b.String()
 }

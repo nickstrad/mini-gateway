@@ -18,7 +18,7 @@ var RejectRules = []RejectRule{
 	{work.RejectListen, "`LISTEN`", "A subscription lives on the connection; notifications would reach whichever client holds it next.", "LISTEN jobs"},
 	{work.RejectUnlisten, "`UNLISTEN`", "Same as `LISTEN`.", "UNLISTEN *"},
 	{work.RejectCursorWithHold, "`DECLARE ... WITH HOLD`", "A holdable cursor survives the commit and stays on the connection.", "DECLARE c CURSOR WITH HOLD FOR SELECT 1"},
-	{work.RejectTempObject, "Temporary objects: `CREATE [GLOBAL|LOCAL] TEMP|TEMPORARY TABLE/VIEW/SEQUENCE`, `SELECT ... INTO TEMP`, `CREATE OR REPLACE TEMP VIEW`, and any reference to the `pg_temp` schema", "Temporary objects belong to the session and would be visible to, or missing for, the next client.", "CREATE TEMP TABLE t (a int)"},
+	{work.RejectTempObject, "Temporary objects: `CREATE [GLOBAL|LOCAL] TEMP|TEMPORARY TABLE/VIEW/SEQUENCE`, `SELECT ... INTO TEMP`, `CREATE OR REPLACE TEMP VIEW`, any reference to the `pg_temp` schema, and a transaction-local `search_path` that may name it: `SET LOCAL search_path`/`SET LOCAL SCHEMA` with a string value that contains `pg_temp` (any case) or that the classifier cannot read (an `E'...'` string with a backslash, a `U&'...'` string with an escape), and `set_config('search_path', value, true)` whose value is not one plain string literal free of `pg_temp`", "Temporary objects belong to the session and would be visible to, or missing for, the next client.", "CREATE TEMP TABLE t (a int)"},
 	{work.RejectAdvisoryLock, "Session advisory-lock functions: `pg_advisory_lock`, `pg_advisory_lock_shared`, `pg_try_advisory_lock`, `pg_try_advisory_lock_shared`, `pg_advisory_unlock`, `pg_advisory_unlock_shared`, `pg_advisory_unlock_all` (any schema, quoted or not)", "A session lock is held until released or the session ends, not until the transaction ends.", "SELECT pg_advisory_lock(42)"},
 	{work.RejectSetConfig, "`set_config(name, value, is_local)` whose third argument is not the bare literal `true`, or whose first argument is not a plain string literal, or names `standard_conforming_strings` or `client_encoding`", "With `false` (or anything that might be `false`) the change is session-level; a setting name the classifier cannot read might be one that changes how later statements are lexed.", "SELECT set_config('search_path', 'app', false)"},
 	{work.RejectDiscard, "`DISCARD ALL|PLANS|SEQUENCES|TEMP`", "Resets session state that other clients' work may rely on; the proxy owns connection hygiene.", "DISCARD ALL"},
@@ -92,6 +92,15 @@ var rejSessionAdvisory = []string{
 }
 
 var rejLexingSettings = []string{"standard_conforming_strings", "client_encoding"}
+
+const (
+	rejSearchPath = "search_path"
+	rejTempSchema = "pg_temp"
+)
+
+var rejTemporalTypes = []string{"date", "time", "timetz", "timestamp", "timestamptz"}
+
+var rejRelativeTimeWords = []string{"now", "today", "tomorrow", "yesterday"}
 
 var rejPerCallKeywords = []string{
 	"current_date", "current_time", "current_timestamp", "localtime", "localtimestamp",

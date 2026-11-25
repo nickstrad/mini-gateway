@@ -44,8 +44,8 @@ F ro co tx:none	SELECT a FROM t LEFT JOIN u USING (a)
 F ro co tx:none	SELECT length('abc'), substring('abcdef' FROM 2 FOR 3)
 F ro co tx:none	SELECT substring('abcdef', 2, 3), position('b' IN 'abc')
 F ro co tx:none	SELECT trim(both ' ' FROM ' x '), overlay('abc' PLACING 'z' FROM 2)
-F ro co tx:none	SELECT extract(year FROM DATE '2020-01-02')
-F ro co tx:none	SELECT date_trunc('day', TIMESTAMP '2020-01-02 03:04:05')
+F ro tx:none	SELECT extract(year FROM DATE '2020-01-02')
+F ro tx:none	SELECT date_trunc('day', TIMESTAMP '2020-01-02 03:04:05')
 F ro co tx:none	SELECT greatest(1, 2), least(1, 2), nullif(1, 1)
 F ro co tx:none	SELECT abs(-1), round(1.5), floor(1.5), ceil(1.5), mod(7, 3), power(2, 10)
 F ro co tx:none	SELECT md5('x'), to_hex(255), repeat('ab', 3), reverse('abc')
@@ -63,9 +63,9 @@ F ro co tx:none	SELECT 'abc' ~ 'b', 'abc' ~* 'B', 'abc' !~ 'z'
 F ro co tx:none	SELECT a FROM t WHERE b IS NOT NULL AND a BETWEEN 1 AND 5
 F ro co tx:none	SELECT a FROM t WHERE b IS DISTINCT FROM 'x'
 F ro co tx:none	SELECT 1.5e3, .5, 0x1F, 1_000
-F ro co tx:none	SELECT E'it\'s', 'it''s'
+F ro tx:none	SELECT E'it\'s', 'it''s'
 F ro co tx:none	SELECT $$dollar$$, $tag$tagged$tag$
-F ro co tx:none	SELECT U&'d\0061t\+000061'
+F ro tx:none	SELECT U&'d\0061t\+000061'
 F ro co tx:none	SELECT B'0101', X'1F', N'national'
 F ro co tx:none	SELECT "a" FROM t
 F ro co tx:none	SELECT a AS "Select" FROM t
@@ -102,7 +102,7 @@ F ro co tx:none	SELECT 'pg_advisory_lock(1)'
 F ro co tx:none	SELECT 'set_config(''a'', ''b'', false)'
 F ro co tx:none	SELECT $$ DROP TABLE kv; SET x = 1 $$
 F ro co tx:none	SELECT $q$ ; LISTEN x ; $q$
-F ro co tx:none	SELECT E'\'; DROP TABLE kv; --'
+F ro tx:none	SELECT E'\'; DROP TABLE kv; --'
 F ro co tx:none	SELECT 1 /* ; DELETE FROM kv */
 F ro co tx:none	"SELECT 1 -- ; SET search_path = x\n"
 F ro co tx:none	SELECT "update" FROM (SELECT 1 AS "update") s
@@ -118,8 +118,8 @@ F ro co tx:none hint	"  /*   mg:share   */\nSELECT 1"
 F ro co tx:none	SELECT 1 /* mg:share */
 F ro co tx:none	/* mg:shared */ SELECT 1
 F ro tx:none	WITH x AS (SELECT 1 AS a) SELECT a FROM x
-F ro co tx:none	SELECT e'x\'y'
-F ro co tx:none	SELECT u&'d\0061t'
+F ro tx:none	SELECT e'x\'y'
+F ro tx:none	SELECT u&'d\0061t'
 F ro co tx:none noexec	"SELECT 'caf\xe9'"
 F ro co tx:none noexec	"SELECT \xff\xfe FROM (SELECT 1 AS \"\xff\xfe\") s"
 F ro co tx:none	SELECT 'café', 'ü' AS "ä"
@@ -208,7 +208,7 @@ F tx:none	EXPLAIN DELETE FROM t
 F tx:none	EXPLAIN ANALYZE DELETE FROM t
 F tx:none	SELECT a FROM t WHERE a = $1
 F tx:none	SELECT 1 OPERATOR(pg_catalog.+) 2
-F tx:none	SELECT 1 +++ 2
+F ro co tx:none	SELECT 1 +++ 2
 F tx:none	SELECT x.writes FROM t x
 F tx:none	SELECT (t).a FROM t
 F tx:none	SELECT a FROM t, public.u
@@ -545,3 +545,44 @@ R:two-phase	PREPARE TRANSACTION 'tx1'
 R:two-phase	COMMIT PREPARED 'tx1'
 R:two-phase	ROLLBACK PREPARED 'tx1'
 R:two-phase	BEGIN; PREPARE TRANSACTION 'tx1'
+# --- repair round 1: schema-qualified keyword-named calls (review finding 1)
+F tx:none	SELECT public.select()
+F tx:none	SELECT public.in(1)
+F tx:none	SELECT public.exists()
+F tx:none	SELECT public.current_timestamp(3)
+F tx:none	SELECT "public" . select /* c */ ()
+F ro co tx:none	SELECT (SELECT count(*) FROM public.kv)
+# --- repair round 1: attribute-notation calls after an expression-position FROM (review finding 2)
+F tx:none	SELECT a IS DISTINCT FROM t.evil_write FROM t
+F tx:none	SELECT a IS NOT DISTINCT FROM t.evil_write FROM t
+F tx:none	SELECT trim(FROM t.evil_write_text) FROM t
+F tx:none	SELECT substring('abc' FROM t.evil_write) FROM t
+F tx:none	SELECT extract(year FROM t.f) FROM t
+F tx:none	SELECT overlay('a' PLACING 'b' FROM t.f) FROM t
+F tx:none	SELECT a IS DISTINCT FROM t.evil_write.x FROM t
+F ro co tx:none	SELECT a IS DISTINCT FROM 1 FROM public.t
+# --- repair round 1: a string-literal search_path naming pg_temp (review finding 3)
+R:temp-object	SET LOCAL search_path = 'pg_temp'
+R:temp-object	SET LOCAL SCHEMA 'pg_temp'
+R:temp-object	SELECT set_config('search_path', 'pg_temp', true)
+R:temp-object	SET LOCAL search_path = 'public, PG_TEMP'
+R:temp-object	SELECT set_config('search_path', 'pg_' || 'temp', true)
+R:temp-object	BEGIN; SET LOCAL search_path = 'pg_temp'; CREATE TABLE sneaky1 (a int); COMMIT
+R:temp-object	BEGIN; SELECT set_config('search_path', 'pg_temp', true); CREATE TABLE sneaky2 (a int); COMMIT
+R:temp-object	BEGIN; SET LOCAL SCHEMA 'pg_temp'; CREATE TABLE sneaky3 (a int); COMMIT
+F tx:none	SET LOCAL search_path = 'app'
+# --- repair round 1: quoted EXPLAIN option names (review finding 4)
+F tx:none	EXPLAIN ("analyze") SELECT 1
+F tx:none	EXPLAIN ("analyze" true) SELECT 1
+F tx:none	EXPLAIN (U&"analyze") SELECT 1
+F ro tx:none	EXPLAIN ("verbose") SELECT 1
+# --- repair round 1: time-dependent literals are not coalescable (adversarial claim 2)
+F ro tx:none	SELECT 'now'::timestamp
+F ro tx:none	SELECT 'now'::timestamptz
+F ro tx:none	SELECT CAST('today' AS date)
+F ro tx:none	SELECT ('n' || 'ow')::timestamptz
+F ro tx:none	SELECT date_trunc('day', 'now'::timestamptz)
+# --- repair round 1: a trailing + or - leaves an operator as in Postgres (adversarial claim 4)
+F ro co tx:none	SELECT 71+-3
+F ro co tx:none	SELECT 71+ -3
+F ro co tx:none	SELECT 1=-1

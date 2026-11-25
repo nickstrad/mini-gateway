@@ -94,9 +94,10 @@ type clsResult struct {
 }
 
 type clsParen struct {
-	match  int
-	comma1 int
-	comma2 int
+	match  int32
+	comma1 int32
+	comma2 int32
+	outer  int32
 }
 
 type clsMsg struct {
@@ -204,16 +205,20 @@ func (m *clsMsg) matchParens() {
 			opens++
 		}
 	}
-	stack := make([]int, 0, opens)
+	stack := make([]int32, 0, opens)
 	for i := range m.toks {
-		m.parens[i] = clsParen{match: -1, comma1: -1, comma2: -1}
+		m.parens[i] = clsParen{match: -1, comma1: -1, comma2: -1, outer: -1}
+		if n := len(stack); n > 0 {
+			m.parens[i].outer = stack[n-1]
+		}
 		switch {
 		case m.isPunct(i, '('):
-			stack = append(stack, i)
+			stack = append(stack, int32(i))
 		case m.isPunct(i, ')'):
 			if n := len(stack); n > 0 {
-				m.parens[stack[n-1]].match = i
+				m.parens[stack[n-1]].match = int32(i)
 				m.parens[i].match = stack[n-1]
+				m.parens[i].outer = m.parens[stack[n-1]].outer
 				stack = stack[:n-1]
 			}
 		case m.isPunct(i, ','):
@@ -221,9 +226,9 @@ func (m *clsMsg) matchParens() {
 				p := &m.parens[stack[n-1]]
 				switch {
 				case p.comma1 < 0:
-					p.comma1 = i
+					p.comma1 = int32(i)
 				case p.comma2 < 0:
-					p.comma2 = i
+					p.comma2 = int32(i)
 				}
 			}
 		case m.isPunct(i, ';'):
@@ -367,7 +372,7 @@ func (m *clsMsg) lead(s clsSpan) int {
 		if m.parens[i].match < 0 {
 			return s.hi
 		}
-		i = m.parens[i].match + 1
+		i = int(m.parens[i].match) + 1
 	}
 	for m.isAny(i, []string{"analyze", "analyse", "verbose"}) {
 		i++
@@ -391,10 +396,16 @@ func (m *clsMsg) leadReject(s clsSpan) work.RejectReason {
 	i := m.lead(s)
 	switch {
 	case m.is(i, "set"):
-		if m.plant || m.transactionScopedSet(i+1) {
+		if m.plant {
 			return work.RejectNone
 		}
-		return work.RejectSessionSet
+		if !m.transactionScopedSet(i + 1) {
+			return work.RejectSessionSet
+		}
+		if m.is(i+1, "local") && m.localPathMayNameTemp(i+2, s.hi) {
+			return work.RejectTempObject
+		}
+		return work.RejectNone
 	case m.is(i, "reset"):
 		return work.RejectReset
 	case m.is(i, "prepare"):
@@ -480,8 +491,95 @@ func (m *clsMsg) tokenReject(s clsSpan, i int) work.RejectReason {
 		return work.RejectAdvisoryLock
 	case string(name) == "set_config" && !m.setConfigLocal(next):
 		return work.RejectSetConfig
+	case string(name) == "set_config" && m.setConfigPathMayNameTemp(next):
+		return work.RejectTempObject
 	}
 	return work.RejectNone
+}
+
+func (m *clsMsg) localPathMayNameTemp(i, hi int) bool {
+	if i >= hi {
+		return false
+	}
+	if !m.is(i, "schema") {
+		name, next, ok := m.name(i, hi)
+		if ok && !clsEqualFold(name, rejSearchPath) {
+			return false
+		}
+		i = next - 1
+	}
+	for k := i + 1; k < hi; k++ {
+		if m.stringMayContain(k, rejTempSchema) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *clsMsg) setConfigPathMayNameTemp(open int) bool {
+	p := m.parens[open]
+	lit := m.toks[open+1]
+	if !clsEqualFold(m.src[lit.Start+1:lit.End-1], rejSearchPath) {
+		return false
+	}
+	v := int(p.comma1) + 1
+	if int(p.comma2) != v+1 || !m.isString(v) {
+		return true
+	}
+	return m.stringMayContain(v, rejTempSchema)
+}
+
+func (m *clsMsg) isString(i int) bool {
+	if i < 0 || i >= len(m.toks) {
+		return false
+	}
+	k := m.toks[i].Kind
+	return k == TokenString || k == TokenDollarString
+}
+
+func (m *clsMsg) stringMayContain(i int, words ...string) bool {
+	if !m.isString(i) {
+		return false
+	}
+	t := m.toks[i]
+	raw := m.src[t.Start:t.End]
+	switch clsFold(raw[0]) {
+	case 'e':
+		if bytes.IndexByte(raw, '\\') >= 0 {
+			return true
+		}
+	case 'u':
+		if bytes.IndexByte(raw, '\\') >= 0 || m.is(i+1, "uescape") {
+			return true
+		}
+	}
+	for _, w := range words {
+		if clsContainsFold(raw, w) {
+			return true
+		}
+	}
+	return false
+}
+
+func clsContainsFold(b []byte, w string) bool {
+	for i := 0; i+len(w) <= len(b); i++ {
+		if clsEqualFold(b[i:i+len(w)], w) {
+			return true
+		}
+	}
+	return false
+}
+
+func clsEqualFold(b []byte, w string) bool {
+	if len(b) != len(w) {
+		return false
+	}
+	for k := range b {
+		if clsFold(b[k]) != clsFold(w[k]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *clsMsg) spanHas(s clsSpan, kw string) bool {
@@ -495,7 +593,7 @@ func (m *clsMsg) spanHas(s clsSpan, kw string) bool {
 
 func (m *clsMsg) setConfigLocal(open int) bool {
 	p := m.parens[open]
-	if p.match < 0 || p.comma2 < 0 || p.comma1 != open+2 {
+	if p.match < 0 || p.comma2 < 0 || int(p.comma1) != open+2 {
 		return false
 	}
 	lit := m.toks[open+1]
@@ -506,7 +604,7 @@ func (m *clsMsg) setConfigLocal(open int) bool {
 	if clsInList(rejLexingSettings, setting) {
 		return false
 	}
-	return p.comma2+2 == p.match && m.is(p.comma2+1, "true")
+	return p.comma2+2 == p.match && m.is(int(p.comma2)+1, "true")
 }
 
 func clsLowerASCII(b []byte) []byte {
@@ -601,12 +699,47 @@ func (m *clsMsg) readOnly(s clsSpan) bool {
 func (m *clsMsg) readOnlyLead(s clsSpan) bool {
 	i := s.lo
 	if m.is(i, "explain") {
+		if m.explainOptionsAnalyze(i+1, s.hi) {
+			return false
+		}
 		i = m.lead(s)
 	}
 	for m.isPunct(i, '(') {
 		i++
 	}
 	return m.isAny(i, []string{"select", "values", "table", "with", "show"})
+}
+
+func (m *clsMsg) explainOptionsAnalyze(open, hi int) bool {
+	if !m.isPunct(open, '(') {
+		return false
+	}
+	end := int(m.parens[open].match)
+	if end < 0 {
+		end = hi
+	}
+	for k := open + 1; k < end; k++ {
+		if m.nameIsAny(k, hi, "analyze", "analyse") {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *clsMsg) nameIsAny(i, hi int, words ...string) bool {
+	if !m.isName(i) {
+		return false
+	}
+	name, _, ok := m.name(i, hi)
+	if !ok {
+		return true
+	}
+	for _, w := range words {
+		if clsEqualFold(name, w) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *clsMsg) readOnlyToken(s clsSpan, i int) bool {
@@ -650,7 +783,18 @@ func (m *clsMsg) dottedOK(s clsSpan, dot int) bool {
 	if m.isPunct(j-1, '.') {
 		return true
 	}
-	return m.isAny(j-1, []string{"from", "join", "table", "only"})
+	return m.isAny(j-1, []string{"from", "join", "table", "only"}) && m.tableRefPosition(s, j-1)
+}
+
+func (m *clsMsg) tableRefPosition(s clsSpan, kw int) bool {
+	if m.is(kw, "from") && m.is(kw-1, "distinct") {
+		return false
+	}
+	outer := int(m.parens[kw].outer)
+	if outer < s.lo {
+		return true
+	}
+	return m.isAny(outer+1, []string{"select", "with", "table"})
 }
 
 func (m *clsMsg) callOK(s clsSpan, i int, coalesce bool) bool {
@@ -681,6 +825,8 @@ func (m *clsMsg) callOK(s clsSpan, i int, coalesce bool) bool {
 
 func (m *clsMsg) notACall(s clsSpan, i int, name []byte) bool {
 	switch {
+	case m.isPunct(i-1, '.'):
+		return false
 	case clsInList(rejNonCallWords, name), m.isPunct(i-1, ')'), m.is(i-1, "as"), m.is(i-1, "with"):
 		return true
 	case m.is(i-1, "recursive") && m.is(i-2, "with"):
@@ -696,7 +842,7 @@ func (m *clsMsg) coalescable(s clsSpan) bool {
 		return false
 	}
 	for i := s.lo; i < s.hi; i++ {
-		if m.isAny(i, rejPerCallKeywords) {
+		if m.isAny(i, rejPerCallKeywords) || m.nameIsAny(i, s.hi, rejTemporalTypes...) || m.stringMayContain(i, rejRelativeTimeWords...) {
 			return false
 		}
 		if m.isName(i) && !m.callOK(s, i, true) {

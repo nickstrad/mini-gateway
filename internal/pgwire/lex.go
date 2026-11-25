@@ -304,13 +304,41 @@ func lexHasPrefix(b, p []byte) bool {
 }
 
 func (l *Lexer) operator() {
+	start := l.pos
 	for l.more(0) && lexIsOpChar(l.src[l.pos]) {
 		c := l.src[l.pos]
 		if (c == '-' && l.peek(1) == '-') || (c == '/' && l.peek(1) == '*') {
-			return
+			break
 		}
 		l.pos++
 	}
+	l.pos = start + lexOperatorLen(l.src[start:l.pos])
+}
+
+func lexOperatorLen(op []byte) int {
+	n := len(op)
+	if n < 2 || !lexIsSign(op[n-1]) {
+		return n
+	}
+	for _, c := range op[:n-1] {
+		if lexKeepsTrailingSign(c) {
+			return n
+		}
+	}
+	for n > 1 && lexIsSign(op[n-1]) {
+		n--
+	}
+	return n
+}
+
+func lexIsSign(c byte) bool { return c == '+' || c == '-' }
+
+func lexKeepsTrailingSign(c byte) bool {
+	switch c {
+	case '~', '!', '@', '#', '^', '&', '|', '`', '?', '%':
+		return true
+	}
+	return false
 }
 
 func lexUnquote(body []byte, q byte) []byte {
