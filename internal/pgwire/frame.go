@@ -66,7 +66,12 @@ func (f *Framer) headerLen() int {
 
 func (f *Framer) Err() error { return f.err }
 
-func (f *Framer) Pending() int { return f.hdrN + len(f.body) }
+func (f *Framer) Pending() int {
+	if f.done {
+		return 0
+	}
+	return f.hdrN + len(f.body)
+}
 
 func (f *Framer) BufferCap() int { return cap(f.body) }
 

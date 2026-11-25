@@ -282,7 +282,7 @@ func (t *FrontendTracker) Receive(evs []FrontEvent, b []byte) ([]FrontEvent, int
 				t.closed = true
 				break
 			}
-			ev.Kind, ev.Body = FrontQuery, f.Body
+			ev.Kind, ev.Body = FrontQuery, append([]byte(nil), f.Body...)
 			t.st.QueriesSeen++
 		case f.Type == MsgTerminate:
 			ev.Kind = FrontTerminate

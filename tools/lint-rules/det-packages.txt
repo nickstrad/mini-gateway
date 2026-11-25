@@ -23,3 +23,4 @@ internal/randdist
 # I/O, goroutines, encoding/json or floating point by design.
 internal/obs/simsrc
 internal/obs/catalog
+internal/pgwire

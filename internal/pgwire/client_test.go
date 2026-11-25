@@ -231,17 +231,6 @@ func TestCancelRequestBeforeAndAfterTheUpgrade(t *testing.T) {
 	}
 }
 
-func fatalOf(t *testing.T, r replayResult) []byte {
-	t.Helper()
-	msgs, _ := splitTyped(writesOf(r))
-	for _, m := range msgs {
-		if m.typ == MsgErrorResponse {
-			return AppendErrorResponse(nil, "", "", "")[:0:0]
-		}
-	}
-	return nil
-}
-
 func TestWrongPasswordAndUnknownUserLookAlike(t *testing.T) {
 	wrong := talk(t, cfgFor(t, ClientTLSOff)(), clientPlan{user: "alice", password: "nope"})
 	rw := requireEveryChunking(t, cfgFor(t, ClientTLSOff), wrong)
@@ -268,7 +257,6 @@ func TestWrongPasswordAndUnknownUserLookAlike(t *testing.T) {
 	if rw.stats.Client.AuthFailures[AuthCauseWrongPassword] != 1 || ru.stats.Client.AuthFailures[AuthCauseUnknownUser] != 1 {
 		t.Fatal("causes not counted")
 	}
-	_ = fatalOf
 }
 
 func TestUnknownUserWithTheRightProofForAnotherVerifierFails(t *testing.T) {
@@ -392,7 +380,11 @@ func TestTrustIsANamedTestSettingOnly(t *testing.T) {
 	if zero.Auth != AuthSCRAM {
 		t.Fatal("the zero configuration is not SCRAM")
 	}
-	mk := func() ClientConfig { c := testClientConfig(t, ClientTLSOff, 1); c.Auth = AuthTrustForTestsOnly; return c }
+	mk := func() ClientConfig {
+		c := testClientConfig(t, ClientTLSOff, 1)
+		c.Auth = AuthTrustForTestsOnly
+		return c
+	}
 	r := requireEveryChunking(t, mk, []clientStep{{in: startupBytes("alice", testDatabase, nil)}})
 	requireReady(t, r)
 	if !strings.HasPrefix(typesOf(writesOf(r)), "R0 S") {

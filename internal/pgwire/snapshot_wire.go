@@ -264,8 +264,9 @@ func (s WireSnapshot) Check() error {
 	if c.StartupsFailed[ReasonNone] != 0 || c.StartupsFailed[ReasonTerminate] != 0 || d.StartupsFailed[ClassNone] != 0 {
 		errs = append(errs, fmt.Errorf("%w: a startup failed without a reason", ErrConservation))
 	}
-	if d.TLSRequests != sumInt64(d.TLSAnswers[:]) {
-		errs = append(errs, fmt.Errorf("%w: database TLS requests %d != answers %d", ErrConservation, d.TLSRequests, sumInt64(d.TLSAnswers[:])))
+	if waiting := d.TLSRequests - sumInt64(d.TLSAnswers[:]); waiting < 0 || waiting > d.InStartup {
+		errs = append(errs, fmt.Errorf("%w: database TLS requests %d, answers %d, sessions in startup %d",
+			ErrConservation, d.TLSRequests, sumInt64(d.TLSAnswers[:]), d.InStartup))
 	}
 	return errors.Join(errs...)
 }

@@ -126,6 +126,9 @@ func (s *BackendSession) fail(acts []Action, a Action) []Action {
 	if s.state == bsClosed {
 		return acts
 	}
+	if s.state == bsTLSAnswer {
+		s.st.TLSAnswers[AnswerNone]++
+	}
 	if s.inStartup() {
 		s.st.StartupsFailed[a.Class]++
 		s.st.InStartup--
@@ -178,10 +181,10 @@ func (s *BackendSession) Receive(acts []Action, b []byte) ([]Action, int) {
 }
 
 func (s *BackendSession) tlsAnswer(acts []Action, answer byte) []Action {
+	s.state = bsTLSWait
 	switch answer {
 	case AnswerTLSYes:
 		s.st.TLSAnswers[AnswerYes]++
-		s.state = bsTLSWait
 		return append(acts, Action{Kind: ActStartTLS})
 	case AnswerTLSNo:
 		s.st.TLSAnswers[AnswerNo]++
