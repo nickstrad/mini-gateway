@@ -283,13 +283,13 @@ two attacks. `result.json` was not committed (builder rules).
   `race-packages.txt` instead), or add `csvflush` to their skip list. Every other check of
   G3, and every product package, passes.
 
-- **Size.** Product Go (non-test) added by this chunk: 3,979 lines, against the brief's ~1,400
+- **Size.** Product Go (non-test) added by this chunk: 3,949 lines, against the brief's ~1,400
   (up to 2×). The excess is test machinery that lives in non-test files because other packages
-  use it: `obstest` conformance and golden helpers (364), the Prometheus grammar checker and
-  decoder (421), the scenario harness `simrun` (194), and the generated-document code (100).
-  Without those, about 2,900. Test files: 2,297 lines (59 test and benchmark functions); with
-  `obstest` and the checker counted as test code the two sides are about equal. Complete, so no
-  split request.
+  use it: `obstest` conformance and golden helpers (374), the Prometheus grammar checker and
+  decoder (420), the scenario harness `simrun` (185), and the catalog/document code (76).
+  Without those, about 2,900. Test files: 2,477 lines (60 test and benchmark functions); with
+  `obstest` and the checker counted as test code the two sides are about equal (3,050 / 3,270).
+  Complete, so no split request.
 - **The flush is turned on outside `internal/sim/world`**: the brief allowed editing the
   scenario harness files of chunk 2, but `world` may not import an adapter (claim 1), so the
   baseline scenarios are flushed by `internal/obs/simrun` (`TestScenarioFlush` over
