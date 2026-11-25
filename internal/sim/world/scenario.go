@@ -11,8 +11,10 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/workload"
 )
 
+// Option mutates a scenario Setup before execution (for example, to plant a canary bug).
 type Option func(*Setup)
 
+// Scenario defines one named, reproducible simulated-world test and its verifier.
 type Scenario struct {
 	Name     string
 	Setup    func(seed int64) Setup
@@ -20,6 +22,7 @@ type Scenario struct {
 	Check    func(r *Result) error
 }
 
+// Result holds the final observation, snapshots, error, and simulator handles of a Scenario run.
 type Result struct {
 	Scenario string
 	Seed     int64
@@ -32,10 +35,12 @@ type Result struct {
 	Workload *workload.Workload
 }
 
+// Run executes sc on a fresh SimDriver with seed and optional Setup mutations.
 func Run(sc Scenario, seed int64, opts ...Option) *Result {
 	return RunWith(sc, seed, &SimDriver{Seed: seed, Scenario: sc.Name}, opts...)
 }
 
+// RunWith executes sc using caller-supplied SimDriver d (allowing custom Tap or Replay settings).
 func RunWith(sc Scenario, seed int64, d *SimDriver, opts ...Option) *Result {
 	setup := sc.Setup(seed)
 	for _, o := range opts {
@@ -54,6 +59,8 @@ func RunWith(sc Scenario, seed int64, d *SimDriver, opts ...Option) *Result {
 	return res
 }
 
+// Drive executes the standard Start -> Inject -> Connect -> Run -> Stop sequence
+// against any Driver implementation.
 func Drive(d Driver, setup Setup, dur time.Duration) error {
 	if err := d.Start(setup); err != nil {
 		return err
@@ -72,6 +79,8 @@ func Drive(d Driver, setup Setup, dur time.Duration) error {
 	return d.Stop()
 }
 
+// Verify checks driver/kernel health, workload conservation, non-zero activity
+// ("counters must move"), and the scenario's own Check predicate.
 func (sc Scenario) Verify(r *Result) error {
 	if r.Err != nil {
 		return r.Err
@@ -101,6 +110,7 @@ func (sc Scenario) Verify(r *Result) error {
 	return sc.Check(r)
 }
 
+// Lookup finds a registered world scenario by name.
 func Lookup(name string) (Scenario, bool) {
 	for _, sc := range Scenarios() {
 		if sc.Name == name {

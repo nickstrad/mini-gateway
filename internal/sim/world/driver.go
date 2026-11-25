@@ -1,3 +1,6 @@
+// Package world wires fakepg and workload into reusable scenarios, a protocol-level
+// Driver interface shared with future tier R drivers, the five direct-to-database
+// baseline scenarios, exact write-log checkers, and the Postgres 17 fidelity runner.
 package world
 
 import (
@@ -11,12 +14,16 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/workload"
 )
 
+// Setup bundles the fake database config, client workload config, and scheduled
+// faults that define one scenario run.
 type Setup struct {
 	Fake     fakepg.Config
 	Workload workload.Config
 	Faults   []sim.Fault
 }
 
+// Observation holds the protocol-level database and client metrics that both
+// the simulator driver and a future real-Postgres tier R driver can report.
 type Observation struct {
 	DBConnsAccepted  int64
 	DBConnsPeak      int64
@@ -28,6 +35,8 @@ type Observation struct {
 	Clients          workload.Snapshot
 }
 
+// Driver is the minimal lifecycle interface a scenario needs from its test
+// world (simulator today; real proxy + Postgres in Chunk 6).
 type Driver interface {
 	Start(s Setup) error
 	Addr() string
@@ -38,8 +47,10 @@ type Driver interface {
 	Stop() error
 }
 
+// ErrNotStarted reports a SimDriver method called before Start.
 var ErrNotStarted = errors.New("world: driver not started")
 
+// SimDriver implements Driver in-process on sim.Sim, simnet, fakepg, and workload.
 type SimDriver struct {
 	Seed     int64
 	Scenario string
@@ -51,6 +62,7 @@ type SimDriver struct {
 	Workload *workload.Workload
 }
 
+// Start creates the simulator kernel, simnet, and fake Postgres server for s.
 func (d *SimDriver) Start(s Setup) error {
 	d.S = sim.New(sim.Config{Seed: d.Seed, Scenario: d.Scenario, Replay: d.Replay})
 	if d.Tap != nil {
@@ -65,6 +77,7 @@ func (d *SimDriver) Start(s Setup) error {
 	return nil
 }
 
+// Addr returns the address clients connect to, or "" before Start.
 func (d *SimDriver) Addr() string {
 	if d.Fake == nil {
 		return ""
@@ -72,6 +85,7 @@ func (d *SimDriver) Addr() string {
 	return d.Fake.Addr()
 }
 
+// Connect creates and starts the simulated workload targeting the fake database.
 func (d *SimDriver) Connect(c workload.Config) error {
 	if d.Fake == nil {
 		return ErrNotStarted
@@ -86,6 +100,7 @@ func (d *SimDriver) Connect(c workload.Config) error {
 	return nil
 }
 
+// Inject schedules fault f on the simulator loop.
 func (d *SimDriver) Inject(f sim.Fault) error {
 	if d.S == nil {
 		return ErrNotStarted
@@ -94,6 +109,7 @@ func (d *SimDriver) Inject(f sim.Fault) error {
 	return nil
 }
 
+// Run advances virtual time by dur.
 func (d *SimDriver) Run(dur time.Duration) error {
 	if d.S == nil {
 		return ErrNotStarted
@@ -101,6 +117,7 @@ func (d *SimDriver) Run(dur time.Duration) error {
 	return d.S.RunFor(dur)
 }
 
+// Observe snapshots the database and client counters into a driver-neutral Observation.
 func (d *SimDriver) Observe() Observation {
 	var o Observation
 	if d.Fake != nil {
@@ -119,6 +136,7 @@ func (d *SimDriver) Observe() Observation {
 	return o
 }
 
+// Stop drains remaining foreground events, checks quiesce, and verifies kernel state.
 func (d *SimDriver) Stop() error {
 	if d.S == nil {
 		return ErrNotStarted

@@ -1,3 +1,8 @@
+// Package fakepg implements a deterministic fake Postgres 17 server over simnet.
+// It speaks the simple-query wire subset with trust authentication, tracks
+// transaction status and statement-start snapshots over a single keyed table
+// (kv), maintains exact audit logs for write/transaction proofs, and supports
+// every non-TLS database-side fault in the simulator fault catalog.
 package fakepg
 
 import (
@@ -25,8 +30,10 @@ var (
 	kindFire   = sim.K("pg.fire")
 )
 
+// Refusal classifies why a client connection was refused during startup.
 type Refusal uint8
 
+// Startup refusal categories indexed into Server's refusal counters.
 const (
 	RefuseTooMany Refusal = iota
 	RefuseUnknownUser
@@ -72,6 +79,9 @@ type stats struct {
 	paramReports    int64
 }
 
+// Server is a deterministic simulated Postgres instance listening on simnet.
+// It owns the kv table, active backends, capacity queue, audit logs, and
+// injectable fault state.
 type Server struct {
 	s          *sim.Sim
 	net        *simnet.Net
@@ -95,6 +105,9 @@ type Server struct {
 	readBuf    [readChunk]byte
 }
 
+// New creates a fake Postgres Server bound to cfg.Addr on net, populates its
+// initial kv rows, and registers its fault handlers, invariants, state writer,
+// and quiesce check with the underlying simulator kernel.
 func New(net *simnet.Net, cfg Config) (*Server, error) {
 	cfg = cfg.normalized()
 	srv := &Server{s: net.Sim(), net: net, cfg: cfg, nextPID: firstPID}
@@ -122,9 +135,14 @@ func New(net *simnet.Net, cfg Config) (*Server, error) {
 	return srv, nil
 }
 
-func (srv *Server) Addr() string               { return srv.cfg.Addr }
+// Addr returns the normalized simnet address this server listens on.
+func (srv *Server) Addr() string { return srv.cfg.Addr }
+
+// Listener returns the underlying simnet listener (used to target listener-level faults).
 func (srv *Server) Listener() *simnet.Listener { return srv.l }
-func (srv *Server) Config() Config             { return srv.cfg }
+
+// Config returns the normalized configuration of the server.
+func (srv *Server) Config() Config { return srv.cfg }
 
 func (srv *Server) limit() int {
 	if srv.faults.maxConnOn {
@@ -144,6 +162,9 @@ func (srv *Server) accept(e *simnet.End) {
 	b.secret = make([]byte, 4)
 	v := srv.keys.Uint32()
 	b.secret[0], b.secret[1], b.secret[2], b.secret[3] = byte(v>>24), byte(v>>16), byte(v>>8), byte(v)
+	// Connections beyond max_connections (or arriving during a cold restart window)
+	// are accepted as uncounted "dead ends" so they can still receive Postgres's
+	// in-protocol FATAL refusal (53300 or 57P03) after sending their startup packet.
 	switch {
 	case srv.faults.restarting:
 		b.refuseAs = RefuseStartingUp
@@ -199,6 +220,7 @@ func (srv *Server) get(key string) (string, bool) {
 	return srv.table[i].value, true
 }
 
+// ErrTableFull reports that inserting a row would exceed Config.MaxRows.
 var ErrTableFull = errors.New("fakepg: table full")
 
 func (srv *Server) put(key, value string) error {
@@ -222,8 +244,10 @@ func (srv *Server) del(key string) bool {
 	return ok
 }
 
+// Get looks up key in the committed kv table.
 func (srv *Server) Get(key string) (string, bool) { return srv.get(key) }
 
+// Rows returns a sorted copy of every committed row currently in the kv table.
 func (srv *Server) Rows() []Row {
 	out := make([]Row, 0, len(srv.table))
 	for _, r := range srv.table {
@@ -232,9 +256,14 @@ func (srv *Server) Rows() []Row {
 	return out
 }
 
-func (srv *Server) WriteLog() []WriteRecord         { return srv.writeLog.all() }
+// WriteLog returns the retained WriteRecord entries in chronological order.
+func (srv *Server) WriteLog() []WriteRecord { return srv.writeLog.all() }
+
+// StatementLog returns the retained StatementRecord entries in chronological order.
 func (srv *Server) StatementLog() []StatementRecord { return srv.stmtLog.all() }
-func (srv *Server) TransactionLog() []TxRecord      { return srv.txLog.all() }
+
+// TransactionLog returns the retained TxRecord entries in chronological order.
+func (srv *Server) TransactionLog() []TxRecord { return srv.txLog.all() }
 
 func (srv *Server) logTx(b *backend, tx *txn, o TxOutcome) {
 	srv.txLog.add(TxRecord{TxID: tx.id, Backend: b.id, Outcome: o, Writes: int64(len(tx.writes)), At: srv.s.Now()})

@@ -26,6 +26,7 @@ type txn struct {
 	netRows  int
 }
 
+// MaxTxWrites bounds the number of pending writes buffered inside one transaction.
 const MaxTxWrites = 1 << 16
 
 func (srv *Server) newTx(explicit bool) *txn {
@@ -126,6 +127,8 @@ func (b *backend) beginService(r *run) {
 	r.slot = true
 	srv.slots++
 	srv.stats.inService.Add(1)
+	// Capture the statement-start read snapshot when service begins (after any
+	// capacity wait) so commits arriving while the read runs stay invisible to it.
 	if r.st.Kind == KindRead {
 		r.readVal, r.readFound = b.read(r.st.Key)
 	}
@@ -135,6 +138,8 @@ func (b *backend) beginService(r *run) {
 	} else {
 		r.timer = srv.s.After(d, func() { b.serviceDone(r) })
 	}
+	// Emit RowDescription when a SELECT-like statement starts, matching Postgres 17
+	// (so a terminated pg_sleep produces RowDescription before FATAL 57P01).
 	if b.describeAtStart(r) && !srv.faults.frozen {
 		b.pump()
 	}
@@ -236,6 +241,8 @@ func (srv *Server) serviceTime(b *backend, r *run) time.Duration {
 	}
 	d = sim.AddDurations(d, r.st.Sleep)
 	d = sim.AddDurations(d, b.slowExtra)
+	// Overlap [start, end] with [w.From, w.To); the start >= w.From clause ensures
+	// a zero-duration statement starting exactly at w.From still takes the stall.
 	start := srv.s.Now()
 	for _, w := range srv.faults.stalls {
 		end := sim.Later(start, d)
@@ -439,6 +446,10 @@ func (b *backend) rowsWithPending() int {
 	return n
 }
 
+// peakRowsAfter simulates applying writes sequentially against the live table
+// and returns the highest row count reached at any step. Checking the peak
+// (rather than only the final count) guarantees srv.put cannot fail midway
+// through commit and silently drop a write after a transaction commits.
 func (srv *Server) peakRowsAfter(writes []pendingWrite) int {
 	n := len(srv.table)
 	peak := n

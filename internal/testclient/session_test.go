@@ -39,6 +39,8 @@ func collect(data []byte, piece int, ssl bool) ([]Msg, error) {
 	return out, nil
 }
 
+// Proves Session tracks startup parameters, BackendKeyData, ReadyForQuery status
+// transitions, and FATAL termination even when input arrives one byte at a time.
 func TestSessionTracksStatusKeyAndParameters(t *testing.T) {
 	data := backend(&pgproto3.AuthenticationOk{}, &pgproto3.ParameterStatus{Name: "a", Value: "1"},
 		&pgproto3.BackendKeyData{ProcessID: 7, SecretKey: []byte{1, 2, 3, 4}}, &pgproto3.ReadyForQuery{TxStatus: 'I'})
@@ -79,6 +81,7 @@ func TestSessionTracksStatusKeyAndParameters(t *testing.T) {
 	}
 }
 
+// Proves Framer and Session reject impossible frame lengths and invalid SSL answers.
 func TestFramerRejectsImpossibleLengths(t *testing.T) {
 	for _, b := range [][]byte{{'Z', 0, 0, 0, 3}, {'D', 0x7f, 0xff, 0xff, 0xff}} {
 		var s Session
@@ -96,6 +99,8 @@ func TestFramerRejectsImpossibleLengths(t *testing.T) {
 	}
 }
 
+// Proves Session produces the same messages and errors whether input arrives whole
+// or one byte at a time, without panicking on arbitrary byte streams.
 func FuzzSession(f *testing.F) {
 	f.Add(backend(&pgproto3.AuthenticationOk{}, &pgproto3.ReadyForQuery{TxStatus: 'I'}), false)
 	f.Add(append([]byte{'N'}, backend(&pgproto3.ErrorResponse{Severity: "FATAL", Code: "53300"})...), true)

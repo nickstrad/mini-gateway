@@ -9,6 +9,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/fakepg"
 )
 
+// CheckWriteLog verifies that r's write, statement, and transaction logs dropped
+// no entries, recorded at least one write, and satisfy CheckWrites.
 func CheckWriteLog(r *Result) error {
 	if r.Server == nil {
 		return errors.New("no server")
@@ -22,6 +24,10 @@ func CheckWriteLog(r *Result) error {
 	return CheckWrites(r.Server.Config().Rows, r.Server.Rows(), r.Server.StatementLog(), r.Server.TransactionLog(), r.Server.WriteLog())
 }
 
+// CheckWrites proves three properties over raw server logs and table snapshots:
+// no transaction spanned two backends or two tagged clients, write records form
+// an exact bijection with committed row-changing statements, and replaying the
+// write log over initial produces final.
 func CheckWrites(initial, final []fakepg.Row, stmts []fakepg.StatementRecord, txs []fakepg.TxRecord, writes []fakepg.WriteRecord) error {
 	if err := checkTransactions(stmts, writes); err != nil {
 		return err
@@ -122,6 +128,8 @@ func checkTransactions(stmts []fakepg.StatementRecord, writes []fakepg.WriteReco
 	return nil
 }
 
+// Quantile computes the bp-basis-point quantile (e.g. 9900 for p99) from an
+// already-snapshotted obs.HistogramSnapshot.
 func Quantile(h obs.HistogramSnapshot, bp int64) int64 {
 	if h.Count == 0 {
 		return 0

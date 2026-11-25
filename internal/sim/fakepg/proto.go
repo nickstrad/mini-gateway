@@ -9,6 +9,10 @@ import (
 	"github.com/jackc/pgx/v5/pgproto3"
 )
 
+// proto.go is the single file in fakepg allowed to import pgproto3 (enforced by
+// importlint and detlint-allow.txt). Only explicit key lookups are read from
+// StartupMessage.Parameters so map iteration order never enters the simulation.
+
 const (
 	codeSSLRequest uint32 = 80877103
 	codeGSSRequest uint32 = 80877104
@@ -177,6 +181,8 @@ func errorf(severity, code, format string, args ...any) pgError {
 	return pgError{severity: severity, code: code, message: fmt.Sprintf(format, args...)}
 }
 
+// CodeValue encodes a 5-character SQLSTATE code as a base-36 int64 for fixed-width
+// simulator trace records, returning -1 if code is empty or not valid base-36.
 func CodeValue(code string) int64 {
 	v, err := strconv.ParseInt(code, 36, 64)
 	if err != nil {

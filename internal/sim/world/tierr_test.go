@@ -203,6 +203,7 @@ func admin(t *testing.T, addr string, stmts ...string) *tcpConn {
 	return c
 }
 
+// Proves fakepg's ProbeScript transcript matches a live Postgres 17 container over TCP (and updates the golden file when MG_TIER_R_UPDATE=1).
 func TestTierRFidelity(t *testing.T) {
 	addr := tierR(t, tierRAddr)
 	admin(t, addr, "DROP TABLE IF EXISTS kv", "CREATE TABLE kv (k text PRIMARY KEY, v text)",
@@ -284,6 +285,7 @@ func countClients(t *testing.T, addr string) int64 {
 	return n
 }
 
+// Proves 500 real-socket clients hold 500 concurrent client backends in pg_stat_activity against Postgres 17.
 func TestTierRManyConnections(t *testing.T) {
 	addr := tierR(t, tierRAddr)
 	admin(t, addr, "DROP TABLE IF EXISTS kv", "CREATE TABLE kv (k text PRIMARY KEY, v text)", "INSERT INTO kv VALUES ('k0', 'v')").close()
@@ -304,6 +306,7 @@ func TestTierRManyConnections(t *testing.T) {
 	t.Logf("tier R: %d clients held %d database connections", manyClients, count)
 }
 
+// Proves 100 connections running 10 identical reads each cause 1,000 executions in pg_stat_statements without a proxy.
 func TestTierRIdenticalReads(t *testing.T) {
 	addr := tierR(t, tierRAddr)
 	adm := admin(t, addr, "CREATE EXTENSION IF NOT EXISTS pg_stat_statements", "DROP TABLE IF EXISTS kv",
@@ -346,6 +349,7 @@ func TestTierRIdenticalReads(t *testing.T) {
 	t.Logf("tier R: %d identical reads cost %s database executions", readerClients*readsEach, v)
 }
 
+// Proves a 500-client reconnect burst within 50 ms against Postgres 17 with max_connections=100 refuses excess clients with FATAL 53300.
 func TestTierRReconnectBurst(t *testing.T) {
 	addr := tierR(t, tierRBurst)
 	var wg sync.WaitGroup

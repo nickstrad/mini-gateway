@@ -8,39 +8,57 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/simnet"
 )
 
+// ArrivalKind selects how a client schedules successive request arrivals.
 type ArrivalKind uint8
 
 const (
+	// ArrivalConstant generates open-loop arrivals at fixed Interval steps.
 	ArrivalConstant ArrivalKind = iota
+	// ArrivalPoisson generates open-loop arrivals with exponential gaps of mean Interval.
 	ArrivalPoisson
+	// ArrivalClosed waits Think after each completed request before generating the next.
 	ArrivalClosed
 )
 
+// KeyKind selects how a client picks keys from the kv table.
 type KeyKind uint8
 
 const (
+	// KeysUniform chooses keys uniformly from [0, N).
 	KeysUniform KeyKind = iota
+	// KeysZipf chooses keys from a Zipf distribution with exponent Zipf/1000.
 	KeysZipf
+	// KeysFixed always returns Keys.Fixed.
 	KeysFixed
 )
 
+// Op selects the kind of SQL conversation a generated request executes.
 type Op uint8
 
 const (
+	// OpRead executes a single-key SELECT.
 	OpRead Op = iota
+	// OpWrite executes a single-key UPDATE.
 	OpWrite
+	// OpTx executes BEGIN, TxStatements reads/writes with TxThink pauses, and COMMIT.
 	OpTx
+	// OpFixed executes the literal Tenant.Statement string.
 	OpFixed
 )
 
+// DisconnectPoint chooses when a configured or faulted client drops its connection.
 type DisconnectPoint uint8
 
 const (
+	// DisconnectNow drops the connection immediately when the fault fires.
 	DisconnectNow DisconnectPoint = iota
+	// DisconnectAfterSend drops immediately after writing the request's first Query.
 	DisconnectAfterSend
+	// DisconnectInTx drops after receiving ReadyForQuery('T') inside an open transaction.
 	DisconnectInTx
 )
 
+// Default limits and hard bounds for workload configuration.
 const (
 	DefaultBacklog   = 1024
 	MaxBacklog       = 1 << 20
@@ -52,11 +70,13 @@ const (
 	DefaultKeyPrefix = "k"
 )
 
+// Weight assigns a relative selection weight to one Op in a tenant's workload mix.
 type Weight struct {
 	Op     Op
 	Weight int
 }
 
+// Keys configures key distribution for a tenant's generated reads and writes.
 type Keys struct {
 	Kind  KeyKind
 	N     int
@@ -64,6 +84,7 @@ type Keys struct {
 	Fixed string
 }
 
+// Retry configures per-request exponential-backoff retries (off by default when Max == 0).
 type Retry struct {
 	Max       int
 	Backoff   time.Duration
@@ -74,12 +95,15 @@ type Retry struct {
 	OnCodes   []string
 }
 
+// Disconnect schedules a deterministic client disconnect on a specific 0-based request index.
 type Disconnect struct {
 	Request int
 	Point   DisconnectPoint
 	Reset   bool
 }
 
+// Tenant defines one tenant's client population, arrival process, query mix,
+// retry policy, and disconnect hooks. Name is sent as the Postgres startup user.
 type Tenant struct {
 	Name         string
 	Database     string
@@ -105,12 +129,14 @@ type Tenant struct {
 	ConnectFirst bool
 }
 
+// Config configures a simulated Workload targeting Addr over simnet.
 type Config struct {
 	Addr    string
 	Options simnet.Options
 	Tenants []Tenant
 }
 
+// ErrConfig wraps all workload configuration validation failures returned by New.
 var ErrConfig = errors.New("workload: bad configuration")
 
 func (c Config) validate() error {

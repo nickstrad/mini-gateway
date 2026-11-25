@@ -7,6 +7,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/simnet"
 )
 
+// Default configuration values and hard bounds for a fake Postgres server.
 const (
 	DefaultAddr           = "pg"
 	DefaultMaxConnections = 100
@@ -24,39 +25,49 @@ const (
 	DefaultServerVersion  = "17.0 (fakepg)"
 )
 
+// LogMode selects whether an in-memory audit log retains entries or only counts them.
 type LogMode uint8
 
 const (
+	// LogRing retains the newest Cap entries in a fixed-size ring buffer.
 	LogRing LogMode = iota
+	// LogCountOnly drops every entry immediately while still counting total dropped entries.
 	LogCountOnly
 )
 
+// LogConfig bounds one server audit log (write, statement, or transaction log).
 type LogConfig struct {
 	Mode LogMode
 	Cap  int
 }
 
+// Row is one key/value entry in the fake server's kv table.
 type Row struct {
 	Key   string
 	Value string
 }
 
+// KindTime overrides the base service time for one statement Kind.
 type KindTime struct {
 	Kind Kind
 	Time time.Duration
 }
 
+// KeyTime adds extra service time whenever a statement targets Key.
 type KeyTime struct {
 	Key  string
 	Time time.Duration
 }
 
+// Stall defines a virtual-time window [From, To) that adds Extra to every
+// statement starting or in service during the window.
 type Stall struct {
 	From  sim.Time
 	To    sim.Time
 	Extra time.Duration
 }
 
+// Service configures the server's virtual-clock statement service-time model.
 type Service struct {
 	Fixed     time.Duration
 	JitterMax time.Duration
@@ -65,6 +76,7 @@ type Service struct {
 	Stalls    []Stall
 }
 
+// Config configures a simulated Postgres server created by New.
 type Config struct {
 	Addr           string
 	MaxConnections int

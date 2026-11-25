@@ -522,6 +522,7 @@ func runFaultCase(t *testing.T, fc faultCase, skipClear bool) error {
 	return w.err
 }
 
+// Proves every non-TLS database fault kind produces its defined client-visible effect, is counted and traced, and recovers cleanly after clear.
 func TestEachDatabaseFault(t *testing.T) {
 	for _, fc := range faultCases() {
 		t.Run(fc.name, func(t *testing.T) {
@@ -535,6 +536,7 @@ func TestEachDatabaseFault(t *testing.T) {
 var oneShotKinds = map[sim.FaultKind]bool{fakepg.FaultTerminate: true, fakepg.FaultDirtyState: true, fakepg.FaultParamStatus: true,
 	fakepg.FaultKill: true, fakepg.FaultHalfOpen: true, fakepg.FaultClear: true}
 
+// Proves every clearable fault case genuinely fails when its clear path is disabled via PlantSkipClear.
 func TestEveryClearPathIsChecked(t *testing.T) {
 	checked := map[sim.FaultKind]bool{}
 	for _, fc := range faultCases() {
@@ -560,6 +562,7 @@ func TestEveryClearPathIsChecked(t *testing.T) {
 	}
 }
 
+// Proves no registered fakepg fault kind is omitted from TestEachDatabaseFault.
 func TestEveryFaultKindHasACase(t *testing.T) {
 	covered := map[sim.FaultKind]bool{fakepg.FaultClear: true}
 	for _, fc := range faultCases() {

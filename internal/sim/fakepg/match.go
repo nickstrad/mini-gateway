@@ -6,8 +6,10 @@ import (
 	"time"
 )
 
+// Kind classifies one statement recognized by Match.
 type Kind uint8
 
+// Statement kinds recognized by the minimal hand-written matcher.
 const (
 	KindEmpty Kind = iota
 	KindConst
@@ -32,6 +34,7 @@ const (
 
 var kindNames = [NumKinds]string{"empty", "const", "div-zero", "txid", "read", "sleep", "rows", "update", "insert", "delete", "set", "reset", "show", "discard", "begin", "commit", "rollback", "unknown"}
 
+// String returns the canonical lowercase name of k.
 func (k Kind) String() string {
 	if k < NumKinds {
 		return kindNames[k]
@@ -39,8 +42,10 @@ func (k Kind) String() string {
 	return "kind-" + strconv.Itoa(int(k))
 }
 
+// IsWrite reports whether k is a table-mutating statement (UPDATE, INSERT, or DELETE).
 func (k Kind) IsWrite() bool { return k == KindUpdate || k == KindInsert || k == KindDelete }
 
+// Hard bounds enforced by Split and Match to keep parsing and reply generation bounded.
 const (
 	MaxStatements = 64
 	MaxTokens     = 64
@@ -49,6 +54,7 @@ const (
 	MaxRowSize    = 1 << 20
 )
 
+// Stmt holds the classified kind and extracted literals of one SQL statement.
 type Stmt struct {
 	Kind  Kind
 	Text  string
@@ -78,6 +84,9 @@ type token struct {
 	text string
 }
 
+// Split divides a simple-query string on semicolons outside single-quoted
+// strings and /* */ comments, dropping empty or comment-only pieces and
+// stopping once more than MaxStatements pieces have been seen.
 func Split(q string) []string {
 	var out []string
 	start, inStr, inComment := 0, false, false
@@ -274,6 +283,9 @@ var txWords = []struct {
 	{"rollback", KindRollback}, {"abort", KindRollback},
 }
 
+// Match classifies one trimmed statement against the supported minimal SQL
+// subset, extracting any leading /* tag */ comment. Unrecognized or malformed
+// input returns KindUnknown so execution emits ERROR 42601.
 func Match(text string) Stmt {
 	tag, rest := leadingComment(text)
 	st := Stmt{Text: text, Tag: tag, Kind: KindUnknown}
@@ -398,6 +410,8 @@ func matchRows(st *Stmt, c []token) {
 	if err1 != nil || err2 != nil || err3 != nil || len(c[0].text) == 0 {
 		return
 	}
+	// Check n before multiplying by unit so huge repeat counts cannot overflow int64
+	// to a negative size and bypass MaxRowSize / MaxReplyBytes.
 	unit := int64(len(c[0].text))
 	if n < 0 || n > MaxRowSize/unit {
 		return

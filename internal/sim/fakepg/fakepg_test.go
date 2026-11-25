@@ -10,6 +10,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/testclient"
 )
 
+// Proves startup emits AuthenticationOk, the exact 14 Postgres 17 ParameterStatus names, BackendKeyData, and ReadyForQuery('I').
 func TestStartupSequenceMatchesPostgres17(t *testing.T) {
 	w := newWorld(t, fakepg.Config{})
 	p := w.client()
@@ -43,6 +44,7 @@ func TestStartupSequenceMatchesPostgres17(t *testing.T) {
 	}
 }
 
+// Proves SSLRequest and GSSENCRequest are each answered with 'N' before completing normal startup.
 func TestEncryptionRequestsAnsweredN(t *testing.T) {
 	w := newWorld(t, fakepg.Config{})
 	p := w.dial()
@@ -99,6 +101,7 @@ func runStatusCase(t *testing.T, cfg fakepg.Config, tc statusCase) []string {
 	return got
 }
 
+// Proves ReadyForQuery transaction status bytes match Postgres across 18 single, pipelined, multi-statement, and error sequences.
 func TestTransactionStatusTable(t *testing.T) {
 	for _, tc := range statusCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -109,6 +112,7 @@ func TestTransactionStatusTable(t *testing.T) {
 	}
 }
 
+// Proves the transaction-status table catches a planted bug that reports 'I' inside an open transaction.
 func TestPlantedBugIdleInTransactionIsCaughtByTheStatusTable(t *testing.T) {
 	cfg := fakepg.Config{}
 	fakepg.PlantIdleInTx(&cfg)
@@ -123,6 +127,7 @@ func TestPlantedBugIdleInTransactionIsCaughtByTheStatusTable(t *testing.T) {
 	}
 }
 
+// Proves SET/SHOW/RESET/DISCARD ALL persist session state, emit unsolicited ParameterStatus for reported settings, and roll back with failed transactions.
 func TestSessionStateAndParameterStatus(t *testing.T) {
 	w := newWorld(t, fakepg.Config{})
 	p := w.client()

@@ -9,6 +9,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/world"
 )
 
+// Proves every registered baseline scenario replays deterministically with identical snapshots and passes Verify across all swept seeds.
 func TestScenario(t *testing.T) {
 	for _, sc := range world.Scenarios() {
 		t.Run(sc.Name, func(t *testing.T) {

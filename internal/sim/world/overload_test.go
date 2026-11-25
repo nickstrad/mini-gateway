@@ -8,6 +8,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/world"
 )
 
+// Proves direct-open-loop-overload mean latency from intended send time increases monotonically across completion quarters.
 func TestOverloadLatencyGrowsWithTheBacklog(t *testing.T) {
 	sc := world.OpenLoopOverload()
 	type done struct{ at, latency int64 }

@@ -12,6 +12,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/simnet"
 )
 
+// Proves Kind.IsWrite is true only for UPDATE, INSERT, and DELETE and every Kind has a name.
 func TestKindIsWriteOnlyForRowChangingStatements(t *testing.T) {
 	writes := map[fakepg.Kind]bool{fakepg.KindUpdate: true, fakepg.KindInsert: true, fakepg.KindDelete: true}
 	for k := fakepg.Kind(0); k < fakepg.NumKinds; k++ {
@@ -24,6 +25,7 @@ func TestKindIsWriteOnlyForRowChangingStatements(t *testing.T) {
 	}
 }
 
+// Proves CodeValue maps valid 5-character SQLSTATE strings injectively to base-36 integers and rejects invalid inputs with -1.
 func TestCodeValueIsTheBase36ValueOfTheCode(t *testing.T) {
 	seen := map[int64]string{}
 	for _, code := range []string{"00000", "22012", "23505", "25P02", "53300", "57014", "57P01", "ZZZZZ"} {
@@ -44,6 +46,7 @@ func TestCodeValueIsTheBase36ValueOfTheCode(t *testing.T) {
 	}
 }
 
+// Proves Config normalization applies defaults and hard caps and exposes the underlying simnet listener.
 func TestConfigDefaultsAndLimits(t *testing.T) {
 	w := newWorld(t, fakepg.Config{MaxReplyBytes: fakepg.MaxReplyBytesLimit + 1, WriteLog: fakepg.LogConfig{Cap: fakepg.MaxLogCap + 1}})
 	c := w.srv.Config()
@@ -64,6 +67,7 @@ func TestConfigDefaultsAndLimits(t *testing.T) {
 	}
 }
 
+// Proves New rejects initial rows exceeding MaxRows and duplicate listener addresses.
 func TestNewRefusesBadSetups(t *testing.T) {
 	s := sim.New(sim.Config{Seed: 1, Scenario: t.Name()})
 	n := simnet.New(s)
@@ -78,6 +82,7 @@ func TestNewRefusesBadSetups(t *testing.T) {
 	}
 }
 
+// Proves FaultKinds and FaultName cover every pg.* fault kind with unique names and return "" outside the range.
 func TestFaultNamesAndKinds(t *testing.T) {
 	kinds := fakepg.FaultKinds()
 	if len(kinds) != fakepg.NumFaults {
@@ -99,6 +104,7 @@ func TestFaultNamesAndKinds(t *testing.T) {
 	}
 }
 
+// Proves TransactionLog records committed, rolled-back, failed-commit, implicit, and lost transactions accurately.
 func TestTransactionLogRecordsEveryOutcome(t *testing.T) {
 	w := newWorld(t, fakepg.Config{Rows: []fakepg.Row{{Key: "a", Value: "1"}}})
 	p, q := w.client(), w.client()
@@ -123,6 +129,7 @@ func TestTransactionLogRecordsEveryOutcome(t *testing.T) {
 	w.done(p)
 }
 
+// Proves LogRing retains the newest Cap entries in order while counting drops, and LogCountOnly drops all entries.
 func TestLogRingKeepsTheNewestEntriesInOrder(t *testing.T) {
 	w := newWorld(t, fakepg.Config{WriteLog: fakepg.LogConfig{Cap: 3}, StatementLog: fakepg.LogConfig{Mode: fakepg.LogCountOnly}})
 	p := w.client()
@@ -140,6 +147,7 @@ func TestLogRingKeepsTheNewestEntriesInOrder(t *testing.T) {
 	w.done(p)
 }
 
+// Proves Framer handles untyped startup packets, transitions to typed frames, and rejects impossible or oversized lengths.
 func TestServerFramerSplitsStartupAndTypedMessages(t *testing.T) {
 	var f fakepg.Framer
 	f.Startup = true

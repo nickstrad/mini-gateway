@@ -9,6 +9,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/workload"
 )
 
+// Proves Retry.OnCodes retries non-FATAL query ERROR responses up to Retry.Max times.
 func TestRetryOnCodesRetriesAQueryError(t *testing.T) {
 	tenant := one("SELECT 1/0", 1)
 	tenant.Retry = workload.Retry{Max: 3, Backoff: 5 * time.Millisecond, OnCodes: []string{"22012"}}
@@ -20,6 +21,7 @@ func TestRetryOnCodesRetriesAQueryError(t *testing.T) {
 	}
 }
 
+// Proves Retry.OnCodes does not retry SQLSTATE error codes absent from the list.
 func TestRetryOnCodesIgnoresOtherCodes(t *testing.T) {
 	tenant := one("SELECT 1/0", 1)
 	tenant.Retry = workload.Retry{Max: 3, Backoff: 5 * time.Millisecond, OnCodes: []string{"57014"}}
@@ -30,6 +32,7 @@ func TestRetryOnCodesIgnoresOtherCodes(t *testing.T) {
 	}
 }
 
+// Proves a cancelled transaction that rolls back and retries re-runs its original statements instead of ROLLBACK.
 func TestRetriedTransactionRunsItsOriginalStatements(t *testing.T) {
 	tenant := workload.Tenant{Name: "a", Clients: 1, Requests: 1, ConnectFirst: true, Start: 10 * time.Millisecond,
 		Keys: workload.Keys{Kind: workload.KeysFixed, Fixed: "k0"}, Mix: []workload.Weight{{Op: workload.OpTx, Weight: 1}},
@@ -55,6 +58,7 @@ func TestRetriedTransactionRunsItsOriginalStatements(t *testing.T) {
 	}
 }
 
+// Proves clearing a timed FaultStopReading cancels its resume timer so it cannot prematurely resume a later indefinite stop.
 func TestStopReadingTimerOfAClearedFaultDoesNotResumeALaterOne(t *testing.T) {
 	tenant := one("SELECT 1", 1)
 	tenant.Start = 50 * time.Millisecond
@@ -75,6 +79,7 @@ func TestStopReadingTimerOfAClearedFaultDoesNotResumeALaterOne(t *testing.T) {
 	}
 }
 
+// Proves requests waiting in retry backoff count against Tenant.Backlog so NotYetSent never exceeds the cap.
 func TestBacklogCapCountsRetryingRequests(t *testing.T) {
 	tenant := workload.Tenant{Name: "a", Clients: 1, Requests: 50, Interval: time.Millisecond, Backlog: 2,
 		Keys:  workload.Keys{N: 1},

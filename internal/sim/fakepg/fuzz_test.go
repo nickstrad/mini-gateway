@@ -35,6 +35,7 @@ func frames(data []byte, startup bool, split func(int) int) ([]frame, error) {
 	return out, nil
 }
 
+// Proves Framer produces identical frames and errors whether fed whole or one byte at a time.
 func FuzzFramer(f *testing.F) {
 	f.Add(testclient.EncodeQuery(testclient.EncodeQuery(nil, "SELECT 1"), "BEGIN"), false)
 	f.Add(testclient.EncodeStartup(nil, []testclient.Param{{Name: "user", Value: "app"}}), true)
@@ -54,6 +55,7 @@ func FuzzFramer(f *testing.F) {
 	})
 }
 
+// Proves Split and Match never panic and always keep statement counts, row counts, row sizes, and sleeps within bounds.
 func FuzzMatch(f *testing.F) {
 	for _, s := range []string{"SELECT 1", "SELECT v FROM kv WHERE k = 'a'", "BEGIN; SELECT 1; COMMIT", "/*c1*/ UPDATE kv SET v = 'x' WHERE k = 'y'",
 		"SELECT pg_sleep(0.05)", "SELECT repeat('x', 100) FROM generate_series(1, 200000)", "SET a.b TO 'c'", "'", "/*", "SELECT ''''", ";;;",
@@ -74,6 +76,7 @@ func FuzzMatch(f *testing.F) {
 	})
 }
 
+// Proves arbitrary client byte streams never panic the server or prevent quiesce after close.
 func FuzzServerInput(f *testing.F) {
 	startup := testclient.EncodeStartup(nil, []testclient.Param{{Name: "user", Value: "app"}})
 	f.Add(append(append([]byte{}, startup...), testclient.EncodeQuery(nil, "SELECT 1")...))

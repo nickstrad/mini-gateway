@@ -59,6 +59,7 @@ func activity(t *testing.T) *world {
 	return w
 }
 
+// Proves fakepg.Snapshot is a plain value struct, obeys all conservation laws, and every non-gauge counter moves across activity and faults.
 func TestSnapshotCountersMoveAndConserve(t *testing.T) {
 	moved := map[string]bool{}
 	w := activity(t)
@@ -89,6 +90,7 @@ func TestSnapshotCountersMoveAndConserve(t *testing.T) {
 	}
 }
 
+// Proves running the same seeded activity twice produces byte-identical snapshots and simulator digests.
 func TestSnapshotsAreIdenticalForOneSeed(t *testing.T) {
 	a, b := activity(t), activity(t)
 	if a.srv.Snapshot() != b.srv.Snapshot() || a.s.Digests() != b.s.Digests() {

@@ -9,12 +9,15 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/world"
 )
 
+// listWorld prints every registered simulated-world scenario name.
 func listWorld(stdout io.Writer) {
 	for _, sc := range world.Scenarios() {
 		fmt.Fprintln(stdout, sc.Name)
 	}
 }
 
+// runWorld executes one simulated-world scenario from a seed, printing digests,
+// the summary counter/latency table, and a REPLAY line.
 func runWorld(sc world.Scenario, seed int64, trace bool, stdout, stderr io.Writer) int {
 	d := &world.SimDriver{Seed: seed, Scenario: sc.Name}
 	if trace {

@@ -41,6 +41,7 @@ func busyWorld(t *testing.T) *world {
 	return w
 }
 
+// Proves workload.Snapshot is plain, obeys per-tenant and total conservation laws, and moves every non-gauge counter.
 func TestWorkloadSnapshotCountersMoveAndConserve(t *testing.T) {
 	w := busyWorld(t)
 	snap := w.wl.Snapshot()
@@ -70,6 +71,7 @@ func TestWorkloadSnapshotCountersMoveAndConserve(t *testing.T) {
 	}
 }
 
+// Proves running the same seeded multi-tenant faulted workload twice produces identical snapshots and digests.
 func TestWorkloadSnapshotsAreIdenticalForOneSeed(t *testing.T) {
 	a, b := busyWorld(t), busyWorld(t)
 	if sa, sb := sprint(a.wl.Snapshot()), sprint(b.wl.Snapshot()); sa != sb {

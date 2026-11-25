@@ -7,6 +7,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim"
 )
 
+// RefusedSnapshot breaks down startup refusals by reason.
 type RefusedSnapshot struct {
 	TooMany         int64
 	UnknownUser     int64
@@ -17,12 +18,15 @@ type RefusedSnapshot struct {
 	Protocol        int64
 }
 
+// FaultSnapshot counts injected database faults by kind, clears, and missed targets.
 type FaultSnapshot struct {
 	ByKind   [NumFaults]int64
 	Cleared  int64
 	NoTarget int64
 }
 
+// Snapshot is a plain value struct of all fakepg counters, gauges, and log levels
+// at one virtual instant.
 type Snapshot struct {
 	ConnsAccepted       int64
 	ConnsClosed         int64
@@ -60,6 +64,7 @@ type Snapshot struct {
 	Faults              FaultSnapshot
 }
 
+// Snapshot returns a plain value copy of the server's current metrics.
 func (srv *Server) Snapshot() Snapshot {
 	st := &srv.stats
 	r := st.refused
@@ -103,6 +108,7 @@ func (srv *Server) Snapshot() Snapshot {
 	}
 }
 
+// Fault returns how many times fault kind k was applied, or 0 if k is not a fakepg kind.
 func (s Snapshot) Fault(k sim.FaultKind) int64 {
 	if k < FaultRefuse || k >= faultEnd {
 		return 0
@@ -110,6 +116,8 @@ func (s Snapshot) Fault(k sim.FaultKind) int64 {
 	return s.Faults.ByKind[k-FaultRefuse]
 }
 
+// Check verifies the four fakepg conservation laws (connections, statements,
+// transactions, and cancels) on this snapshot.
 func (s Snapshot) Check() error {
 	return errors.Join(
 		obs.Conserve(obs.T("accepted", s.ConnsAccepted), obs.T("open", s.ConnsOpen.Value), obs.T("closed", s.ConnsClosed)),

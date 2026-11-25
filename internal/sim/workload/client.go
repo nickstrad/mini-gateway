@@ -135,6 +135,9 @@ func (c *client) arrive() {
 	r := &request{id: c.made, intended: c.w.s.Now(), stmts: c.statements()}
 	r.orig = r.stmts
 	c.w.s.Trace(kindArrive, int64(c.id), r.id, 0, 0)
+	// Count waiting retries and a still-retryable in-flight request against
+	// Tenant.Backlog so backoff timers re-prepending a request cannot push the
+	// backlog slice or NotYetSent gauge past the configured cap.
 	queued := len(c.backlog) + c.waiting
 	if c.cur != nil && c.cur.attempts < t.Retry.Max {
 		queued++
@@ -455,6 +458,8 @@ func (c *client) onReady(status byte) {
 			return
 		}
 	}
+	// Use slices.Clip so appending ROLLBACK allocates a new backing array and
+	// preserves r.orig intact in case this request is retried later.
 	if status == 'E' && r.next < len(r.stmts) {
 		r.stmts = append(slices.Clip(r.stmts[:r.next]), c.tag("ROLLBACK"))
 	}
@@ -534,6 +539,8 @@ func (c *client) record(r *request, o Outcome) {
 		st.unsentFailed++
 	}
 	st.code(r.code)
+	// Record both true open-loop latency (from first intended arrival, avoiding
+	// coordinated omission) and from-last-send latency as the control metric.
 	if o == OutcomeOK || o == OutcomeError {
 		c.t.latency.Record(int64(now - r.intended))
 		c.t.fromSend.Record(int64(now - r.sentAt))

@@ -28,6 +28,7 @@ func arrivals(t *testing.T, service time.Duration, tenant workload.Tenant) ([]si
 	return at, w
 }
 
+// Proves open-loop arrival count and schedule timestamps are exact regardless of server service time.
 func TestOpenLoopArrivalsEqualIntendedWhateverTheServerSpeed(t *testing.T) {
 	const clients, perClient, interval = 10, 50, 10 * time.Millisecond
 	tenant := workload.Tenant{Name: "a", Clients: clients, Requests: perClient, Interval: interval, Spread: true, Keys: workload.Keys{N: 1}}
@@ -55,6 +56,7 @@ func TestOpenLoopArrivalsEqualIntendedWhateverTheServerSpeed(t *testing.T) {
 	}
 }
 
+// Proves Latency measures from intended send time (exposing a 200 ms stall across queued requests) while LatencyFromSend is the coordinated-omission control.
 func TestLatencyIsMeasuredFromIntendedSendTime(t *testing.T) {
 	const interval = 10 * time.Millisecond
 	stall := fakepg.Stall{From: sim.Time(300 * time.Millisecond), To: sim.Time(301 * time.Millisecond), Extra: 200 * time.Millisecond}
@@ -95,6 +97,7 @@ func zipfShare(n int, s float64, top int) (float64, float64) {
 	return head / total, math.Pow(1, -s) / total
 }
 
+// Proves Zipf(s=1.2, N=100,000) top-1% and hottest-key shares match the exact harmonic sum within 0.005.
 func TestZipfSharesMatchTheCalculation(t *testing.T) {
 	const n, draws = 100_000, 200_000
 	const bound = 0.005
@@ -123,6 +126,7 @@ func TestZipfSharesMatchTheCalculation(t *testing.T) {
 	t.Logf("s=1.2, N=%d, %d draws: top 1%% share %.4f (exact %.4f), hottest key %.4f (exact %.4f)", n, draws, gotTop, wantTop, gotHot, wantHot)
 }
 
+// Proves uniform key draws cover [0, N) evenly and fixed keys always return Keys.Fixed.
 func TestUniformKeysCoverTheRange(t *testing.T) {
 	kc := workload.NewKeyChooser(sim.NewStream(1, "uniform"), workload.Keys{N: 10})
 	var seen [10]int
@@ -139,6 +143,7 @@ func TestUniformKeysCoverTheRange(t *testing.T) {
 	}
 }
 
+// Proves Poisson inter-arrival gaps match the configured mean within 5% and exponential median-below-mean share (1 - 1/e).
 func TestPoissonInterArrivalMean(t *testing.T) {
 	const mean, n = 10 * time.Millisecond, 5000
 	at, _ := arrivals(t, 0, workload.Tenant{Name: "a", Clients: 1, Requests: n, Interval: mean, Arrival: workload.ArrivalPoisson, Keys: workload.Keys{N: 1}})
@@ -161,6 +166,7 @@ func TestPoissonInterArrivalMean(t *testing.T) {
 	t.Logf("Poisson: mean gap %s (want %s), %d of %d gaps below the mean", got, mean, below, n-1)
 }
 
+// Proves ArrivalClosed waits for reply completion plus Think time before scheduling the next arrival.
 func TestClosedLoopThinkTime(t *testing.T) {
 	at, w := arrivals(t, 5*time.Millisecond, workload.Tenant{Name: "a", Clients: 1, Requests: 5, Arrival: workload.ArrivalClosed, Think: 10 * time.Millisecond, Keys: workload.Keys{N: 1}})
 	if len(at) != 5 {
@@ -176,6 +182,7 @@ func TestClosedLoopThinkTime(t *testing.T) {
 	}
 }
 
+// Proves narrowed Claim 7: arrivals follow the schedule while a client is busy, wire sends wait for the previous reply, and latency equals completion minus intended time.
 func TestOpenLoopArrivalsIgnoreABusyClientAndLatencyIsExact(t *testing.T) {
 	const n, gap, start, service = 17, time.Millisecond, 10 * time.Millisecond, time.Second
 	kindSend, kindDone := sim.K("wl.send"), sim.K("wl.done")
@@ -237,6 +244,7 @@ func TestOpenLoopArrivalsIgnoreABusyClientAndLatencyIsExact(t *testing.T) {
 	}
 }
 
+// Proves a retried request preserves its original intended send time in its final recorded latency.
 func TestRetriedRequestKeepsItsIntendedTime(t *testing.T) {
 	kindDone := sim.K("wl.done")
 	s := sim.New(sim.Config{Seed: 1, Scenario: t.Name()})

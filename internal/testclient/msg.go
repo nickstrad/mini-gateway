@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgproto3"
 )
 
+// Wire message type bytes and protocol constants for the simple-query subset.
 const (
 	MsgAuth          byte   = 'R'
 	MsgParamStatus   byte   = 'S'
@@ -27,6 +28,8 @@ const (
 	startupFixedSize        = 8
 )
 
+// Msg is the flattened, protocol-decoded form of a backend message. Only the
+// fields corresponding to Type are populated.
 type Msg struct {
 	Type      byte
 	Status    byte
@@ -43,6 +46,7 @@ type Msg struct {
 	Values    [][]byte
 }
 
+// MsgName returns a human-readable Postgres message name for a wire type byte.
 func MsgName(t byte) string {
 	switch t {
 	case MsgAuth:
@@ -73,6 +77,8 @@ func MsgName(t byte) string {
 	return fmt.Sprintf("Unknown(%q)", t)
 }
 
+// Decode parses one framed backend message body using pgproto3 message types
+// without pgproto3's blocking Frontend reader.
 func Decode(typ byte, body []byte) (Msg, error) {
 	m := Msg{Type: typ}
 	switch typ {
@@ -134,11 +140,15 @@ func Decode(typ byte, body []byte) (Msg, error) {
 	return m, nil
 }
 
+// Param is a single name/value startup or server parameter pair.
 type Param struct {
 	Name  string
 	Value string
 }
 
+// EncodeStartup appends a protocol 3.0 startup packet with parameters written in
+// slice order. Encoded directly rather than via pgproto3.StartupMessage.Encode
+// because pgproto3 iterates over a Go map, which is non-deterministic.
 func EncodeStartup(dst []byte, params []Param) []byte {
 	start := len(dst)
 	dst = binary.BigEndian.AppendUint32(dst, 0)
@@ -159,10 +169,14 @@ func encodeCode(dst []byte, code uint32) []byte {
 	return binary.BigEndian.AppendUint32(dst, code)
 }
 
+// EncodeSSLRequest appends an 8-byte Postgres SSLRequest packet.
 func EncodeSSLRequest(dst []byte) []byte { return encodeCode(dst, sslRequestCode) }
 
+// EncodeGSSRequest appends an 8-byte Postgres GSSENCRequest packet.
 func EncodeGSSRequest(dst []byte) []byte { return encodeCode(dst, gssRequestCode) }
 
+// EncodeCancel appends a Postgres CancelRequest packet for the given backend
+// process ID and cancel secret.
 func EncodeCancel(dst []byte, pid uint32, secret []byte) []byte {
 	out, err := (&pgproto3.CancelRequest{ProcessID: pid, SecretKey: secret}).Encode(dst)
 	if err != nil {
@@ -171,6 +185,7 @@ func EncodeCancel(dst []byte, pid uint32, secret []byte) []byte {
 	return out
 }
 
+// EncodeQuery appends a simple-protocol Query ('Q') message.
 func EncodeQuery(dst []byte, q string) []byte {
 	out, err := (&pgproto3.Query{String: q}).Encode(dst)
 	if err != nil {
@@ -179,6 +194,7 @@ func EncodeQuery(dst []byte, q string) []byte {
 	return out
 }
 
+// EncodeTerminate appends a frontend Terminate ('X') message.
 func EncodeTerminate(dst []byte) []byte {
 	out, _ := (&pgproto3.Terminate{}).Encode(dst)
 	return out

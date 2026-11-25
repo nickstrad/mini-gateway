@@ -40,7 +40,7 @@ func runChild(t *testing.T, args ...string) string {
 	return string(out)
 }
 
-// Proves "mgsim list" exits 0 and outputs every registered toy scenario name.
+// Proves "mgsim list" exits 0 and outputs every registered toy and world scenario name.
 func TestListNamesEveryScenario(t *testing.T) {
 	code, out, _ := runInProcess("list")
 	if code != 0 || strings.Count(out, "\n") != len(simtoy.Scenarios())+len(world.Scenarios()) || !strings.Contains(out, "echo-reset\n") {

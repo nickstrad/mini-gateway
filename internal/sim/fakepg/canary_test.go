@@ -8,6 +8,7 @@ import (
 	simworld "github.com/nickstrad/mini-gateway/internal/sim/world"
 )
 
+// Proves the write-log checker catches a planted double-apply bug on direct-mixed-transactions.
 func TestPlantedBugDoubleWriteIsCaughtByTheWriteLogCheck(t *testing.T) {
 	sc := simworld.MixedTransactions()
 	for _, seed := range []int64{1, 2, 3} {
@@ -23,6 +24,7 @@ func TestPlantedBugDoubleWriteIsCaughtByTheWriteLogCheck(t *testing.T) {
 	}
 }
 
+// Proves the write-log checker catches a planted silently dropped write at any sequence position.
 func TestPlantedBugDroppedWriteIsCaughtByTheWriteLogCheck(t *testing.T) {
 	sc := simworld.MixedTransactions()
 	for _, seed := range []int64{1, 2, 3} {
@@ -36,6 +38,7 @@ func TestPlantedBugDroppedWriteIsCaughtByTheWriteLogCheck(t *testing.T) {
 	}
 }
 
+// Proves the write-log replay check catches a planted phantom write logged without mutating the table.
 func TestPlantedBugPhantomWriteIsCaughtByTheWriteLogCheck(t *testing.T) {
 	sc := simworld.MixedTransactions()
 	for _, seed := range []int64{1, 2, 3} {

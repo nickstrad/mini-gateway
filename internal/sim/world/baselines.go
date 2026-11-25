@@ -12,6 +12,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/workload"
 )
 
+// Shared parameters for the direct-to-database baseline scenarios (control arms
+// for later pool, queue, and coalescer chunks).
 const (
 	HotKey         = "hot"
 	BaselineKeys   = 100
@@ -22,6 +24,7 @@ const (
 	BurstAt        = sim.Time(100 * time.Millisecond)
 )
 
+// HotRead returns the exact single-key SELECT statement used by identical-read baselines.
 func HotRead() string { return "SELECT v FROM kv WHERE k = '" + HotKey + "'" }
 
 func rows(n int) []fakepg.Row {
@@ -39,6 +42,7 @@ func netOptions() simnet.Options {
 	return o
 }
 
+// Scenarios returns all five registered direct-to-database baseline scenarios.
 func Scenarios() []Scenario {
 	return []Scenario{
 		ManyConnections(),
@@ -49,6 +53,8 @@ func Scenarios() []Scenario {
 	}
 }
 
+// ManyConnections is the no-proxy control arm proving 500 clients open 500
+// database sessions simultaneously.
 func ManyConnections() Scenario {
 	return Scenario{
 		Name:     "direct-500-connections",
@@ -79,6 +85,8 @@ func ManyConnections() Scenario {
 	}
 }
 
+// ReconnectBurst is the no-proxy control arm proving a 500-client reconnect
+// burst within 50 ms against max_connections=100 causes real 53300 refusals.
 func ReconnectBurst() Scenario {
 	return Scenario{
 		Name:     "direct-reconnect-burst",
@@ -113,6 +121,8 @@ func ReconnectBurst() Scenario {
 	}
 }
 
+// IdenticalReadsScenario is the no-proxy control arm proving 1,000 simultaneous
+// identical reads execute 1,000 database reads without a coalescer.
 func IdenticalReadsScenario() Scenario {
 	return Scenario{
 		Name:     "direct-1000-identical-reads",
@@ -136,6 +146,7 @@ func IdenticalReadsScenario() Scenario {
 	}
 }
 
+// Parameters for OpenLoopOverload: offered load 800 req/s against 400 req/s capacity.
 const (
 	OverloadCapacity = 4
 	OverloadService  = 10 * time.Millisecond
@@ -144,6 +155,8 @@ const (
 	OverloadRequests = 20
 )
 
+// OpenLoopOverload is the no-proxy control arm showing unbounded queue latency
+// growth when open-loop arrival rate exceeds database capacity.
 func OpenLoopOverload() Scenario {
 	return Scenario{
 		Name:     "direct-open-loop-overload",
@@ -174,6 +187,8 @@ func OpenLoopOverload() Scenario {
 	}
 }
 
+// MixedTransactions runs three Zipf/Poisson tenants mixing reads, writes, and
+// multi-statement transactions and checks exact write-log and transaction invariants.
 func MixedTransactions() Scenario {
 	return Scenario{
 		Name:     "direct-mixed-transactions",

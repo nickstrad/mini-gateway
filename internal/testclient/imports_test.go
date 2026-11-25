@@ -91,6 +91,9 @@ func pgproto3Importers(t *testing.T, root string) []string {
 	return found
 }
 
+// Proves narrowed Claim 11: every Go file outside tools/ (including tests,
+// nested modules, and testdata) imports pgproto3 only under the directories
+// permitted by tools/lint-rules/imports.txt.
 func TestPgproto3IsImportedOnlyWhereTheRulesAllowInEveryGoFileOutsideTools(t *testing.T) {
 	root := repoRoot(t)
 	allowed := pgproto3Allowed(t, root)

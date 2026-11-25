@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// MaxSettings bounds the total session settings (built-in plus custom) on one backend.
 const MaxSettings = 64
 
 type setting struct {
@@ -14,12 +15,14 @@ type setting struct {
 	readOnly bool
 }
 
+// The 14 ParameterStatus names real Postgres 17 sends at startup, in wire order.
 var reportedNames = []string{
 	"application_name", "client_encoding", "DateStyle", "default_transaction_read_only", "in_hot_standby",
 	"integer_datetimes", "IntervalStyle", "is_superuser", "scram_iterations", "server_encoding",
 	"server_version", "session_authorization", "standard_conforming_strings", "TimeZone",
 }
 
+// ReportedParameters returns a copy of the 14 startup ParameterStatus names in wire order.
 func ReportedParameters() []string { return slices.Clone(reportedNames) }
 
 func (srv *Server) defaultSettings(user, appName string) []setting {

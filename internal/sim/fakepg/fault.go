@@ -9,6 +9,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/simnet"
 )
 
+// Database-side fault kinds registered by fakepg (IDs 32..55, disjoint from
+// simnet's 1..9 and workload's 96..101).
 const (
 	FaultRefuse sim.FaultKind = iota + 32
 	FaultSilentStartup
@@ -37,10 +39,12 @@ const (
 	faultEnd
 )
 
+// NumFaults is the total number of fault kinds registered by fakepg, including FaultClear.
 const NumFaults = int(faultEnd - FaultRefuse)
 
 type point uint8
 
+// Arg1 values for FaultReset selecting when a backend resets its connection.
 const (
 	PointNow point = iota
 	PointBefore
@@ -57,17 +61,20 @@ const (
 	pointMidTx  = PointMidTx
 )
 
+// Arg1 modes for FaultGarbage choosing random bytes or malformed frame lengths.
 const (
 	GarbageRandom int64 = iota
 	GarbageShortLength
 	GarbageHugeLength
 )
 
+// Arg1 modes for FaultDirtyState injecting an unexpected open transaction or changed setting.
 const (
 	DirtyOpenTx int64 = iota
 	DirtySetting
 )
 
+// SurpriseApp is the application_name prefix emitted by FaultParamStatus.
 const SurpriseApp = "fakepg-surprise"
 
 var faultNames = [...]string{"pg.refuse", "pg.silent-startup", "pg.silent-query", "pg.connect-stall", "pg.first-byte",
@@ -75,6 +82,7 @@ var faultNames = [...]string{"pg.refuse", "pg.silent-startup", "pg.silent-query"
 	"pg.dirty-state", "pg.param-status", "pg.kill", "pg.freeze", "pg.restart", "pg.max-conn", "pg.boundary",
 	"pg.slow-conn", "pg.half-open", "pg.asym", "pg.stall-window", "pg.clear"}
 
+// FaultKinds returns every sim.FaultKind registered by fakepg in ascending order.
 func FaultKinds() []sim.FaultKind {
 	out := make([]sim.FaultKind, 0, NumFaults)
 	for k := FaultRefuse; k < faultEnd; k++ {
@@ -83,6 +91,7 @@ func FaultKinds() []sim.FaultKind {
 	return out
 }
 
+// FaultName returns the trace/diagnostic name for a fakepg fault kind, or "" if out of range.
 func FaultName(k sim.FaultKind) string {
 	if k >= FaultRefuse && k < faultEnd {
 		return faultNames[k-FaultRefuse]
@@ -178,6 +187,8 @@ func (srv *Server) applyKind(f sim.Fault) bool {
 	case FaultBloat:
 		fs.bloatRows, fs.bloatSize = min(max(f.Arg1, 1), MaxRowCount), min(max(f.Arg2, 0), MaxRowSize)
 	case FaultMaxConn:
+		// Clamp to Config.MaxConnections so the fault can only tighten the limit
+		// and never violate the registered sessions <= MaxConnections invariant.
 		fs.maxConnOn, fs.maxConn = true, min(max(f.Arg1, 0), int64(srv.cfg.MaxConnections))
 	case FaultBoundary:
 		fs.boundaryOn, fs.boundary = true, time.Duration(max(f.Arg2, 0))
@@ -305,6 +316,8 @@ func (b *backend) terminate() {
 		b.srv.stats.aborted++
 		b.srv.logStatement(b, r, "57P01", true)
 	}
+	// Drop queued segments not yet started, but leave b.outBuf intact so an
+	// already-begun wire frame finishes cleanly before FATAL 57P01 is emitted.
 	b.msg = nil
 	b.out = nil
 	b.emit(encError(nil, errorf("FATAL", "57P01", "terminating connection due to administrator command")))

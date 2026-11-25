@@ -8,6 +8,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/testclient"
 )
 
+// Client-side fault kinds registered by workload (IDs 96..101). Targets are
+// 1-based client IDs.
 const (
 	FaultHalfMessage sim.FaultKind = iota + 96
 	FaultStopReading
@@ -18,6 +20,7 @@ const (
 	faultEnd
 )
 
+// Bounds on auxiliary cancel connections spawned by FaultCancel.
 const (
 	MaxCancelConns = 1 << 16
 	CancelTimeout  = time.Second
@@ -25,6 +28,7 @@ const (
 
 var faultNames = [...]string{"wl.half-message", "wl.stop-reading", "wl.disconnect", "wl.burst", "wl.cancel", "wl.clear"}
 
+// FaultKinds returns every sim.FaultKind registered by workload in ascending order.
 func FaultKinds() []sim.FaultKind {
 	var out []sim.FaultKind
 	for k := FaultHalfMessage; k < faultEnd; k++ {
@@ -33,6 +37,7 @@ func FaultKinds() []sim.FaultKind {
 	return out
 }
 
+// FaultName returns the trace/diagnostic name for a workload fault kind, or "" if out of range.
 func FaultName(k sim.FaultKind) string {
 	if k >= FaultHalfMessage && k < faultEnd {
 		return faultNames[k-FaultHalfMessage]

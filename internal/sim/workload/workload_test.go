@@ -52,6 +52,7 @@ func (w *world) finish(t testing.TB) {
 	}
 }
 
+// Proves a basic mixed read/write/transaction workload completes every request and quiesces cleanly.
 func TestSmoke(t *testing.T) {
 	w := build(t, 1, fakepg.Config{Rows: []fakepg.Row{{Key: "k0", Value: "x"}}, Service: fakepg.Service{Fixed: time.Millisecond}},
 		workload.Config{Tenants: []workload.Tenant{{Name: "a", Clients: 3, Requests: 10, Interval: 5 * time.Millisecond,

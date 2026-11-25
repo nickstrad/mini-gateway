@@ -70,6 +70,7 @@ func scheduleFor(seed int64) []sim.Fault {
 	return sim.ScheduleFromBytes(data, faultSpace())
 }
 
+// Proves random fault schedules from ScheduleFromBytes never panic, always quiesce after clearing, obey conservation, and replay identically.
 func TestScenarioRandomFaultSchedules(t *testing.T) {
 	simtest.Sweep(t, func(t *testing.T, seed int64) {
 		sched := scheduleFor(seed)
@@ -92,6 +93,7 @@ func TestScenarioRandomFaultSchedules(t *testing.T) {
 	})
 }
 
+// Proves arbitrary byte-decoded fault schedules run to clean quiesce without panics or invariant errors.
 func FuzzWorldSchedule(f *testing.F) {
 	f.Add([]byte{0, 1, 0, 10, 0, 0, 0, 100})
 	f.Add([]byte{14, 0, 0, 50, 0, 0, 0, 0, 22, 3, 1, 0, 0, 2, 0, 0})

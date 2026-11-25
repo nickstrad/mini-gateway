@@ -19,6 +19,7 @@ func lastRows(msgs []testclient.Msg) []string {
 	return out
 }
 
+// Proves a read already in service returns its statement-start snapshot and ignores writes committed afterward.
 func TestReadInServiceDoesNotSeeLaterCommit(t *testing.T) {
 	w := newWorld(t, fakepg.Config{
 		Rows:    []fakepg.Row{{Key: "a", Value: "1"}},
@@ -45,6 +46,7 @@ func TestReadInServiceDoesNotSeeLaterCommit(t *testing.T) {
 	w.done(reader, writer)
 }
 
+// Proves transaction writes are private until COMMIT, apply atomically at COMMIT, and vanish on ROLLBACK or implicit-tx error.
 func TestTransactionWritesApplyAtCommitAndVanishAtRollback(t *testing.T) {
 	w := newWorld(t, fakepg.Config{Rows: []fakepg.Row{{Key: "a", Value: "1"}}})
 	a, b := w.client(), w.client()
@@ -83,6 +85,7 @@ func TestTransactionWritesApplyAtCommitAndVanishAtRollback(t *testing.T) {
 	}
 }
 
+// Proves WriteLog records every applied write exactly once with tags and skips no-op updates and duplicate-key errors.
 func TestWriteLogHasEveryAppliedWriteOnce(t *testing.T) {
 	w := newWorld(t, fakepg.Config{})
 	a := w.client()
@@ -112,6 +115,7 @@ func TestWriteLogHasEveryAppliedWriteOnce(t *testing.T) {
 	w.done(a)
 }
 
+// Proves max_connections caps open sessions and refuses excess clients with Postgres's real FATAL 53300 message.
 func TestMaxConnectionsRefusesWithRealError(t *testing.T) {
 	const limit = 5
 	w := newWorld(t, fakepg.Config{MaxConnections: limit})
@@ -150,6 +154,7 @@ func TestMaxConnectionsRefusesWithRealError(t *testing.T) {
 	w.done(late)
 }
 
+// Proves missing user, unknown user, and unknown database are refused with FATAL 28000 / 3D000.
 func TestUnknownUserAndDatabase(t *testing.T) {
 	w := newWorld(t, fakepg.Config{Users: []string{"app"}, Databases: []string{"app"}})
 	cases := []struct{ user, db, want string }{{"nobody", "app", "28000"}, {"app", "nodb", "3D000"}, {"", "app", "28000"}}
@@ -168,6 +173,7 @@ func TestUnknownUserAndDatabase(t *testing.T) {
 	}
 }
 
+// Proves CancelRequest cancels only the matching PID/secret backend's active statement and ignores wrong keys or idle targets.
 func TestCancelHitsOnlyTheTargetBackend(t *testing.T) {
 	w := newWorld(t, fakepg.Config{})
 	a, b := w.client(), w.client()
@@ -203,6 +209,7 @@ func TestCancelHitsOnlyTheTargetBackend(t *testing.T) {
 	}
 }
 
+// Proves Config.Capacity limits concurrent statements in service and queues excess statements in FIFO order.
 func TestCapacityQueuesStatementsInsideTheDatabase(t *testing.T) {
 	w := newWorld(t, fakepg.Config{Capacity: 2, Service: fakepg.Service{Fixed: 10 * time.Millisecond}})
 	var ps []*testProbe
@@ -237,6 +244,7 @@ func TestCapacityQueuesStatementsInsideTheDatabase(t *testing.T) {
 	}
 }
 
+// Proves a configured Service.Stalls window adds its extra delay to statements executing during it.
 func TestStallWindowAddsToStatementsInService(t *testing.T) {
 	w := newWorld(t, fakepg.Config{Service: fakepg.Service{Fixed: 10 * time.Millisecond, Stalls: []fakepg.Stall{{From: 0, To: 1 << 62, Extra: 150 * time.Millisecond}}}})
 	p := w.client()
@@ -250,6 +258,7 @@ func TestStallWindowAddsToStatementsInService(t *testing.T) {
 	w.done(p)
 }
 
+// Proves a 20,000-row reply streams cleanly to the client across simnet's bounded window.
 func TestLargeReplyIsStreamedUnderBackPressure(t *testing.T) {
 	w := newWorld(t, fakepg.Config{})
 	p := w.client()
@@ -270,6 +279,7 @@ func TestLargeReplyIsStreamedUnderBackPressure(t *testing.T) {
 	w.done(p)
 }
 
+// Proves KindRows statements exceeding Config.MaxReplyBytes fail immediately with ERROR 54000.
 func TestReplyLargerThanTheLimitIsRefused(t *testing.T) {
 	w := newWorld(t, fakepg.Config{MaxReplyBytes: 1 << 20})
 	p := w.client()

@@ -13,6 +13,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/testclient"
 )
 
+// Proves workload.New rejects invalid client, request, key, interval, Zipf, and transaction lengths with ErrConfig.
 func TestNewRefusesBadConfigurations(t *testing.T) {
 	ok := workload.Tenant{Name: "a", Clients: 1, Requests: 2, Interval: time.Millisecond, Keys: workload.Keys{N: 1}}
 	bad := map[string]func(t *workload.Tenant){
@@ -40,6 +41,7 @@ func TestNewRefusesBadConfigurations(t *testing.T) {
 	}
 }
 
+// Proves KeyName formatting and KeyChooser bounds for uniform and empty configs.
 func TestKeyNamesAndChooser(t *testing.T) {
 	if workload.KeyName(0) != workload.DefaultKeyPrefix+"0" || workload.KeyName(42) != workload.DefaultKeyPrefix+"42" {
 		t.Fatal(workload.KeyName(42))
@@ -56,6 +58,7 @@ func TestKeyNamesAndChooser(t *testing.T) {
 	}
 }
 
+// Proves every workload fault kind, Outcome, and EventKind returns a unique canonical name.
 func TestWorkloadFaultNamesAndOutcomeNames(t *testing.T) {
 	seen := map[string]bool{}
 	for _, k := range workload.FaultKinds() {
@@ -79,6 +82,7 @@ func TestWorkloadFaultNamesAndOutcomeNames(t *testing.T) {
 	}
 }
 
+// Proves Workload.Done stays false while requests remain and becomes true once all clients finish.
 func TestWorkloadDoneOnlyWhenEveryClientFinished(t *testing.T) {
 	w := build(t, 1, fakepg.Config{Service: fakepg.Service{Fixed: 10 * time.Millisecond}}, workload.Config{Tenants: []workload.Tenant{one("SELECT 1", 3)}})
 	if w.wl.Done() {
@@ -119,6 +123,7 @@ func (pw *probeWorld) run(d time.Duration) {
 	}
 }
 
+// Proves Probe supports pre-startup, startup, stop/resume reading, pipelined queries, trace slicing, and clean termination.
 func TestProbeConversation(t *testing.T) {
 	pw := newProbeWorld(t)
 	p := workload.NewProbe(pw.n, pw.srv.Addr(), simnet.DefaultOptions())
@@ -161,6 +166,7 @@ func TestProbeConversation(t *testing.T) {
 	}
 }
 
+// Proves Probe can send cancels, reset connections, and fail cleanly on backend messages exceeding SetMaxMessage.
 func TestProbeCancelResetAndMessageLimit(t *testing.T) {
 	pw := newProbeWorld(t)
 	a := workload.NewProbe(pw.n, pw.srv.Addr(), simnet.DefaultOptions())

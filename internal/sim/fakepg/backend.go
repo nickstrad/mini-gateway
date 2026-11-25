@@ -135,6 +135,8 @@ func (b *backend) advance() {
 			b.finishStatement()
 			continue
 		}
+		// pump returns false when simnet's send window is full (back pressure) or
+		// delayed output exceeds MaxDelayedSegments; pause reading until writable.
 		if !b.pump() {
 			return
 		}
@@ -274,6 +276,9 @@ func (b *backend) startup(body []byte) {
 		b.refuseWith(RefuseBadStartup, errorf("FATAL", "08P01", "invalid startup packet layout"))
 		return
 	}
+	// Follow Postgres's startup refusal order: encryption negotiation first, then
+	// cancel request (uncounting its slot), protocol version, restart window,
+	// max_connections, missing/unknown user, and unknown database.
 	switch pkt.kind {
 	case startupSSL, startupGSS:
 		b.emit([]byte{'N'})
@@ -424,6 +429,8 @@ func (b *backend) pump() bool {
 			b.out = b.out[1:]
 			continue
 		}
+		// Stream large row sets in outFill-sized batches (or one row at a time
+		// under FaultTrickle) so a 200,000-row reply stays bounded in memory.
 		b.rowBuf = b.rowBuf[:0]
 		for seg.rows > 0 && (len(b.rowBuf) == 0 || (seg.trickle == 0 && len(b.rowBuf) < outFill)) {
 			b.rowBuf = appendRepeatRow(b.rowBuf, seg.unit, seg.size, seg.second)

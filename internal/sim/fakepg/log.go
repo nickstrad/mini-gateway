@@ -2,6 +2,8 @@ package fakepg
 
 import "github.com/nickstrad/mini-gateway/internal/sim"
 
+// WriteRecord records one committed (or autocommit) row-changing write applied
+// to the kv table, linking it to its statement, backend, and transaction.
 type WriteRecord struct {
 	Seq     int64
 	StmtSeq int64
@@ -15,14 +17,19 @@ type WriteRecord struct {
 	At      sim.Time
 }
 
+// TxOutcome records how a transaction ended.
 type TxOutcome uint8
 
 const (
+	// TxCommitted means the transaction's pending writes were applied to the table.
 	TxCommitted TxOutcome = iota + 1
+	// TxRolledBack means the transaction was explicitly or implicitly rolled back.
 	TxRolledBack
+	// TxLost means the backend closed or reset while the transaction was open.
 	TxLost
 )
 
+// TxRecord records the final outcome and pending-write count of one transaction.
 type TxRecord struct {
 	TxID    int64
 	Backend int64
@@ -31,6 +38,8 @@ type TxRecord struct {
 	At      sim.Time
 }
 
+// StatementRecord records one statement executed or aborted on a backend,
+// including affected row count (Rows) and optional client comment Tag.
 type StatementRecord struct {
 	Seq     int64
 	Backend int64

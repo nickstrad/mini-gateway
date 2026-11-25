@@ -50,12 +50,14 @@ func (c writeCase) check() error {
 	return world.CheckWrites(c.initial, c.final, c.stmts, c.txs, c.writes)
 }
 
+// Proves CheckWrites accepts an exact write, statement, and transaction log matching the final table.
 func TestCheckWritesAcceptsAnExactLog(t *testing.T) {
 	if err := baseWriteCase().check(); err != nil {
 		t.Fatal(err)
 	}
 }
 
+// Proves CheckWrites detects all 13 classes of missing, duplicated, rolled-back, phantom, misordered, and cross-backend/cross-client write mismatches.
 func TestCheckWritesFindsEveryKindOfMismatch(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -104,6 +106,7 @@ func TestCheckWritesFindsEveryKindOfMismatch(t *testing.T) {
 	}
 }
 
+// Proves CheckWriteLog refuses to certify any run whose write, statement, or transaction log dropped entries.
 func TestCheckWriteLogRefusesIncompleteLogs(t *testing.T) {
 	sc := world.MixedTransactions()
 	r := world.Run(sc, 1)
@@ -128,6 +131,7 @@ func TestCheckWriteLogRefusesIncompleteLogs(t *testing.T) {
 	}
 }
 
+// Proves Quantile picks the exact bucket upper bound at every basis-point boundary and returns 0 when empty.
 func TestQuantileReadsTheBucketAtTheRank(t *testing.T) {
 	h := obs.HistogramSnapshot{Count: 10, Hi: 99, Buckets: []obs.Bucket{{Lo: 0, Hi: 9, Count: 5}, {Lo: 10, Hi: 19, Count: 4}, {Lo: 20, Hi: 29, Count: 1}}}
 	for _, c := range []struct{ bp, want int64 }{{0, 9}, {5000, 9}, {5001, 19}, {9000, 19}, {9001, 29}, {10000, 29}, {20000, 29}, {-5, 9}} {

@@ -26,6 +26,7 @@ func simTranscript(t *testing.T) world.Transcript {
 	return tr
 }
 
+// Proves fakepg's ProbeScript transcript matches the recorded Postgres 17 transcript line for line in CI.
 func TestFidelityAgainstRecordedPostgres17(t *testing.T) {
 	data, err := os.ReadFile(filepath.FromSlash(recording))
 	if err != nil {
@@ -36,6 +37,7 @@ func TestFidelityAgainstRecordedPostgres17(t *testing.T) {
 	}
 }
 
+// Proves ProbeScript runs cleanly against SimTarget and logs its normalized transcript.
 func TestFakeTranscript(t *testing.T) {
 	t.Log("\n" + simTranscript(t).String())
 }

@@ -40,6 +40,7 @@ func tableMatchesWriteLog(t *testing.T, w *world, initial []fakepg.Row) {
 	}
 }
 
+// Proves transactional INSERT respects MaxRows (accounting for pending deletes) in explicit and implicit transactions.
 func TestInsertInsideATransactionRespectsMaxRows(t *testing.T) {
 	initial := []fakepg.Row{{Key: "k1", Value: "v1"}, {Key: "k2", Value: "v2"}}
 	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: initial})
@@ -63,6 +64,7 @@ func TestInsertInsideATransactionRespectsMaxRows(t *testing.T) {
 	w.done(p)
 }
 
+// Proves COMMIT rolls back with ERROR 53100 without logging phantom writes when concurrent inserts filled the table.
 func TestCommitThatNoLongerFitsIsRolledBack(t *testing.T) {
 	initial := []fakepg.Row{{Key: "a", Value: "1"}}
 	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: initial})
@@ -88,6 +90,7 @@ func TestCommitThatNoLongerFitsIsRolledBack(t *testing.T) {
 	}
 }
 
+// Proves exceeding MaxStatements inside an explicit transaction puts it in the failed ('E') state.
 func TestStatementLimitErrorFailsTheTransaction(t *testing.T) {
 	w := newWorld(t, fakepg.Config{})
 	p := w.client()
@@ -107,6 +110,7 @@ func TestStatementLimitErrorFailsTheTransaction(t *testing.T) {
 	w.done(p)
 }
 
+// Proves injecting FaultStallWindow extends statements already in service by the stall extra.
 func TestStallWindowExtendsStatementsAlreadyInService(t *testing.T) {
 	w := newWorld(t, fakepg.Config{Service: fakepg.Service{Fixed: 50 * time.Millisecond}})
 	p := w.client()
@@ -124,6 +128,7 @@ func TestStallWindowExtendsStatementsAlreadyInService(t *testing.T) {
 	w.done(p)
 }
 
+// Proves FaultStallWindow adds its extra delay to a statement currently paused by FaultFreeze.
 func TestStallWindowExtendsAFrozenStatement(t *testing.T) {
 	w := newWorld(t, fakepg.Config{Service: fakepg.Service{Fixed: 50 * time.Millisecond}})
 	p := w.client()
@@ -139,6 +144,7 @@ func TestStallWindowExtendsAFrozenStatement(t *testing.T) {
 	w.done(p)
 }
 
+// Proves a zero-service-time statement starting exactly at a stall window's From instant takes the stall extra.
 func TestStallWindowCatchesAZeroTimeStatementAtItsStart(t *testing.T) {
 	start := sim.Time(100 * time.Millisecond)
 	w := newWorld(t, fakepg.Config{Service: fakepg.Service{Stalls: []fakepg.Stall{{From: start, To: start + sim.Time(200*time.Millisecond), Extra: 150 * time.Millisecond}}}})
@@ -154,6 +160,7 @@ func TestStallWindowCatchesAZeroTimeStatementAtItsStart(t *testing.T) {
 	w.done(p)
 }
 
+// Proves FaultMaxConn is clamped at Config.MaxConnections and cannot raise the hard session ceiling.
 func TestMaxConnFaultCannotRaiseTheConfiguredLimit(t *testing.T) {
 	w := newWorld(t, fakepg.Config{MaxConnections: 2})
 	w.s.ApplyFault(sim.Fault{Kind: fakepg.FaultMaxConn, Arg1: 5})
@@ -167,6 +174,7 @@ func TestMaxConnFaultCannotRaiseTheConfiguredLimit(t *testing.T) {
 	w.done(a, b, c)
 }
 
+// Proves a targeted FaultFragment does not clear an active server-wide FaultFragment for new connections.
 func TestTargetedFragmentKeepsTheServerWideFragment(t *testing.T) {
 	w := newWorld(t, fakepg.Config{})
 	a := w.client()
@@ -181,6 +189,7 @@ func TestTargetedFragmentKeepsTheServerWideFragment(t *testing.T) {
 	w.done(a, b)
 }
 
+// Proves a targeted FaultGarbage keeps its mode per backend without overwriting the server-wide garbage mode.
 func TestTargetedGarbageKeepsTheServerWideMode(t *testing.T) {
 	w := newWorld(t, fakepg.Config{})
 	a, b, c := w.client(), w.client(), w.client()
@@ -199,6 +208,7 @@ func TestTargetedGarbageKeepsTheServerWideMode(t *testing.T) {
 	w.done(a, b, c)
 }
 
+// Proves ready-only faults (FaultDirtyState, FaultParamStatus) targeting a starting backend count as NoTarget.
 func TestReadyOnlyFaultsOnAStartingBackendCountAsNoTarget(t *testing.T) {
 	w := newWorld(t, fakepg.Config{})
 	p := w.dial()
@@ -215,6 +225,7 @@ func TestReadyOnlyFaultsOnAStartingBackendCountAsNoTarget(t *testing.T) {
 	w.done(p)
 }
 
+// Proves FaultBloat on a two-column read emits two-column DataRows matching its RowDescription.
 func TestBloatOnATwoColumnReadKeepsTheColumnCount(t *testing.T) {
 	w := newWorld(t, fakepg.Config{Rows: []fakepg.Row{{Key: "a", Value: "1"}}})
 	p := w.client()
@@ -235,6 +246,7 @@ func TestBloatOnATwoColumnReadKeepsTheColumnCount(t *testing.T) {
 	w.done(p)
 }
 
+// Proves FaultFreeze pauses a pending delayed reset timer until the server thaws.
 func TestFreezeHoldsADelayedReset(t *testing.T) {
 	w := newWorld(t, fakepg.Config{AfterDelay: 10 * time.Millisecond})
 	p := w.client()
@@ -254,6 +266,7 @@ func TestFreezeHoldsADelayedReset(t *testing.T) {
 	w.done(p)
 }
 
+// Proves Match rejects repeat counts whose byte-length product would overflow int64.
 func TestMatchRowsRefusesOverflowingSizes(t *testing.T) {
 	for _, q := range []string{
 		"SELECT repeat('ab', 5000000000000000000) FROM generate_series(1, 1)",
@@ -266,6 +279,7 @@ func TestMatchRowsRefusesOverflowingSizes(t *testing.T) {
 	}
 }
 
+// Proves FaultTerminate under back pressure finishes already-framed bytes before emitting FATAL 57P01 and EOF.
 func TestTerminateDuringABackPressuredReplyKeepsTheFraming(t *testing.T) {
 	w := newWorld(t, fakepg.Config{})
 	p := w.client()
@@ -302,6 +316,7 @@ func requireRows(t *testing.T, w *world, want string) {
 	}
 }
 
+// Proves COMMIT rolls back with 53100 when sequential apply would exceed MaxRows midway before a later DELETE.
 func TestCommitThatPassesMaxRowsMidwayIsRolledBack(t *testing.T) {
 	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: []fakepg.Row{{Key: "k1", Value: "v1"}}})
 	a, b := w.client(), w.client()
@@ -318,6 +333,7 @@ func TestCommitThatPassesMaxRowsMidwayIsRolledBack(t *testing.T) {
 	w.done(a, b)
 }
 
+// Proves a re-creating UPDATE followed by a DELETE rolls back at COMMIT if its intermediate peak exceeds MaxRows.
 func TestCommitWhoseRecreatedRowPassesMaxRowsIsRolledBack(t *testing.T) {
 	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: []fakepg.Row{{Key: "k1", Value: "v1"}, {Key: "k2", Value: "v2"}}})
 	a, b := w.client(), w.client()
@@ -331,6 +347,7 @@ func TestCommitWhoseRecreatedRowPassesMaxRowsIsRolledBack(t *testing.T) {
 	w.done(a, b)
 }
 
+// Proves INSERT then DELETE of the same key rolls back at COMMIT when a concurrent filler leaves no room for the peak.
 func TestCommitInsertThenDeleteOfOneKeyAtAFullTableIsRolledBack(t *testing.T) {
 	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: []fakepg.Row{{Key: "k1", Value: "v1"}}})
 	a, b := w.client(), w.client()
@@ -344,6 +361,7 @@ func TestCommitInsertThenDeleteOfOneKeyAtAFullTableIsRolledBack(t *testing.T) {
 	w.done(a, b)
 }
 
+// Proves an implicit multi-statement transaction whose peak exceeds MaxRows midway rolls back with E:53100 before ReadyForQuery.
 func TestImplicitCommitThatPassesMaxRowsMidwayIsRolledBack(t *testing.T) {
 	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: []fakepg.Row{{Key: "k1", Value: "v1"}}, Service: fakepg.Service{Fixed: 50 * time.Millisecond}})
 	a, b := w.client(), w.client()
@@ -360,6 +378,7 @@ func TestImplicitCommitThatPassesMaxRowsMidwayIsRolledBack(t *testing.T) {
 	w.done(a, b)
 }
 
+// Proves a delete-first transaction at a full table stays within MaxRows at every step and still commits.
 func TestCommitThatDeletesFirstStillCommitsAtAFullTable(t *testing.T) {
 	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: []fakepg.Row{{Key: "k1", Value: "v1"}}})
 	a, b := w.client(), w.client()
@@ -373,6 +392,7 @@ func TestCommitThatDeletesFirstStillCommitsAtAFullTable(t *testing.T) {
 	w.done(a, b)
 }
 
+// Proves a net-zero INSERT-then-DELETE transaction commits with both writes logged when room exists for the peak.
 func TestInsertThenDeleteOfOneKeyCommits(t *testing.T) {
 	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: []fakepg.Row{{Key: "k1", Value: "v1"}}})
 	a := w.client()

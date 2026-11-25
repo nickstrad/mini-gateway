@@ -1,3 +1,7 @@
+// Package workload implements simulated Postgres client actors over simnet:
+// multi-tenant open-loop (constant and Poisson) and closed-loop traffic
+// generation with intended-send-time latency measurement, Zipf/uniform key
+// selection, configurable retries, client-side faults, and a hand-driven Probe.
 package workload
 
 import (
@@ -28,6 +32,8 @@ type tenantState struct {
 	fromSend *obs.Histogram
 }
 
+// Workload manages a set of simulated tenant client actors and their registered
+// fault handlers, conservation invariants, state writer, and quiesce check.
 type Workload struct {
 	s       *sim.Sim
 	n       *simnet.Net
@@ -46,6 +52,9 @@ type faultStats struct {
 	noTarget int64
 }
 
+// New validates cfg, constructs all client actors with isolated per-client
+// random streams, and registers workload faults, invariants, and quiesce checks.
+// Call Start to schedule initial arrivals and connections.
 func New(n *simnet.Net, cfg Config) (*Workload, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -73,6 +82,7 @@ func New(n *simnet.Net, cfg Config) (*Workload, error) {
 	return w, nil
 }
 
+// Start schedules every client's initial arrival and/or pre-connect event once.
 func (w *Workload) Start() {
 	if w.started {
 		return
@@ -83,8 +93,10 @@ func (w *Workload) Start() {
 	}
 }
 
+// Clients returns the total number of client actors across all tenants.
 func (w *Workload) Clients() int { return len(w.clients) }
 
+// Done reports whether every client actor has finished its requests and closed.
 func (w *Workload) Done() bool {
 	for _, c := range w.clients {
 		if !c.finished() {
@@ -141,6 +153,7 @@ func (w *Workload) writeState(sk sim.StateSink) {
 	}
 }
 
+// Tenant returns the 0-based index of the named tenant in Snapshot().Tenants, or -1.
 func (w *Workload) Tenant(name string) int {
 	return slices.IndexFunc(w.tenants, func(t *tenantState) bool { return t.cfg.Name == name })
 }

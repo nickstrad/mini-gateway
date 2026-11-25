@@ -18,6 +18,7 @@ func fault(s *sim.Sim, at time.Duration, kind sim.FaultKind, target, a1, a2 int6
 	s.InjectAt(sim.Fault{At: sim.Time(at), Kind: kind, Target: target, Arg1: a1, Arg2: a2})
 }
 
+// Proves FaultHalfMessage holds a partial Query frame in the server framer without starting a statement until the client leaves.
 func TestClientFaultHalfMessage(t *testing.T) {
 	w := build(t, 1, fakepg.Config{}, workload.Config{Tenants: []workload.Tenant{one("SELECT 1", 2)}})
 	fault(w.s, 10*time.Millisecond, workload.FaultHalfMessage, 1, 0, 0)
@@ -38,6 +39,7 @@ func TestClientFaultHalfMessage(t *testing.T) {
 	}
 }
 
+// Proves FaultStopReading triggers simnet window back pressure on a large reply and completes once reading resumes.
 func TestClientFaultStopsReading(t *testing.T) {
 	tenant := one("SELECT repeat('x', 1000) FROM generate_series(1, 1000)", 1)
 	w := build(t, 1, fakepg.Config{Service: fakepg.Service{Fixed: 20 * time.Millisecond}}, workload.Config{Tenants: []workload.Tenant{tenant}})
@@ -55,6 +57,7 @@ func TestClientFaultStopsReading(t *testing.T) {
 	}
 }
 
+// Proves mid-statement DisconnectNow with FIN lets the statement finish, whereas Reset aborts it immediately.
 func TestClientFaultDisconnectMidStatement(t *testing.T) {
 	for _, reset := range []bool{false, true} {
 		w := build(t, 1, fakepg.Config{}, workload.Config{Tenants: []workload.Tenant{one("SELECT pg_sleep(0.1)", 1)}})
@@ -73,6 +76,7 @@ func TestClientFaultDisconnectMidStatement(t *testing.T) {
 	}
 }
 
+// Proves DisconnectAfterSend with FIN delivers the query to the server, whereas Reset discards bytes in flight.
 func TestClientFaultDisconnectRightAfterSending(t *testing.T) {
 	for _, reset := range []bool{false, true} {
 		w := build(t, 1, fakepg.Config{}, workload.Config{Tenants: []workload.Tenant{one("SELECT pg_sleep(0.1)", 1)}})
@@ -96,6 +100,7 @@ func boolArg(b bool) int64 {
 	return 0
 }
 
+// Proves resetting a client whose statement is waiting in the database capacity queue aborts it immediately.
 func TestClientFaultDisconnectWhileQueuedInTheDatabase(t *testing.T) {
 	tenant := workload.Tenant{Name: "a", Clients: 2, Requests: 1, Statement: "SELECT pg_sleep(0.1)", ConnectFirst: true, Start: 5 * time.Millisecond,
 		Keys: workload.Keys{Kind: workload.KeysFixed, Fixed: "k0"}}
@@ -114,6 +119,7 @@ func TestClientFaultDisconnectWhileQueuedInTheDatabase(t *testing.T) {
 	}
 }
 
+// Proves DisconnectInTx leaves the open transaction lost (unapplied) and reconnects cleanly for the next request.
 func TestClientFaultDisconnectMidTransaction(t *testing.T) {
 	tenant := workload.Tenant{Name: "a", Clients: 1, Requests: 2, Interval: 50 * time.Millisecond, Mix: []workload.Weight{{Op: workload.OpTx, Weight: 1}},
 		TxStatements: 2, Keys: workload.Keys{N: 1}, Disconnect: []workload.Disconnect{{Request: 0, Point: workload.DisconnectInTx}}}
@@ -125,6 +131,7 @@ func TestClientFaultDisconnectMidTransaction(t *testing.T) {
 	}
 }
 
+// Proves Retry.OnConnect schedules bounded retries against 53300 refusals and succeeds once capacity returns.
 func TestClientRetriesAggressively(t *testing.T) {
 	tenant := workload.Tenant{Name: "a", Clients: 5, Requests: 1, Keys: workload.Keys{N: 1},
 		Retry: workload.Retry{Max: 3, Backoff: 10 * time.Millisecond, OnConnect: true}}
@@ -145,6 +152,7 @@ func TestClientRetriesAggressively(t *testing.T) {
 	}
 }
 
+// Proves FaultCancel cancels the running statement with the real secret (57014) and has no effect with a wrong secret.
 func TestClientSendsACancel(t *testing.T) {
 	for _, wrong := range []bool{false, true} {
 		w := build(t, 1, fakepg.Config{}, workload.Config{Tenants: []workload.Tenant{one("SELECT pg_sleep(0.2)", 1)}})
@@ -163,6 +171,7 @@ func TestClientSendsACancel(t *testing.T) {
 	}
 }
 
+// Proves Tenant.Deadline closes a stalled request and counts OutcomeTimedOut.
 func TestClientTimesOutOnItsOwnDeadline(t *testing.T) {
 	tenant := one("SELECT pg_sleep(1)", 1)
 	tenant.Deadline = 100 * time.Millisecond
@@ -173,6 +182,7 @@ func TestClientTimesOutOnItsOwnDeadline(t *testing.T) {
 	}
 }
 
+// Proves arrivals beyond Tenant.Backlog are dropped and counted while NotYetSent.Peak stays at Backlog.
 func TestBacklogCapCountsCouldNotSend(t *testing.T) {
 	tenant := workload.Tenant{Name: "a", Clients: 1, Requests: 20, Interval: time.Millisecond, Backlog: 5, Keys: workload.Keys{N: 1}}
 	w := build(t, 1, fakepg.Config{Rows: []fakepg.Row{{Key: "k0", Value: "v"}}, Service: fakepg.Service{Fixed: 100 * time.Millisecond}},

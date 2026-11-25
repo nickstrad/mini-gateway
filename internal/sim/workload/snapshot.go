@@ -8,8 +8,10 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim"
 )
 
+// Outcome classifies the final disposition of one intended client request.
 type Outcome uint8
 
+// Terminal request outcome categories used in counters and trace records.
 const (
 	OutcomeOK Outcome = iota + 1
 	OutcomeError
@@ -22,6 +24,7 @@ const (
 
 var outcomeNames = [...]string{"", "ok", "error", "connection-lost", "timed-out", "client-left", "connect-failed", "dropped"}
 
+// String returns the canonical lowercase outcome name.
 func (o Outcome) String() string {
 	if int(o) < len(outcomeNames) {
 		return outcomeNames[o]
@@ -29,8 +32,10 @@ func (o Outcome) String() string {
 	return "?"
 }
 
+// MaxCodes bounds the number of distinct SQLSTATE codes tracked per tenant.
 const MaxCodes = 64
 
+// CodeCount records how many requests for a tenant ended with a given SQLSTATE code.
 type CodeCount struct {
 	Code  string
 	Count int64
@@ -98,6 +103,8 @@ func (t *tenantStats) write(w sim.StateSink) {
 	}
 }
 
+// TenantSnapshot is a plain value struct of one tenant's (or the summed total's)
+// request counters, connection gauges, error code histogram, and latency histograms.
 type TenantSnapshot struct {
 	Name             string
 	Intended         int64
@@ -128,11 +135,13 @@ type TenantSnapshot struct {
 	LatencyFromSend  obs.HistogramSnapshot
 }
 
+// FaultSnapshot counts workload faults applied by kind and missed targets.
 type FaultSnapshot struct {
 	ByKind   [6]int64
 	NoTarget int64
 }
 
+// Snapshot is a plain value copy of all workload metrics across every tenant and in total.
 type Snapshot struct {
 	Clients  int64
 	Finished int64
@@ -154,6 +163,7 @@ func (t *tenantState) snapshot() TenantSnapshot {
 	}
 }
 
+// Snapshot returns a plain value snapshot of the workload's per-tenant and merged total metrics.
 func (w *Workload) Snapshot() Snapshot {
 	out := Snapshot{Clients: int64(len(w.clients)), Total: TenantSnapshot{Name: "total"},
 		Faults: FaultSnapshot{ByKind: w.faults.byKind, NoTarget: w.faults.noTarget}}
@@ -217,6 +227,7 @@ func (o obsTotal) add(t *TenantSnapshot, s TenantSnapshot) {
 	t.BurstDrops += s.BurstDrops
 }
 
+// Code returns the count of requests that ended with SQLSTATE code c, or 0.
 func (s TenantSnapshot) Code(c string) int64 {
 	for _, x := range s.ErrorsByCode {
 		if x.Code == c {
@@ -226,6 +237,7 @@ func (s TenantSnapshot) Code(c string) int64 {
 	return 0
 }
 
+// Check verifies the two workload conservation laws (intended and sent) on this snapshot.
 func (s TenantSnapshot) Check() error {
 	if err := obs.Conserve(obs.T("intended", s.Intended), obs.T("sent", s.Sent), obs.T("not yet sent", s.NotYetSent.Value),
 		obs.T("dropped", s.Dropped), obs.T("failed before send", s.FailedBeforeSend)); err != nil {

@@ -15,6 +15,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/testclient"
 )
 
+// Defaults and bounds for the Postgres 17 fidelity script runner.
 const (
 	FidelityUser = "postgres"
 	ProbeKey     = "probe"
@@ -22,6 +23,8 @@ const (
 	CollectLimit = 60 * time.Second
 )
 
+// Step is one action in a fidelity Script: opening a connection, sending
+// synchronous or asynchronous queries, collecting replies, pausing, or terminating.
 type Step struct {
 	Name      string
 	Conn      int
@@ -34,22 +37,29 @@ type Step struct {
 	Values    bool
 }
 
+// Script is a named sequence of protocol exchanges executed identically against
+// fakepg and real Postgres 17.
 type Script struct {
 	Name  string
 	Steps []Step
 }
 
+// Conn is one client connection opened by a fidelity Target.
 type Conn interface {
 	Send(qs ...string) error
 	Collect(n int) ([]testclient.Msg, bool, error)
 }
 
+// Target abstracts the database under test (SimTarget or real Postgres over TCP)
+// for RunScript.
 type Target interface {
 	Open(user, db string) (Conn, []testclient.Msg, error)
 	Terminate(c Conn) error
 	Pause(d time.Duration) error
 }
 
+// ProbeScript returns the fidelity Script covering the Phase 1 probe's simple-query
+// exchanges (B0 through B10) with trust authentication.
 func ProbeScript() Script {
 	q := func(name string, qs ...string) Step { return Step{Name: name, Queries: qs} }
 	return Script{Name: "probe-b0-b10", Steps: []Step{
@@ -78,12 +88,17 @@ func ProbeScript() Script {
 	}}
 }
 
+// Transcript holds the normalized token lines produced by RunScript, stripping
+// values that legitimately differ between real Postgres and fakepg (PIDs, secrets,
+// server version text, timings).
 type Transcript struct {
 	Lines []string
 }
 
+// String formats Transcript with one line per step plus a trailing newline.
 func (t Transcript) String() string { return strings.Join(t.Lines, "\n") + "\n" }
 
+// ParseTranscript parses a recorded transcript file, ignoring blank lines and # comments.
 func ParseTranscript(s string) Transcript {
 	var out Transcript
 	for _, l := range strings.Split(s, "\n") {
@@ -94,6 +109,7 @@ func ParseTranscript(s string) Transcript {
 	return out
 }
 
+// Compare returns an error detailing every line where got diverges from want.
 func Compare(want, got Transcript) error {
 	var errs []error
 	for i := 0; i < max(len(want.Lines), len(got.Lines)); i++ {
@@ -111,6 +127,7 @@ func Compare(want, got Transcript) error {
 	return errors.Join(errs...)
 }
 
+// RunScript executes sc step by step against t and records the normalized Transcript.
 func RunScript(sc Script, t Target) (Transcript, error) {
 	var tr Transcript
 	conns := make([]Conn, MaxConns)
@@ -196,6 +213,8 @@ func paramNames(msgs []testclient.Msg) string {
 	return strings.Join(names, ",")
 }
 
+// Tokens formats a slice of backend messages (plus optional EOF) into compact
+// transcript tokens; consecutive DataRows collapse to D*<n> unless values is true.
 func Tokens(msgs []testclient.Msg, ended bool, values bool) string {
 	var toks []string
 	rows := 0
@@ -250,12 +269,14 @@ func token(m testclient.Msg, values bool) string {
 	return string(m.Type)
 }
 
+// SimTarget runs a fidelity Script against an in-process fakepg.Server over simnet.
 type SimTarget struct {
 	S    *sim.Sim
 	Net  *simnet.Net
 	Fake *fakepg.Server
 }
 
+// NewSimTarget constructs a seeded SimTarget preloaded with ProbeKey="1".
 func NewSimTarget(seed int64) (*SimTarget, error) {
 	s := sim.New(sim.Config{Seed: seed, Scenario: "fidelity"})
 	n := simnet.New(s)
@@ -272,6 +293,7 @@ type simConn struct {
 	taken int
 }
 
+// Open dials the simulated server, sends Startup, and collects messages through ReadyForQuery.
 func (t *SimTarget) Open(user, db string) (Conn, []testclient.Msg, error) {
 	c := &simConn{t: t, p: workload.NewProbe(t.Net, t.Fake.Addr(), simnet.DefaultOptions())}
 	c.p.Startup(user, db)
@@ -282,6 +304,7 @@ func (t *SimTarget) Open(user, db string) (Conn, []testclient.Msg, error) {
 	return c, msgs, nil
 }
 
+// Terminate injects FaultTerminate against c's backend, matching pg_terminate_backend on Postgres.
 func (t *SimTarget) Terminate(c Conn) error {
 	sc, ok := c.(*simConn)
 	if !ok {
@@ -291,8 +314,10 @@ func (t *SimTarget) Terminate(c Conn) error {
 	return t.S.Err()
 }
 
+// Pause advances virtual time by d.
 func (t *SimTarget) Pause(d time.Duration) error { return t.S.RunFor(d) }
 
+// Close cleanly terminates and closes conns, drains the loop, and checks quiesce.
 func (t *SimTarget) Close(conns ...Conn) error {
 	for _, c := range conns {
 		if sc, ok := c.(*simConn); ok {
