@@ -309,8 +309,11 @@ func (b *backend) startup(body []byte) {
 		return
 	}
 	if pkt.version != protocol30 {
-		b.refuseWith(RefuseProtocol, errorf("FATAL", "0A000", "unsupported frontend protocol %d.%d: server supports 3.0 to 3.0", pkt.version>>16, pkt.version&0xffff))
+		b.refuseProtocol(pkt.version)
 		return
+	}
+	if pkt.negotiate || len(pkt.unknown) > 0 {
+		b.emit(pgwire.AppendNegotiateProtocolVersion(nil, protocol30, pkt.unknown))
 	}
 	if b.refuse {
 		if b.refuseAs == RefuseStartingUp {

@@ -3,6 +3,7 @@ package fakepg
 import (
 	"math/rand/v2"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
@@ -242,7 +243,7 @@ func (b *backend) authMessage(typ byte, body []byte) {
 		}
 		reply, cause := b.scram.First(mech, data)
 		if cause == pgwire.AuthCauseNone && b.overTLS && b.scram.GS2() == pgwire.GS2ClientSupports {
-			b.saslFatal("08P01", "SCRAM channel binding negotiation error")
+			b.saslFatal("28000", "SCRAM channel binding negotiation error")
 			return
 		}
 		if cause != pgwire.AuthCauseNone {
@@ -283,4 +284,38 @@ func scramFailureText(c pgwire.AuthCause) string {
 		return "SCRAM channel binding check failed"
 	}
 	return "malformed SCRAM message"
+}
+
+func decodeNewerMinor(p startupPacket, body []byte) (startupPacket, error) {
+	params, ok := pgwire.ParseStartupParams(body)
+	if !ok {
+		return p, errBadStartup
+	}
+	for _, kv := range params {
+		switch {
+		case strings.HasPrefix(kv.Name, "_pq_."):
+			p.unknown = append(p.unknown, kv.Name)
+		case kv.Name == "user":
+			p.user = kv.Value
+		case kv.Name == "database":
+			p.db = kv.Value
+		case kv.Name == "application_name":
+			p.appName = kv.Value
+		}
+	}
+	p.version = protocol30
+	p.negotiate = true
+	return p, nil
+}
+
+func (b *backend) refuseProtocol(version uint32) {
+	text := "unsupported frontend protocol " + strconv.Itoa(int(version>>16)) + "." + strconv.Itoa(int(version&0xffff)) + ": server supports 3.0 to 3.0"
+	if version>>16 < protocol30>>16 {
+		b.srv.stats.refused[RefuseProtocol]++
+		b.srv.s.Trace(kindRefuse, b.id, int64(RefuseProtocol), CodeValue("0A000"), 0)
+		b.emit(pgwire.AppendLegacyFatal(nil, text))
+		b.after = afterClose
+		return
+	}
+	b.refuseWith(RefuseProtocol, errorf("FATAL", "0A000", "%s", text))
 }

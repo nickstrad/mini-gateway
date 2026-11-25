@@ -39,7 +39,7 @@ func activity(t *testing.T) *world {
 	bad.Send([]byte{0, 0, 0, 9, 0, 3, 0, 0, 'x'})
 	proto := w.dial()
 	pkt := binary.BigEndian.AppendUint32(nil, 9)
-	pkt = binary.BigEndian.AppendUint32(pkt, 3<<16|2)
+	pkt = binary.BigEndian.AppendUint32(pkt, 4<<16)
 	proto.Send(append(pkt, 0))
 	w.run(10 * time.Millisecond)
 	w.s.ApplyFault(sim.Fault{Kind: fakepg.FaultMaxConn, Arg1: 2})
