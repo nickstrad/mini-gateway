@@ -2,6 +2,7 @@ package csvflush
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -98,7 +99,6 @@ type Writer struct {
 	closed      bool
 	last        job
 	lastDropped bool
-	exported    int64
 
 	metrics io.WriteCloser
 	hists   io.WriteCloser
@@ -203,8 +203,7 @@ func (w *Writer) Flush(snaps ...obs.InstanceSnapshot) error {
 			j.rows += int64(len(h.Buckets))
 		}
 	}
-	slices.SortFunc(j.snaps, func(a, b obs.InstanceSnapshot) int { return strings.Compare(a.Instance, b.Instance) })
-	w.exported++
+	slices.SortFunc(j.snaps, compareSnapshot)
 	w.last = j
 	w.lastDropped = false
 	if !w.cfg.Async {
@@ -220,6 +219,13 @@ func (w *Writer) Flush(snaps ...obs.InstanceSnapshot) error {
 	}
 }
 
+func compareSnapshot(a, b obs.InstanceSnapshot) int {
+	if a.Seq != b.Seq {
+		return cmp.Compare(a.Seq, b.Seq)
+	}
+	return strings.Compare(a.Instance, b.Instance)
+}
+
 func (w *Writer) drop(j job) {
 	w.flushErrors.Add(1)
 	w.rowsDropped.Add(j.rows)
@@ -231,7 +237,7 @@ func (w *Writer) write(j job) error {
 		return ErrStopped
 	}
 	mb, hb := w.render(j)
-	size := int64(len(mb) + len(hb))
+	size := int64(len(mb)+len(hb)) + w.pendingHeaderBytes()
 	if w.bytes.Load()+size > w.cfg.MaxBytes {
 		w.stop(j, fmt.Errorf("%w: the flush of %d bytes would pass obs.csv.max_bytes %d", ErrDropped, size, w.cfg.MaxBytes))
 		return ErrStopped
@@ -248,9 +254,16 @@ func (w *Writer) write(j job) error {
 		w.stop(j, err)
 		return ErrStopped
 	}
-	w.bytes.Add(size)
+	w.bytes.Add(int64(len(mb) + len(hb)))
 	w.flushes.Add(1)
 	return nil
+}
+
+func (w *Writer) pendingHeaderBytes() int64 {
+	if w.metrics != nil {
+		return 0
+	}
+	return int64(len(headerBytes(MetricsHeader())) + len(headerBytes(HistogramsHeader())))
 }
 
 func writeAll(f io.Writer, b []byte) error {
@@ -313,7 +326,7 @@ func (w *Writer) render(j job) ([]byte, []byte) {
 		for i, p := range points {
 			v := p.Value
 			if w.cfg.plant == plantStaleValue && i < len(w.prevVal) {
-				v = w.prevVal[0].Value
+				v = w.prevVal[i].Value
 			}
 			_ = mw.Write([]string{ver, run, seq, t, s.Instance, p.Component, p.Metric, p.Kind.String(),
 				p.Labels.Tenant, p.Labels.Outcome, p.Labels.Reason, p.Labels.Mode, strconv.FormatInt(v, 10)})
@@ -397,11 +410,14 @@ func (w *Writer) Close() error {
 		w.done.Wait()
 	}
 	if w.lastDropped && !w.stopped.Load() {
-		w.flushErrors.Add(-1)
-		w.rowsDropped.Add(-w.last.rows)
 		_ = w.write(w.last)
 	}
 	var err error
+	if !w.stopped.Load() && w.bytes.Load()+w.pendingHeaderBytes() > w.cfg.MaxBytes {
+		w.stopped.Store(true)
+		w.flushErrors.Add(1)
+		err = fmt.Errorf("%w: the headers would pass obs.csv.max_bytes %d", ErrDropped, w.cfg.MaxBytes)
+	}
 	if !w.stopped.Load() {
 		if oerr := w.open(); oerr != nil {
 			w.stopped.Store(true)

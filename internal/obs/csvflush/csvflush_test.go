@@ -362,12 +362,16 @@ func TestAsyncWriterNeverBlocksTheCaller(t *testing.T) {
 	}
 	close(release)
 	last, _ := c.Last()
+	before := w.FlushStats()
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
 	st = w.FlushStats()
-	if st.Flushes != int64(cfg.QueueCap)+2 || st.FlushErrors != 4 || st.QueueDepth != 0 {
+	if st.Flushes != int64(cfg.QueueCap)+2 || st.FlushErrors != 5 || st.QueueDepth != 0 {
 		t.Fatalf("after close: %+v", st)
+	}
+	if st.Flushes < before.Flushes || st.FlushErrors < before.FlushErrors || st.RowsDropped < before.RowsDropped || st.BytesWritten < before.BytesWritten {
+		t.Fatalf("a counter went down at Close: before %+v, after %+v", before, st)
 	}
 	if err := csvflush.RoundTrip(w.RunDir(), last); err != nil {
 		t.Fatalf("the final flush on close did not land the last snapshot: %v", err)
