@@ -6,7 +6,7 @@ Goal: build mini-gateway (spec: [docs/project-source.md](docs/project-source.md)
 
 Plan: [PLAN.md](PLAN.md) — APPROVED, 16 chunks after a foundation step. Diagrams: [docs/c4/](docs/c4/README.md) (target architecture, 12 diagrams).
 
-Status: **PHASE 2 — BUILDING (started 2026-11-24 on Nick's go, mission /root/briefs/zgateway-phase2-mission.md).** Landed: chunk 0 (`aa54077`), 1 (`d21b26d`), 2 (`64b2958`, tag `freeze-sim`), 3 (`1a7f830`). In flight: chunk 4 (reviewed; being joined to chunk 3's flush) and chunk 5 (in arbitration). The Fable orchestrator drives the chain without stopping between chunks; stop conditions are in the mission.
+Status: **PHASE 2 — BUILDING, with chunk 5 PARKED by Nick.** Landed: chunk 0 (`aa54077`), 1 (`d21b26d`), 2 (`64b2958`, tag `freeze-sim`), 3 (`1a7f830`). In flight: chunk 4 (wire sessions). **Chunk 5 scope — awaiting Nick** (see Open decisions). Chunk 6 and everything after it need chunk 5, so the chain stops after chunk 4 lands until Nick rules.
 
 Seats (this project only; ruling: /root/briefs/zgateway-seat-ruling.md, confirmed by ruling 1): Fable orchestrates, gates, lands and owns the C4 diagrams; Opus writes product Go (logic only), fresh agent and worktree per chunk; Gemini Neon (via Antigravity `agy`) REVIEWS Opus's code — a project-scoped exception to the global Fable-only rule, which stands elsewhere — and writes all reader-facing prose once, late, per chunk (review and prose are separate fresh agents); Astra (gpt-6-astra) writes adversarial harnesses per chunk.
 
@@ -33,7 +33,8 @@ In progress: (2026-11-25 UTC) wave A, second half. **Chunk 4** (`work/c04-wire-s
 
 Next steps, in order: (1) land chunks 3, 4, 5; (2) chunk 6 (walking skeleton; brief drafted at /root/briefs/zgateway-p2-c06-walking-skeleton.md — update it with what wave A actually built before dispatch); (3) wave B (7, 8) — fold part 3 of `docs/knowledge/release-it-pooled-connections.md` into the chunk 7 brief; then per PLAN.md section 13.1.
 
-Open decisions for Nick: none.
+Open decisions for Nick:
+- **Chunk 5 scope — awaiting Nick.** Nick stopped the chunk 5 (statement classifier) arbitration on 2026-11-24 22:28 CT (relayed by Twin, /root/briefs/zgateway-c05-stop-scope.md): no arbitration, no repair, no landing until he rules. The assessment is `agent_work/chunks/c05-classifier/SCOPE-ASSESSMENT.md`. Summary: about a third of the chunk (the work vocabulary, the error contract, the reply builders — about 660 of 2,150 lines) does not read SQL and passed two reviews with no finding; the other two thirds decide things from SQL text, and there each review round found new holes (11 in three rounds), because catching every spelling of "changes session state" is a deny-list over an open language, and one lexer mistake defeats every rule at once. Options: (a) continue — fix, arbitrate, land; small now, open-ended tail; (b) narrow — keep the reject list as a best-effort courtesy, guarantee session safety by resetting the connection (`DISCARD ALL`) when a lease is not known clean, share reads automatically only inside a tiny recognisable shape or when the client marks them, about 400 syntax lines instead of 1,500; (c) a real parser through cgo — a second dependency, and it still cannot see function side effects; (d) land the uncontested third now as "5a" to unblock chunk 6, and/or defer automatic sharing to chunk 11. **Recommendation: (b), staged with (d1).** Option (b) changes two decided things (steering answer 9's "rejected, not pinned" for hidden cases; how much `auto` coalescing covers), so it needs Nick's ruling. Owner: Nick.
 
 Other open items:
 - Terminal (Unicode) renderings of the C4 diagrams are not in this first set; the diagrams have a c4-sdk model and Mermaid pages. Owner: Fable, at chunk 0.
