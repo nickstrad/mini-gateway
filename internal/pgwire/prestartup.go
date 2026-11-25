@@ -116,11 +116,19 @@ func (s *ClientSession) startup(acts []Action, p startupPacket) []Action {
 	t, known := s.cfg.Tenants.Lookup(user)
 	v := t.Verifier
 	if !known {
-		v = MockVerifier(s.cfg.MockSecret, user, s.cfg.MockIterations)
+		v = s.mockVerifier(user)
 	}
 	s.scram = NewScramServer(v, NewNonce(s.cfg.Random), !known)
 	s.state = csAuthFirst
 	return s.write(acts, AppendAuthenticationSASL(nil, ScramMechanism), 1)
+}
+
+func (s *ClientSession) mockVerifier(user string) Verifier {
+	iterations, saltLen := s.cfg.Tenants.mockShape()
+	if s.cfg.MockIterations != 0 {
+		iterations = s.cfg.MockIterations
+	}
+	return mockVerifier(s.cfg.MockSecret, user, iterations, saltLen)
 }
 
 func (s *ClientSession) refusedParam(params []Param) (string, bool) {

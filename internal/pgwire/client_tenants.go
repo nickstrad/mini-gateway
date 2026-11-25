@@ -25,8 +25,10 @@ type Tenant struct {
 }
 
 type TenantTable struct {
-	byUser map[string]int
-	list   []Tenant
+	byUser        map[string]int
+	list          []Tenant
+	commonIters   int
+	commonSaltLen int
 }
 
 func NewTenantTable(tenants []Tenant) (*TenantTable, error) {
@@ -47,7 +49,29 @@ func NewTenantTable(tenants []Tenant) (*TenantTable, error) {
 		t.byUser[tn.User] = len(t.list)
 		t.list = append(t.list, tn)
 	}
+	t.commonIters = mostCommon(t.list, func(tn Tenant) int { return tn.Verifier.Iterations })
+	t.commonSaltLen = mostCommon(t.list, func(tn Tenant) int { return len(tn.Verifier.Salt) })
 	return t, nil
+}
+
+func mostCommon(list []Tenant, key func(Tenant) int) int {
+	counts := make(map[int]int)
+	best, bestCount := 0, 0
+	for _, tn := range list {
+		k := key(tn)
+		counts[k]++
+		if counts[k] > bestCount {
+			best, bestCount = k, counts[k]
+		}
+	}
+	return best
+}
+
+func (t *TenantTable) mockShape() (iterations, saltLen int) {
+	if t == nil || len(t.list) == 0 {
+		return DefaultScramIterations, ScramSaltLen
+	}
+	return t.commonIters, t.commonSaltLen
 }
 
 func (t *TenantTable) Lookup(user string) (Tenant, bool) {

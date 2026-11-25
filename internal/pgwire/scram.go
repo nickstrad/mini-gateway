@@ -26,6 +26,7 @@ const (
 	GS2ClientSupports      = "y,,"
 	scramVerifierPrefix    = "SCRAM-SHA-256$"
 	mockSaltLabel          = "pgwire mock salt"
+	maxMockSaltLen         = 4 * ScramKeyLen
 )
 
 var b64 = base64.StdEncoding
@@ -147,11 +148,23 @@ func decodeKey(s string, dst *[ScramKeyLen]byte) bool {
 }
 
 func MockVerifier(secret []byte, user string, iterations int) Verifier {
+	return mockVerifier(secret, user, iterations, ScramSaltLen)
+}
+
+func mockVerifier(secret []byte, user string, iterations, saltLen int) Verifier {
 	if iterations < MinScramIterations || iterations > MaxScramIterations {
 		iterations = DefaultScramIterations
 	}
-	salt := scramHMAC(secret, mockSaltLabel, user)
-	return Verifier{Salt: salt[:ScramSaltLen], Iterations: iterations, StoredKey: scramHMAC(secret, "stored", user),
+	if saltLen < 1 || saltLen > maxMockSaltLen {
+		saltLen = ScramSaltLen
+	}
+	first := scramHMAC(secret, mockSaltLabel, user)
+	salt := first[:]
+	for block := 1; len(salt) < saltLen; block++ {
+		next := scramHMAC(secret, mockSaltLabel, user, strconv.Itoa(block))
+		salt = append(salt, next[:]...)
+	}
+	return Verifier{Salt: salt[:saltLen], Iterations: iterations, StoredKey: scramHMAC(secret, "stored", user),
 		ServerKey: scramHMAC(secret, "server", user)}
 }
 
