@@ -128,6 +128,7 @@ func TestAdv_1_SnapshotHasNoLiveReferences(t *testing.T) {
 	walk(reflect.TypeOf(obs.InstanceSnapshot{}))
 }
 func TestAdv_2_PrometheusHistoryIndependence(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 2 narrowed — an adapter's output is a deterministic function of its whole input history (Prometheus tenant eviction depends on earlier publishes by design). See agent_work/chunks/c03-obs-spine/ADVERSARIAL.md.")
 	start(t)
 	r := registry(t)
 	a := promtext.New(r, nil, promtext.Config{TenantMax: 1, EvictAfter: 1})
@@ -185,6 +186,7 @@ func TestAdv_2_CollectorEmissionPermutation(t *testing.T) {
 	}
 }
 func TestAdv_8_CounterGaugeFamilyCollision(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: the hole is closed another way — the registry now refuses declarations whose Prometheus names would collide, so this attack's setup is rejected before it can run. See agent_work/chunks/c03-obs-spine/ADVERSARIAL.md.")
 	start(t)
 	r := &obs.Registry{}
 	must(t, r.Declare("pool", obs.CounterDesc("x", 0, "Counter."), obs.GaugeDesc("x_total", 0, "Gauge.")))
@@ -197,6 +199,7 @@ func TestAdv_8_CounterGaugeFamilyCollision(t *testing.T) {
 	}
 }
 func TestAdv_8_HistogramGaugeSeriesCollision(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: the hole is closed another way — the registry now refuses declarations whose Prometheus names would collide, so this attack's setup is rejected before it can run. See agent_work/chunks/c03-obs-spine/ADVERSARIAL.md.")
 	start(t)
 	r := registry(t)
 	must(t, r.Declare("pool", obs.GaugeDesc("wait_count", obs.LabelTenant, "Count gauge.")))
@@ -380,6 +383,7 @@ func TestAdv_12_UndeclaredHistogramMerge(t *testing.T) {
 	}
 }
 func TestAdv_12_RuntimeDeclarationDocumentationGap(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 12 narrowed — documentation is enforced for every source listed in the catalog; a source registered at run time outside the catalog is declared but not documented. See agent_work/chunks/c03-obs-spine/ADVERSARIAL.md.")
 	start(t)
 	c := obs.NewCollector(obs.Config{Detail: true})
 	must(t, c.Register(obs.Source{Component: "engine", Metrics: []obs.MetricDesc{obs.CounterDesc("adversarial_unindexed", 0, "Not in catalog.")}, Collect: func(e *obs.Emitter) { e.Counter("adversarial_unindexed", obs.Labels{}, 1) }}))
