@@ -1,26 +1,28 @@
 # C4 diagrams — mini-gateway
 
-**Target architecture of the approved plan.** These diagrams describe what [PLAN.md](../../PLAN.md) sets out to build; Nick approved the plan on 2026-11-24 as amended by his rulings (PLAN.md section 18). The set was updated for those rulings: the batcher is gone (batching was dropped from v1), and TLS is drawn on the shell and the two session machines. Nothing in them exists yet; every element carries the status `planned`. As chunks land, the orchestrator updates the diagrams to the as-built architecture, and a diagram that no longer matches the code is treated as a defect.
+**Target architecture of the approved plan.** These diagrams describe what [PLAN.md](../../PLAN.md) sets out to build; Nick approved the plan on 2026-11-24 as amended by his rulings (PLAN.md section 18). The set was updated for those rulings: the batcher is gone (batching was dropped from v1), and TLS is drawn on the shell and the two session machines. The build has started, so each diagram shows two things at once: what exists in the code (status `existing`, drawn solid) and what is still planned (status `planned`, drawn dashed). At every chunk landing the orchestrator marks what the chunk built — one edit to the AS BUILT block at the top of [gen.py](gen.py), described in [docs/knowledge/c4-as-built.md](../knowledge/c4-as-built.md) — and a diagram that no longer matches the code is treated as a defect.
 
 Three C4 levels plus a deployment view: system context, containers (two views), components (eight views), and the three-instance deployment.
 
 ## Diagrams
 
 <!-- diagram-table:start -->
-| # | Level | File | Shows |
-| --- | --- | --- | --- |
-| 1 | System context | [01-system-context.md](01-system-context.md) | mini-gateway, its clients, its operator, the one Postgres behind it, the readers of its metrics, and its one external library |
-| 2 | Containers | [02-container-request-path.md](02-container-request-path.md) | The Go packages inside one mini-gateway process and how a request passes through them |
-| 3 | Containers | [03-container-drivers-and-seams.md](03-container-drivers-and-seams.md) | Who drives the engine (the shell or the simulator), where the Postgres codec boundary is, and the work vocabulary the cores are written against |
-| 4 | Deployment | [04-deployment-fleet.md](04-deployment-fleet.md) | The supported multi-instance deployment: static fleet config, per-instance enforcement, no run-time coordination |
-| 5 | Components | [05-component-engine.md](05-component-engine.md) | internal/proxy: the transport seam, the two connection tables, the request pipeline and its stage seams, the reply relay |
-| 6 | Components | [06-component-wire-layer.md](06-component-wire-layer.md) | internal/pgwire: the pgproto3 codec boundary, our framer, both session machines, the classifier, the error contract |
-| 7 | Components | [07-component-admission.md](07-component-admission.md) | internal/admission: the rate gate, per-tenant queues, both CoDel modes behind one interface, the dispatcher, the adaptive limit |
-| 8 | Components | [08-component-pool.md](08-component-pool.md) | internal/pool: the hard cap, the creation limiter, leases per transaction, the breaker, the dirty-connection table |
-| 9 | Components | [09-component-coalescer.md](09-component-coalescer.md) | internal/coalesce: the join rule, the flight table, waiters, the flight's own deadline, the shared reply |
-| 10 | Components | [10-component-retry.md](10-component-retry.md) | internal/retry: the policy interface, its two policies, the budget |
-| 11 | Components | [11-component-simulator.md](11-component-simulator.md) | internal/sim and its sub-packages: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, faults, the trace, invariants, replay |
-| 12 | Components | [12-component-observability.md](12-component-observability.md) | internal/obs: the one raw export (snapshots), the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus |
+**Built so far: chunks 0–1. Dashed parts are planned.** The Built column counts the elements of each diagram that exist in the code.
+
+| # | Level | File | Built | Shows |
+| --- | --- | --- | --- | --- |
+| 1 | System context | [01-system-context.md](01-system-context.md) | 1 of 7 | mini-gateway, its clients, its operator, the one Postgres behind it, the readers of its metrics, and its one external library |
+| 2 | Containers | [02-container-request-path.md](02-container-request-path.md) | 0 of 13 | The Go packages inside one mini-gateway process and how a request passes through them |
+| 3 | Containers | [03-container-drivers-and-seams.md](03-container-drivers-and-seams.md) | 1 of 13 | Who drives the engine (the shell or the simulator), where the Postgres codec boundary is, and the work vocabulary the cores are written against |
+| 4 | Deployment | [04-deployment-fleet.md](04-deployment-fleet.md) | 0 of 10 | The supported multi-instance deployment: static fleet config, per-instance enforcement, no run-time coordination |
+| 5 | Components | [05-component-engine.md](05-component-engine.md) | 0 of 18 | internal/proxy: the transport seam, the two connection tables, the request pipeline and its stage seams, the reply relay |
+| 6 | Components | [06-component-wire-layer.md](06-component-wire-layer.md) | 0 of 12 | internal/pgwire: the pgproto3 codec boundary, our framer, both session machines, the classifier, the error contract |
+| 7 | Components | [07-component-admission.md](07-component-admission.md) | 0 of 12 | internal/admission: the rate gate, per-tenant queues, both CoDel modes behind one interface, the dispatcher, the adaptive limit |
+| 8 | Components | [08-component-pool.md](08-component-pool.md) | 0 of 10 | internal/pool: the hard cap, the creation limiter, leases per transaction, the breaker, the dirty-connection table |
+| 9 | Components | [09-component-coalescer.md](09-component-coalescer.md) | 0 of 9 | internal/coalesce: the join rule, the flight table, waiters, the flight's own deadline, the shared reply |
+| 10 | Components | [10-component-retry.md](10-component-retry.md) | 0 of 7 | internal/retry: the policy interface, its two policies, the budget |
+| 11 | Components | [11-component-simulator.md](11-component-simulator.md) | 11 of 16 | internal/sim and its sub-packages: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol |
+| 12 | Components | [12-component-observability.md](12-component-observability.md) | 3 of 21 | internal/obs: the one raw export (snapshots), the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus |
 <!-- diagram-table:end -->
 
 ## Where each required part is drawn
@@ -40,9 +42,9 @@ Three C4 levels plus a deployment view: system context, containers (two views), 
 
 ## Format
 
-- [gen.py](gen.py) is the source. Elements, relationships and diagrams are tables in that file; running it writes everything else here. Edit `gen.py`, not the generated files.
-- [model.json](model.json) is the C4 model as a `c4-sdk` bundle (`schemaVersion: 1`): every element, relationship and diagram.
-- Each diagram page has a Mermaid picture, an element table and a numbered relationship table. Edge numbers in the picture match the table rows. A dashed arrow means "implements"; a solid arrow means "uses" and points to the supplier.
+- [gen.py](gen.py) is the source. Elements, relationships and diagrams are tables in that file; running it writes everything else here. Edit `gen.py`, not the generated files. What is built is said in one place, the AS BUILT block at its top: `LANDED` (the last landed chunk), `BUILT` (element → chunk), `PARTIAL` (element → what exists so far) and `REL_BUILT` (exceptions to the rule that a relationship is built when both its ends are).
+- [model.json](model.json) is the C4 model as a `c4-sdk` bundle (`schemaVersion: 1`): every element, relationship and diagram. Statuses are the SDK's: `existing` for built, `planned` for the rest; a diagram that holds both has the status `mixed`.
+- Each diagram page has a Mermaid picture, an element table and a numbered relationship table. Edge numbers in the picture match the table rows. A solid box or arrow is built; a dashed one is planned; every picture has a key for the two. An arrow points to the supplier; one marked "implements" means the source implements the target's interface. Both tables have a Status column: `built (chunk N)` or `planned`. An element that is only partly built stays `planned`, and its row says what exists so far.
 - [diagrams/](diagrams/) holds the Mermaid sources, one per diagram.
 
 ## Model notes
@@ -68,4 +70,7 @@ python3 docs/c4/gen.py
 # in a scratch folder outside /tmp, after `npm init -y && npm install c4-sdk@0.1.0`, with the script copied in
 # (Node resolves the import from the script's own folder):
 cp /root/Software/mini-gateway/agent_work/phase1/c4-check.mjs . && node c4-check.mjs /root/Software/mini-gateway/docs/c4/model.json
+# the pictures: build the site, serve it locally, open every page in a headless browser
+scripts/site.sh /tmp/c4-site && (cd /tmp/c4-site && python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
+agent_work/phase1/check-mermaid.py http://127.0.0.1:8765
 ```

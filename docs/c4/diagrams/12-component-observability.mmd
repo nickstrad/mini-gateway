@@ -1,42 +1,55 @@
 flowchart TB
-  N_ENGINE["Engine"]
-  N_SHELL["Shell and binary"]
-  N_E2E["End-to-end suite and load generator"]
-  CSVFILES[["Flushed CSV files"]]
-  DUCKDB[["DuckDB (analysis tool)"]]
-  OTELCOL[["OpenTelemetry Collector"]]
-  PROM[["Prometheus"]]
+  N_ENGINE["Engine"]:::planned
+  N_SHELL["Shell and binary"]:::planned
+  N_E2E["End-to-end suite and load generator"]:::planned
+  N_SIM["Simulator harness"]:::planned
+  CSVFILES[["Flushed CSV files"]]:::planned
+  DUCKDB[["DuckDB (analysis tool)"]]:::planned
+  OTELCOL[["OpenTelemetry Collector"]]:::planned
+  PROM[["Prometheus"]]:::planned
   subgraph SCOPE["Observability"]
-    O_CONTRACT["Snapshot conventions"]
-    O_HIST["Integer histogram"]
-    O_COLLECTOR["Collector"]
-    O_ADAPTER["Adapter interface"]
-    O_MERGE["Fleet merge"]
-    O_HEALTH["Health"]
-    O_PROM["Prometheus text exporter"]
-    O_JSON["JSON stats exporter"]
-    O_CSV["CSV flush adapter"]
-    O_LOG["Log-line exporter"]
-    O_OTLP["OTLP/HTTP push exporter"]
+    O_CONTRACT["Snapshot conventions"]:::planned
+    O_HIST["Integer histogram"]:::built
+    O_CONSERVE["Conservation check and gauge"]:::built
+    O_OBSTEST["Snapshot test helpers"]:::built
+    O_COLLECTOR["Collector"]:::planned
+    O_ADAPTER["Adapter interface"]:::planned
+    O_MERGE["Fleet merge"]:::planned
+    O_HEALTH["Health"]:::planned
+    O_PROM["Prometheus text exporter"]:::planned
+    O_JSON["JSON stats exporter"]:::planned
+    O_CSV["CSV flush adapter"]:::planned
+    O_LOG["Log-line exporter"]:::planned
+    O_OTLP["OTLP/HTTP push exporter"]:::planned
   end
-  N_ENGINE -->|1| O_COLLECTOR
-  O_COLLECTOR -->|2| O_CONTRACT
-  O_CONTRACT -->|3| O_HIST
-  O_COLLECTOR -->|4| O_HEALTH
-  O_ADAPTER -->|5| O_COLLECTOR
-  O_PROM -.->|6| O_ADAPTER
-  O_JSON -.->|7| O_ADAPTER
-  O_CSV -.->|8| O_ADAPTER
-  O_LOG -.->|9| O_ADAPTER
-  O_OTLP -.->|10| O_ADAPTER
-  N_SHELL -->|11| O_PROM
-  N_SHELL -->|12| O_JSON
-  N_SHELL -->|13| O_HEALTH
-  O_CSV -->|14| CSVFILES
-  N_E2E -->|15| O_CSV
-  DUCKDB -->|16| CSVFILES
-  N_E2E -->|17| DUCKDB
-  O_OTLP -->|18| OTELCOL
-  PROM -->|19| OTELCOL
-  PROM -->|20| N_SHELL
-  O_MERGE -->|21| O_CONTRACT
+  N_ENGINE -.->|1| O_COLLECTOR
+  O_COLLECTOR -.->|2| O_CONTRACT
+  O_CONTRACT -.->|3| O_HIST
+  O_CONTRACT -.->|4| O_CONSERVE
+  O_COLLECTOR -.->|5| O_HEALTH
+  O_ADAPTER -.->|6| O_COLLECTOR
+  O_PROM -.->|7 implements| O_ADAPTER
+  O_JSON -.->|8 implements| O_ADAPTER
+  O_CSV -.->|9 implements| O_ADAPTER
+  O_LOG -.->|10 implements| O_ADAPTER
+  O_OTLP -.->|11 implements| O_ADAPTER
+  N_SHELL -.->|12| O_PROM
+  N_SHELL -.->|13| O_JSON
+  N_SHELL -.->|14| O_HEALTH
+  O_CSV -.->|15| CSVFILES
+  N_E2E -.->|16| O_CSV
+  DUCKDB -.->|17| CSVFILES
+  N_E2E -.->|18| DUCKDB
+  O_OTLP -.->|19| OTELCOL
+  PROM -.->|20| OTELCOL
+  PROM -.->|21| N_SHELL
+  O_MERGE -.->|22| O_CONTRACT
+  N_SIM -.->|23| O_OBSTEST
+  O_OBSTEST -.->|24| O_CONTRACT
+  subgraph KEY["Key"]
+    KEY_BUILT["Built"]:::built
+    KEY_PLANNED["Planned"]:::planned
+  end
+  classDef built fill:#d9ecd9,stroke:#2e6b34,stroke-width:2px,color:#1c1e21
+  classDef planned stroke-width:1px,stroke-dasharray:6 4
+  style SCOPE stroke-dasharray:6 4

@@ -97,3 +97,10 @@ Notes: `chunks/c01-sim-kernel/NOTES.md`. Durable facts: `../docs/knowledge/sim-k
 | `chunks/c01-sim-kernel/gate/extra.sh` | Gate G10 for chunk 1: every `mgsim list` scenario passes `TestScenario` on the pinned seeds, the planted-bug canary and the shrinker test pass, and two processes of the built `mgsim` agree for every scenario. Run: `agent_work/chunks/c01-sim-kernel/gate/extra.sh` | Opus | Green in 2 s |
 | `../internal/sim/simtoy/testdata/golden-digests.txt` | Golden trace and state digests of every toy scenario on the pinned seeds. Update after review: `go test ./internal/sim/simtoy -run TestGoldenDigests -update` | Opus | 55 lines (11 scenarios x 5 seeds) |
 
+
+### C4 as-built mechanism (2026-11-24)
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../docs/c4/gen.py` | Source of the C4 set, now with the AS BUILT block at its top (`LANDED`, `BUILT`, `PARTIAL`, `REL_BUILT`): the one edit at a chunk landing. Built parts are written with status `existing` and drawn solid, the rest `planned` and dashed. Run: `python3 docs/c4/gen.py`. How to mark a chunk: `../docs/knowledge/c4-as-built.md` | Fable | Chunk 1 marked: 118 elements (14 built), 177 relationships (16 built), 12 diagrams. `c4-check.mjs`: decode ok, 0 errors, 0 warnings, 12 of 12 scenes. Site built (18 pages); `check-mermaid.py` against a local server: 12 of 12 pictures drew |
+| `phase1/check-mermaid.py` | Also works on a local build: `scripts/site.sh /tmp/c4-site`, then `python3 -m http.server 8765 --bind 127.0.0.1` in that folder, then `agent_work/phase1/check-mermaid.py http://127.0.0.1:8765` | Fable | 2026-11-24, local build with chunk 1 marked: 18 pages ok, 12 of 12 pictures drew |
