@@ -1,7 +1,6 @@
 package workload_test
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -20,7 +19,11 @@ type world struct {
 
 func build(t testing.TB, seed int64, pg fakepg.Config, wc workload.Config) *world {
 	t.Helper()
-	s := sim.New(sim.Config{Seed: seed, Scenario: t.Name()})
+	return buildOn(t, sim.New(sim.Config{Seed: seed, Scenario: t.Name()}), pg, wc)
+}
+
+func buildOn(t testing.TB, s *sim.Sim, pg fakepg.Config, wc workload.Config) *world {
+	t.Helper()
 	n := simnet.New(s)
 	srv, err := fakepg.New(n, pg)
 	if err != nil {
@@ -55,7 +58,6 @@ func TestSmoke(t *testing.T) {
 			TxStatements: 3, TxReads: 1}}})
 	w.finish(t)
 	s := w.wl.Snapshot()
-	fmt.Printf("%+v\n", s.Total.Intended)
 	if s.Total.Intended != 30 || s.Total.OK != 30 {
 		t.Fatalf("%+v", s.Total)
 	}

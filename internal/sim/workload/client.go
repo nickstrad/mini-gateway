@@ -54,10 +54,9 @@ type client struct {
 	id       int
 	local    int
 	arrivals *rand.Rand
-	keys     *rand.Rand
+	keys     *KeyChooser
 	mix      *rand.Rand
 	retryR   *rand.Rand
-	zipf     *rand.Zipf
 	cc       *conn
 	sess     testclient.Session
 	phase    cphase
@@ -89,11 +88,8 @@ type client struct {
 func newClient(w *Workload, t *tenantState, id, local int) *client {
 	base := label(t.cfg.Name, itoa(local))
 	c := &client{w: w, t: t, id: id, local: local,
-		arrivals: w.s.Stream(base + "/arrivals"), keys: w.s.Stream(base + "/keys"),
+		arrivals: w.s.Stream(base + "/arrivals"), keys: NewKeyChooser(w.s.Stream(base+"/keys"), t.cfg.Keys),
 		mix: w.s.Stream(base + "/mix"), retryR: w.s.Stream(base + "/retry")}
-	if t.cfg.Keys.Kind == KeysZipf {
-		c.zipf = newZipf(c.keys, t.cfg.Keys.Zipf, t.cfg.Keys.N)
-	}
 	return c
 }
 
@@ -151,16 +147,7 @@ func (c *client) arrive() {
 	c.pump()
 }
 
-func (c *client) key() string {
-	k := &c.cfg().Keys
-	switch k.Kind {
-	case KeysFixed:
-		return k.Fixed
-	case KeysZipf:
-		return DefaultKeyPrefix + strconv.FormatUint(c.zipf.Uint64(), 10)
-	}
-	return DefaultKeyPrefix + strconv.Itoa(c.keys.IntN(k.N))
-}
+func (c *client) key() string { return c.keys.Next() }
 
 func (c *client) pickOp() Op {
 	mix := c.cfg().Mix
