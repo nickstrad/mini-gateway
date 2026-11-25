@@ -109,6 +109,8 @@ type backend struct {
 	stream      *rand.Rand
 	step        startStep
 	overTLS     bool
+	sslDone     bool
+	gssDone     bool
 	tlsTimer    sim.Timer
 	scram       *pgwire.ScramServer
 }
@@ -299,8 +301,7 @@ func (b *backend) startup(body []byte) {
 		b.answerSSL()
 		return
 	case startupGSS:
-		b.srv.auth.stats.GSSAnsweredNo++
-		b.emit([]byte{'N'})
+		b.answerGSS()
 		return
 	case startupCancel:
 		b.uncount()

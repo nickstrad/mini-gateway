@@ -105,15 +105,31 @@ func (srv *Server) TLS() TLSConfig { return srv.auth.tls }
 func (srv *Server) AuthSnapshot() AuthSnapshot { return srv.auth.stats }
 
 func (b *backend) answerSSL() {
+	if b.sslDone {
+		b.refuseProtocol(codeSSLRequest)
+		return
+	}
 	st := &b.srv.auth.stats
-	if b.srv.auth.tls.Answer != pgwire.AnswerTLSYes || b.overTLS {
+	b.sslDone, b.gssDone = true, false
+	if b.srv.auth.tls.Answer != pgwire.AnswerTLSYes {
 		st.TLSAnsweredNo++
 		b.emit([]byte{pgwire.AnswerTLSNo})
 		return
 	}
+	b.gssDone = true
 	st.TLSAnsweredYes++
 	b.emit([]byte{pgwire.AnswerTLSYes})
 	b.step = stepHello
+}
+
+func (b *backend) answerGSS() {
+	if b.gssDone {
+		b.refuseProtocol(codeGSSRequest)
+		return
+	}
+	b.sslDone, b.gssDone = false, true
+	b.srv.auth.stats.GSSAnsweredNo++
+	b.emit([]byte{pgwire.AnswerTLSNo})
 }
 
 func (b *backend) readHello() bool {

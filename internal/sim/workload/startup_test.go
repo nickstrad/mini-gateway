@@ -108,7 +108,7 @@ func startupCases() []startupCase {
 			}},
 		{name: "client-second-request", pg: yes, tenant: startupTenant(workload.TLSRequire, workload.TLSFaultSecondRequest, scramPassword), ok: false,
 			check: func(t *testing.T, c workload.StartupCounters, a fakepg.AuthSnapshot) {
-				if c.TLSFaults[workload.TLSFaultSecondRequest] != 1 || a.TLSAnsweredNo != 1 {
+				if c.TLSFaults[workload.TLSFaultSecondRequest] != 1 || a.TLSAnsweredYes != 1 || a.TLSAnsweredNo != 0 {
 					t.Fatalf("%+v %+v", c, a)
 				}
 			}},
