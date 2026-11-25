@@ -7,6 +7,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim"
 )
 
+// Proves injecting or clearing any listener fault on a closed listener counts
+// as NoTarget instead of mutating the listener.
 func TestFaultsOnAClosedListenerHaveNoTarget(t *testing.T) {
 	w := newWorld(1)
 	l, _ := w.n.Listen("gone", nil)
@@ -20,6 +22,8 @@ func TestFaultsOnAClosedListenerHaveNoTarget(t *testing.T) {
 	}
 }
 
+// Proves FaultClear targeting a connecting, not-yet-accepted connection counts
+// as NoTarget, and succeeds as Clear only after acceptance.
 func TestClearOnAnUnacceptedConnectionHasNoTarget(t *testing.T) {
 	w := newWorld(1)
 	e := w.n.Dial("srv", fixed(time.Millisecond), &recorder{})

@@ -7,6 +7,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim"
 )
 
+// Proves Jitter == math.MaxInt64 draws a valid non-negative delay without
+// overflowing Int64N(bound+1) and panicking.
 func TestMaximumJitterDrawsWithoutPanicking(t *testing.T) {
 	w := newWorld(1)
 	o := DefaultOptions()
@@ -28,6 +30,8 @@ func TestMaximumJitterDrawsWithoutPanicking(t *testing.T) {
 	}
 }
 
+// Proves Base + jitter saturates at MaxTime rather than wrapping negative and
+// firing early.
 func TestBasePlusJitterSaturates(t *testing.T) {
 	w := newWorld(1)
 	o := DefaultOptions()
@@ -44,6 +48,8 @@ func TestBasePlusJitterSaturates(t *testing.T) {
 	}
 }
 
+// Proves a refused dial's up + down round-trip latency saturates at MaxTime
+// instead of wrapping to 0.
 func TestRefusalRoundTripSaturates(t *testing.T) {
 	w := newWorld(1)
 	o := DefaultOptions()

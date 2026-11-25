@@ -1,3 +1,10 @@
+// Package simtest provides test plumbing for deterministic simulation suites:
+// -seed and DST_SEED/DST_SEEDS seed selection, pinned seed files, multi-seed
+// sweeps, run-twice replay verification, and failure reports with REPLAY lines.
+//
+// Adapted from object-store internal/sim/simtest at commit
+// 25fb899317955eb7d87186f940702e55dc0e3cde. Because it reads flags,
+// environment variables, and files, simtest is excluded from detlint.
 package simtest
 
 import (
@@ -11,10 +18,14 @@ import (
 	"testing"
 )
 
+// Default seed-sweep settings and the filename loaded from testdata/.
 const (
-	DefaultSeeds    = 3
+	// DefaultSeeds is the number of consecutive seeds swept when DST_SEEDS is unset.
+	DefaultSeeds = 3
+	// DefaultSeedBase is the starting seed when DST_SEED_BASE is unset.
 	DefaultSeedBase = 1
-	SeedsFile       = "seeds.txt"
+	// SeedsFile is the pinned-seeds filename read from testdata/.
+	SeedsFile = "seeds.txt"
 )
 
 type seedValue struct {
@@ -44,6 +55,8 @@ func init() {
 	flag.Var(&seedFlag, "seed", "")
 }
 
+// Seed returns the explicitly pinned single seed from the -seed flag or
+// DST_SEED environment variable, reporting whether one was configured.
 func Seed() (int64, bool, error) {
 	if seedFlag.set {
 		return seedFlag.v, true, nil
@@ -71,6 +84,9 @@ func envInt(name string, def int64) (int64, error) {
 	return n, nil
 }
 
+// PinnedSeeds reads integer seeds from dir/seeds.txt, ignoring blank lines and
+// '#' comments and taking the first whitespace-delimited field on each line.
+// A missing file returns (nil, nil).
 func PinnedSeeds(dir string) ([]int64, error) {
 	data, err := os.ReadFile(filepath.Join(dir, SeedsFile))
 	if errors.Is(err, os.ErrNotExist) {
@@ -94,6 +110,9 @@ func PinnedSeeds(dir string) ([]int64, error) {
 	return out, nil
 }
 
+// Seeds returns the deduplicated list of seeds for the current test: either
+// the single -seed / DST_SEED override, or testdata/seeds.txt followed by
+// DST_SEEDS consecutive seeds starting at DST_SEED_BASE.
 func Seeds(t testing.TB) []int64 {
 	t.Helper()
 	if seed, ok, err := Seed(); err != nil {
@@ -125,6 +144,7 @@ func Seeds(t testing.TB) []int64 {
 	return out
 }
 
+// Sweep runs fn as a subtest named "seed=<n>" for every seed returned by Seeds.
 func Sweep(t *testing.T, fn func(t *testing.T, seed int64)) {
 	t.Helper()
 	for _, seed := range Seeds(t) {

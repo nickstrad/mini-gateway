@@ -1,5 +1,7 @@
 package simnet
 
+// DirSnapshot reports byte conservation and back-pressure counters for one
+// direction (Up or Down). Written always equals Delivered + Discarded + InFlight.
 type DirSnapshot struct {
 	Written       int64
 	Delivered     int64
@@ -9,6 +11,8 @@ type DirSnapshot struct {
 	Chunks        int64
 }
 
+// FaultSnapshot counts every fault applied to a live target, plus clears and
+// no-target attempts.
 type FaultSnapshot struct {
 	Reset     int64
 	Stall     int64
@@ -22,6 +26,7 @@ type FaultSnapshot struct {
 	NoTarget  int64
 }
 
+// ClosedSnapshot breaks down finished connections by their terminal CloseReason.
 type ClosedSnapshot struct {
 	Graceful int64
 	Reset    int64
@@ -30,6 +35,8 @@ type ClosedSnapshot struct {
 	Aborted  int64
 }
 
+// Snapshot is a plain, deterministic view of a Net's listeners, connections,
+// directional byte flows, and injected faults.
 type Snapshot struct {
 	Listeners       int64
 	DialsAttempted  int64
@@ -44,6 +51,7 @@ type Snapshot struct {
 	Faults          FaultSnapshot
 }
 
+// Snapshot returns a value copy of the network's current counters and gauges.
 func (n *Net) Snapshot() Snapshot {
 	st := &n.stats
 	live := int64(0)

@@ -1,12 +1,19 @@
 package sim
 
+// Indexed min-heap copied from object-store internal/sim/queue.go at commit
+// 25fb899317955eb7d87186f940702e55dc0e3cde, with domain event kinds removed.
+
+// Handler receives scheduled events without allocating a closure per event.
+// The code is opaque to the kernel and interpreted only by the handler.
 type Handler interface {
 	OnEvent(code uint64)
 }
 
 type event struct {
-	at         Time
-	seq        uint64
+	at  Time
+	seq uint64
+	// hi tracks the event's slot in eventQueue so Timer.Cancel can remove it
+	// in O(log n); -1 means the event is no longer queued.
 	hi         int
 	fn         func()
 	h          Handler
@@ -14,6 +21,9 @@ type event struct {
 	background bool
 }
 
+// eventQueue is a binary min-heap ordered by (at, seq). Tie-breaking on the
+// monotonic scheduling sequence guarantees deterministic FIFO order within an
+// instant regardless of heap swaps.
 type eventQueue []*event
 
 func (q eventQueue) less(i, j int) bool {
@@ -93,6 +103,7 @@ func (q *eventQueue) remove(e *event) bool {
 	}
 	old[n] = nil
 	*q = old[:n]
+	// The element swapped in from the tail may belong either below or above i.
 	if i != n {
 		if !q.down(i) {
 			q.up(i)

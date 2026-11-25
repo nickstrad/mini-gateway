@@ -17,6 +17,8 @@ type endView struct {
 	discarded bool
 }
 
+// Proves both the server's counters and simnet's close reasons match the
+// specified semantics for every one of the 11 named scenarios across 20 seeds.
 func TestEachFaultAsSeenByBothEnds(t *testing.T) {
 	want := map[string]endView{
 		"echo-clean":         {accepted: 4, closed: simnet.ClosedSnapshot{Graceful: 4}},
@@ -58,6 +60,8 @@ func TestEachFaultAsSeenByBothEnds(t *testing.T) {
 	}
 }
 
+// Proves that in echo-stall-timeout the client's FIN from closing on timeout
+// is held by the stall and reaches the server only after longClear.
 func TestStallTimeoutServerSeesClientCloseOnlyAfterTheClear(t *testing.T) {
 	sc, _ := Lookup("echo-stall-timeout")
 	for seed := int64(1); seed <= 10; seed++ {
@@ -85,6 +89,8 @@ func TestStallTimeoutServerSeesClientCloseOnlyAfterTheClear(t *testing.T) {
 	}
 }
 
+// Proves silent failure modes (half-open, silence, dial-stall, stall-timeout)
+// terminate the client at its exact virtual-clock deadline.
 func TestHalfOpenClientTimesOutOnItsOwnDeadline(t *testing.T) {
 	for _, name := range []string{"echo-half-open", "echo-silence", "echo-dial-stall", "echo-stall-timeout"} {
 		sc, _ := Lookup(name)
@@ -98,6 +104,7 @@ func TestHalfOpenClientTimesOutOnItsOwnDeadline(t *testing.T) {
 	}
 }
 
+// Proves Outcome.String names every defined outcome and Lookup rejects unknown names.
 func TestOutcomeNames(t *testing.T) {
 	for o := OutcomeNone; o <= OutcomeMismatch; o++ {
 		if o.String() == "?" {
@@ -112,6 +119,8 @@ func TestOutcomeNames(t *testing.T) {
 	}
 }
 
+// Proves lines longer than the 64-byte send window trigger back pressure and
+// still echo completely across multiple writes.
 func TestLinesLongerThanTheWindow(t *testing.T) {
 	for seed := int64(1); seed <= 20; seed++ {
 		o := BaseOptions()
@@ -131,6 +140,8 @@ func TestLinesLongerThanTheWindow(t *testing.T) {
 	}
 }
 
+// Proves the server enforces MaxPending on incoming bytes before '\n',
+// resetting the connection without echoing or counting the oversized line.
 func TestServerPendingEchoIsBounded(t *testing.T) {
 	const seed, maxLine = 1, 4 * MaxPending
 	first := 1 + sim.New(sim.Config{Seed: seed}).Stream("simtoy/client/0").IntN(maxLine)

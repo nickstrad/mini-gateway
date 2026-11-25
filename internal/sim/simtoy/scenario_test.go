@@ -21,6 +21,9 @@ import (
 
 var update = flag.Bool("update", false, "rewrite testdata/golden-digests.txt")
 
+// Proves every named scenario is deterministic in process (matching digests
+// and textual snapshots), meets its outcome, recovery, quiesce, and counter
+// checks, and passes ablation where configured across all swept seeds.
 func TestScenario(t *testing.T) {
 	for _, sc := range Scenarios() {
 		t.Run(sc.Name, func(t *testing.T) {
@@ -77,6 +80,8 @@ func checkAblation(t *testing.T, sc Scenario, seed int64, res *Result, replay st
 	}
 }
 
+// Proves the planted server line-splitting bug causes echo-chunk-1 and
+// echo-random-split to fail with ErrMismatch and a REPLAY line.
 func TestPlantedBugCanary(t *testing.T) {
 	for _, name := range []string{"echo-chunk-1", "echo-random-split"} {
 		sc, _ := Lookup(name)
@@ -98,6 +103,8 @@ func canary(t *testing.T, sc Scenario) {
 	}
 }
 
+// Proves every counter in simnet.Snapshot moves across the scenario suite,
+// byte conservation holds at every step, and both snapshot types are plain.
 func TestCountersMove(t *testing.T) {
 	netMoved := map[string]bool{}
 	for _, sc := range Scenarios() {
@@ -130,6 +137,8 @@ func goldenLine(sc Scenario, seed int64) string {
 	return fmt.Sprintf("%s %d %s %s", sc.Name, seed, d.Trace, d.State)
 }
 
+// Proves every scenario on every pinned seed reproduces the committed
+// testdata/golden-digests.txt hashes bit-for-bit.
 func TestGoldenDigests(t *testing.T) {
 	pinned, err := simtest.PinnedSeeds("testdata")
 	if err != nil || len(pinned) == 0 {
@@ -157,6 +166,7 @@ func TestGoldenDigests(t *testing.T) {
 	}
 }
 
+// Proves distinct seeds produce distinct trace digests on echo-clean.
 func TestDifferentSeedsGiveDifferentTraces(t *testing.T) {
 	seen := map[sim.Digest]int64{}
 	sc, _ := Lookup("echo-clean")
@@ -169,6 +179,7 @@ func TestDifferentSeedsGiveDifferentTraces(t *testing.T) {
 	}
 }
 
+// Proves disabling decision tracing leaves StateDigest identical on every scenario.
 func TestTraceOffKeepsStateDigest(t *testing.T) {
 	for _, sc := range Scenarios() {
 		on := sc.Run(3)
@@ -211,6 +222,8 @@ func connTraffic(ids ...int64) func(sim.Record) bool {
 	}
 }
 
+// Proves every per-connection fault targeting connection 1 leaves trace
+// records, received bytes, and finish times of connections 2 and 3 identical.
 func TestFaultOnOneConnectionLeavesOthersIdentical(t *testing.T) {
 	clean, _ := Lookup("echo-clean")
 	for _, sc := range Scenarios() {
@@ -239,6 +252,8 @@ func TestFaultOnOneConnectionLeavesOthersIdentical(t *testing.T) {
 	}
 }
 
+// Proves injecting and clearing all five clearable faults before traffic
+// leaves traffic trace digests and StateDigest identical to a clean run.
 func TestClearedFaultLeavesNoResidue(t *testing.T) {
 	ms := func(us int64) sim.Time { return sim.Time(us * int64(time.Microsecond)) }
 	faults := []sim.Fault{
@@ -270,6 +285,8 @@ func TestClearedFaultLeavesNoResidue(t *testing.T) {
 	}
 }
 
+// Proves CheckQuiesce catches a leaked open connection, a half-closed
+// connection, and a leaked foreground timer after a toy run.
 func TestQuiesceCatchesLeaks(t *testing.T) {
 	sc, _ := Lookup("echo-clean")
 	res := sc.Run(1)
@@ -304,6 +321,7 @@ func TestQuiesceCatchesLeaks(t *testing.T) {
 	}
 }
 
+// Proves CheckQuiesce catches a single unread byte left in flight on a pipe.
 func TestQuiesceCatchesInFlightByte(t *testing.T) {
 	cfg := Config{Seed: 1, Options: BaseOptions(), Clients: 1}
 	res := Run(cfg)
@@ -328,6 +346,8 @@ func TestQuiesceCatchesInFlightByte(t *testing.T) {
 	}
 }
 
+// Proves exhausting MaxSteps yields a StallError and an actor panic yields a
+// PanicError, each carrying the configured REPLAY command.
 func TestStepBudgetAndPanicAreTypedFailures(t *testing.T) {
 	sc, _ := Lookup("echo-clean")
 	cfg := sc.Config(4)
@@ -354,6 +374,9 @@ func shrinkSpace() sim.Space {
 	return sim.Space{Kinds: simnet.FaultKinds(), Targets: 4, Start: 0, Window: sim.Time(40 * time.Millisecond), MaxArg1: 3, MaxArg2: 3, MaxFaults: 64}
 }
 
+// Proves sim.Shrink reduces a 40-fault decoded schedule that triggers the
+// planted bug down to a 1-minimal failing schedule of at most 2 faults
+// containing a FaultChunk.
 func TestPlantedBugCaughtAndShrunk(t *testing.T) {
 	fails := func(f []sim.Fault) bool {
 		cfg := Config{Seed: 1, Options: BaseOptions(), Faults: f}
@@ -408,6 +431,8 @@ func runDecoded(t *testing.T, data []byte) {
 	}
 }
 
+// Fuzzes arbitrary byte strings decoded into fault schedules against the toy
+// protocol to prove no schedule panics or stalls the kernel.
 func FuzzToySchedule(f *testing.F) {
 	f.Add([]byte{})
 	f.Add([]byte{4, 1, 0, 9, 0, 3, 0, 1})
@@ -415,6 +440,8 @@ func FuzzToySchedule(f *testing.F) {
 	f.Fuzz(runDecoded)
 }
 
+// Proves hundreds of random decoded fault schedules execute cleanly on the toy
+// without kernel panics, stalls, or invariant failures.
 func TestDecodedSchedulesNeverBreakTheKernel(t *testing.T) {
 	n := 300
 	if testing.Short() {

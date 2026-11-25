@@ -12,6 +12,8 @@ import (
 
 const childEnv = "MGSIM_TEST_RUN_MAIN"
 
+// Re-executes the compiled test binary as the mgsim CLI when childEnv is set
+// so cross-process replay tests run real OS processes without invoking go build.
 func TestMain(m *testing.M) {
 	if os.Getenv(childEnv) == "1" {
 		main()
@@ -37,6 +39,7 @@ func runChild(t *testing.T, args ...string) string {
 	return string(out)
 }
 
+// Proves "mgsim list" exits 0 and outputs every registered toy scenario name.
 func TestListNamesEveryScenario(t *testing.T) {
 	code, out, _ := runInProcess("list")
 	if code != 0 || strings.Count(out, "\n") != len(simtoy.Scenarios()) || !strings.Contains(out, "echo-reset\n") {
@@ -44,6 +47,8 @@ func TestListNamesEveryScenario(t *testing.T) {
 	}
 }
 
+// Proves "mgsim run" prints matching trace/state digests and the REPLAY line
+// regardless of whether -seed precedes or follows the scenario name.
 func TestRunPrintsDigestsAndReplayLine(t *testing.T) {
 	code, out, _ := runInProcess("run", "echo-stall", "-seed", "7")
 	if code != 0 {
@@ -62,6 +67,8 @@ func TestRunPrintsDigestsAndReplayLine(t *testing.T) {
 	}
 }
 
+// Proves every scenario produces byte-identical CLI output across separate OS
+// processes and in-process execution, and diverges across different seeds.
 func TestCrossProcessReplay(t *testing.T) {
 	for _, sc := range simtoy.Scenarios() {
 		a := runChild(t, "run", sc.Name, "-seed", "3")
@@ -79,6 +86,7 @@ func TestCrossProcessReplay(t *testing.T) {
 	}
 }
 
+// Proves -trace streams formatted trace records including fault and reset events.
 func TestTraceFlagPrintsRecords(t *testing.T) {
 	_, out, _ := runInProcess("run", "echo-reset", "-trace")
 	if !strings.Contains(out, " fault ") || !strings.Contains(out, " net.rst ") {
@@ -86,6 +94,7 @@ func TestTraceFlagPrintsRecords(t *testing.T) {
 	}
 }
 
+// Proves a failing scenario exits 1 with status=fail and prints the REPLAY line.
 func TestFailureExitsOneWithReplay(t *testing.T) {
 	var out, errb bytes.Buffer
 	code := run([]string{"run", "echo-clean", "-seed", "9"}, &out, &errb, func(cfg simtoy.Config) *simtoy.Result {
@@ -97,6 +106,7 @@ func TestFailureExitsOneWithReplay(t *testing.T) {
 	}
 }
 
+// Proves invalid CLI invocations exit 2 and "mgsim help" exits 0 with usage.
 func TestUsageErrors(t *testing.T) {
 	for _, args := range [][]string{{}, {"bogus"}, {"run", "nope"}, {"run", "echo-clean", "extra"}, {"run", "-seed", "x", "echo-clean"}} {
 		if code, _, _ := runInProcess(args...); code != 2 {
@@ -108,6 +118,8 @@ func TestUsageErrors(t *testing.T) {
 	}
 }
 
+// Proves -trace output repeats byte-for-byte across processes and produces the
+// same digests as a non-tracing run.
 func TestTraceOutputRepeatsAcrossProcesses(t *testing.T) {
 	a := runChild(t, "run", "echo-random-split", "-seed", "5", "-trace")
 	b := runChild(t, "run", "echo-random-split", "-seed", "5", "-trace")
@@ -129,6 +141,8 @@ func TestTraceOutputRepeatsAcrossProcesses(t *testing.T) {
 	}
 }
 
+// Proves every scenario passes from the CLI across positive, negative, and
+// large root seeds.
 func TestEveryScenarioPassesFromTheCLI(t *testing.T) {
 	for _, sc := range simtoy.Scenarios() {
 		for _, seed := range []string{"1", "-4", "1000003"} {

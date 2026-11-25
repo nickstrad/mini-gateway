@@ -17,6 +17,9 @@ type endLog struct {
 	events int
 }
 
+// Proves random interleavings of dials, writes, closes, resets, and all fault
+// kinds preserve prefix byte ordering, window bounds, byte conservation, dial
+// conservation, and clean quiesce after teardown.
 func TestRandomOperationsKeepEveryLaw(t *testing.T) {
 	steps := 400
 	if testing.Short() {

@@ -8,6 +8,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/simnet"
 )
 
+// Shared timing and window constants for the named toy scenarios.
 const (
 	faultAt       = sim.Time(2500 * time.Microsecond)
 	baseLatency   = time.Millisecond
@@ -16,9 +17,12 @@ const (
 	shortRecovery = 50 * time.Millisecond
 	longClear     = sim.Time(1500 * time.Millisecond)
 	longRecovery  = 2 * time.Second
-	StallFor      = 20 * time.Millisecond
+	// StallFor is the duration of the transient stall in echo-stall.
+	StallFor = 20 * time.Millisecond
 )
 
+// Scenario describes one named end-to-end toy echo scenario, its injected
+// faults, expected client outcome class, and recovery timing.
 type Scenario struct {
 	Name        string
 	Kind        sim.FaultKind
@@ -30,6 +34,8 @@ type Scenario struct {
 	options     func(o *simnet.Options)
 }
 
+// BaseOptions returns the standard toy network configuration: a 256-byte send
+// window and 1 ms ± 200 µs latency in each direction.
 func BaseOptions() simnet.Options {
 	o := simnet.DefaultOptions()
 	o.Window = baseWindow
@@ -50,6 +56,8 @@ func listenerFault(kind sim.FaultKind, clearAt sim.Time) []sim.Fault {
 	return []sim.Fault{{At: 0, Kind: kind, Target: 0}, clearFault(clearAt, 0, kind)}
 }
 
+// Scenarios returns all 11 named toy scenarios covering clean operation,
+// random splitting, and every simnet fault kind.
 func Scenarios() []Scenario {
 	return []Scenario{
 		{Name: "echo-clean", Expect: OutcomeCompleted, recoverAt: shortRecovery},
@@ -76,6 +84,7 @@ func Scenarios() []Scenario {
 	}
 }
 
+// Lookup finds a named scenario in Scenarios.
 func Lookup(name string) (Scenario, bool) {
 	for _, sc := range Scenarios() {
 		if sc.Name == name {
@@ -85,6 +94,7 @@ func Lookup(name string) (Scenario, bool) {
 	return Scenario{}, false
 }
 
+// Config builds the toy Config for running sc with seed.
 func (sc Scenario) Config(seed int64) Config {
 	o := BaseOptions()
 	if sc.options != nil {
@@ -99,6 +109,8 @@ func (sc Scenario) Config(seed int64) Config {
 	}
 }
 
+// Control builds the unfaulted control Config for sc using BaseOptions and no
+// faults, used by ablation checks.
 func (sc Scenario) Control(seed int64) Config {
 	cfg := sc.Config(seed)
 	cfg.Faults = nil
@@ -106,8 +118,10 @@ func (sc Scenario) Control(seed int64) Config {
 	return cfg
 }
 
+// Run executes sc with seed and returns its Result.
 func (sc Scenario) Run(seed int64) *Result { return Run(sc.Config(seed)) }
 
+// FaultCount returns the counter for kind from snap.Faults, or 0 if unknown.
 func FaultCount(snap simnet.Snapshot, kind sim.FaultKind) int64 {
 	f := snap.Faults
 	switch kind {
@@ -133,6 +147,9 @@ func FaultCount(snap simnet.Snapshot, kind sim.FaultKind) int64 {
 	return 0
 }
 
+// Check asserts all scenario obligations on res: no kernel or quiesce error,
+// expected client and recovery outcomes, non-zero fault and clear counters,
+// and non-zero traffic in both directions.
 func (sc Scenario) Check(res *Result) error {
 	if res.Err != nil {
 		return res.Err

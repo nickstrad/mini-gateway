@@ -1,3 +1,10 @@
+// Package obstest provides reflection-based test helpers that enforce
+// mini-gateway's snapshot conventions: snapshots must be plain deterministic
+// structs (no maps, floats, pointers, or time.Time), and every counter field
+// must move in at least one test scenario.
+//
+// Because it imports reflect, obstest is test plumbing and is intentionally
+// kept outside tools/lint-rules/det-packages.txt.
 package obstest
 
 import (
@@ -7,6 +14,9 @@ import (
 	"testing"
 )
 
+// PlainProblems inspects v's type recursively and returns a description of any
+// field that violates the plain-snapshot rule (such as floats, maps, pointers,
+// or types from the time package).
 func PlainProblems(v any) []string {
 	var out []string
 	walkType(reflect.TypeOf(v), "", map[reflect.Type]bool{}, &out)
@@ -44,6 +54,7 @@ func join(path, name string) string {
 	return path + "." + name
 }
 
+// RequirePlain fails t if PlainProblems(v) reports any non-plain field.
 func RequirePlain(t testing.TB, v any) {
 	t.Helper()
 	if p := PlainProblems(v); len(p) > 0 {
@@ -51,6 +62,8 @@ func RequirePlain(t testing.TB, v any) {
 	}
 }
 
+// ZeroCounters returns the sorted dotted field names of every integer field in
+// v whose value is currently zero.
 func ZeroCounters(v any) []string {
 	var out []string
 	walkValue(reflect.ValueOf(v), "", &out)
@@ -75,6 +88,8 @@ func walkValue(v reflect.Value, path string, out *[]string) {
 	}
 }
 
+// MergeMoved updates dst to record every integer field in v, marking a field
+// true as soon as it is observed non-zero in any snapshot passed to MergeMoved.
 func MergeMoved(dst map[string]bool, v any) {
 	all := map[string]bool{}
 	collect(reflect.ValueOf(v), "", all)
@@ -103,6 +118,8 @@ func collect(v reflect.Value, path string, out map[string]bool) {
 	}
 }
 
+// NeverMoved returns the sorted names of fields in moved that remained zero in
+// every merged snapshot.
 func NeverMoved(moved map[string]bool) []string {
 	var out []string
 	for name, ok := range moved {

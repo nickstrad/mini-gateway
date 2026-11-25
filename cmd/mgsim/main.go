@@ -1,3 +1,5 @@
+// Command mgsim runs named deterministic simulation scenarios outside go test,
+// printing both trace and state digests and a REPLAY line for reproduction.
 package main
 
 import (
@@ -59,6 +61,8 @@ func runScenario(args []string, stdout, stderr io.Writer, exec runner) int {
 	seed := fs.Int64("seed", 1, "")
 	trace := fs.Bool("trace", false, "")
 	var name string
+	// Accept the scenario name either before or after flags so both
+	// "mgsim run <name> -seed N" and "mgsim run -seed N <name>" work.
 	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
 		name, args = args[0], args[1:]
 	}

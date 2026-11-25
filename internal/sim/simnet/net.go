@@ -1,3 +1,8 @@
+// Package simnet simulates ordered, full-duplex byte-stream connections on top
+// of internal/sim. Connections model per-direction latency and jitter,
+// configurable delivery chunking down to one byte, a bounded send window with
+// event-driven back pressure, half-close, reset, stalls, half-open failures,
+// and listener faults.
 package simnet
 
 import (
@@ -23,6 +28,8 @@ var (
 	kindNoTarget = sim.K("net.nota")
 )
 
+// Listener represents a named endpoint accepting simulated connections. Its
+// numeric Index is used as the target of listener-level faults.
 type Listener struct {
 	net       *Net
 	name      string
@@ -34,13 +41,19 @@ type Listener struct {
 	silence   bool
 }
 
+// Name returns the endpoint address registered with Net.Listen.
 func (l *Listener) Name() string { return l.name }
+
+// Index returns the zero-based listener index used by Fault.Target.
 func (l *Listener) Index() int64 { return l.idx }
 
+// Close marks the listener closed so later dials to its name are refused and
+// later faults targeting its index are counted as NoTarget.
 func (l *Listener) Close() {
 	l.closed = true
 }
 
+// Net owns all simulated listeners and connections attached to one *sim.Sim.
 type Net struct {
 	s         *sim.Sim
 	listeners []*Listener
@@ -60,6 +73,8 @@ type stats struct {
 	faults         FaultSnapshot
 }
 
+// New attaches a simulated network to s, registering its byte-conservation
+// invariant, quiesce check, state-digest writer, and fault kinds 1..9.
 func New(s *sim.Sim) *Net {
 	n := &Net{s: s}
 	_ = s.RegisterQuiesce("simnet", n.quiesce)
@@ -69,8 +84,11 @@ func New(s *sim.Sim) *Net {
 	return n
 }
 
+// Sim returns the underlying simulator kernel.
 func (n *Net) Sim() *sim.Sim { return n.s }
 
+// Listen registers an active listener at name and invokes accept with each new
+// server End once the client's dial arrives after up latency.
 func (n *Net) Listen(name string, accept func(e *End)) (*Listener, error) {
 	if l := n.lookup(name); l != nil {
 		return nil, fmt.Errorf("%w: %s", ErrAddrInUse, name)
@@ -106,8 +124,11 @@ func (n *Net) conn(id int64) *Conn {
 	return n.conns[id-1]
 }
 
+// Conn looks up a connection by its 1-based ID, returning nil if out of range.
 func (n *Net) Conn(id int64) *Conn { return n.conn(id) }
 
+// Dial opens a connection from a new client End to the named listener using
+// opts and h. Completion arrives asynchronously via EvConnected or EvRefused.
 func (n *Net) Dial(to string, opts Options, h Handler) *End {
 	opts = opts.normalized()
 	id := int64(len(n.conns)) + 1
@@ -136,6 +157,7 @@ func (n *Net) Dial(to string, opts Options, h Handler) *End {
 	n.s.Trace(kindDial, id, lidx, 0, 0)
 	switch {
 	case l == nil || l.refuse:
+		// Saturate the round trip so extreme latencies refuse at MaxTime instead of wrapping.
 		at := sim.AddDurations(c.pipes[up].delay(), c.pipes[down].delay())
 		n.s.After(at, func() { c.refuse() })
 	case l.dialStall:
@@ -185,6 +207,8 @@ func (n *Net) writeState(w sim.StateSink) {
 	st := &n.stats
 	w.Int(st.dialsAttempted, st.dialsRefused, st.dialsStalled, st.opened, st.open, st.connecting)
 	w.Int(st.closed[:]...)
+	// Fault counters are intentionally omitted so a fault injected and cleared
+	// before traffic leaves StateDigest identical to a never-faulted run.
 	for _, ds := range st.dir {
 		w.Int(ds.Written, ds.Delivered, ds.Discarded, ds.InFlight)
 	}

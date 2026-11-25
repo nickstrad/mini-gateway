@@ -6,18 +6,30 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim"
 )
 
+// Fault kinds owned by simnet (1..9). Later world packages pick disjoint ID ranges.
 const (
+	// FaultReset tears down a connection and notifies client then server with EvReset.
 	FaultReset sim.FaultKind = iota + 1
+	// FaultStall holds arriving pieces on the selected direction(s) until duration or clear.
 	FaultStall
+	// FaultHalfOpen silences one end (Arg1: 0 client, 1 server) without notifying the survivor.
 	FaultHalfOpen
+	// FaultHalfClose queues a FIN on one end's outgoing pipe (Arg1: 0 client, 1 server).
 	FaultHalfClose
+	// FaultChunk overrides piece size for subsequent writes (Arg1: dir mask, Arg2: size >= 1).
 	FaultChunk
+	// FaultRefuse causes a listener to refuse subsequent dials after one round trip.
 	FaultRefuse
+	// FaultDialStall causes subsequent dials to a listener to hang until aborted.
 	FaultDialStall
+	// FaultSilence accepts subsequent dials on the client side while never notifying the server.
 	FaultSilence
+	// FaultClear removes a clearable fault (Arg1: FaultKind) from a connection or listener.
 	FaultClear
 )
 
+// Direction bitmasks passed in Fault.Arg1 for FaultStall and FaultChunk.
+// A zero mask defaults to DirBoth.
 const (
 	DirUp   = 1
 	DirDown = 2
@@ -26,10 +38,13 @@ const (
 
 var faultNames = [...]string{"", "net.reset", "net.stall", "net.half-open", "net.half-close", "net.chunk", "net.refuse", "net.dial-stall", "net.silence", "net.clear"}
 
+// FaultKinds returns all fault kinds registered by simnet in ascending order.
 func FaultKinds() []sim.FaultKind {
 	return []sim.FaultKind{FaultReset, FaultStall, FaultHalfOpen, FaultHalfClose, FaultChunk, FaultRefuse, FaultDialStall, FaultSilence, FaultClear}
 }
 
+// FaultName returns the canonical dotted name of a simnet fault kind, or ""
+// if k is not a simnet kind.
 func FaultName(k sim.FaultKind) string {
 	if int(k) < len(faultNames) && k > 0 {
 		return faultNames[k]
@@ -192,6 +207,8 @@ func (c *Conn) halfOpen(side int) bool {
 		return false
 	}
 	e.state = stGone
+	// Blackhole the pipe arriving at the gone end so the survivor's writes fill
+	// the window without ever delivering or triggering an error.
 	c.pipes[1-side].blackhole = true
 	c.maybeFinish()
 	return true

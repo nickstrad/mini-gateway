@@ -1,5 +1,8 @@
 package simtest
 
+// Adapted from object-store internal/sim/simtest/determinism.go at commit
+// 25fb899317955eb7d87186f940702e55dc0e3cde.
+
 import (
 	"errors"
 	"fmt"
@@ -12,10 +15,15 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim"
 )
 
+// TailLines is the number of trailing trace records printed by Report.
 const TailLines = 20
 
+// ErrNondeterministic is returned when two runs of the same seed produce
+// different trace or state digests.
 var ErrNondeterministic = errors.New("simtest: same seed gave different digests")
 
+// CheckDeterministic executes run(seed) twice, requires both trace and state
+// digests to match, and runs a.Verify() on the resulting simulator.
 func CheckDeterministic(seed int64, run func(seed int64) *sim.Sim) (*sim.Sim, error) {
 	a := run(seed)
 	b := run(seed)
@@ -29,6 +37,9 @@ func CheckDeterministic(seed int64, run func(seed int64) *sim.Sim) (*sim.Sim, er
 	return a, nil
 }
 
+// RequireDeterministic runs CheckDeterministic, registers Report to print full
+// diagnostics and a REPLAY line if the test fails (even in later assertions),
+// and fatals immediately if determinism or Verify fails.
 func RequireDeterministic(t testing.TB, seed int64, run func(seed int64) *sim.Sim) *sim.Sim {
 	t.Helper()
 	s, err := CheckDeterministic(seed, run)
@@ -72,6 +83,8 @@ func packagePath() string {
 	return "./" + filepath.ToSlash(rel)
 }
 
+// RunPattern converts a go test subtest name into an anchored -run regex so
+// replaying one subtest does not accidentally run prefix-matching siblings.
 func RunPattern(name string) string {
 	parts := strings.Split(name, "/")
 	for i, p := range parts {
@@ -80,6 +93,7 @@ func RunPattern(name string) string {
 	return strings.Join(parts, "/")
 }
 
+// ReplayCommand formats the exact go test command that reproduces t with seed.
 func ReplayCommand(t testing.TB, seed int64) string {
 	return fmt.Sprintf("REPLAY: go test %s -run '%s' -seed=%d -count=1", packagePath(), RunPattern(t.Name()), seed)
 }
@@ -108,6 +122,8 @@ func writeArtifact(t testing.TB, s *sim.Sim) (string, error) {
 	return path, nil
 }
 
+// Report logs the failing run's seed, error, digests, trace tail, optional
+// DST_ARTIFACTS trace file path, PIN command, and final REPLAY line.
 func Report(t testing.TB, s *sim.Sim) {
 	t.Helper()
 	if s == nil {

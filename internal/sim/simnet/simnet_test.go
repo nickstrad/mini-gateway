@@ -147,6 +147,9 @@ func chunkModes() []Direction {
 	}
 }
 
+// Proves full-duplex streams deliver exact written bytes in order followed by
+// EOF under every chunking mode (including 1-byte) and latency setting while
+// keeping in-flight bytes within the window.
 func TestBytesDeliveredInOrderForEveryChunking(t *testing.T) {
 	for mi, mode := range chunkModes() {
 		for _, lat := range []Latency{{Base: time.Millisecond}, {Base: 10 * time.Microsecond, Jitter: 3 * time.Millisecond}} {
@@ -179,6 +182,8 @@ func TestBytesDeliveredInOrderForEveryChunking(t *testing.T) {
 	}
 }
 
+// Proves a stopped reader stalls the writer at exactly Window bytes with back
+// pressure, and resuming reads wakes the writer so all bytes arrive cleanly.
 func TestStoppedReaderBlocksWriterAtWindow(t *testing.T) {
 	for seed := int64(1); seed <= int64(seedCount()); seed++ {
 		window := 1 + int(seed*131%3000)
@@ -211,6 +216,8 @@ func TestStoppedReaderBlocksWriterAtWindow(t *testing.T) {
 	}
 }
 
+// Proves an injected FaultReset discards all in-flight bytes, delivers nothing
+// afterwards, notifies client then server with EvReset, and returns ErrReset.
 func TestResetDeliversNothingAfterAndNotifiesBothEnds(t *testing.T) {
 	for seed := int64(1); seed <= int64(seedCount()); seed++ {
 		opts := DefaultOptions()
@@ -266,6 +273,7 @@ func TestResetDeliversNothingAfterAndNotifiesBothEnds(t *testing.T) {
 	}
 }
 
+// Proves a local End.Reset delivers EvReset only to the peer, not the caller.
 func TestLocalResetNotifiesOnlyThePeer(t *testing.T) {
 	pr := newPair(3, DefaultOptions(), 10, 10)
 	var cliEvents, srvEvents []Event
@@ -288,6 +296,9 @@ func TestLocalResetNotifiesOnlyThePeer(t *testing.T) {
 	}
 }
 
+// Proves FaultHalfOpen leaves the surviving client unaware (writes fill the
+// window, no FIN or reset), returns ErrGone on the dead end, and closes as
+// ReasonHalfOpen only when the survivor calls Close.
 func TestHalfOpenSurvivorNeverLearns(t *testing.T) {
 	for seed := int64(1); seed <= int64(seedCount()); seed++ {
 		opts := DefaultOptions()
@@ -328,6 +339,8 @@ func TestHalfOpenSurvivorNeverLearns(t *testing.T) {
 	}
 }
 
+// Proves FaultStall prevents all deliveries during the stall window and
+// releases held bytes and FINs in order once the stall expires.
 func TestStallHoldsBytesThenResumesInOrder(t *testing.T) {
 	for seed := int64(1); seed <= int64(seedCount()); seed++ {
 		opts := DefaultOptions()
@@ -369,6 +382,8 @@ func dialOnly(t *testing.T, kind sim.FaultKind) (*sim.Sim, *Net, *End, *[]Event,
 	return s, n, e, &evs, &accepted
 }
 
+// Proves FaultRefuse, missing listeners, FaultDialStall, and FaultSilence each
+// produce their specified client/server events, errors, and close reasons.
 func TestDialRefusedStalledAndSilenced(t *testing.T) {
 	s, n, e, evs, _ := dialOnly(t, FaultRefuse)
 	_ = s.RunUntilQuiet()
@@ -421,6 +436,8 @@ func TestDialRefusedStalledAndSilenced(t *testing.T) {
 	}
 }
 
+// Proves clearing FaultRefuse, FaultDialStall, or FaultSilence restores normal
+// dialing for subsequent connections.
 func TestClearedListenerFaultsLeaveNewDialsNormal(t *testing.T) {
 	for _, k := range []sim.FaultKind{FaultRefuse, FaultDialStall, FaultSilence} {
 		s, n, e, _, _ := dialOnly(t, k)
@@ -452,6 +469,8 @@ func TestClearedListenerFaultsLeaveNewDialsNormal(t *testing.T) {
 	}
 }
 
+// Proves simnet's quiesce check reports leaked open connections and unread
+// in-flight bytes, and passes once both sides close.
 func TestQuiesceCatchesLeakedConnectionAndByte(t *testing.T) {
 	pr := newPair(1, DefaultOptions(), 100, 0)
 	pr.srv.stopRead = true
@@ -472,6 +491,8 @@ func TestQuiesceCatchesLeakedConnectionAndByte(t *testing.T) {
 	}
 }
 
+// Proves FaultHalfClose sends a FIN on the targeted side while keeping the
+// reverse direction open.
 func TestHalfCloseFaultSendsFinAfterPendingBytes(t *testing.T) {
 	pr := newPair(1, DefaultOptions(), 0, 0)
 	pr.srv.noFin = true
@@ -483,6 +504,8 @@ func TestHalfCloseFaultSendsFinAfterPendingBytes(t *testing.T) {
 	}
 }
 
+// Proves every fault kind targeting a nonexistent ID counts as NoTarget
+// without failing the simulation.
 func TestFaultsWithoutTargetAreCounted(t *testing.T) {
 	s := sim.New(sim.Config{Seed: 1})
 	n := New(s)

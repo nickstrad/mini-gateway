@@ -25,6 +25,8 @@ func randValue(r *rand.Rand, hi int64) int64 {
 	return r.Int64N(int64(1) << uint(r.IntN(62)+1))
 }
 
+// Proves bucket bounds partition [0, MaxValue] without gaps or overlaps and
+// every bucket width stays within v/ErrorBoundDenom.
 func TestRecordedValueFallsInItsBucket(t *testing.T) {
 	r := rand.New(rand.NewPCG(1, 1))
 	prevHi := int64(-1)
@@ -50,6 +52,8 @@ func TestRecordedValueFallsInItsBucket(t *testing.T) {
 	}
 }
 
+// Proves Quantile never under-reports a sorted reference quantile and stays
+// within 1/ErrorBoundDenom (< 0.79%) above it across random distributions.
 func TestQuantileErrorBoundAgainstSortedReference(t *testing.T) {
 	for seed := 0; seed < seeds(); seed++ {
 		r := rand.New(rand.NewPCG(uint64(seed), 2))
@@ -80,6 +84,8 @@ func TestQuantileErrorBoundAgainstSortedReference(t *testing.T) {
 	}
 }
 
+// Proves Merge(a, b) produces identical buckets, min, max, and clamp counts to
+// recording both streams into one histogram, and rejects mismatched ranges.
 func TestMergeEqualsRecordingBoth(t *testing.T) {
 	for seed := 0; seed < seeds(); seed++ {
 		r := rand.New(rand.NewPCG(uint64(seed), 3))
@@ -111,6 +117,8 @@ func TestMergeEqualsRecordingBoth(t *testing.T) {
 	}
 }
 
+// Proves out-of-range values clamp into edge buckets, increment ClampedLow or
+// ClampedHigh, preserve total count across Buckets, and clear on Reset.
 func TestClampsAreCounted(t *testing.T) {
 	h := NewDurationHistogram()
 	h.Record(5)
@@ -139,6 +147,7 @@ func TestClampsAreCounted(t *testing.T) {
 	}
 }
 
+// Proves Histogram.Record performs zero heap allocations per call.
 func TestRecordAllocatesNothing(t *testing.T) {
 	h := NewDurationHistogram()
 	v := int64(1)
@@ -151,6 +160,8 @@ func TestRecordAllocatesNothing(t *testing.T) {
 	}
 }
 
+// Proves NewHistogram rejects invalid bounds and supports zero-based ranges
+// with exact 0 representation.
 func TestHistogramRangeAndSize(t *testing.T) {
 	for _, c := range [][2]int64{{-1, 5}, {5, 5}, {1, MaxValue + 1}} {
 		if _, err := NewHistogram(c[0], c[1]); err == nil {
@@ -171,6 +182,8 @@ func TestHistogramRangeAndSize(t *testing.T) {
 	}
 }
 
+// Proves Counters.Check reports which side is higher with named terms, and
+// Gauge tracks current value and peak.
 func TestConservationNamesTheSideThatIsOff(t *testing.T) {
 	c := Counters{Accepted: 10, Completed: 3, Failed: 2, Shed: 1, Queued: 1, InFlight: 3}
 	if err := c.Check(); err != nil {
@@ -198,6 +211,8 @@ func TestConservationNamesTheSideThatIsOff(t *testing.T) {
 	}
 }
 
+// Proves generic byte and count histograms are exact below 256 and ignore
+// non-positive RecordN weights.
 func TestGenericRangesForBytesAndCounts(t *testing.T) {
 	h, err := NewHistogram(1, 1<<30)
 	if err != nil {
@@ -222,6 +237,7 @@ func TestGenericRangesForBytesAndCounts(t *testing.T) {
 	}
 }
 
+// Proves out-of-range basis-point arguments to Quantile clamp to [0, BasisPoints].
 func TestQuantileArgumentClamped(t *testing.T) {
 	h := NewDurationHistogram()
 	h.Record(5000)
@@ -234,6 +250,8 @@ func TestQuantileArgumentClamped(t *testing.T) {
 	}
 }
 
+// Proves Buckets stops when the iterator yields false and Snapshot copies
+// non-empty buckets in ascending order detached from later writes.
 func TestBucketsIterationStopsEarlyAndSnapshotCopies(t *testing.T) {
 	h := NewDurationHistogram()
 	for _, v := range []int64{2000, 3000, 4_000_000, 4_000_001, 50_000_000_000} {
@@ -269,6 +287,8 @@ func TestBucketsIterationStopsEarlyAndSnapshotCopies(t *testing.T) {
 	}
 }
 
+// Proves merging an empty histogram is a no-op and merging into an empty
+// histogram copies min, max, and clamp counters accurately.
 func TestMergeIntoEmptyAndFromEmpty(t *testing.T) {
 	a := NewDurationHistogram()
 	b := NewDurationHistogram()
@@ -285,6 +305,8 @@ func TestMergeIntoEmptyAndFromEmpty(t *testing.T) {
 	}
 }
 
+// Proves the duration histogram backing array stays within its 27 KB footprint
+// budget and below MaxValue.
 func TestDurationHistogramFootprint(t *testing.T) {
 	h := NewDurationHistogram()
 	if bytes := h.BucketCount() * 8; bytes > 27_000 {
@@ -295,6 +317,7 @@ func TestDurationHistogramFootprint(t *testing.T) {
 	}
 }
 
+// Proves Conserve with zero parts succeeds only when the total is zero.
 func TestConserveWithNoParts(t *testing.T) {
 	if Conserve(T("x", 0)) != nil || Conserve(T("x", 1)) == nil {
 		t.Fatal("empty parts")

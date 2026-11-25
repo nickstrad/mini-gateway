@@ -7,17 +7,24 @@ import (
 	"time"
 )
 
+// Fault registry and schedule-decoding caps.
 const (
-	MaxFaultKinds    = 64
-	MaxScheduleLen   = 1024
+	// MaxFaultKinds is the maximum number of fault kinds per Sim instance.
+	MaxFaultKinds = 64
+	// MaxScheduleLen is the hard upper bound on faults decoded from bytes.
+	MaxScheduleLen = 1024
+	// DefaultMaxFaults is used when Space.MaxFaults is non-positive.
 	DefaultMaxFaults = 64
 	faultBytes       = 8
 )
 
+// KindFault is the trace record tag emitted whenever ApplyFault runs.
 var KindFault = K("fault")
 
+// FaultKind identifies a fault type registered on a Sim by a world package.
 type FaultKind uint16
 
+// Fault is a single scheduled or applied fault injection entry.
 type Fault struct {
 	At     Time
 	Kind   FaultKind
@@ -46,6 +53,9 @@ func (r *faultRegistry) find(k FaultKind) (faultKind, bool) {
 	return faultKind{}, false
 }
 
+// RegisterFaultKind registers an apply callback for kind on this Sim. Keeping
+// fault kinds per-Sim instead of in a package global prevents the available
+// kind set from depending on which packages a binary happens to link.
 func (s *Sim) RegisterFaultKind(kind FaultKind, name string, apply func(Fault) error) error {
 	if _, ok := s.faults.find(kind); ok {
 		return fmt.Errorf("%w: fault kind %d", ErrDuplicateName, kind)
@@ -57,6 +67,7 @@ func (s *Sim) RegisterFaultKind(kind FaultKind, name string, apply func(Fault) e
 	return nil
 }
 
+// FaultKinds returns the registered fault kinds in ascending numeric order.
 func (s *Sim) FaultKinds() []FaultKind {
 	out := make([]FaultKind, 0, len(s.faults.kinds))
 	for _, fk := range s.faults.kinds {
@@ -66,6 +77,8 @@ func (s *Sim) FaultKinds() []FaultKind {
 	return out
 }
 
+// FaultKindName returns the registered name for kind, or "fault-<id>" if
+// unregistered.
 func (s *Sim) FaultKindName(kind FaultKind) string {
 	if fk, ok := s.faults.find(kind); ok {
 		return fk.name
@@ -80,14 +93,18 @@ type faultEvent struct {
 
 func (e *faultEvent) OnEvent(uint64) { e.s.ApplyFault(e.f) }
 
+// InjectAt schedules f to be applied at f.At (or Now if f.At is in the past).
 func (s *Sim) InjectAt(f Fault) Timer { return s.AtHandler(f.At, &faultEvent{s: s, f: f}, 0) }
 
+// InjectSchedule schedules every fault in sched at its respective At time.
 func (s *Sim) InjectSchedule(sched []Fault) {
 	for _, f := range sched {
 		s.InjectAt(f)
 	}
 }
 
+// ApplyFault immediately traces f at Now and dispatches it to its registered
+// handler. Unknown kinds and handler errors fail the simulation via FaultError.
 func (s *Sim) ApplyFault(f Fault) {
 	f.At = s.now
 	s.Trace(KindFault, int64(f.Kind), f.Target, f.Arg1, f.Arg2)
@@ -102,6 +119,9 @@ func (s *Sim) ApplyFault(f Fault) {
 	}
 }
 
+// Space defines the valid domain for ScheduleFromBytes: allowed fault kinds,
+// target count, virtual-time window [Start, Start+Window), argument maxima,
+// and maximum schedule length.
 type Space struct {
 	Kinds     []FaultKind
 	Targets   int64
@@ -112,6 +132,9 @@ type Space struct {
 	MaxFaults int
 }
 
+// ScheduleFromBytes decodes an arbitrary byte slice into a valid, bounded,
+// time-sorted fault schedule within sp. It is total: every byte slice decodes
+// without panicking, and an empty sp.Kinds returns nil.
 func ScheduleFromBytes(data []byte, sp Space) []Fault {
 	if len(sp.Kinds) == 0 {
 		return nil
@@ -153,6 +176,8 @@ func decodeFault(rec [faultBytes]byte, sp Space) Fault {
 	at := int64(rec[2])<<8 | int64(rec[3])
 	f.At = sp.Start
 	if sp.Window > 0 {
+		// Scale the 16-bit offset via 128-bit multiplication (at*Window >> 16)
+		// so Window can be as large as MaxTime without signed overflow.
 		hi, lo := bits.Mul64(uint64(at), uint64(sp.Window))
 		f.At = Later(sp.Start, time.Duration(hi<<48|lo>>16))
 	}
@@ -168,6 +193,10 @@ func boundedArg(v, max int64) int64 {
 	return v % (max + 1)
 }
 
+// Shrink repeatedly deletes single faults from a copy of sched while
+// stillFails holds, stopping only after a full pass removes nothing. The
+// returned schedule still fails and is 1-minimal even for non-monotone
+// predicates, and the caller's slice is never mutated.
 func Shrink(sched []Fault, stillFails func([]Fault) bool) []Fault {
 	cur := slices.Clone(sched)
 	for {

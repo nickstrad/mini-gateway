@@ -20,6 +20,8 @@ func blockedWriter(t *testing.T, w *world, o Options, wakes *int) *End {
 	return w.n.Dial("lazy", o, cli)
 }
 
+// Proves closing a receiver that discards already-buffered bytes delivers
+// EvWritable to a writer blocked on the full send window.
 func TestReceiverCloseWakesABlockedWriterWhenItDiscardsBufferedBytes(t *testing.T) {
 	w := newWorld(1)
 	w.n.Listen("lazy", func(e *End) { w.srv = append(w.srv, e) })
@@ -46,6 +48,8 @@ func TestReceiverCloseWakesABlockedWriterWhenItDiscardsBufferedBytes(t *testing.
 	}
 }
 
+// Proves bytes arriving after a receiver closed are discarded and deliver
+// EvWritable to a writer blocked on the full send window.
 func TestReceiverCloseWakesABlockedWriterWhenLaterArrivalsAreDiscarded(t *testing.T) {
 	w := newWorld(1)
 	w.n.Listen("lazy", func(e *End) {

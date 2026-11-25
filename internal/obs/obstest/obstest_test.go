@@ -23,6 +23,8 @@ type bad struct {
 	Out good
 }
 
+// Proves PlainProblems catches floats, maps, pointers, and time.Time, and
+// ZeroCounters/MergeMoved/NeverMoved accurately track unexercised counters.
 func TestPlainAndCounters(t *testing.T) {
 	RequirePlain(t, good{})
 	if p := PlainProblems(bad{}); len(p) != 4 {

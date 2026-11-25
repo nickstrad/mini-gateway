@@ -37,6 +37,8 @@ func checkSchedule(t *testing.T, data []byte, sp Space) []Fault {
 	return sched
 }
 
+// Fuzzes ScheduleFromBytes to prove every byte string deterministically decodes
+// to a valid, bounded, time-sorted schedule without panicking.
 func FuzzScheduleFromBytes(f *testing.F) {
 	f.Add([]byte{})
 	f.Add([]byte{1})
@@ -54,6 +56,8 @@ func FuzzScheduleFromBytes(f *testing.F) {
 	})
 }
 
+// Proves ScheduleFromBytes is total across random byte lengths and enforces
+// MaxScheduleLen even when Space.MaxFaults is larger.
 func TestScheduleFromBytesIsTotal(t *testing.T) {
 	r := NewStream(1, "bytes")
 	for i := 0; i < 2000; i++ {
@@ -68,6 +72,8 @@ func TestScheduleFromBytesIsTotal(t *testing.T) {
 	}
 }
 
+// Proves scheduled faults run at their timestamps, emit KindFault trace
+// records, reject duplicate registrations, and fail on unknown kinds.
 func TestFaultsAppliedAtTheirInstantsAndTraced(t *testing.T) {
 	s := New(Config{Seed: 1})
 	var seen []Fault
@@ -100,6 +106,8 @@ func TestFaultsAppliedAtTheirInstantsAndTraced(t *testing.T) {
 	}
 }
 
+// Proves Shrink returns a schedule that still satisfies the failure predicate
+// and from which no single fault can be deleted without losing the failure.
 func TestShrinkReturnsOneMinimalFailingSchedule(t *testing.T) {
 	for seed := int64(0); seed < 200; seed++ {
 		r := NewStream(seed, "shrink")

@@ -65,6 +65,8 @@ func fixed(lat time.Duration) Options {
 	return o
 }
 
+// Proves a client always receives EvConnected before EvReadable even when the
+// server writes immediately inside its accept callback.
 func TestConnectedPrecedesReadableEvenWhenServerWritesFirst(t *testing.T) {
 	o := DefaultOptions()
 	o.Down.Latency = Latency{Base: time.Millisecond, Jitter: 500 * time.Microsecond}
@@ -83,6 +85,8 @@ func TestConnectedPrecedesReadableEvenWhenServerWritesFirst(t *testing.T) {
 	}
 }
 
+// Proves accept occurs after up latency, EvConnected after up + down latency,
+// and subsequent down bytes arrive after down latency.
 func TestHandshakeTakesOneRoundTripOnTheVirtualClock(t *testing.T) {
 	w := newWorld(1)
 	o := DefaultOptions()
@@ -113,6 +117,8 @@ func TestHandshakeTakesOneRoundTripOnTheVirtualClock(t *testing.T) {
 	}
 }
 
+// Proves asymmetric latency, jitter, and random chunking repeat identically for
+// one seed and diverge across seeds.
 func TestAsymmetricLatencyAndJitterAreSeeded(t *testing.T) {
 	trace := func(seed int64) []sim.Record {
 		w := newWorld(seed)
@@ -144,6 +150,8 @@ func TestAsymmetricLatencyAndJitterAreSeeded(t *testing.T) {
 	}
 }
 
+// Proves ChunkRandom splits writes into multiple pieces while bounding each
+// write to at most MaxRandomPieces events.
 func TestRandomChunkingBoundsPieceCount(t *testing.T) {
 	w := newWorld(3)
 	o := DefaultOptions()
@@ -167,6 +175,8 @@ func TestRandomChunkingBoundsPieceCount(t *testing.T) {
 	}
 }
 
+// Proves state-error contracts for connecting, half-closed, and closed ends,
+// and that both sides closing finishes with ReasonGraceful.
 func TestWriteAfterCloseWriteAndReadAfterClose(t *testing.T) {
 	w := newWorld(1)
 	cli := &recorder{}
@@ -212,6 +222,8 @@ func TestWriteAfterCloseWriteAndReadAfterClose(t *testing.T) {
 	}
 }
 
+// Proves Close discards both buffered unread bytes and bytes arriving later
+// (counting them as Discarded, not Delivered) while still sending a FIN.
 func TestCloseDiscardsUnreadAndLaterArrivals(t *testing.T) {
 	w := newWorld(1)
 	cli := &recorder{onEv: func(e *End, ev Event) {
@@ -247,6 +259,8 @@ func TestCloseDiscardsUnreadAndLaterArrivals(t *testing.T) {
 	}
 }
 
+// Proves multiple 1-byte pieces arriving at the same instant coalesce into one
+// EvReadable notification.
 func TestNotificationsAreCoalescedPerEvent(t *testing.T) {
 	w := newWorld(1)
 	o := fixed(time.Millisecond)
@@ -272,6 +286,8 @@ func TestNotificationsAreCoalescedPerEvent(t *testing.T) {
 	}
 }
 
+// Proves WaitWritable arms a single EvWritable notification even when the
+// preceding write was not refused.
 func TestWaitWritableWakesTheWriter(t *testing.T) {
 	w := newWorld(1)
 	o := fixed(time.Millisecond)
@@ -297,6 +313,8 @@ func TestWaitWritableWakesTheWriter(t *testing.T) {
 	}
 }
 
+// Proves EvWritable never fires for a writer that neither hit a short write
+// nor called WaitWritable.
 func TestWritableNeverFiresForAWriterThatWasNotRefused(t *testing.T) {
 	w := newWorld(1)
 	wakes := 0
@@ -315,6 +333,8 @@ func TestWritableNeverFiresForAWriterThatWasNotRefused(t *testing.T) {
 	}
 }
 
+// Proves listener address uniqueness, closed-listener refusal, name reuse
+// after Close, and the MaxListeners cap.
 func TestListenErrorsAndClosedListener(t *testing.T) {
 	w := newWorld(1)
 	if _, err := w.n.Listen("srv", nil); !errors.Is(err, ErrAddrInUse) {
@@ -348,6 +368,8 @@ func TestListenErrorsAndClosedListener(t *testing.T) {
 	t.Fatal("no listener limit")
 }
 
+// Proves closing a client end after server accept but before EvConnected aborts
+// the dial and delivers EvReset to the server.
 func TestAbortOfAcceptedButUnconnectedDialResetsServer(t *testing.T) {
 	w := newWorld(1)
 	o := DefaultOptions()
@@ -373,6 +395,8 @@ func TestAbortOfAcceptedButUnconnectedDialResetsServer(t *testing.T) {
 	}
 }
 
+// Proves an injected FaultReset on an accepted-but-still-connecting dial
+// delivers EvReset to both ends and quiesces cleanly.
 func TestResetOfAnAcceptedConnectingDial(t *testing.T) {
 	w := newWorld(1)
 	o := DefaultOptions()
@@ -390,6 +414,8 @@ func TestResetOfAnAcceptedConnectingDial(t *testing.T) {
 	}
 }
 
+// Proves a single-direction FaultStall blocks only the masked pipe while the
+// reverse direction continues flowing, and FaultClear releases held bytes.
 func TestStallOneDirectionOnly(t *testing.T) {
 	w := newWorld(1)
 	cli := &recorder{onEv: func(e *End, ev Event) {
@@ -416,6 +442,8 @@ func TestStallOneDirectionOnly(t *testing.T) {
 	}
 }
 
+// Proves bytes held during a stall count against the send window so the writer
+// blocks at Window bytes and resumes cleanly once the stall ends.
 func TestStallFillsWindowThenWriterResumes(t *testing.T) {
 	pr := newPair(4, Options{Window: 100, Up: Direction{Latency: Latency{Base: time.Millisecond}}, Down: Direction{Latency: Latency{Base: time.Millisecond}}}, 1000, 0)
 	pr.srv.noFin = true
@@ -433,6 +461,8 @@ func TestStallFillsWindowThenWriterResumes(t *testing.T) {
 	}
 }
 
+// Proves FaultChunk overrides piece size in the masked direction only and
+// FaultClear restores the connection's original chunking mode.
 func TestChunkFaultOverridesAndClears(t *testing.T) {
 	w := newWorld(1)
 	var e *End
@@ -459,6 +489,9 @@ func TestChunkFaultOverridesAndClears(t *testing.T) {
 	}
 }
 
+// Proves FaultHalfOpen targeting the client end mirrors server half-open: the
+// server fills its window without notification, the gone client gets ErrGone,
+// and server Reset discards the held bytes with ReasonReset.
 func TestHalfOpenOfTheClientEnd(t *testing.T) {
 	w := newWorld(1)
 	cli := &recorder{}
@@ -491,6 +524,8 @@ func TestHalfOpenOfTheClientEnd(t *testing.T) {
 	}
 }
 
+// Proves bytes already written by an end before FaultHalfOpen still arrive at
+// the survivor with no EOF.
 func TestBytesAlreadyInFlightFromAGoneEndStillArrive(t *testing.T) {
 	w := newWorld(1)
 	cli := &recorder{}
@@ -504,6 +539,8 @@ func TestBytesAlreadyInFlightFromAGoneEndStillArrive(t *testing.T) {
 	}
 }
 
+// Proves every connection fault injected on connection 1 leaves trace records
+// and delivered bytes on connection 2 byte-identical to a control run.
 func TestFaultOnOneConnectionLeavesAnotherByteIdentical(t *testing.T) {
 	kinds := []sim.Fault{
 		{Kind: FaultReset},
@@ -559,6 +596,9 @@ func TestFaultOnOneConnectionLeavesAnotherByteIdentical(t *testing.T) {
 	}
 }
 
+// Proves injecting and clearing FaultStall, FaultChunk, and FaultRefuse before
+// traffic leaves StateDigest identical to a never-faulted run, while an
+// uncleared stall changes it.
 func TestStateDigestHasNoResidueAfterClear(t *testing.T) {
 	digest := func(faults ...sim.Fault) sim.Digest {
 		w := newWorld(2)
@@ -590,6 +630,8 @@ func TestStateDigestHasNoResidueAfterClear(t *testing.T) {
 	}
 }
 
+// Proves Snapshot obeys byte conservation at every event and is identical
+// across two runs with the same seed.
 func TestSnapshotIsDeterministicAndConserves(t *testing.T) {
 	snap := func(seed int64) string {
 		pr := newPair(seed, Options{Window: 333, Up: Direction{Chunking: ChunkRandom, Latency: Latency{Base: time.Millisecond, Jitter: time.Millisecond}}, Down: Direction{Chunking: ChunkFixed, ChunkSize: 2}}, 5000, 4000)
@@ -615,6 +657,8 @@ func TestSnapshotIsDeterministicAndConserves(t *testing.T) {
 	}
 }
 
+// Proves every Event and FaultKind has a non-empty name and unknown values
+// return their fallback markers.
 func TestEventNames(t *testing.T) {
 	for ev := EvConnected; ev <= EvReset; ev++ {
 		if ev.String() == "?" {
@@ -631,6 +675,8 @@ func TestEventNames(t *testing.T) {
 	}
 }
 
+// Proves Options.normalized clamps Window to [1, MaxWindow] (defaulting 0 to
+// DefaultWindow), ChunkSize to >= 1, and negative latencies to 0.
 func TestOptionsNormalize(t *testing.T) {
 	o := Options{Window: MaxWindow * 2, Up: Direction{ChunkSize: -1, Latency: Latency{Base: -5, Jitter: -1}}}.normalized()
 	if o.Window != MaxWindow || o.Up.ChunkSize != 1 || o.Up.Latency.Base != 0 || o.Up.Latency.Jitter != 0 {

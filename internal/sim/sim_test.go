@@ -22,6 +22,8 @@ type refEntry struct {
 	seq uint64
 }
 
+// Proves eventQueue matches a sorted-slice reference model across random push,
+// pop, and indexed remove sequences, keeping heap indices exact.
 func TestHeapMatchesSortedReference(t *testing.T) {
 	for seed := 0; seed < propSeeds(t); seed++ {
 		r := NewStream(int64(seed), "heap")
@@ -74,6 +76,8 @@ func TestHeapMatchesSortedReference(t *testing.T) {
 	}
 }
 
+// Proves thousands of timers fire in (deadline, creation) order and that
+// cancelled timers never fire and leave the heap.
 func TestTimersFireInDeadlineThenCreationOrder(t *testing.T) {
 	for seed := 0; seed < propSeeds(t); seed++ {
 		s := New(Config{Seed: int64(seed)})
@@ -125,6 +129,8 @@ func TestTimersFireInDeadlineThenCreationOrder(t *testing.T) {
 	}
 }
 
+// Proves events scheduled at the same instant, including zero-delay follow-up
+// events scheduled during callbacks, run strictly in scheduling sequence order.
 func TestSameInstantRunsInSequenceOrder(t *testing.T) {
 	s := New(Config{Seed: 1})
 	var got []int
@@ -152,6 +158,8 @@ func TestSameInstantRunsInSequenceOrder(t *testing.T) {
 	}
 }
 
+// Proves Later, Sub, Scaled, and After saturate at MinTime/MaxTime rather than
+// wrapping on signed 64-bit overflow.
 func TestTimeSaturates(t *testing.T) {
 	if Later(MaxTime-5, 10) != MaxTime || Later(MinTime+5, -10) != MinTime {
 		t.Fatal("Later wrapped")
@@ -183,6 +191,8 @@ func TestTimeSaturates(t *testing.T) {
 	}
 }
 
+// Proves extra draws on one named stream leave another stream's sequence
+// unchanged and distinct labels diverge.
 func TestStreamIsolation(t *testing.T) {
 	for seed := int64(0); seed < 50; seed++ {
 		b1 := NewStream(seed, "b")
@@ -208,6 +218,8 @@ func TestStreamIsolation(t *testing.T) {
 	}
 }
 
+// Proves both livelock guards (ErrBudgetExhausted and ErrTimeFrozen) stop the
+// loop with a sticky StallError carrying the REPLAY line.
 func TestStepBudgetTurnsLivelockIntoStall(t *testing.T) {
 	s := New(Config{Seed: 9, Scenario: "livelock", MaxSteps: 1000})
 	var tick func()
@@ -238,6 +250,8 @@ func TestStepBudgetTurnsLivelockIntoStall(t *testing.T) {
 	}
 }
 
+// Proves panics inside event callbacks and invariants are recovered into a
+// sticky PanicError carrying the seed, time, and REPLAY line.
 func TestPanicBecomesTypedFailure(t *testing.T) {
 	s := New(Config{Seed: 77, Replay: "REPLAY: custom"})
 	s.After(5, func() {
@@ -265,6 +279,8 @@ func TestPanicBecomesTypedFailure(t *testing.T) {
 	}
 }
 
+// Proves invariants run after every step, sampled invariants run at their
+// cadence, and the first violation stops the loop with an InvariantError.
 func TestInvariantsCheckedAfterEveryEventAndSampled(t *testing.T) {
 	s := New(Config{Seed: 1})
 	x := 0
@@ -290,6 +306,8 @@ func TestInvariantsCheckedAfterEveryEventAndSampled(t *testing.T) {
 	}
 }
 
+// Proves CheckQuiesce ignores background timers while catching leaked
+// foreground timers and failing registered actor quiesce checks.
 func TestQuiesceCatchesLeakedTimerButNotBackground(t *testing.T) {
 	s := New(Config{Seed: 1})
 	bg := s.After(time.Hour, func() {})
@@ -342,6 +360,9 @@ func runTraceToy(seed int64, traceOff bool) *Sim {
 	return s
 }
 
+// Proves replay determinism of both digests, divergence across seeds,
+// invariance of StateDigest with TraceOff, tail ring retention, and duplicate
+// state registration rejection.
 func TestTraceDigestsAndRing(t *testing.T) {
 	a, b := runTraceToy(5, false), runTraceToy(5, false)
 	if a.Digests() != b.Digests() {
@@ -379,6 +400,8 @@ func TestTraceDigestsAndRing(t *testing.T) {
 	}
 }
 
+// Proves RunUntil and RunFor advance virtual time to the target instant and
+// that past-scheduled events clamp to Now.
 func TestRunUntilAdvancesClock(t *testing.T) {
 	s := New(Config{Seed: 1})
 	ran := 0
@@ -398,6 +421,7 @@ func TestRunUntilAdvancesClock(t *testing.T) {
 	_ = s.RunUntilQuiet()
 }
 
+// Proves exceeding MaxEvents fails the run with ErrHeapFull.
 func TestHeapFullIsTypedFailure(t *testing.T) {
 	s := New(Config{Seed: 1, MaxEvents: 10})
 	for i := 0; i < 11; i++ {
@@ -408,6 +432,8 @@ func TestHeapFullIsTypedFailure(t *testing.T) {
 	}
 }
 
+// Proves 20,000 timers can be scheduled and half cancelled with real heap
+// removal so only the remaining half fire.
 func TestThousandsOfTimers(t *testing.T) {
 	s := New(Config{Seed: 1})
 	n := 20000
@@ -429,6 +455,8 @@ func TestThousandsOfTimers(t *testing.T) {
 	}
 }
 
+// Proves every field of Snapshot moves in a run and satisfies
+// Scheduled == Fired + Cancelled + HeapLen.
 func TestKernelSnapshotCountersMove(t *testing.T) {
 	s := New(Config{Seed: 1})
 	_ = s.RegisterFaultKind(1, "noop", func(Fault) error { return nil })
@@ -469,6 +497,8 @@ func TestKernelSnapshotCountersMove(t *testing.T) {
 	}
 }
 
+// Proves zero-value, idempotent MarkBackground, cancelled, and already-fired
+// Timer handles behave cleanly without double-counting background timers.
 func TestTimerHandleSemantics(t *testing.T) {
 	s := New(Config{Seed: 1})
 	var zero Timer
@@ -495,6 +525,8 @@ func TestTimerHandleSemantics(t *testing.T) {
 	}
 }
 
+// Proves RunUntilQuiet runs repeating background ticks while foreground work
+// exists and stops as soon as only background timers remain.
 func TestRunUntilQuietIgnoresOnlyBackground(t *testing.T) {
 	s := New(Config{Seed: 1})
 	ticks := 0
@@ -523,6 +555,8 @@ type countHandler struct {
 
 func (h *countHandler) OnEvent(code uint64) { h.codes = append(h.codes, code) }
 
+// Proves AtHandler and AfterHandler deliver their opaque codes in time order
+// and respect Timer.Cancel.
 func TestHandlerEventsCarryTheirCode(t *testing.T) {
 	s := New(Config{Seed: 1})
 	h := &countHandler{}
@@ -535,6 +569,8 @@ func TestHandlerEventsCarryTheirCode(t *testing.T) {
 	}
 }
 
+// Proves the first error recorded by Fail is sticky and halts Step, RunUntil,
+// Verify, and CheckInvariants without advancing the clock.
 func TestFailIsStickyAndFirstWins(t *testing.T) {
 	s := New(Config{Seed: 1})
 	first := errors.New("first")
@@ -555,6 +591,8 @@ func TestFailIsStickyAndFirstWins(t *testing.T) {
 	}
 }
 
+// Proves DefaultReplay formats both named and unnamed scenarios and SetReplay
+// overrides the stored line.
 func TestReplayLines(t *testing.T) {
 	if got := DefaultReplay("echo", -3); got != "REPLAY: go run ./cmd/mgsim run echo -seed -3" {
 		t.Fatal(got)
@@ -569,6 +607,8 @@ func TestReplayLines(t *testing.T) {
 	}
 }
 
+// Proves invariant and fault-kind registries reject entries past their caps
+// with ErrRegistryFull.
 func TestRegistriesAreBounded(t *testing.T) {
 	s := New(Config{Seed: 1})
 	var err error
@@ -588,6 +628,8 @@ func TestRegistriesAreBounded(t *testing.T) {
 	}
 }
 
+// Proves an error returned by a fault handler fails the run with a FaultError
+// wrapping the original cause.
 func TestFaultApplyErrorFailsTheRun(t *testing.T) {
 	s := New(Config{Seed: 1})
 	bad := errors.New("cannot apply")
@@ -603,6 +645,7 @@ func TestFaultApplyErrorFailsTheRun(t *testing.T) {
 	}
 }
 
+// Proves Kind truncation and string formatting for Record, Digests, and Time.
 func TestKindAndRecordFormatting(t *testing.T) {
 	if K("abcdefghijk").String() != "abcdefgh" || K("").String() != "" {
 		t.Fatal("kind truncation")
@@ -620,6 +663,8 @@ func TestKindAndRecordFormatting(t *testing.T) {
 	}
 }
 
+// Proves the trace ring retains the exact last N records in order across wraps
+// and caps capacity at MaxTraceRing.
 func TestTraceRingKeepsTheLastRecordsInOrder(t *testing.T) {
 	for _, ring := range []int{1, 3, 8, 100} {
 		s := New(Config{Seed: 1, TraceRing: ring})
@@ -646,6 +691,7 @@ func TestTraceRingKeepsTheLastRecordsInOrder(t *testing.T) {
 	}
 }
 
+// Proves every field of Record contributes to TraceDigest.
 func TestTraceDigestCoversEveryField(t *testing.T) {
 	base := Record{At: 1, Kind: K("k"), A: 2, B: 3, C: 4, D: 5}
 	digest := func(r Record) Digest {
@@ -676,6 +722,7 @@ func TestTraceDigestCoversEveryField(t *testing.T) {
 	}
 }
 
+// Proves StateDigest is a deterministic function of writers in registration order.
 func TestStateDigestFollowsRegistrationOrder(t *testing.T) {
 	mk := func(order []string) Digest {
 		s := New(Config{Seed: 1})
@@ -693,6 +740,8 @@ func TestStateDigestFollowsRegistrationOrder(t *testing.T) {
 	}
 }
 
+// Proves Shrink handles empty, always-failing, and irreducible schedules
+// without mutating the caller's slice.
 func TestShrinkEdgeCases(t *testing.T) {
 	if out := Shrink(nil, func([]Fault) bool { return true }); len(out) != 0 {
 		t.Fatal("empty")
@@ -708,6 +757,8 @@ func TestShrinkEdgeCases(t *testing.T) {
 	}
 }
 
+// Proves ScheduleFromBytes scales timestamps across [Start, Start+Window)
+// without overflow, reduces targets and arguments, and sorts stably by time.
 func TestScheduleWindowAndArguments(t *testing.T) {
 	sp := Space{Kinds: []FaultKind{4}, Targets: 3, Start: 1000, Window: 65536, MaxArg1: 255, MaxArg2: 0}
 	sched := ScheduleFromBytes([]byte{0, 5, 0xff, 0xff, 0, 7, 9, 9, 0, 1, 0, 0, 1, 0}, sp)
@@ -733,6 +784,8 @@ type modelTimer struct {
 	fired     bool
 }
 
+// Proves Sim scheduling, cancellation, RunUntil, and PendingTimers agree with
+// a simple slice reference model over random operation sequences.
 func TestLoopAgainstReferenceModel(t *testing.T) {
 	for seed := int64(0); seed < int64(propSeeds(t)); seed++ {
 		s := New(Config{Seed: seed})
@@ -802,6 +855,8 @@ func TestLoopAgainstReferenceModel(t *testing.T) {
 	}
 }
 
+// Proves AddDurations saturates at math.MinInt64 and math.MaxInt64 instead of
+// wrapping signed 64-bit sums.
 func TestAddDurationsSaturates(t *testing.T) {
 	cases := []struct{ a, b, want time.Duration }{
 		{math.MaxInt64, 1, math.MaxInt64},
@@ -819,6 +874,8 @@ func TestAddDurationsSaturates(t *testing.T) {
 	}
 }
 
+// Proves TraceTail and LogTail return empty slices for zero or negative n
+// rather than panicking on slice allocation.
 func TestTraceTailOfZeroOrNegativeIsEmpty(t *testing.T) {
 	s := New(Config{Seed: 1})
 	s.Trace(K("toy.add"), 1, 2, 3, 4)
@@ -829,6 +886,8 @@ func TestTraceTailOfZeroOrNegativeIsEmpty(t *testing.T) {
 	}
 }
 
+// Proves MaxSameInstant allows the exact same number of same-instant events at
+// t == 0 and at t > 0 before tripping ErrTimeFrozen.
 func TestMaxSameInstantIsTheSameBoundAtZeroAndLater(t *testing.T) {
 	for _, start := range []Time{0, 3} {
 		f := New(Config{Seed: 9, MaxSameInstant: 5})
@@ -850,6 +909,8 @@ func TestMaxSameInstantIsTheSameBoundAtZeroAndLater(t *testing.T) {
 	}
 }
 
+// Proves RunUntil resets the same-instant counter when it advances the clock
+// past the last fired event so the next instant gets its full budget.
 func TestMaxSameInstantRestartsWhenRunUntilMovesTheClock(t *testing.T) {
 	f := New(Config{Seed: 9, MaxSameInstant: 5})
 	ran := 0

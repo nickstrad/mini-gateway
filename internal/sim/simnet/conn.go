@@ -15,6 +15,8 @@ const (
 	up     = 0
 	down   = 1
 
+	// Delivery event codes pack a 32-bit epoch in the upper half and either
+	// finBit or a byte length (<= MaxWindow < 2^31) in the lower half.
 	finBit   = 1 << 31
 	sizeMask = finBit - 1
 )
@@ -31,6 +33,8 @@ const (
 	stSilent
 )
 
+// Conn represents one simulated connection consisting of a client End, a
+// server End, and two unidirectional pipes (up and down).
 type Conn struct {
 	net         *Net
 	id          int64
@@ -45,10 +49,19 @@ type Conn struct {
 	reason      CloseReason
 }
 
-func (c *Conn) ID() int64           { return c.id }
-func (c *Conn) Client() *End        { return &c.ends[client] }
-func (c *Conn) Server() *End        { return &c.ends[server] }
-func (c *Conn) Done() bool          { return c.done }
+// ID returns the connection's 1-based identifier, also used as Fault.Target.
+func (c *Conn) ID() int64 { return c.id }
+
+// Client returns the dialing endpoint of the connection.
+func (c *Conn) Client() *End { return &c.ends[client] }
+
+// Server returns the accepted endpoint of the connection.
+func (c *Conn) Server() *End { return &c.ends[server] }
+
+// Done reports whether the connection has reached a terminal closed state.
+func (c *Conn) Done() bool { return c.done }
+
+// Reason returns why the connection closed, or ReasonNone if still active.
 func (c *Conn) Reason() CloseReason { return c.reason }
 
 type notifier struct {
@@ -67,6 +80,7 @@ func (n *notifier) OnEvent(code uint64) {
 	e.h.OnEvent(e, ev)
 }
 
+// End is one side (client or server) of a simulated Conn.
 type End struct {
 	c          *Conn
 	side       int
@@ -76,9 +90,16 @@ type End struct {
 	note       notifier
 }
 
-func (e *End) ID() int64            { return e.c.id }
-func (e *End) Conn() *Conn          { return e.c }
-func (e *End) IsClient() bool       { return e.side == client }
+// ID returns the owning connection's 1-based ID.
+func (e *End) ID() int64 { return e.c.id }
+
+// Conn returns the owning connection.
+func (e *End) Conn() *Conn { return e.c }
+
+// IsClient reports whether e is the dialing side of the connection.
+func (e *End) IsClient() bool { return e.side == client }
+
+// SetHandler installs or replaces the Handler that receives events for e.
 func (e *End) SetHandler(h Handler) { e.h = h }
 
 func (e *End) in() *pipe {
@@ -110,6 +131,7 @@ func (e *End) deliverable(ev Event) bool {
 }
 
 func (e *End) notify(ev Event) {
+	// Coalesce duplicate notifications of the same event kind already queued.
 	if e.note.pending[ev] || e.state == stGone || e.state == stSilent {
 		return
 	}
@@ -133,21 +155,30 @@ func (e *End) err() error {
 	return nil
 }
 
+// Buffered returns the number of delivered incoming bytes currently ready to Read.
 func (e *End) Buffered() int { return e.in().ready }
 
+// Window returns the configured send window capacity in bytes for outgoing writes.
 func (e *End) Window() int { return e.out().window }
 
+// Space returns how many additional bytes Write can currently accept before
+// filling the outgoing send window.
 func (e *End) Space() int {
 	p := e.out()
 	return p.window - len(p.buf)
 }
 
+// WaitWritable arms a single EvWritable notification once outgoing window space
+// is freed by the peer consuming or discarding bytes.
 func (e *End) WaitWritable() {
 	if e.state == stOpen {
 		e.out().blocked = true
 	}
 }
 
+// Read copies up to len(b) delivered bytes from the incoming pipe. It returns
+// (0, nil) when no bytes are ready yet and (0, io.EOF) once the peer's FIN has
+// arrived and all preceding bytes have been read.
 func (e *End) Read(b []byte) (int, error) {
 	if err := e.err(); err != nil {
 		return 0, err
@@ -167,6 +198,9 @@ func (e *End) Read(b []byte) (int, error) {
 	return n, nil
 }
 
+// Write copies up to Space() bytes of b into the outgoing pipe and schedules
+// their chunked arrival on the virtual clock. A short write (including 0)
+// counts as a refused write and arms EvWritable.
 func (e *End) Write(b []byte) (int, error) {
 	if err := e.err(); err != nil {
 		return 0, err
@@ -178,6 +212,8 @@ func (e *End) Write(b []byte) (int, error) {
 	return p.write(b), nil
 }
 
+// CloseWrite half-closes the outgoing pipe by queuing a FIN behind any pending
+// bytes; e can continue reading until Close or Reset.
 func (e *End) CloseWrite() error {
 	if err := e.err(); err != nil {
 		return err
@@ -186,6 +222,9 @@ func (e *End) CloseWrite() error {
 	return nil
 }
 
+// Close sends a FIN if not yet sent, stops reading, discards any buffered or
+// future incoming bytes, and finishes the connection once both sides are done.
+// Calling Close on a connecting client end aborts the dial.
 func (e *End) Close() error {
 	switch e.state {
 	case stConnecting:
@@ -199,12 +238,16 @@ func (e *End) Close() error {
 	e.readClosed = true
 	e.state = stClosed
 	e.in().discardAll()
+	// Discarding buffered bytes frees the peer's send window; wake a blocked writer
+	// before advancing the epoch so it does not hang with an empty pipe.
 	e.in().unblock()
 	e.in().epoch++
 	e.c.maybeFinish()
 	return nil
 }
 
+// Reset tears down the connection immediately, discarding all bytes in flight
+// in both directions and notifying only the peer with EvReset.
 func (e *End) Reset() error {
 	switch e.state {
 	case stConnecting:
@@ -262,6 +305,8 @@ func (c *Conn) connected() {
 	cl.state = stOpen
 	c.net.s.Trace(kindConnect, c.id, 0, 0, 0)
 	cl.notify(EvConnected)
+	// If the server wrote immediately on accept, queue EvReadable right after
+	// EvConnected so the client never observes bytes before learning it connected.
 	p := cl.in()
 	if p.ready > 0 || p.finReady {
 		cl.notify(EvReadable)
@@ -296,6 +341,8 @@ func (c *Conn) reset(by int) {
 	}
 	c.finish(ReasonReset)
 	c.net.s.Trace(kindReset, c.id, int64(by), 0, 0)
+	// Notify client before server so injected resets (by == -1) have a fixed,
+	// deterministic notification order at the fault instant.
 	for side := client; side <= server; side++ {
 		e := &c.ends[side]
 		if e.state != stOpen {
@@ -340,11 +387,13 @@ func (c *Conn) finish(reason CloseReason) {
 }
 
 type pipe struct {
-	c         *Conn
-	dir       int
-	opts      Direction
-	window    int
-	rng       *rand.Rand
+	c      *Conn
+	dir    int
+	opts   Direction
+	window int
+	rng    *rand.Rand
+	// buf holds all in-flight bytes in FIFO order: buf[:ready] are delivered
+	// and unread; the remainder are either held by a stall or still travelling.
 	buf       []byte
 	ready     int
 	held      int
@@ -390,6 +439,7 @@ func (p *pipe) delay() time.Duration {
 }
 
 func (p *pipe) jitter(bound time.Duration) time.Duration {
+	// Int64N(bound+1) would overflow and panic when bound == math.MaxInt64.
 	if bound == math.MaxInt64 {
 		return time.Duration(p.rng.Int64())
 	}
@@ -397,6 +447,8 @@ func (p *pipe) jitter(bound time.Duration) time.Duration {
 }
 
 func (p *pipe) arrival() sim.Time {
+	// Clamp to lastAt so random jitter can delay a later piece but never
+	// reorder it ahead of an earlier piece on the same byte stream.
 	at := p.c.net.s.Now().Add(p.delay())
 	if at < p.lastAt {
 		at = p.lastAt
@@ -454,6 +506,7 @@ func (p *pipe) sendFin() {
 }
 
 func (p *pipe) OnEvent(code uint64) {
+	// Drop stale delivery events scheduled before a Close or Reset bumped epoch.
 	if code>>32 != p.epoch || p.c.done {
 		return
 	}

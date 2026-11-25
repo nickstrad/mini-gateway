@@ -13,6 +13,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim"
 )
 
+// Proves PinnedSeeds returns nil when seeds.txt is absent, strips comments and
+// annotations, and rejects malformed lines.
 func TestPinnedSeedsParse(t *testing.T) {
 	dir := t.TempDir()
 	if s, err := PinnedSeeds(dir); err != nil || s != nil {
@@ -28,6 +30,8 @@ func TestPinnedSeedsParse(t *testing.T) {
 	}
 }
 
+// Proves Seeds reads DST_SEEDS and DST_SEED_BASE and lets DST_SEED override
+// the sweep to a single seed.
 func TestSeedsFromEnvironment(t *testing.T) {
 	if _, ok, _ := Seed(); ok {
 		t.Skip("an explicit seed is set")
@@ -55,6 +59,8 @@ func run(seed int64) *sim.Sim {
 	return s
 }
 
+// Proves CheckDeterministic accepts repeatable runs and returns
+// ErrNondeterministic when two runs of one seed diverge.
 func TestCheckDeterministic(t *testing.T) {
 	if _, err := CheckDeterministic(3, run); err != nil {
 		t.Fatal(err)
@@ -70,6 +76,8 @@ func TestCheckDeterministic(t *testing.T) {
 	RequireDeterministic(t, 5, run)
 }
 
+// Proves ReplayCommand and RunPattern produce an exact, anchored go test
+// reproduction command.
 func TestReplayCommand(t *testing.T) {
 	got := ReplayCommand(t, 42)
 	want := "REPLAY: go test ./internal/sim/simtest -run '^TestReplayCommand$' -seed=42 -count=1"
@@ -84,6 +92,8 @@ func TestReplayCommand(t *testing.T) {
 	}
 }
 
+// Proves Seeds places pinned seeds first, deduplicates overlaps with the swept
+// range, and Sweep runs each seed as a subtest.
 func TestSeedsDeduplicatePinnedAndSwept(t *testing.T) {
 	if _, ok, _ := Seed(); ok {
 		t.Skip("an explicit seed is set")
@@ -104,6 +114,7 @@ func TestSeedsDeduplicatePinnedAndSwept(t *testing.T) {
 	}
 }
 
+// Proves the custom -seed flag value parses signed integers and rejects invalid strings.
 func TestSeedFlagParsing(t *testing.T) {
 	var v seedValue
 	if v.String() != "" || v.Set("x") == nil {
@@ -129,6 +140,8 @@ func (f *fakeTB) Name() string            { return f.name }
 func (f *fakeTB) Log(args ...any)         { f.logs = append(f.logs, fmt.Sprint(args...)) }
 func (f *fakeTB) Logf(s string, a ...any) { f.logs = append(f.logs, fmt.Sprintf(s, a...)) }
 
+// Proves Report prints seed, error, trace tail, artifact path, PIN line, and
+// ends with the REPLAY command, while ignoring a nil simulator.
 func TestReportPrintsTailPinAndReplay(t *testing.T) {
 	s := run(11)
 	s.Fail(errors.New("boom"))
