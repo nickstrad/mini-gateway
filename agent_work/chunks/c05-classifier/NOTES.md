@@ -16,7 +16,7 @@ Durable facts for later builders: `docs/knowledge/classifier.md`.
 | Reply builders, the discard-until-Sync helper | `internal/pgwire/reply.go` |
 | Generated documents | `docs/error-contract.md` (from `errors_doc.go`), `docs/reject-list.md` (from `rejectlist_doc.go`) |
 | Generator | `scripts/gen-docs.sh` (driver), `scripts/gen-docs.d/c05-contracts.sh` (this chunk's part) |
-| Corpus | `internal/pgwire/testdata/classifier-corpus.txt` (504 records: 159 rejected, 345 forwarded, 150 read-only-provable, 127 coalescable) |
+| Corpus | `internal/pgwire/testdata/classifier-corpus.txt` (527 records: 178 rejected, 349 forwarded, 154 read-only-provable, 128 coalescable) |
 | Golden reply bytes | `internal/pgwire/testdata/reply-golden.txt` |
 | CSV-flush assertions (SQL, run once chunk 3's runner and chunk 6's flush exist) | `test/analysis/c05-reject-list/rejects-equal-sent.sql`, `fakepg-statements-zero.sql` |
 | Gate extra (G10) | `agent_work/chunks/c05-classifier/gate/extra.sh` |
@@ -103,7 +103,7 @@ Leading keyword (after an `EXPLAIN [ ( … ) ] [ANALYZE|ANALYSE|VERBOSE]…` pre
 | Leading form | Result |
 | --- | --- |
 | `SET LOCAL …`, `SET TRANSACTION …`, `SET CONSTRAINTS …` | **allowed** (transaction-scoped) |
-| `SET local.x …`, `SET transaction.x …`, `SET constraints.x …`, `SET local = …`, `SET local TO …`, a bare `SET LOCAL` | **rejected, session-set** (tier R shows `SET local.x = 1` sets a session-level custom setting) |
+| `SET local.x …`, `SET transaction.x …`, `SET constraints.x …`, `SET local = …`, `SET local TO …`, a bare `SET LOCAL`, `SET LOCAL NAMES …`, `SET TRANSACTION NAMES …` | **rejected, session-set** (tier R shows `SET local.x = 1` sets a session-level custom setting) |
 | every other `SET …`: `SET name`, `SET SESSION …`, `SET SESSION CHARACTERISTICS AS TRANSACTION …`, `SET ROLE`, `SET SESSION AUTHORIZATION`, `SET TIME ZONE`, `SET NAMES`, `SET SCHEMA`, `SET XML OPTION`, `SET "local" …` | **rejected, session-set** |
 | `RESET …` | rejected, reset |
 | `PREPARE TRANSACTION` | rejected, two-phase |
@@ -123,8 +123,9 @@ Anywhere in a statement:
 | any name (unquoted folded, quoted, or decoded `U&"…"` with `UESCAPE`) equal to `pg_temp` or starting `pg_temp_` | temp-object |
 | `EXECUTE` right after `AS` (`CREATE TABLE … AS EXECUTE`) | execute |
 | a name followed by `(` (whitespace and comments between allowed; any schema; quoted or `U&`) equal to `pg_advisory_lock`, `pg_advisory_lock_shared`, `pg_try_advisory_lock`, `pg_try_advisory_lock_shared`, `pg_advisory_unlock`, `pg_advisory_unlock_shared`, `pg_advisory_unlock_all` | advisory-lock (the four `_xact_` functions are allowed) |
-| a name `set_config` followed by `(` whose third top-level argument is not exactly the bare word `TRUE` (any case), including a missing third argument or an unclosed call | set-config |
+| a name `set_config` followed by `(` whose third top-level argument is not exactly the bare word `TRUE` (any case), including a missing third argument or an unclosed call; or whose first argument is not exactly one plain `'…'` string literal; or whose first argument names `standard_conforming_strings` or `client_encoding` (case-insensitively) | set-config (a setting name the classifier cannot read might be a lexing setting) |
 | a name `pg_settings` in a statement that contains the word `UPDATE` | session-set (`UPDATE pg_settings SET setting = …` is `SET` in disguise; tier R canary) |
+| a name equal (ASCII case-insensitively) to `standard_conforming_strings` or `client_encoding` in a statement that contains the word `SET` or `RESET` — `SET LOCAL` and `ALTER ROLE/DATABASE/SYSTEM … SET` included | session-set: both settings change how Postgres lexes the statements that follow, so a transaction-local change would let a later statement hide a `SET` inside what this lexer reads as a string (tier R canary: after `SET LOCAL standard_conforming_strings = off`, `SELECT '\' ; SELECT ' ; SET search_path = hidden ; --'` sets `search_path` on Postgres 17 while the lexer sees only strings) |
 
 A message is rejected as a whole when any of its statements is rejected; the first reason
 found is reported.
@@ -283,8 +284,8 @@ nested `set_config`, Unicode identifiers, …): 64 bytes per input byte
 
 | # | Claim | Tests (file: function) |
 | --- | --- | --- |
-| 1 | No statement containing a reject-list feature is forwardable, however spelled, cased, commented or padded (lexer limits stated) | `classify_test.go: TestClassifierCorpus` (159 rejected records: case, comments, whitespace, multi-statement, quoted, schema-qualified, `U&` with `UESCAPE`, comment between name and `(`, invalid UTF-8 around them, `SET local.x`, `UPDATE pg_settings`), `TestClassifierGeneratedStatements` (a reject at the end of a 450 KB message, after a NUL byte, after invalid UTF-8), `TestClassifierPaddingAndCaseProperty`; `rejectlist_test.go: TestRejectRulesExamplesClassifyAsDocumented`; tier R `classify_tierr_test.go: TestTierRClassifierDifferential` (every forwarded corpus statement leaves the session state — session-sourced settings changed from their reset value, own advisory locks, prepared statements, cursors, LISTEN channels, temp relations, current and session user — unchanged on Postgres 17; oracle canaries show the oracle sees 11 rejected forms, and that `SET local.x`, `SET transaction.y`, `SET constraints.z` are session settings) |
-| 2 | Nothing that can write, lock or call a non-allow-listed function is read-only-provable; nothing outside D10 is coalescable | `TestClassifierCorpus` (data-changing CTEs at any depth, locking clauses, `SELECT … INTO`, `EXPLAIN ANALYZE`, sequences, unknown, schema-qualified, quoted and attribute-notation calls, parameters, odd operators), `TestClassifierInvariantsOverMutants`, `FuzzClassify` (coalescable ⇒ read-only, one statement, outside a transaction); tier R `TestTierRClassifierDifferential` (each of the 150 read-only-provable records that Postgres accepts leaves the tables, sequence, large objects and prepared transactions unchanged and runs inside `BEGIN READ ONLY`; oracle canaries: 5 writing statements are caught); `classify_obs_test.go: TestClassifierReadOnlyCorpusLeavesTheFakeUnchanged` (every read-only record against the fake: write log empty, table unchanged) |
+| 1 | No statement containing a reject-list feature is forwardable, however spelled, cased, commented or padded (lexer limits stated) | `classify_test.go: TestClassifierCorpus` (159 rejected records: case, comments, whitespace, multi-statement, quoted, schema-qualified, `U&` with `UESCAPE`, comment between name and `(`, invalid UTF-8 around them, `SET local.x`, `UPDATE pg_settings`, `SET LOCAL standard_conforming_strings`, `SET LOCAL NAMES`, `set_config` with an unreadable name), `TestClassifierGeneratedStatements` (a reject at the end of a 450 KB message, after a NUL byte, after invalid UTF-8), `TestClassifierPaddingAndCaseProperty`; `rejectlist_test.go: TestRejectRulesExamplesClassifyAsDocumented`; tier R `classify_tierr_test.go: TestTierRClassifierDifferential` (every forwarded corpus statement leaves the session state — session-sourced settings changed from their reset value, own advisory locks, prepared statements, cursors, LISTEN channels, temp relations, current and session user — unchanged on Postgres 17; oracle canaries show the oracle sees 12 rejected forms, that `SET local.x`, `SET transaction.y`, `SET constraints.z` are session settings, and that a transaction-local `standard_conforming_strings = off` lets a later statement hide a `SET` from this lexer — the reason that setting is rejected) |
+| 2 | Nothing that can write, lock or call a non-allow-listed function is read-only-provable; nothing outside D10 is coalescable | `TestClassifierCorpus` (data-changing CTEs at any depth, locking clauses, `SELECT … INTO`, `EXPLAIN ANALYZE`, sequences, unknown, schema-qualified, quoted and attribute-notation calls, parameters, odd operators), `TestClassifierInvariantsOverMutants`, `FuzzClassify` (coalescable ⇒ read-only, one statement, outside a transaction); tier R `TestTierRClassifierDifferential` (each of the read-only-provable records that Postgres accepts leaves the tables, sequence, large objects and prepared transactions unchanged and runs inside `BEGIN READ ONLY`; oracle canaries: 5 writing statements are caught); `classify_obs_test.go: TestClassifierReadOnlyCorpusLeavesTheFakeUnchanged` (every read-only record against the fake: write log empty, table unchanged) |
 | 3 | Anything the lexer cannot fully tokenise is forwarded, never shared, never read-only (see Deviations for the precise form) | corpus records flagged `bad`; `TestClassifierConservativeWhenUntokenisable` (≥ 1,000 mutated corpus entries the lexer cannot tokenise: never read-only, never coalescable, no key; forwarded as opaque with `Tx` unknown unless a reject-list feature was found); `FuzzClassify` |
 | 4 | Classification does not depend on whitespace, comments between tokens, or keyword case | `TestClassifierPaddingAndCaseProperty` (6 seeds × every corpus record: random whitespace incl. `\f \v \r\n`, block, nested and line comments — some containing `;` and `SET` — between every pair of tokens, and random case of every word) |
 | 5 | No panic, bounded memory on any byte string | `FuzzLex`, `FuzzClassify` (gate: 20 s each), `TestClassifierMemoryIsBounded`, `TestClassifierGeneratedStatements` (20,000 nested parentheses, 5,000 nested `set_config`, 20,000 statements) |
@@ -335,9 +336,10 @@ ones. It then checks, per corpus record that is not rejected and not `noexec`: t
 session-state oracle; for "leaves no transaction open" records, the final status `I`; for
 read-only-provable records, success, unchanged checksum (tables, sequence, relation count,
 large objects, prepared transactions) and success inside `BEGIN READ ONLY`. Last run
-(2026-11-25, Postgres 17): 332 forwarded statements left the session state unchanged; 295
-"no transaction left open" statements ended with `I`; 146 read-only-provable statements
-passed both oracles; plus the oracle canaries.
+(2026-11-25, Postgres 17): 347 forwarded statements left the session state unchanged; 300
+"no transaction left open" statements ended with `I`; 151 read-only-provable statements
+passed both oracles; 180 records not run (rejected, or `noexec`); plus the oracle canaries.
+About 80 s.
 
 Excluded (`noexec`): the three records with invalid UTF-8 (two read-only ones, one
 coalescable read): Postgres refuses invalid UTF-8 before parsing, so they cannot succeed
@@ -386,9 +388,18 @@ pattern matching, not a SQL parser.
 4. **Identifier case folding is ASCII only**, as Postgres does for multibyte encodings:
    `A–Z` fold, every byte ≥ 0x80 is an identifier byte and is compared exactly. Names are
    compared after truncation to 63 bytes (Postgres's `NAMEDATALEN - 1`).
-5. **`standard_conforming_strings` is assumed on** (the default since 9.1): a backslash in
-   `'…'` is an ordinary character. With it off, `'\''` would be lexed differently from the
-   server. The proxy's fixed session settings must keep it on.
+5. **`standard_conforming_strings` is assumed on** (the default since 9.1) and the client
+   encoding is assumed to be the pool's fixed one (UTF-8 or another encoding in which no
+   multibyte character contains the bytes `'` or `\`). With `standard_conforming_strings`
+   off, or with an encoding such as SJIS, Postgres lexes `'…\'…'` differently from this
+   lexer and a `SET` can hide inside what the classifier reads as a string (shown on
+   Postgres 17 in tier R). The classifier rejects every visible way to change either
+   setting (`SET`, `SET LOCAL`, `SET [LOCAL] NAMES`, `set_config`, `ALTER … SET`, `UPDATE
+   pg_settings`). What it cannot see — a server or database default, a function that calls
+   `set_config` — is for the wire layer: both settings are reported in `ParameterStatus`,
+   so chunks 4 and 6 must refuse a database connection whose `standard_conforming_strings`
+   is not `on` or whose `client_encoding` is not the pool's, and treat a `ParameterStatus`
+   for either during a client's turn as a dirty connection (D8).
 6. **Numbers follow Postgres 16+** (`0x`, `0o`, `0b`, `_` separators). A number directly
    followed by a letter is split into a number and a word (Postgres 17 rejects such
    "trailing junk"; the split only makes the classifier see more names).
@@ -399,8 +410,11 @@ pattern matching, not a SQL parser.
 8. **Over-rejection is possible in rare spellings**: a table named `pg_advisory_lock`
    followed by a column list, a reference to `pg_temp` in `SET LOCAL search_path`, `SELECT 1
    AS execute` after `AS`, and any `set_config` whose third argument is not the bare word
-   `true` (`'true'`, `(true)`, `true::bool`) are rejected. Nothing is rejected because it is
-   unknown.
+   `true` (`'true'`, `(true)`, `true::bool`) or whose setting name is not a plain string
+   literal (`$$search_path$$`, `E'…'`, an expression), and any statement with `SET` or
+   `RESET` that mentions `client_encoding` or `standard_conforming_strings`, are rejected.
+   Apart from that last rule (unreadable `set_config` names), nothing is rejected because
+   it is unknown.
 9. **Session state that is not on the reject list is not rejected**: `setseed()`, the
    sequence cache behind `currval`/`lastval`, large-object descriptors (transaction-scoped
    anyway), `ALTER ROLE/DATABASE/SYSTEM … SET` (persistent, not session-level). These are
@@ -454,8 +468,12 @@ pattern matching, not a SQL parser.
   says).
 - **CSV SQL assertions are written but not executed** here (no flush or runner on this
   branch).
-- **Size**: product code 1,948 lines (estimate ~1,300; the tables of `rejectlist.go` and
-  `errors.go` are about 400 of them); tests 2,300 lines plus the 504-record corpus.
+- **Size**: product code 1,969 lines (estimate ~1,300; the tables of `rejectlist.go` and
+  `errors.go` are about 400 of them); tests 2,202 lines plus the 527-record corpus.
+- **One rule rejects for an unreadable input**: `set_config(<expression>, …, true)` is
+  rejected because the setting name cannot be read and might be a lexing setting (see
+  limit 5). The brief says nothing is rejected because it is unknown; this is the single
+  exception, made on purpose.
 
 ## Commands
 
@@ -487,7 +505,7 @@ Rows the orchestrator may add to `agent_work/INDEX.md`:
 | `scripts/gen-docs.d/c05-contracts.sh` | Generates `docs/error-contract.md` and `docs/reject-list.md` from `internal/pgwire` |
 | `docs/error-contract.md` | Generated error contract (rows, SQLSTATEs, contract facts, counter keys) |
 | `docs/reject-list.md` | Generated reject list, allowed forms, function allow-lists |
-| `internal/pgwire/testdata/classifier-corpus.txt` | The classifier corpus (504 records) |
+| `internal/pgwire/testdata/classifier-corpus.txt` | The classifier corpus (527 records) |
 | `test/analysis/c05-reject-list/` | CSV-flush SQL assertions for the reject-list scenario |
 | `agent_work/chunks/c05-classifier/gate/extra.sh` | Chunk 5 gate extra: reject-list scenarios across processes, SET canary |
 | `docs/knowledge/classifier.md` | Facts about the classifier, the error table and the reply builders for later chunks |
