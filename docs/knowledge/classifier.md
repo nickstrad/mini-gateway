@@ -32,7 +32,16 @@ Facts a later builder needs before using `internal/work` and the chunk 5 half of
   forwarded.
 - The classifier rejects some spellings people do not expect: `SET local.x = 1` (a session
   custom setting, checked on Postgres 17), `UPDATE pg_settings SET …`, any `pg_temp`
-  reference, `set_config(…, 'true')` (only the bare word `true` is transaction-local).
+  reference, `set_config(…, 'true')` (only the bare word `true` is transaction-local),
+  `set_config` with a setting name that is not a plain `'…'` literal, and `SET LOCAL
+  standard_conforming_strings` / `client_encoding` / `NAMES`.
+- **The lexer is only right while `standard_conforming_strings` is on and the client
+  encoding is the pool's.** With it off (even transaction-locally) Postgres reads
+  `SELECT '\' ; SELECT ' ; SET search_path = hidden ; --'` as a string followed by a real
+  `SET` (verified on Postgres 17). The wire layer must refuse a database connection whose
+  `ParameterStatus` for `standard_conforming_strings` is not `on` (or whose
+  `client_encoding` is not the pool's) and treat either arriving during a client's turn as
+  a dirty connection.
 - Qualified column references (`t.a` outside `FROM`/`JOIN`) are never read-only-provable
   (attribute notation can call a function). Joins written with qualified columns are
   therefore not coalescable.
