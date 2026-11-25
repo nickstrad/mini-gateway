@@ -64,10 +64,14 @@ func requireSame(t *testing.T, label string, want, got []string) {
 	}
 }
 
+// TestStartupFidelityAgainstRecordedPostgres17 proves fakepg's 12-step startup
+// transcript matches the committed Postgres 17 recording outside KnownDifferences.
 func TestStartupFidelityAgainstRecordedPostgres17(t *testing.T) {
 	requireSame(t, "fake against the Postgres 17 recording", readRecording(t), simTranscript(t))
 }
 
+// TestKnownDifferencesAreTheRecordedOnes proves KnownDifferences stays exact
+// (only gss-request: real G vs fake N).
 func TestKnownDifferencesAreTheRecordedOnes(t *testing.T) {
 	rec, sim := readRecording(t), simTranscript(t)
 	if len(rec) != len(sim) {
@@ -88,6 +92,8 @@ func TestKnownDifferencesAreTheRecordedOnes(t *testing.T) {
 	}
 }
 
+// TestSimTranscriptIsDeterministic proves running the simulated startup
+// fidelity script twice yields identical transcripts.
 func TestSimTranscriptIsDeterministic(t *testing.T) {
 	requireSame(t, "two runs", simTranscript(t), simTranscript(t))
 }
@@ -136,6 +142,8 @@ func (r *realConn) StartTLS() error {
 
 func (r *realConn) Close() { _ = r.c.Close() }
 
+// TestTierRStartupFidelity runs StartupScript live against real Postgres 17
+// containers and proves the fake and committed recording match.
 func TestTierRStartupFidelity(t *testing.T) {
 	if os.Getenv("MG_TIER_R") != "1" {
 		t.Skip("tier R: run scripts/tier-r.sh")

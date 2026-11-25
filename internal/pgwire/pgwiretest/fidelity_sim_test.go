@@ -45,6 +45,9 @@ func readFull(c Transport, b []byte) (int, error) {
 	return n, nil
 }
 
+// TestFakeRefusesARepeatedEncryptionRequestAsPostgresDoes proves fakepg follows
+// Postgres 17's ssl_done/gss_done refusal rule on repeated and alternating
+// SSLRequest and GSSENCRequest packets.
 func TestFakeRefusesARepeatedEncryptionRequestAsPostgresDoes(t *testing.T) {
 	const sslAgain = "E:FATAL:0A000:unsupported frontend protocol 1234.5679: server supports 3.0 to 3.0"
 	const gssAgain = "E:FATAL:0A000:unsupported frontend protocol 1234.5680: server supports 3.0 to 3.0"

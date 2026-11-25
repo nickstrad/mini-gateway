@@ -1,3 +1,6 @@
+// Package wiresrc declares component "wire" metrics and maps pgwire.WireSnapshot
+// values into obs.Emitter without letting internal/pgwire depend on any adapter
+// or catalog package.
 package wiresrc
 
 import (
@@ -26,6 +29,10 @@ func sideMetrics(side, peer string) []obs.MetricDesc {
 	}
 }
 
+// Metrics returns the 47 component-"wire" metric declarations (21 client-leg
+// and 26 database-leg). The side lives in the metric name because mode is used
+// for request kind, TLS version, and ReadyForQuery status and the two legs have
+// distinct failure vocabularies.
 func Metrics() []obs.MetricDesc {
 	ms := []obs.MetricDesc{
 		obs.CounterDesc("client_startups_begun", 0, "Client sessions that began startup.").AsHeadline(),
@@ -70,10 +77,13 @@ func Metrics() []obs.MetricDesc {
 	return append(ms, sideMetrics("database", "database")...)
 }
 
+// Source wraps a WireSnapshot producer as an obs.Source under obs.ComponentWire.
 func Source(snapshot func() pgwire.WireSnapshot) obs.Source {
 	return obs.NewSource(obs.ComponentWire, Metrics(), snapshot, Map)
 }
 
+// Map emits every field of s into e, including zero rows for every enum label
+// value so downstream SQL assertions can distinguish zero from missing.
 func Map(s pgwire.WireSnapshot, e *obs.Emitter) {
 	mapClient(s.Client, e)
 	mapDatabase(s.Database, e)

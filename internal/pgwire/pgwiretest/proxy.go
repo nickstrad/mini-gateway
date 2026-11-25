@@ -1,3 +1,6 @@
+// Package pgwiretest provides a test-only startup proxy over simnet (wiring
+// pgwire.ClientSession and pgwire.BackendSession back-to-back to fakepg) and
+// the startup fidelity runner shared between tier S and real Postgres 17.
 package pgwiretest
 
 import (
@@ -15,7 +18,9 @@ import (
 )
 
 const (
-	DefaultAddr       = "proxy"
+	// DefaultAddr is the default simnet listener address of Proxy.
+	DefaultAddr = "proxy"
+	// DefaultMaxSession caps concurrent sessions accepted by Proxy.
 	DefaultMaxSession = 4096
 	maxPending        = 64 << 10
 	readChunk         = 4096
@@ -29,6 +34,7 @@ var (
 	kindDBFail  = sim.K("pw.dbfail")
 )
 
+// Config configures a simulated startup-only Proxy.
 type Config struct {
 	Addr           string
 	Database       string
@@ -42,6 +48,7 @@ type Config struct {
 	MaxSessions    int
 }
 
+// Counters tracks harness-level session and relay counts for assertions.
 type Counters struct {
 	Accepted        int64
 	Refused         int64
@@ -58,6 +65,9 @@ type Counters struct {
 	HandshakesBad   int64
 }
 
+// Proxy is a one-backend-per-client startup-only test proxy over simnet.
+// It is not the production engine or pool; it exists to drive ClientSession,
+// BackendSession, FrontendTracker, and CycleTracker end-to-end in the simulator.
 type Proxy struct {
 	s        *sim.Sim
 	net      *simnet.Net
@@ -72,6 +82,8 @@ type Proxy struct {
 	buf      [readChunk]byte
 }
 
+// New starts a Proxy listener on net and registers its quiesce, wire
+// conservation, and state-digest hooks with the simulator kernel.
 func New(net *simnet.Net, cfg Config) (*Proxy, error) {
 	if cfg.Addr == "" {
 		cfg.Addr = DefaultAddr
@@ -109,10 +121,20 @@ func New(net *simnet.Net, cfg Config) (*Proxy, error) {
 	return p, nil
 }
 
-func (p *Proxy) Addr() string                        { return p.cfg.Addr }
-func (p *Proxy) Snapshot() pgwire.WireSnapshot       { return p.stats.Snapshot() }
-func (p *Proxy) Counters() Counters                  { return p.c }
-func (p *Proxy) ServerParams() []pgwire.Param        { return slices.Clone(p.params) }
+// Addr returns the simnet address on which p listens.
+func (p *Proxy) Addr() string { return p.cfg.Addr }
+
+// Snapshot returns the current pgwire.WireSnapshot accumulated by p.
+func (p *Proxy) Snapshot() pgwire.WireSnapshot { return p.stats.Snapshot() }
+
+// Counters returns a copy of p's harness-level counters.
+func (p *Proxy) Counters() Counters { return p.c }
+
+// ServerParams returns a clone of the backend ParameterStatus set captured from
+// the first ready database connection.
+func (p *Proxy) ServerParams() []pgwire.Param { return slices.Clone(p.params) }
+
+// SetClientTLS updates the client TLS mode for subsequently accepted sessions.
 func (p *Proxy) SetClientTLS(m pgwire.ClientTLSMode) { p.cfg.Client.TLS = m }
 
 func (p *Proxy) quiesce() error {
@@ -297,6 +319,9 @@ func (ss *session) handshakeDone() {
 }
 
 func (ss *session) clientActs(acts []pgwire.Action) {
+	// Hold the client's final startup writes (AuthenticationOk..ReadyForQuery)
+	// until the database connection is ready so a database connect failure can
+	// still surface to the client as FATAL 08006.
 	hold := false
 	for _, a := range acts {
 		hold = hold || a.Kind == pgwire.ActReady
@@ -585,6 +610,8 @@ func (ss *session) close(why int64) {
 	}
 }
 
+// AuthenticatingBackends returns the simnet connection IDs of database legs
+// currently mid-SASL, used by scenarios that inject a mid-handshake reset.
 func (p *Proxy) AuthenticatingBackends() []int64 {
 	var out []int64
 	for _, ss := range p.sessions {

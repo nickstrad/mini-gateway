@@ -128,6 +128,8 @@ func busyStats(t *testing.T) *WireStats {
 	return st
 }
 
+// TestWireCountersMoveAndConserve proves every reachable scalar counter and
+// enum array cell in WireSnapshot moves and satisfies conservation.
 func TestWireCountersMoveAndConserve(t *testing.T) {
 	snap := busyStats(t).Snapshot()
 	if err := snap.Check(); err != nil {
@@ -190,6 +192,8 @@ func TestWireCountersMoveAndConserve(t *testing.T) {
 	}
 }
 
+// TestWireConservationCatchesAMissingOutcome proves WireSnapshot.Check rejects
+// mismatched startup sums on either leg and tolerates a nil WireStats.
 func TestWireConservationCatchesAMissingOutcome(t *testing.T) {
 	snap := busyStats(t).Snapshot()
 	snap.Client.StartupsCompleted--

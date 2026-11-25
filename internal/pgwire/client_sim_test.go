@@ -36,6 +36,8 @@ func wireSeeds(t *testing.T, scenario int) []int64 {
 	return out
 }
 
+// TestWireSweepKeepsTheFullMatrixOnPinnedSeeds proves the sweep rotation runs
+// every scenario on pinned seeds and gives every scenario and sweep seed coverage.
 func TestWireSweepKeepsTheFullMatrixOnPinnedSeeds(t *testing.T) {
 	if _, single, _ := simtest.Seed(); single {
 		t.Skip("one seed is pinned")
@@ -72,6 +74,8 @@ func TestWireSweepKeepsTheFullMatrixOnPinnedSeeds(t *testing.T) {
 	}
 }
 
+// TestScenarioWireStartup runs the 19 simulated wire-startup scenarios, proving
+// deterministic replay, snapshot equality, conservation, recovery, and deadlines.
 func TestScenarioWireStartup(t *testing.T) {
 	for i, sc := range wireworld.Scenarios() {
 		t.Run(sc.Name, func(t *testing.T) {

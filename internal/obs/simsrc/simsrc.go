@@ -194,6 +194,8 @@ func Fake(srv *fakepg.Server) obs.Source {
 
 func fakeAll() []obs.MetricDesc { return append(FakeMetrics(), FakeAuthMetrics()...) }
 
+// FakeAuthMetrics returns the metric declarations for fakepg's TLS and SCRAM
+// startup counters (fakepg.AuthSnapshot).
 func FakeAuthMetrics() []obs.MetricDesc {
 	return []obs.MetricDesc{
 		obs.CounterDesc("tls_answered", lo, "Answers to a TLS request (outcome: S, N)."),
@@ -212,6 +214,7 @@ func FakeAuthMetrics() []obs.MetricDesc {
 var handshakeResults = [fakepg.NumTLSOutcomes]string{
 	fakepg.TLSCompleted: "completed", fakepg.TLSFailed: "failed", fakepg.TLSStall: "stall", fakepg.TLSBadCertificate: "bad-certificate"}
 
+// MapFakeAuth emits every field of a fakepg.AuthSnapshot into e.
 func MapFakeAuth(a fakepg.AuthSnapshot, e *obs.Emitter) {
 	e.Counter("tls_answered", obs.Labels{Outcome: "S"}, a.TLSAnsweredYes)
 	e.Counter("tls_answered", obs.Labels{Outcome: "N"}, a.TLSAnsweredNo)

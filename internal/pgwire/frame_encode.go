@@ -2,6 +2,9 @@ package pgwire
 
 import "encoding/binary"
 
+// Postgres wire-protocol constants: startup request codes, backend and frontend
+// message type bytes, authentication subtypes, TLS answers, ReadyForQuery
+// transaction status bytes, and error severities.
 const (
 	ProtocolVersion30 uint32 = 3<<16 | 0
 	CodeSSLRequest    uint32 = 80877103
@@ -75,6 +78,8 @@ func appendCString(dst []byte, s string) []byte {
 	return append(append(dst, s...), 0)
 }
 
+// AppendAuthentication appends a backend Authentication ('R') message with the
+// given auth subtype code and payload data.
 func AppendAuthentication(dst []byte, code uint32, data []byte) []byte {
 	dst, at := beginMessage(dst, MsgAuthentication)
 	dst = binary.BigEndian.AppendUint32(dst, code)
@@ -82,6 +87,8 @@ func AppendAuthentication(dst []byte, code uint32, data []byte) []byte {
 	return finishMessage(dst, at)
 }
 
+// AppendAuthenticationSASL appends an AuthenticationSASL ('R', subtype 10)
+// message listing the offered SASL mechanisms terminated by an empty string.
 func AppendAuthenticationSASL(dst []byte, mechanisms ...string) []byte {
 	dst, at := beginMessage(dst, MsgAuthentication)
 	dst = binary.BigEndian.AppendUint32(dst, AuthSASL)
@@ -92,6 +99,7 @@ func AppendAuthenticationSASL(dst []byte, mechanisms ...string) []byte {
 	return finishMessage(dst, at)
 }
 
+// AppendParameterStatus appends a backend ParameterStatus ('S') message.
 func AppendParameterStatus(dst []byte, name, value string) []byte {
 	dst, at := beginMessage(dst, MsgParameterStatus)
 	dst = appendCString(dst, name)
@@ -99,6 +107,8 @@ func AppendParameterStatus(dst []byte, name, value string) []byte {
 	return finishMessage(dst, at)
 }
 
+// AppendBackendKeyData appends a backend BackendKeyData ('K') message carrying
+// the session's process ID and cancel secret.
 func AppendBackendKeyData(dst []byte, k BackendKey) []byte {
 	dst, at := beginMessage(dst, MsgBackendKeyData)
 	dst = binary.BigEndian.AppendUint32(dst, k.ProcessID)
@@ -106,12 +116,16 @@ func AppendBackendKeyData(dst []byte, k BackendKey) []byte {
 	return finishMessage(dst, at)
 }
 
+// AppendReadyForQuery appends a backend ReadyForQuery ('Z') message with the
+// transaction status byte ('I', 'T', or 'E').
 func AppendReadyForQuery(dst []byte, status byte) []byte {
 	dst, at := beginMessage(dst, MsgReadyForQuery)
 	dst = append(dst, status)
 	return finishMessage(dst, at)
 }
 
+// AppendStartupMessage appends an untyped protocol-3.0 StartupMessage with
+// params encoded in slice order for deterministic wire bytes.
 func AppendStartupMessage(dst []byte, params []Param) []byte {
 	at := len(dst)
 	dst = append(dst, 0, 0, 0, 0)
@@ -130,10 +144,13 @@ func appendRequestCode(dst []byte, code uint32) []byte {
 	return binary.BigEndian.AppendUint32(dst, code)
 }
 
+// AppendSSLRequest appends the 8-byte untyped SSLRequest packet.
 func AppendSSLRequest(dst []byte) []byte { return appendRequestCode(dst, CodeSSLRequest) }
 
+// AppendGSSRequest appends the 8-byte untyped GSSENCRequest packet.
 func AppendGSSRequest(dst []byte) []byte { return appendRequestCode(dst, CodeGSSRequest) }
 
+// AppendCancelRequest appends the 16-byte untyped CancelRequest packet for k.
 func AppendCancelRequest(dst []byte, k BackendKey) []byte {
 	dst = binary.BigEndian.AppendUint32(dst, uint32(minStartupLength+lengthFieldLen+len(k.Secret)))
 	dst = binary.BigEndian.AppendUint32(dst, CodeCancelRequest)
@@ -141,6 +158,8 @@ func AppendCancelRequest(dst []byte, k BackendKey) []byte {
 	return append(dst, k.Secret[:]...)
 }
 
+// AppendSASLInitialResponse appends a frontend SASLInitialResponse ('p')
+// message naming mechanism and carrying the client-first data.
 func AppendSASLInitialResponse(dst []byte, mechanism string, data []byte) []byte {
 	dst, at := beginMessage(dst, MsgPassword)
 	dst = appendCString(dst, mechanism)
@@ -149,12 +168,15 @@ func AppendSASLInitialResponse(dst []byte, mechanism string, data []byte) []byte
 	return finishMessage(dst, at)
 }
 
+// AppendSASLResponse appends a frontend SASLResponse ('p') message carrying
+// the client-final data.
 func AppendSASLResponse(dst []byte, data []byte) []byte {
 	dst, at := beginMessage(dst, MsgPassword)
 	dst = append(dst, data...)
 	return finishMessage(dst, at)
 }
 
+// AppendQuery appends a frontend simple Query ('Q') message for sql.
 func AppendQuery(dst []byte, sql []byte) []byte {
 	dst, at := beginMessage(dst, MsgQuery)
 	dst = append(dst, sql...)
@@ -162,11 +184,14 @@ func AppendQuery(dst []byte, sql []byte) []byte {
 	return finishMessage(dst, at)
 }
 
+// AppendTerminate appends a frontend Terminate ('X') message.
 func AppendTerminate(dst []byte) []byte {
 	dst, at := beginMessage(dst, MsgTerminate)
 	return finishMessage(dst, at)
 }
 
+// AppendMessageHeader appends the 5-byte typed message header (type + length)
+// for a body of bodyLen bytes.
 func AppendMessageHeader(dst []byte, typ byte, bodyLen int) []byte {
 	dst = append(dst, typ)
 	return binary.BigEndian.AppendUint32(dst, uint32(bodyLen+lengthFieldLen))

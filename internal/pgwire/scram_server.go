@@ -14,6 +14,9 @@ const (
 	scramDone
 )
 
+// ScramServer drives the server side of one SCRAM-SHA-256 exchange without I/O.
+// It accepts only SCRAM-SHA-256 (never -PLUS), allows GS2 headers "n,," and
+// "y,,", verifies the matching c= attribute, and compares proofs in constant time.
 type ScramServer struct {
 	v               Verifier
 	mock            bool
@@ -25,16 +28,23 @@ type ScramServer struct {
 	serverFirst     string
 }
 
+// NewScramServer starts a server-side SCRAM exchange for v and serverNonce.
+// When unknownUser is true, Final still runs the proof math and always fails
+// with AuthCauseUnknownUser.
 func NewScramServer(v Verifier, serverNonce string, unknownUser bool) *ScramServer {
 	return &ScramServer{v: v, serverNonce: serverNonce, mock: unknownUser}
 }
 
+// GS2 returns the client's parsed GS2 header ("n,," or "y,,") after First.
 func (s *ScramServer) GS2() string { return s.gs2 }
 
+// First validates the client's selected mechanism and client-first-message and
+// returns the server-first-message challenge. Each step can run at most once.
 func (s *ScramServer) First(mechanism string, data []byte) ([]byte, AuthCause) {
 	if s.step != scramAwaitFirst {
 		return nil, AuthCauseMalformed
 	}
+	// Mark done before validating so any early error permanently closes the exchange.
 	s.step = scramDone
 	if mechanism != ScramMechanism {
 		return nil, AuthCauseBadMechanism
@@ -73,6 +83,8 @@ func splitGS2(msg string) (string, string, bool) {
 	return msg[:3], bare, true
 }
 
+// Final verifies the client-final-message (c= matching the GS2 header, combined
+// nonce, and client proof in constant time) and returns the server-final-message.
 func (s *ScramServer) Final(data []byte) ([]byte, AuthCause) {
 	if s.step != scramAwaitFinal {
 		return nil, AuthCauseMalformed

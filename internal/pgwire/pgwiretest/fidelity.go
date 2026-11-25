@@ -11,6 +11,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
 )
 
+// Transport is the minimal blocking connection interface implemented by both
+// real TCP/TLS sockets (tier R) and the simulated dialer (tier S).
 type Transport interface {
 	Write(b []byte) error
 	Read(buf []byte) (int, error)
@@ -18,12 +20,15 @@ type Transport interface {
 	Close()
 }
 
+// Dialer opens a Transport to a named startup fidelity target ("ssl-off" or "ssl-on").
 type Dialer interface {
 	Dial(target string) (Transport, error)
 }
 
+// ErrTimeout reports that a fidelity target did not reply within its step budget.
 var ErrTimeout = errors.New("pgwiretest: no reply in time")
 
+// Login holds credentials and an optional GS2 header override for a fidelity step.
 type Login struct {
 	User     string
 	Password string
@@ -31,6 +36,7 @@ type Login struct {
 	GS2      string
 }
 
+// Step defines one scripted startup exchange in StartupScript.
 type Step struct {
 	Name    string
 	Target  string
@@ -41,16 +47,22 @@ type Step struct {
 	Extra   []pgwire.Param
 }
 
+// KnownDifferences lists the startup fidelity steps where the fake intentionally
+// differs from the postgres:17 container image, with justification.
 var KnownDifferences = map[string]string{
 	"gss-request": "the postgres:17 image is built with GSSAPI and answers G; the fake answers N, as a server without GSSAPI does and as the proxy does",
 }
 
 const (
+	// TargetSSLOff selects the server target with TLS disabled.
 	TargetSSLOff = "ssl-off"
-	TargetSSLOn  = "ssl-on"
-	maxTokens    = 256
+	// TargetSSLOn selects the server target with TLS enabled and SCRAM active.
+	TargetSSLOn = "ssl-on"
+	maxTokens   = 256
 )
 
+// StartupScript returns the 12-step startup fidelity script exercised against
+// both real Postgres 17 and fakepg.
 func StartupScript(user, password, database string) []Step {
 	login := func(pw, db, gs2 string) *Login {
 		return &Login{User: user, Password: pw, Database: db, GS2: gs2}
@@ -122,6 +134,8 @@ func (r *reader) message() (byte, []byte, bool) {
 	}
 }
 
+// Run executes steps sequentially against d and returns one normalized
+// transcript line per step.
 func Run(d Dialer, steps []Step) ([]string, error) {
 	var out []string
 	for _, st := range steps {

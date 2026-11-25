@@ -8,16 +8,25 @@ import (
 	"time"
 )
 
+// DefaultConnectTimeout is the deadline covering database connect, optional
+// TLS handshake, and authentication to ReadyForQuery('I').
 const DefaultConnectTimeout = 2 * time.Second
 
+// BackendTLSMode selects TLS behavior on the database-facing leg, using
+// libpq's mode names.
 type BackendTLSMode uint8
 
+// Supported database-facing TLS modes.
 const (
+	// BackendTLSDisable connects in plaintext without sending SSLRequest.
 	BackendTLSDisable BackendTLSMode = iota
+	// BackendTLSRequire sends SSLRequest and requires encryption without CA verification.
 	BackendTLSRequire
+	// BackendTLSVerifyFull requires encryption and full certificate/hostname verification.
 	BackendTLSVerifyFull
 )
 
+// BackendConfig configures a BackendSession state machine.
 type BackendConfig struct {
 	TLS             BackendTLSMode
 	User            string
@@ -29,8 +38,10 @@ type BackendConfig struct {
 	Stats           *WireStats
 }
 
+// ErrBackendConfig is wrapped by BackendConfig.Validate on missing or invalid fields.
 var ErrBackendConfig = errors.New("pgwire: bad database session configuration")
 
+// Validate checks that BackendConfig has the fields required to run a database login.
 func (c BackendConfig) Validate() error {
 	switch {
 	case c.User == "":
@@ -58,6 +69,9 @@ const (
 	bsClosed
 )
 
+// BackendSession is the sans-I/O state machine for logging a pooled database
+// connection in to Postgres, optionally upgrading to TLS, running SCRAM-SHA-256
+// or trust auth, and collecting server parameters and BackendKeyData.
 type BackendSession struct {
 	cfg        BackendConfig
 	st         *DatabaseWireSnapshot
@@ -72,6 +86,8 @@ type BackendSession struct {
 	serverCode string
 }
 
+// NewBackendSession creates a database startup machine and counts the startup
+// as begun immediately. Call Start once the underlying transport connects.
 func NewBackendSession(cfg BackendConfig) *BackendSession {
 	if cfg.Stats == nil {
 		cfg.Stats = &WireStats{}
@@ -84,16 +100,34 @@ func NewBackendSession(cfg BackendConfig) *BackendSession {
 	return s
 }
 
-func (s *BackendSession) Ready() bool        { return s.state == bsReady }
-func (s *BackendSession) Closed() bool       { return s.state == bsClosed }
-func (s *BackendSession) Class() Class       { return s.class }
+// Ready reports whether the database reached ReadyForQuery('I').
+func (s *BackendSession) Ready() bool { return s.state == bsReady }
+
+// Closed reports whether the database startup failed or closed.
+func (s *BackendSession) Closed() bool { return s.state == bsClosed }
+
+// Class returns the failure class recorded when startup failed.
+func (s *BackendSession) Class() Class { return s.class }
+
+// ServerCode returns the SQLSTATE from a server ErrorResponse during startup, if any.
 func (s *BackendSession) ServerCode() string { return s.serverCode }
-func (s *BackendSession) Params() []Param    { return s.params }
-func (s *BackendSession) Key() BackendKey    { return s.key }
-func (s *BackendSession) OverTLS() bool      { return s.overTLS }
+
+// Params returns the ParameterStatus pairs collected from the server during startup.
+func (s *BackendSession) Params() []Param { return s.params }
+
+// Key returns the BackendKeyData sent by the database server.
+func (s *BackendSession) Key() BackendKey { return s.key }
+
+// OverTLS reports whether the database connection completed a TLS upgrade.
+func (s *BackendSession) OverTLS() bool { return s.overTLS }
+
+// Authenticating reports whether a SASL exchange is currently in flight.
 func (s *BackendSession) Authenticating() bool {
 	return s.state >= bsSASLContinue && s.state <= bsAuthOK
 }
+
+// AwaitingTLS reports whether the server answered 'S' and the session is
+// waiting for HandshakeDone.
 func (s *BackendSession) AwaitingTLS() bool { return s.state == bsTLSWait }
 func (s *BackendSession) inStartup() bool   { return s.state != bsReady && s.state != bsClosed }
 
@@ -103,6 +137,8 @@ func (s *BackendSession) write(acts []Action, data []byte, messages int64) []Act
 	return append(acts, Action{Kind: ActWrite, Data: data})
 }
 
+// Start emits the first outbound message once the transport is connected:
+// SSLRequest when TLS is configured, or StartupMessage directly otherwise.
 func (s *BackendSession) Start(acts []Action) []Action {
 	if s.state != bsNew {
 		return acts
@@ -129,12 +165,15 @@ func (s *BackendSession) fail(acts []Action, a Action) []Action {
 	if !s.inStartup() {
 		return acts
 	}
+	// Record AnswerNone when startup fails before the server replies to SSLRequest
+	// so TLSRequests - sum(TLSAnswers) stays conserved within [0, InStartup].
 	if s.state == bsTLSAnswer {
 		s.st.TLSAnswers[AnswerNone]++
 	}
 	s.st.StartupsFailed[a.Class]++
 	s.st.InStartup--
 	s.state = bsClosed
+	// Release SCRAM state (including the plaintext database password) on every exit.
 	s.scram = nil
 	s.class = a.Class
 	a.Kind = ActClose
@@ -146,6 +185,9 @@ func (s *BackendSession) violation(acts []Action, v Violation) []Action {
 	return s.fail(acts, Action{Class: ClassViolation, Violation: v})
 }
 
+// Receive feeds database bytes into the startup machine and returns resulting
+// actions and the number of bytes consumed. Bytes arriving after 'S' and before
+// HandshakeDone are rejected without being consumed (CVE-2021-23222 class).
 func (s *BackendSession) Receive(acts []Action, b []byte) ([]Action, int) {
 	n := 0
 	for n < len(b) && s.inStartup() {
@@ -196,6 +238,8 @@ func (s *BackendSession) tlsAnswer(acts []Action, answer byte) []Action {
 	return s.violation(acts, ViolationBadTLSAnswer)
 }
 
+// HandshakeDone delivers the database TLS handshake result after ActStartTLS.
+// Ignored unless the session is awaiting a handshake.
 func (s *BackendSession) HandshakeDone(acts []Action, r HandshakeResult) []Action {
 	if s.state != bsTLSWait {
 		return acts
@@ -216,6 +260,8 @@ func (s *BackendSession) HandshakeDone(acts []Action, r HandshakeResult) []Actio
 	return s.sendStartup(acts)
 }
 
+// Deadline signals that the connect/startup deadline expired. Ready or closed
+// sessions ignore it.
 func (s *BackendSession) Deadline(acts []Action) []Action {
 	if s.state == bsTLSWait {
 		s.st.TLSFailed[HandshakeDeadline]++
@@ -223,6 +269,8 @@ func (s *BackendSession) Deadline(acts []Action) []Action {
 	return s.fail(acts, Action{Class: ClassDeadline})
 }
 
+// PeerClosed signals EOF or connection reset from the database during startup.
+// Ready or closed sessions ignore it.
 func (s *BackendSession) PeerClosed(acts []Action) []Action {
 	return s.fail(acts, Action{Class: ClassLost})
 }
@@ -288,6 +336,8 @@ func (s *BackendSession) authRequest(acts []Action, body []byte) []Action {
 		s.state = bsParams
 		return acts
 	case code == AuthOK && s.state > bsAuth:
+		// A server that sends AuthenticationOk without first completing
+		// AuthenticationSASLFinal skipped proving it holds ServerKey.
 		return s.authFailed(acts, ClassAuthFailed, AuthCauseServerSignature)
 	case code == AuthSASL && s.state == bsAuth:
 		return s.saslStart(acts, data)

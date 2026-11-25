@@ -17,6 +17,9 @@ func scenarioNamed(t *testing.T, name string) wireworld.Scenario {
 	return sc
 }
 
+// TestPlantedEarlyBytesBugFailsTheSmuggleScenario is the planted-bug canary:
+// wire-client-smuggle must pass normally and fail its startup-failures check
+// when PlantEarlyBytes disables the pre-handshake byte guard.
 func TestPlantedEarlyBytesBugFailsTheSmuggleScenario(t *testing.T) {
 	sc := scenarioNamed(t, "wire-client-smuggle")
 	for seed := int64(1); seed <= 3; seed++ {
@@ -35,6 +38,8 @@ func TestPlantedEarlyBytesBugFailsTheSmuggleScenario(t *testing.T) {
 	}
 }
 
+// TestEveryWireScenarioHasItsAnalysisFiles proves all 19 wire scenarios have
+// non-empty startup-failures, tls-requests, and handshake-failures SQL files.
 func TestEveryWireScenarioHasItsAnalysisFiles(t *testing.T) {
 	for _, sc := range wireworld.Scenarios() {
 		for _, f := range []string{"startup-failures.sql", "tls-requests.sql", "handshake-failures.sql"} {
@@ -43,6 +48,8 @@ func TestEveryWireScenarioHasItsAnalysisFiles(t *testing.T) {
 	}
 }
 
+// TestWireDigests writes seed-42 trace and state digests for all 19 scenarios
+// so gate/extra.sh can assert cross-process determinism.
 func TestWireDigests(t *testing.T) {
 	path := os.Getenv("MG_WIRE_DIGESTS")
 	if path == "" {

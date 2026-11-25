@@ -5,6 +5,9 @@ import (
 	"testing"
 )
 
+// TestClientRejectsAnOversizedSCRAMMessageInsideTheFrame proves ClientSession
+// refuses a SCRAM payload larger than MaxScramMessage even when the outer SASL
+// frame fits within maxAuthMessage.
 func TestClientRejectsAnOversizedSCRAMMessageInsideTheFrame(t *testing.T) {
 	cfg := testClientConfig(t, ClientTLSOff, 1)
 	s := NewClientSession(cfg)
@@ -16,6 +19,8 @@ func TestClientRejectsAnOversizedSCRAMMessageInsideTheFrame(t *testing.T) {
 	}
 }
 
+// TestScramFunctionsRefuseMessagesAboveTheBound proves every pure SCRAM
+// server and client method refuses inputs exceeding MaxScramMessage.
 func TestScramFunctionsRefuseMessagesAboveTheBound(t *testing.T) {
 	v := secretVerifier(t)
 	atBound := "n,,n=,r=" + strings.Repeat("a", MaxScramMessage-len("n,,n=,r="))

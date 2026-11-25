@@ -31,6 +31,7 @@ func rfcVerifier(t *testing.T) Verifier {
 	return v
 }
 
+// TestScramRFC7677ClientSide proves ScramClient matches the RFC 7677 test vector.
 func TestScramRFC7677ClientSide(t *testing.T) {
 	c := NewScramClient(rfcUser, rfcPassword, rfcClientNonce, GS2NoBinding)
 	if got := string(c.First()); got != rfcClientFirst {
@@ -45,6 +46,7 @@ func TestScramRFC7677ClientSide(t *testing.T) {
 	}
 }
 
+// TestScramRFC7677ServerSide proves ScramServer matches the RFC 7677 test vector.
 func TestScramRFC7677ServerSide(t *testing.T) {
 	s := NewScramServer(rfcVerifier(t), rfcServerNonce, false)
 	first, cause := s.First(ScramMechanism, []byte(rfcClientFirst))
@@ -57,6 +59,8 @@ func TestScramRFC7677ServerSide(t *testing.T) {
 	}
 }
 
+// TestVerifierRoundTripsThroughItsText proves Verifier.String and ParseVerifier
+// round-trip cleanly and reject malformed verifier strings.
 func TestVerifierRoundTripsThroughItsText(t *testing.T) {
 	v := rfcVerifier(t)
 	got, err := ParseVerifier(v.String())
@@ -75,6 +79,7 @@ func TestVerifierRoundTripsThroughItsText(t *testing.T) {
 	}
 }
 
+// TestVerifierHoldsNoPassword proves the derived Verifier contains no plaintext password.
 func TestVerifierHoldsNoPassword(t *testing.T) {
 	v := rfcVerifier(t)
 	if strings.Contains(v.String(), rfcPassword) || strings.Contains(string(v.Salt), rfcPassword) ||
@@ -145,6 +150,9 @@ func secretVerifier(t *testing.T) Verifier {
 	return v
 }
 
+// TestScramClientAgainstServer cross-tests ScramClient against ScramServer
+// across valid GS2 headers, mismatched c= values, p= refusal, tampered proofs,
+// nonces, and tampered server signatures.
 func TestScramClientAgainstServer(t *testing.T) {
 	v := secretVerifier(t)
 	swapC := func(to string) func(string) string {
@@ -194,6 +202,8 @@ func TestScramClientAgainstServer(t *testing.T) {
 	}
 }
 
+// TestScramServerRejectsAnotherMechanism proves ScramServer rejects -PLUS and
+// malformed client-first payloads.
 func TestScramServerRejectsAnotherMechanism(t *testing.T) {
 	s := NewScramServer(secretVerifier(t), "abc", false)
 	if _, cause := s.First(ScramPlusMechanism, []byte("p=tls-server-end-point,,n=,r=abc")); cause != AuthCauseBadMechanism {
@@ -208,6 +218,7 @@ func TestScramServerRejectsAnotherMechanism(t *testing.T) {
 	}
 }
 
+// TestScramServerStepsOnlyOnce proves out-of-order Final and Verify calls fail.
 func TestScramServerStepsOnlyOnce(t *testing.T) {
 	v := secretVerifier(t)
 	s := NewScramServer(v, "abc", false)
@@ -220,6 +231,8 @@ func TestScramServerStepsOnlyOnce(t *testing.T) {
 	}
 }
 
+// TestGS2HeaderRule proves GS2Header selects y,, only over TLS without -PLUS
+// and verifies the corresponding c= base64 encodings.
 func TestGS2HeaderRule(t *testing.T) {
 	if GS2Header(false, false) != GS2NoBinding || GS2Header(false, true) != GS2NoBinding ||
 		GS2Header(true, true) != GS2NoBinding || GS2Header(true, false) != GS2ClientSupports {
@@ -230,6 +243,8 @@ func TestGS2HeaderRule(t *testing.T) {
 	}
 }
 
+// TestMockVerifierIsStablePerUserAndDiffersBetweenUsers proves MockVerifier is
+// deterministic per user and distinct across users.
 func TestMockVerifierIsStablePerUserAndDiffersBetweenUsers(t *testing.T) {
 	a, b := MockVerifier([]byte("k"), "alice", 0), MockVerifier([]byte("k"), "alice", 0)
 	c := MockVerifier([]byte("k"), "bob", 0)
@@ -238,6 +253,8 @@ func TestMockVerifierIsStablePerUserAndDiffersBetweenUsers(t *testing.T) {
 	}
 }
 
+// TestNonceIsPrintableAndFromTheSource proves NewNonce is deterministic per
+// seed and emits valid 24-character printable nonces.
 func TestNonceIsPrintableAndFromTheSource(t *testing.T) {
 	n1 := NewNonce(rand.New(rand.NewPCG(7, 7)))
 	n2 := NewNonce(rand.New(rand.NewPCG(7, 7)))

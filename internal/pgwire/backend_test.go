@@ -208,6 +208,8 @@ func requireBackendClass(t *testing.T, r backendRun, c Class) {
 	}
 }
 
+// TestBackendLogsInWithSCRAM proves BackendSession completes plaintext SCRAM
+// login and collects all 14 server parameters and BackendKeyData across every chunking.
 func TestBackendLogsInWithSCRAM(t *testing.T) {
 	steps := talkBackend(t, BackendTLSDisable, serverPlan{auth: AuthSASL, wantGS2: GS2NoBinding})
 	r := requireBackendEveryChunking(t, BackendTLSDisable, steps)
@@ -219,6 +221,9 @@ func TestBackendLogsInWithSCRAM(t *testing.T) {
 	}
 }
 
+// TestBackendChoosesSCRAMWhenPlusIsOfferedAndPicksTheGS2Header proves
+// BackendSession selects SCRAM-SHA-256 even when -PLUS is offered and sends
+// GS2 "n,," when -PLUS is offered or in plaintext, and "y,," over TLS without -PLUS.
 func TestBackendChoosesSCRAMWhenPlusIsOfferedAndPicksTheGS2Header(t *testing.T) {
 	both := []string{ScramPlusMechanism, ScramMechanism}
 	steps := talkBackend(t, BackendTLSRequire, serverPlan{tlsAnswer: 'S', auth: AuthSASL, mechanisms: both, wantGS2: GS2NoBinding})
@@ -237,6 +242,7 @@ func TestBackendChoosesSCRAMWhenPlusIsOfferedAndPicksTheGS2Header(t *testing.T) 
 	}
 }
 
+// TestBackendTrust proves BackendSession accepts direct AuthenticationOk (trust auth).
 func TestBackendTrust(t *testing.T) {
 	r := requireBackendEveryChunking(t, BackendTLSDisable, talkBackend(t, BackendTLSDisable, serverPlan{auth: AuthOK}))
 	if !r.session.Ready() {
@@ -244,6 +250,9 @@ func TestBackendTrust(t *testing.T) {
 	}
 }
 
+// TestBackendFailureClasses proves all 17 database startup failures (TLS refusal,
+// handshake errors, auth errors, unsupported methods, 53300, server FATALs, and
+// protocol errors) map to their documented Class and ServerCode across all chunkings.
 func TestBackendFailureClasses(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -281,6 +290,8 @@ func TestBackendFailureClasses(t *testing.T) {
 	}
 }
 
+// TestBackendGarbageSilenceAndEOF proves non-Postgres bytes, oversized headers,
+// deadlines, premature EOF, and bytes before HandshakeDone classify cleanly.
 func TestBackendGarbageSilenceAndEOF(t *testing.T) {
 	r := requireBackendEveryChunking(t, BackendTLSDisable, []clientStep{{in: []byte("HTTP/1.1 400 Bad Request\r\n\r\n")}})
 	requireBackendClass(t, r, ClassViolation)
@@ -305,6 +316,8 @@ func TestBackendGarbageSilenceAndEOF(t *testing.T) {
 	}
 }
 
+// TestBackendConfigValidation proves BackendConfig.Validate rejects missing
+// user or random source.
 func TestBackendConfigValidation(t *testing.T) {
 	if err := testBackendConfig(BackendTLSDisable, 1).Validate(); err != nil {
 		t.Fatal(err)

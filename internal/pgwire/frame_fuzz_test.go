@@ -26,6 +26,8 @@ func splitAt(b []byte, k int) [][]byte {
 	return [][]byte{b[:k], b[k:]}
 }
 
+// FuzzFramer proves Framer never panics or loops, bounds its buffer, and gives
+// identical output across whole, arbitrary-split, and one-byte delivery.
 func FuzzFramer(f *testing.F) {
 	fuzzSeeds(f)
 	f.Fuzz(func(t *testing.T, data []byte, k int, mode uint8) {
@@ -100,6 +102,8 @@ func fuzzClientRun(t *testing.T, mode uint8, data []byte, pieces [][]byte) strin
 	return strings.Join(traceOf(acts), "\n")
 }
 
+// FuzzClientSession proves ClientSession never panics, bounds memory, conserves
+// startup counters, and agrees across whole, split, and one-byte chunkings.
 func FuzzClientSession(f *testing.F) {
 	fuzzSeeds(f)
 	f.Fuzz(func(t *testing.T, data []byte, k int, mode uint8) {
@@ -137,6 +141,8 @@ func fuzzBackendRun(t *testing.T, mode uint8, pieces [][]byte) string {
 	return strings.Join(traceOf(acts), "\n")
 }
 
+// FuzzBackendSession proves BackendSession never panics, bounds params and
+// buffers, conserves startup counters, and agrees across chunkings.
 func FuzzBackendSession(f *testing.F) {
 	fuzzSeeds(f)
 	f.Fuzz(func(t *testing.T, data []byte, k int, mode uint8) {
@@ -150,6 +156,8 @@ func FuzzBackendSession(f *testing.F) {
 	})
 }
 
+// FuzzCycle proves CycleTracker and FrontendTracker never panic, bound memory,
+// and produce identical event traces across whole, split, and one-byte delivery.
 func FuzzCycle(f *testing.F) {
 	fuzzSeeds(f)
 	f.Fuzz(func(t *testing.T, data []byte, k int, mode uint8) {

@@ -10,20 +10,26 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/simtls"
 )
 
+// AuthMode selects how fakepg authenticates incoming connections.
 type AuthMode uint8
 
+// Supported fake Postgres authentication modes (zero keeps chunk 2's trust default).
 const (
 	AuthTrust AuthMode = iota
 	AuthSCRAM
 )
 
+// UserVerifier pairs a role name with its SCRAM-SHA-256 verifier for AuthSCRAM.
 type UserVerifier struct {
 	User     string
 	Verifier pgwire.Verifier
 }
 
+// TLSOutcome configures how fakepg completes a simulated TLS handshake after
+// answering 'S' to SSLRequest.
 type TLSOutcome uint8
 
+// Simulated database-side TLS handshake outcomes.
 const (
 	TLSCompleted TLSOutcome = iota
 	TLSFailed
@@ -32,6 +38,8 @@ const (
 	NumTLSOutcomes
 )
 
+// TLSConfig configures fakepg's answer to SSLRequest ('N' or 'S') and its
+// simulated handshake outcome, duration, and advertised version.
 type TLSConfig struct {
 	Answer    byte
 	Handshake time.Duration
@@ -52,6 +60,7 @@ func (c TLSConfig) normalized() TLSConfig {
 	return c
 }
 
+// AuthSnapshot is a plain value copy of fakepg's TLS and SCRAM startup counters.
 type AuthSnapshot struct {
 	TLSAnsweredYes     int64
 	TLSAnsweredNo      int64
@@ -95,16 +104,22 @@ func (srv *Server) initAuth() {
 	}
 }
 
+// SetTLS replaces the server's TLS configuration for subsequent connections.
 func (srv *Server) SetTLS(c TLSConfig) {
 	srv.auth.tls = c.normalized()
 	srv.auth.stats.TLSChanges++
 }
 
+// TLS returns the server's current normalized TLS configuration.
 func (srv *Server) TLS() TLSConfig { return srv.auth.tls }
 
+// AuthSnapshot returns a plain copy of the server's TLS and SCRAM counters.
 func (srv *Server) AuthSnapshot() AuthSnapshot { return srv.auth.stats }
 
 func (b *backend) answerSSL() {
+	// Match Postgres 17's ProcessStartupPacket ssl_done/gss_done flags: a
+	// repeated SSLRequest fails with FATAL 0A000 (protocol 1234.5679), while a
+	// refused SSLRequest clears gssDone and an accepted one latches both.
 	if b.sslDone {
 		b.refuseProtocol(codeSSLRequest)
 		return

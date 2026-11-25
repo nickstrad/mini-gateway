@@ -122,6 +122,9 @@ func startupCases() []startupCase {
 	}
 }
 
+// TestStartupAgainstTheFake proves simulated workload clients handle plaintext
+// and TLS SCRAM logins, all client and fake TLS faults, wrong password, and
+// wrong database against fakepg.
 func TestStartupAgainstTheFake(t *testing.T) {
 	for _, tc := range startupCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -140,6 +143,8 @@ func TestStartupAgainstTheFake(t *testing.T) {
 	}
 }
 
+// TestStartupCountersMove proves every reachable field of workload.StartupCounters
+// and fakepg.AuthSnapshot moves across the startup test matrix.
 func TestStartupCountersMove(t *testing.T) {
 	moved := map[string]bool{}
 	for _, tc := range startupCases() {
@@ -154,6 +159,8 @@ func TestStartupCountersMove(t *testing.T) {
 	}
 }
 
+// TestFakeTLSAnswerCanChangeDuringARun proves fakepg.Server.SetTLS flips SSL
+// answers mid-run and increments TLSChanges.
 func TestFakeTLSAnswerCanChangeDuringARun(t *testing.T) {
 	pg := scramFake(t, fakepg.TLSConfig{Answer: 'N'})
 	tenant := startupTenant(workload.TLSRequire, workload.TLSFaultNone, scramPassword)

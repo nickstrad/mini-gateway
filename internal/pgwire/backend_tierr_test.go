@@ -108,6 +108,9 @@ func realBackendConfig(mode pgwire.BackendTLSMode, password string) pgwire.Backe
 		SessionSettings: pgwire.DefaultSessionSettings(), Random: rand.New(rand.NewPCG(1, 2)), Stats: &pgwire.WireStats{}}
 }
 
+// TestTierRScramClientLogsInToPostgres proves BackendSession authenticates
+// against real Postgres 17 (plaintext, TLS with -PLUS offered, wrong password,
+// verify-full failure, TLS refused, and unknown database).
 func TestTierRScramClientLogsInToPostgres(t *testing.T) {
 	plain, scram, pw := tierR(t)
 	insecure := &tls.Config{InsecureSkipVerify: true}
@@ -276,6 +279,9 @@ func psql(t *testing.T, ts *testServer, user, password, db, sslmode string) (str
 
 func itoa(n int) string { return big.NewInt(int64(n)).String() }
 
+// TestTierRScramServerAcceptedByPsql proves stock psql (libpq) authenticates
+// against ClientSession across all 9 TLS-mode, SCRAM, wrong-password,
+// unknown-user, and unknown-database cases.
 func TestTierRScramServerAcceptedByPsql(t *testing.T) {
 	_, scram, pw := tierR(t)
 	if _, err := exec.LookPath("psql"); err != nil {

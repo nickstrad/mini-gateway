@@ -34,7 +34,7 @@
       "chunk": 4,
       "title": "Speaking Postgres: TLS or not, startup, login, fragments",
       "file": "book/chapters/04-wire-sessions.md",
-      "status": "planned"
+      "status": "live"
     },
     {
       "number": 5,

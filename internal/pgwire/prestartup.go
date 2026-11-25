@@ -13,8 +13,12 @@ const (
 	protocolParamPfx = "_pq_."
 )
 
+// ErrClientConfig is wrapped by ClientConfig.Validate when required fields are
+// missing or invalid.
 var ErrClientConfig = errors.New("pgwire: bad client session configuration")
 
+// Validate checks that ClientConfig has the dependencies required to drive a
+// ClientSession safely.
 func (c ClientConfig) Validate() error {
 	switch {
 	case c.Random == nil:
@@ -113,6 +117,8 @@ func (s *ClientSession) startup(acts []Action, p startupPacket) []Action {
 		}
 		return s.authenticated(acts, nil, 0)
 	}
+	// Run the full SCRAM challenge/response with a deterministic mock verifier
+	// for unknown users so the wire exchange matches a wrong-password failure.
 	t, known := s.cfg.Tenants.Lookup(user)
 	v := t.Verifier
 	if !known {

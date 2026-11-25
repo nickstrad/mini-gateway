@@ -63,6 +63,8 @@ func producedMessages(t *testing.T) []goldenMsg {
 	}
 }
 
+// TestGoldenBytes pins the exact wire bytes of every message produced by the
+// encoders and machines against testdata/golden.txt.
 func TestGoldenBytes(t *testing.T) {
 	msgs := producedMessages(t)
 	var buf bytes.Buffer
@@ -92,6 +94,8 @@ func TestGoldenBytes(t *testing.T) {
 	}
 }
 
+// TestGoldenRepliesAreWhatTheMachinesWrite proves the ClientSession machine
+// emits the same golden bytes during a TLS+SCRAM login.
 func TestGoldenRepliesAreWhatTheMachinesWrite(t *testing.T) {
 	steps := talk(t, cfgFor(t, ClientTLSRequire)(), clientPlan{sslFirst: true, user: "alice", password: passwordOf("alice")})
 	r := replayClient(t, testClientConfig(t, ClientTLSRequire, 1), steps, whole)
@@ -112,6 +116,8 @@ func TestGoldenRepliesAreWhatTheMachinesWrite(t *testing.T) {
 	}
 }
 
+// TestFramerTakesOnlyWhatItNeeds proves Framer stops at exact message
+// boundaries, including consuming exactly 8 bytes of an untyped SSLRequest.
 func TestFramerTakesOnlyWhatItNeeds(t *testing.T) {
 	two := append(AppendQuery(nil, []byte("a")), AppendQuery(nil, []byte("bb"))...)
 	var f Framer
@@ -130,6 +136,9 @@ func TestFramerTakesOnlyWhatItNeeds(t *testing.T) {
 	}
 }
 
+// TestFramerRefusesFromTheHeaderAlone proves impossible and oversized lengths
+// fail from the header with zero body allocation, and skipped bodies pass
+// without buffering.
 func TestFramerRefusesFromTheHeaderAlone(t *testing.T) {
 	cases := []struct {
 		f    Framer

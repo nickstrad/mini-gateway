@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// ScramClient drives the client side of one SCRAM-SHA-256 exchange without I/O.
 type ScramClient struct {
 	user            string
 	password        string
@@ -15,15 +16,19 @@ type ScramClient struct {
 	serverSig       [ScramKeyLen]byte
 }
 
+// NewScramClient creates a client-side SCRAM exchange using the chosen GS2 header.
 func NewScramClient(user, password, clientNonce, gs2 string) *ScramClient {
 	return &ScramClient{user: user, password: password, clientNonce: clientNonce, gs2: gs2}
 }
 
+// First builds and returns the client-first-message.
 func (c *ScramClient) First() []byte {
 	c.clientFirstBare = "n=" + c.user + ",r=" + c.clientNonce
 	return []byte(c.gs2 + c.clientFirstBare)
 }
 
+// Final processes server-first-message, derives the salted password and client
+// proof, saves the expected server signature, and returns client-final-message.
 func (c *ScramClient) Final(serverFirst []byte) ([]byte, AuthCause) {
 	if c.step != scramAwaitFirst {
 		return nil, AuthCauseMalformed
@@ -65,6 +70,8 @@ func (c *ScramClient) Final(serverFirst []byte) ([]byte, AuthCause) {
 	return []byte(withoutProof + ",p=" + b64.EncodeToString(proof[:])), AuthCauseNone
 }
 
+// Verify checks server-final-message against the expected ServerSignature in
+// constant time; a server that cannot prove knowledge of ServerKey is rejected.
 func (c *ScramClient) Verify(serverFinal []byte) AuthCause {
 	if c.step != scramAwaitFinal {
 		return AuthCauseMalformed

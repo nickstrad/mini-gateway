@@ -89,6 +89,8 @@ func itoa(n int) string {
 
 const readyShape = "R10 R11 R12 R0 S S S S S S S S S S S S S S K Z"
 
+// TestPlaintextClientLogsInWithSCRAM proves plaintext SCRAM login succeeds in
+// off and allow modes with identical traces across every byte chunking.
 func TestPlaintextClientLogsInWithSCRAM(t *testing.T) {
 	for _, mode := range []ClientTLSMode{ClientTLSOff, ClientTLSAllow} {
 		steps := talk(t, cfgFor(t, mode)(), clientPlan{user: "alice", password: passwordOf("alice")})
@@ -103,6 +105,8 @@ func TestPlaintextClientLogsInWithSCRAM(t *testing.T) {
 	}
 }
 
+// TestDefaultStyleClientUpgradesWhenAllowedOrRequired proves an SSLRequest
+// triggers 'S' + ActStartTLS and SCRAM with GS2 y,, succeeds in allow and require modes.
 func TestDefaultStyleClientUpgradesWhenAllowedOrRequired(t *testing.T) {
 	for _, mode := range []ClientTLSMode{ClientTLSAllow, ClientTLSRequire} {
 		steps := talk(t, cfgFor(t, mode)(), clientPlan{sslFirst: true, user: "bob", password: passwordOf("bob"), gs2: GS2ClientSupports})
@@ -120,6 +124,8 @@ func TestDefaultStyleClientUpgradesWhenAllowedOrRequired(t *testing.T) {
 	}
 }
 
+// TestTLSRequestAnsweredNWhenOff proves ClientTLSOff replies 'N' to SSLRequest
+// and completes plaintext login on the same connection.
 func TestTLSRequestAnsweredNWhenOff(t *testing.T) {
 	steps := talk(t, cfgFor(t, ClientTLSOff)(), clientPlan{sslFirst: true, user: "alice", password: passwordOf("alice")})
 	r := requireEveryChunking(t, cfgFor(t, ClientTLSOff), steps)
@@ -129,6 +135,8 @@ func TestTLSRequestAnsweredNWhenOff(t *testing.T) {
 	}
 }
 
+// TestPlaintextStartupRefusedWhenRequired proves ClientTLSRequire refuses
+// plaintext startups (directly or after GSS) with FATAL 28000.
 func TestPlaintextStartupRefusedWhenRequired(t *testing.T) {
 	steps := []clientStep{{in: startupBytes("alice", testDatabase, nil)}}
 	r := requireEveryChunking(t, cfgFor(t, ClientTLSRequire), steps)
@@ -141,6 +149,8 @@ func TestPlaintextStartupRefusedWhenRequired(t *testing.T) {
 	requireClose(t, r, ReasonPlaintextRefused)
 }
 
+// TestGSSThenTLSRequest proves a GSS request answered 'N' followed by an
+// SSLRequest succeeds in all three client TLS modes.
 func TestGSSThenTLSRequest(t *testing.T) {
 	for _, mode := range []ClientTLSMode{ClientTLSOff, ClientTLSAllow, ClientTLSRequire} {
 		steps := talk(t, cfgFor(t, mode)(), clientPlan{gssFirst: true, sslFirst: true, user: "alice", password: passwordOf("alice")})
@@ -152,6 +162,8 @@ func TestGSSThenTLSRequest(t *testing.T) {
 	}
 }
 
+// TestSecondTLSRequestAfterTheUpgradeIsAViolation proves repeated SSLRequest
+// (after upgrade or after 'N') and repeated GSS requests close as violations.
 func TestSecondTLSRequestAfterTheUpgradeIsAViolation(t *testing.T) {
 	steps := talk(t, cfgFor(t, ClientTLSRequire)(), clientPlan{sslFirst: true, afterUpgrade: AppendSSLRequest(nil)})
 	r := requireEveryChunking(t, cfgFor(t, ClientTLSRequire), steps)
@@ -169,6 +181,8 @@ func TestSecondTLSRequestAfterTheUpgradeIsAViolation(t *testing.T) {
 	}
 }
 
+// TestBytesSentEarlyAfterAnAcceptedTLSRequest proves smuggled bytes after an
+// accepted SSLRequest leave consumed at 8 and close with bytes-before-handshake.
 func TestBytesSentEarlyAfterAnAcceptedTLSRequest(t *testing.T) {
 	smuggled := append(AppendSSLRequest(nil), startupBytes("alice", testDatabase, nil)...)
 	for _, mode := range []ClientTLSMode{ClientTLSAllow, ClientTLSRequire} {
@@ -190,6 +204,8 @@ func TestBytesSentEarlyAfterAnAcceptedTLSRequest(t *testing.T) {
 	}
 }
 
+// TestPlantedEarlyBytesBugInterpretsTheSmuggledStartup proves the test-only
+// plantEarlyBytes switch reproduces CVE-2021-23214 at the machine level.
 func TestPlantedEarlyBytesBugInterpretsTheSmuggledStartup(t *testing.T) {
 	smuggled := append(AppendSSLRequest(nil), startupBytes("alice", testDatabase, nil)...)
 	cfg := testClientConfig(t, ClientTLSRequire, 1)
@@ -200,6 +216,8 @@ func TestPlantedEarlyBytesBugInterpretsTheSmuggledStartup(t *testing.T) {
 	}
 }
 
+// TestHandshakeFailsOrNeverFinishes proves failed and stalled TLS handshakes
+// close silently under ReasonTLSFailed and ReasonDeadline respectively.
 func TestHandshakeFailsOrNeverFinishes(t *testing.T) {
 	failed := []clientStep{{in: AppendSSLRequest(nil)}, {hs: &HandshakeResult{Outcome: HandshakeFailed}}}
 	r := requireEveryChunking(t, cfgFor(t, ClientTLSRequire), failed)
@@ -215,6 +233,8 @@ func TestHandshakeFailsOrNeverFinishes(t *testing.T) {
 	}
 }
 
+// TestCancelRequestBeforeAndAfterTheUpgrade proves CancelRequest emits
+// ActCancel and closes silently both in plaintext and after a TLS upgrade.
 func TestCancelRequestBeforeAndAfterTheUpgrade(t *testing.T) {
 	k := BackendKey{ProcessID: 4242, Secret: [4]byte{1, 2, 3, 4}}
 	r := requireEveryChunking(t, cfgFor(t, ClientTLSRequire), []clientStep{{in: AppendCancelRequest(nil, k)}})
@@ -231,6 +251,8 @@ func TestCancelRequestBeforeAndAfterTheUpgrade(t *testing.T) {
 	}
 }
 
+// TestWrongPasswordAndUnknownUserLookAlike proves unknown users go through the
+// full SCRAM exchange and receive a reply identical in shape to a wrong password.
 func TestWrongPasswordAndUnknownUserLookAlike(t *testing.T) {
 	wrong := talk(t, cfgFor(t, ClientTLSOff)(), clientPlan{user: "alice", password: "nope"})
 	rw := requireEveryChunking(t, cfgFor(t, ClientTLSOff), wrong)
@@ -259,12 +281,16 @@ func TestWrongPasswordAndUnknownUserLookAlike(t *testing.T) {
 	}
 }
 
+// TestUnknownUserWithTheRightProofForAnotherVerifierFails proves an unknown
+// user never authenticates.
 func TestUnknownUserWithTheRightProofForAnotherVerifierFails(t *testing.T) {
 	steps := talk(t, cfgFor(t, ClientTLSOff)(), clientPlan{user: "mallory", password: "anything"})
 	r := requireEveryChunking(t, cfgFor(t, ClientTLSOff), steps)
 	requireClose(t, r, ReasonAuthFailed)
 }
 
+// TestWrongDatabaseIsRefusedAfterAuthentication proves database existence is
+// checked after SCRAM succeeds, emitting R12, R0, then FATAL 3D000.
 func TestWrongDatabaseIsRefusedAfterAuthentication(t *testing.T) {
 	steps := talk(t, cfgFor(t, ClientTLSOff)(), clientPlan{user: "alice", password: passwordOf("alice"), database: "other"})
 	r := requireEveryChunking(t, cfgFor(t, ClientTLSOff), steps)
@@ -274,6 +300,8 @@ func TestWrongDatabaseIsRefusedAfterAuthentication(t *testing.T) {
 	}
 }
 
+// TestBadProtocolVersion proves major < 3 gets Postgres's legacy unframed FATAL
+// and major > 3 gets a protocol-3.0 FATAL 0A000.
 func TestBadProtocolVersion(t *testing.T) {
 	b := startupBytes("alice", testDatabase, nil)
 	binary.BigEndian.PutUint32(b[4:], 2<<16)
@@ -291,6 +319,8 @@ func TestBadProtocolVersion(t *testing.T) {
 	}
 }
 
+// TestNewerMinorVersionIsNegotiatedDown proves protocol 3.x (x > 0) and _pq_.
+// options receive NegotiateProtocolVersion(3.0) and proceed with login.
 func TestNewerMinorVersionIsNegotiatedDown(t *testing.T) {
 	steps := talk(t, cfgFor(t, ClientTLSOff)(), clientPlan{user: "alice", password: passwordOf("alice")})
 	b := startupBytes("alice", testDatabase, []Param{{"_pq_.foo", "x"}})
@@ -305,6 +335,8 @@ func TestNewerMinorVersionIsNegotiatedDown(t *testing.T) {
 	}
 }
 
+// TestStartupParameters proves fixed session settings and application_name pass
+// while differing settings, replication, options, and missing user are refused.
 func TestStartupParameters(t *testing.T) {
 	ok := talk(t, cfgFor(t, ClientTLSOff)(), clientPlan{user: "alice", password: passwordOf("alice"),
 		extra: []Param{{"application_name", "psql"}, {"client_encoding", "utf8"}}})
@@ -325,6 +357,8 @@ func TestStartupParameters(t *testing.T) {
 	}
 }
 
+// TestDatabaseDefaultsToTheUserName proves an omitted database startup parameter
+// defaults to the user name, matching Postgres.
 func TestDatabaseDefaultsToTheUserName(t *testing.T) {
 	cfg := testClientConfig(t, ClientTLSOff, 1)
 	cfg.Database = "alice"
@@ -334,6 +368,8 @@ func TestDatabaseDefaultsToTheUserName(t *testing.T) {
 	requireReady(t, requireEveryChunking(t, cfg2, steps))
 }
 
+// TestGS2HeadersThroughTheMachine proves n,, and y,, succeed through ClientSession,
+// p= is refused, -PLUS is never offered, and a mismatched c= value fails.
 func TestGS2HeadersThroughTheMachine(t *testing.T) {
 	for _, gs2 := range []string{GS2NoBinding, GS2ClientSupports} {
 		steps := talk(t, cfgFor(t, ClientTLSOff)(), clientPlan{user: "alice", password: passwordOf("alice"), gs2: gs2})
@@ -358,6 +394,8 @@ func TestGS2HeadersThroughTheMachine(t *testing.T) {
 	}
 }
 
+// TestOnlySCRAMSHA256IsOffered proves AuthenticationSASL lists SCRAM-SHA-256
+// alone both in plaintext and over TLS.
 func TestOnlySCRAMSHA256IsOffered(t *testing.T) {
 	for _, mode := range []ClientTLSMode{ClientTLSOff, ClientTLSRequire} {
 		steps := talk(t, cfgFor(t, mode)(), clientPlan{sslFirst: mode != ClientTLSOff, user: "alice", password: passwordOf("alice")})
@@ -371,6 +409,8 @@ func TestOnlySCRAMSHA256IsOffered(t *testing.T) {
 	}
 }
 
+// TestTerminationAndEOFDuringStartup proves EOF, Terminate, startup deadlines,
+// and out-of-phase Query messages close under the expected reason and reply.
 func TestTerminationAndEOFDuringStartup(t *testing.T) {
 	r := requireEveryChunking(t, cfgFor(t, ClientTLSOff), []clientStep{{in: AppendSSLRequest(nil)}, {eof: true}})
 	requireClose(t, r, ReasonClientClosed)
@@ -392,6 +432,8 @@ func TestTerminationAndEOFDuringStartup(t *testing.T) {
 	requireClose(t, r, ReasonViolation)
 }
 
+// TestTrustIsANamedTestSettingOnly proves the zero AuthMode is SCRAM and trust
+// mode still rejects unknown users.
 func TestTrustIsANamedTestSettingOnly(t *testing.T) {
 	var zero ClientConfig
 	if zero.Auth != AuthSCRAM {
@@ -411,6 +453,8 @@ func TestTrustIsANamedTestSettingOnly(t *testing.T) {
 	requireClose(t, r, ReasonAuthFailed)
 }
 
+// TestOversizedLengthIsRefusedFromTheHeader proves oversized and impossible
+// lengths close ClientSession from the header alone in both startup and SASL.
 func TestOversizedLengthIsRefusedFromTheHeader(t *testing.T) {
 	hdr := []byte{0, 0, 0x4e, 0x30}
 	s := NewClientSession(testClientConfig(t, ClientTLSOff, 1))
@@ -435,6 +479,8 @@ func TestOversizedLengthIsRefusedFromTheHeader(t *testing.T) {
 	}
 }
 
+// TestProxyKeysAreUniqueAndFromTheIssuer proves KeyIssuer produces unique
+// non-zero process IDs within one issuer and distinct keys across seeds.
 func TestProxyKeysAreUniqueAndFromTheIssuer(t *testing.T) {
 	cfg := testClientConfig(t, ClientTLSOff, 3)
 	seen := map[uint32]bool{}
@@ -454,6 +500,8 @@ func TestProxyKeysAreUniqueAndFromTheIssuer(t *testing.T) {
 	}
 }
 
+// TestReceiveAfterReadyConsumesNothing proves ClientSession stops at its last
+// startup byte and ignores subsequent bytes and deadlines once ready.
 func TestReceiveAfterReadyConsumesNothing(t *testing.T) {
 	steps := talk(t, cfgFor(t, ClientTLSOff)(), clientPlan{user: "alice", password: passwordOf("alice")})
 	cfg := testClientConfig(t, ClientTLSOff, 1)
@@ -474,6 +522,8 @@ func TestReceiveAfterReadyConsumesNothing(t *testing.T) {
 	}
 }
 
+// TestClientConfigValidation proves ClientConfig.Validate rejects missing
+// dependencies, out-of-range TLS modes, and SCRAM without a MockSecret.
 func TestClientConfigValidation(t *testing.T) {
 	good := testClientConfig(t, ClientTLSOff, 1)
 	if err := good.Validate(); err != nil {

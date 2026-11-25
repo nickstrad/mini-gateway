@@ -11,6 +11,9 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/pgwire/pgwiretest/wireworld"
 )
 
+// TestScenarioWireFlush flushes all 19 wire scenarios on pinned seeds through
+// all four observability adapters and proves Verify, Run.Check, byte-identical
+// replay, and exact counter parity with WireSnapshot.
 func TestScenarioWireFlush(t *testing.T) {
 	for _, sc := range wireworld.Scenarios() {
 		t.Run(sc.Name, func(t *testing.T) {

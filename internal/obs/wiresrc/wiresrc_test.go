@@ -33,6 +33,9 @@ func (f *filler) fill(v reflect.Value, path string) {
 	}
 }
 
+// TestMappingMovesEveryMetricAndExportsEveryField fills every int64 field of
+// WireSnapshot via reflection and proves every declared wire metric moves and
+// no snapshot field is dropped.
 func TestMappingMovesEveryMetricAndExportsEveryField(t *testing.T) {
 	var s pgwire.WireSnapshot
 	f := &filler{paths: map[int64]string{}}
@@ -74,6 +77,8 @@ func TestMappingMovesEveryMetricAndExportsEveryField(t *testing.T) {
 	}
 }
 
+// TestZeroSnapshotEmitsEveryLabelValue proves a zero WireSnapshot emits explicit
+// zero rows for every enum label value so SQL assertions never miss a slot.
 func TestZeroSnapshotEmitsEveryLabelValue(t *testing.T) {
 	c := obs.NewCollector(obs.Config{Instance: "i", Detail: true})
 	if err := c.Register(wiresrc.Source(func() pgwire.WireSnapshot { return pgwire.WireSnapshot{} })); err != nil {

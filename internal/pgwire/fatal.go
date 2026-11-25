@@ -9,6 +9,7 @@ const (
 	fieldMessage             byte = 'M'
 )
 
+// SQLSTATE codes emitted or classified by the startup machines.
 const (
 	CodeInvalidAuthorization = "28000"
 	CodeInvalidPassword      = "28P01"
@@ -19,6 +20,8 @@ const (
 	CodeConnectionFailure    = "08006"
 )
 
+// AppendErrorResponse appends a protocol-3.0 ErrorResponse ('E') containing
+// only the S, V, C, and M fields followed by the terminating NUL byte.
 func AppendErrorResponse(dst []byte, severity, code, message string) []byte {
 	dst, at := beginMessage(dst, MsgErrorResponse)
 	dst = append(dst, fieldSeverity)
@@ -33,11 +36,17 @@ func AppendErrorResponse(dst []byte, severity, code, message string) []byte {
 	return finishMessage(dst, at)
 }
 
+// AppendLegacyFatal appends Postgres's protocol-2.0 unframed fatal reply
+// ('E' + "FATAL:  <message>\n\x00", with no length word) used when a client
+// sends a startup packet with major version < 3.
 func AppendLegacyFatal(dst []byte, message string) []byte {
 	dst = append(dst, MsgErrorResponse)
 	return appendCString(dst, SeverityFatal+":  "+message+"\n")
 }
 
+// AppendNegotiateProtocolVersion appends a NegotiateProtocolVersion ('v')
+// message advertising newest as the highest supported version and listing any
+// unrecognized _pq_. protocol options.
 func AppendNegotiateProtocolVersion(dst []byte, newest uint32, unrecognized []string) []byte {
 	dst, at := beginMessage(dst, MsgNegotiateProtocol)
 	dst = binary.BigEndian.AppendUint32(dst, newest)
@@ -48,18 +57,24 @@ func AppendNegotiateProtocolVersion(dst []byte, newest uint32, unrecognized []st
 	return finishMessage(dst, at)
 }
 
+// AppendFatal appends a FATAL ErrorResponse with the given SQLSTATE and text.
 func AppendFatal(dst []byte, code, message string) []byte {
 	return AppendErrorResponse(dst, SeverityFatal, code, message)
 }
 
+// ErrorFields holds the severity, SQLSTATE code, and human-readable text parsed
+// from a backend ErrorResponse or NoticeResponse body.
 type ErrorFields struct {
 	Severity string
 	Code     string
 	Message  string
 }
 
+// Fatal reports whether the error severity terminates the connection (FATAL or PANIC).
 func (e ErrorFields) Fatal() bool { return e.Severity == SeverityFatal || e.Severity == SeverityPanic }
 
+// ParseErrorFields decodes the NUL-terminated field list of an ErrorResponse or
+// NoticeResponse body, preferring the unlocalized V severity over localized S.
 func ParseErrorFields(body []byte) (ErrorFields, bool) {
 	var e ErrorFields
 	var localized string

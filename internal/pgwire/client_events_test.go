@@ -4,6 +4,8 @@ import (
 	"testing"
 )
 
+// TestHandshakeResultOutcomesAreClassifiedOnTheClientSide proves every
+// HandshakeOutcome (including out-of-range values) maps to its expected Reason.
 func TestHandshakeResultOutcomesAreClassifiedOnTheClientSide(t *testing.T) {
 	cases := []struct {
 		outcome HandshakeOutcome
@@ -27,6 +29,8 @@ func TestHandshakeResultOutcomesAreClassifiedOnTheClientSide(t *testing.T) {
 	}
 }
 
+// TestHandshakeResultWithAnUnknownVersionCountsAsOther proves an out-of-range
+// TLSVersion clamps safely into TLSVersionOther.
 func TestHandshakeResultWithAnUnknownVersionCountsAsOther(t *testing.T) {
 	steps := []clientStep{{in: AppendSSLRequest(nil)}, {hs: &HandshakeResult{Outcome: HandshakeCompleted, Version: TLSVersion(250)}},
 		{in: startupBytes("alice", testDatabase, nil)}}
@@ -36,6 +40,8 @@ func TestHandshakeResultWithAnUnknownVersionCountsAsOther(t *testing.T) {
 	}
 }
 
+// TestClientSessionDropsSCRAMStateWhenItCloses proves SCRAM state is released
+// on auth failure and deadline close, not only on success.
 func TestClientSessionDropsSCRAMStateWhenItCloses(t *testing.T) {
 	steps := talk(t, cfgFor(t, ClientTLSOff)(), clientPlan{user: "alice", password: "nope"})
 	r := replayClient(t, testClientConfig(t, ClientTLSOff, 1), steps, whole)

@@ -5,8 +5,10 @@ import (
 	"fmt"
 )
 
+// Reason classifies why a ClientSession ended before reaching ReadyForQuery.
 type Reason uint8
 
+// Client-side startup close reasons indexed into ClientWireSnapshot.StartupsFailed.
 const (
 	ReasonNone Reason = iota
 	ReasonClientClosed
@@ -27,6 +29,7 @@ var reasonNames = [NumReasons]string{"none", "client-closed", "deadline", "proto
 	"plaintext-refused", "protocol-version", "parameter-refused", "no-user", "auth-failed", "unknown-database",
 	"cancel-request"}
 
+// String returns the canonical hyphenated name of r.
 func (r Reason) String() string {
 	if r < NumReasons {
 		return reasonNames[r]
@@ -34,8 +37,11 @@ func (r Reason) String() string {
 	return "unknown"
 }
 
+// Class classifies a BackendSession startup failure so the pool's circuit
+// breaker can count failures by cause.
 type Class uint8
 
+// Database-side startup failure classes indexed into DatabaseWireSnapshot.StartupsFailed.
 const (
 	ClassNone Class = iota
 	ClassTLSRefused
@@ -53,6 +59,7 @@ const (
 var classNames = [NumClasses]string{"none", "tls-refused", "tls-failed", "auth-failed", "auth-unsupported",
 	"too-many-connections", "server-fatal", "protocol-violation", "deadline", "connection-lost"}
 
+// String returns the canonical hyphenated name of c.
 func (c Class) String() string {
 	if c < NumClasses {
 		return classNames[c]
@@ -60,8 +67,10 @@ func (c Class) String() string {
 	return "unknown"
 }
 
+// Violation identifies a wire-protocol violation detected by a session or tracker.
 type Violation uint8
 
+// Wire-protocol violation kinds indexed into SideCounters.Violations.
 const (
 	ViolationNone Violation = iota
 	ViolationBadLength
@@ -82,6 +91,7 @@ var violationNames = [NumViolations]string{"none", "bad-length", "too-large", "b
 	"second-tls-request", "second-gss-request", "bad-startup-packet", "unexpected-message", "bad-message",
 	"bad-tls-answer", "unknown-message", "bad-handshake"}
 
+// String returns the canonical hyphenated name of v.
 func (v Violation) String() string {
 	if v < NumViolations {
 		return violationNames[v]
@@ -89,8 +99,10 @@ func (v Violation) String() string {
 	return "unknown"
 }
 
+// RequestKind identifies a pre-startup untyped request packet on the client leg.
 type RequestKind uint8
 
+// Pre-startup request kinds indexed into ClientWireSnapshot.Requests.
 const (
 	RequestTLS RequestKind = iota
 	RequestGSS
@@ -100,6 +112,7 @@ const (
 
 var requestKindNames = [NumRequestKinds]string{"tls", "gss", "cancel"}
 
+// String returns the canonical name of k.
 func (k RequestKind) String() string {
 	if k < NumRequestKinds {
 		return requestKindNames[k]
@@ -107,8 +120,10 @@ func (k RequestKind) String() string {
 	return "unknown"
 }
 
+// Answer records the single-byte reply ('S', 'N', or none) to an encryption request.
 type Answer uint8
 
+// Encryption-request answer slots indexed into Requests and TLSAnswers arrays.
 const (
 	AnswerYes Answer = iota
 	AnswerNo
@@ -118,6 +133,7 @@ const (
 
 var answerNames = [NumAnswers]string{"S", "N", "none"}
 
+// String returns "S", "N", or "none".
 func (a Answer) String() string {
 	if a < NumAnswers {
 		return answerNames[a]
@@ -125,8 +141,10 @@ func (a Answer) String() string {
 	return "unknown"
 }
 
+// HandshakeOutcome reports how a TLS handshake ended to HandshakeDone.
 type HandshakeOutcome uint8
 
+// TLS handshake outcomes indexed into TLSFailed arrays (excluding HandshakeCompleted).
 const (
 	HandshakeCompleted HandshakeOutcome = iota
 	HandshakeFailed
@@ -138,6 +156,7 @@ const (
 
 var handshakeNames = [NumHandshakeOutcomes]string{"completed", "failed", "failed-verification", "deadline", "protocol-violation"}
 
+// String returns the canonical hyphenated name of h.
 func (h HandshakeOutcome) String() string {
 	if h < NumHandshakeOutcomes {
 		return handshakeNames[h]
@@ -145,8 +164,10 @@ func (h HandshakeOutcome) String() string {
 	return "unknown"
 }
 
+// TLSVersion identifies the negotiated TLS protocol version on a completed handshake.
 type TLSVersion uint8
 
+// TLS version slots indexed into TLSCompleted arrays.
 const (
 	TLSVersionOther TLSVersion = iota
 	TLSVersion12
@@ -156,6 +177,7 @@ const (
 
 var tlsVersionNames = [NumTLSVersions]string{"other", "1.2", "1.3"}
 
+// String returns "1.2", "1.3", or "other".
 func (v TLSVersion) String() string {
 	if v < NumTLSVersions {
 		return tlsVersionNames[v]
@@ -163,6 +185,8 @@ func (v TLSVersion) String() string {
 	return "unknown"
 }
 
+// HandshakeResult is delivered to ClientSession.HandshakeDone or
+// BackendSession.HandshakeDone after the transport finishes (or fails) TLS.
 type HandshakeResult struct {
 	Outcome HandshakeOutcome
 	Version TLSVersion
@@ -178,6 +202,8 @@ func (r HandshakeResult) normalized() HandshakeResult {
 	return r
 }
 
+// SideCounters holds message, byte, violation, and oversized-frame counters
+// common to both the client and database legs.
 type SideCounters struct {
 	MessagesIn  int64
 	MessagesOut int64
@@ -187,6 +213,8 @@ type SideCounters struct {
 	Oversized   int64
 }
 
+// ClientWireSnapshot is a plain value copy of all client-facing wire counters
+// and startup gauges.
 type ClientWireSnapshot struct {
 	StartupsBegun     int64
 	StartupsCompleted int64
@@ -206,6 +234,8 @@ type ClientWireSnapshot struct {
 	SideCounters
 }
 
+// DatabaseWireSnapshot is a plain value copy of all database-facing wire
+// counters, startup gauges, and query-cycle tracker counts.
 type DatabaseWireSnapshot struct {
 	StartupsBegun      int64
 	StartupsCompleted  int64
@@ -230,15 +260,20 @@ type DatabaseWireSnapshot struct {
 	SideCounters
 }
 
+// WireSnapshot is the raw observability export of internal/pgwire, grouping
+// client-side and database-side counters with no maps, pointers, or wall clock.
 type WireSnapshot struct {
 	Client   ClientWireSnapshot
 	Database DatabaseWireSnapshot
 }
 
+// WireStats accumulates wire counters for a proxy instance (single-threaded,
+// matching the sans-I/O engine).
 type WireStats struct {
 	snap WireSnapshot
 }
 
+// Snapshot returns a plain value copy of the current wire counters.
 func (w *WireStats) Snapshot() WireSnapshot {
 	if w == nil {
 		return WireSnapshot{}
@@ -254,8 +289,13 @@ func sumInt64(xs []int64) int64 {
 	return t
 }
 
+// ErrConservation is wrapped by WireSnapshot.Check when startup conservation
+// or TLS-request accounting fails.
 var ErrConservation = errors.New("pgwire: wire snapshot conservation")
 
+// Check verifies startup conservation on both legs (begun == completed +
+// failed + in progress), non-negative startup gauges, no unreasoned failures,
+// and unanswered database TLS requests bounded by database sessions in startup.
 func (s WireSnapshot) Check() error {
 	var errs []error
 	c := s.Client

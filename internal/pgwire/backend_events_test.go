@@ -4,6 +4,9 @@ import (
 	"testing"
 )
 
+// TestHandshakeResultOutcomesAreClassifiedOnTheDatabaseSide proves every
+// HandshakeOutcome and out-of-range enum value maps to the right Class and
+// TLSVersion slot without panicking.
 func TestHandshakeResultOutcomesAreClassifiedOnTheDatabaseSide(t *testing.T) {
 	cases := []struct {
 		outcome HandshakeOutcome
@@ -32,6 +35,8 @@ func TestHandshakeResultOutcomesAreClassifiedOnTheDatabaseSide(t *testing.T) {
 	}
 }
 
+// TestReadyBackendSessionIgnoresStartupEvents proves a ready BackendSession is
+// immutable to subsequent Receive, Deadline, PeerClosed, and HandshakeDone events.
 func TestReadyBackendSessionIgnoresStartupEvents(t *testing.T) {
 	steps := talkBackend(t, BackendTLSRequire, serverPlan{tlsAnswer: AnswerTLSYes, auth: AuthSASL})
 	cfg := testBackendConfig(BackendTLSRequire, 1)
@@ -61,6 +66,8 @@ func TestReadyBackendSessionIgnoresStartupEvents(t *testing.T) {
 	}
 }
 
+// TestBackendSessionDropsSCRAMStateWhenItFails proves ScramClient (holding the
+// plaintext password) is cleared on auth failure and deadline close.
 func TestBackendSessionDropsSCRAMStateWhenItFails(t *testing.T) {
 	steps := talkBackend(t, BackendTLSDisable, serverPlan{auth: AuthSASL, tamperFinal: true})
 	r := replayBackend(t, testBackendConfig(BackendTLSDisable, 1), steps, whole)

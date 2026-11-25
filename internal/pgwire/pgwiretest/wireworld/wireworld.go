@@ -1,3 +1,9 @@
+// Package wireworld defines the 19 end-to-end wire startup scenarios, their
+// simulated world builder, and their exact Go assertions.
+//
+// It lives in an importable harness package (not a test file of internal/pgwire)
+// so both internal/pgwire's seed sweep and internal/obs/simrun's CSV-flush
+// tests share one scenario definition without violating importlint.
 package wireworld
 
 import (
@@ -14,7 +20,9 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/workload"
 )
 
+// Fixed timing, tenant, and credential constants shared by every wire scenario.
 const (
+	// Iterations uses 16 PBKDF2 rounds in the simulator to keep seed sweeps fast.
 	Iterations    = 16
 	PoolUser      = "pool"
 	PoolPassword  = "pool-pw"
@@ -31,6 +39,7 @@ const (
 	tenantCount   = 3
 )
 
+// World holds the wired simulator actors for one wire startup scenario run.
 type World struct {
 	Sim      *sim.Sim
 	Net      *simnet.Net
@@ -40,6 +49,8 @@ type World struct {
 	Scenario Scenario
 }
 
+// Expect specifies the exact client and database startup failures expected by
+// a scenario, along with the deadline-check instant By.
 type Expect struct {
 	Client   map[pgwire.Reason]int64
 	Database map[pgwire.Class]int64
@@ -47,6 +58,9 @@ type Expect struct {
 	OKFault  bool
 }
 
+// Scenario describes one wire-session end-to-end scenario: TLS modes, chunking,
+// optional fault tenant or database fault injection/clear callbacks, and expected
+// failure counts.
 type Scenario struct {
 	Name            string
 	ClientTLS       pgwire.ClientTLSMode
@@ -61,12 +75,15 @@ type Scenario struct {
 	Client          func(c *pgwire.ClientConfig)
 }
 
+// Verifier derives a simulator-speed SCRAM verifier for password and salt.
 func Verifier(password, salt string) (pgwire.Verifier, error) {
 	return pgwire.NewVerifier(password, []byte(salt), Iterations)
 }
 
+// TenantName formats the i-th scenario tenant name ("tenant0", "tenant1", ...).
 func TenantName(i int) string { return fmt.Sprintf("%s%d", ClientPrefix, i) }
 
+// TenantPassword returns the deterministic test password for tenant name.
 func TenantPassword(name string) string { return "pw-" + name }
 
 func goodTenant(name string, start time.Duration, tls workload.TLSRequest) workload.Tenant {
@@ -119,6 +136,8 @@ func (sc Scenario) faultTenant() workload.Tenant {
 	return f
 }
 
+// Build constructs and starts a simulated World for sc on seed without running
+// the event loop yet, so callers (such as simrun.Wire) can attach observers.
 func Build(seed int64, sc Scenario, replay string) (*World, error) {
 	s := sim.New(sim.Config{Seed: seed, Scenario: sc.Name})
 	s.SetReplay(replay)
@@ -174,6 +193,8 @@ func Build(seed int64, sc Scenario, replay string) (*World, error) {
 	return w, nil
 }
 
+// Result holds the intermediate deadline-check snapshot, final snapshots, and
+// quiesce error produced by World.Run.
 type Result struct {
 	World    *World
 	AtCheck  pgwire.WireSnapshot
@@ -184,6 +205,8 @@ type Result struct {
 	Err      error
 }
 
+// CheckAt returns the virtual time by which all expected startup failures must
+// already have terminated and been counted.
 func (sc Scenario) CheckAt() time.Duration {
 	if sc.Want.By == 0 {
 		return FaultAt + CheckMargin
@@ -191,6 +214,8 @@ func (sc Scenario) CheckAt() time.Duration {
 	return sc.Want.By
 }
 
+// Run drives w through its deadline-check instant, the full 30 s virtual
+// window, quiet drain, and quiesce check, capturing snapshots along the way.
 func (w *World) Run() Result {
 	r := Result{World: w}
 	if err := w.Sim.RunUntil(sim.Time(w.Scenario.CheckAt())); err != nil {
@@ -211,6 +236,7 @@ func (w *World) Run() Result {
 	return r
 }
 
+// Run builds and runs sc on seed in one call.
 func Run(seed int64, sc Scenario, replay string) Result {
 	w, err := Build(seed, sc, replay)
 	if err != nil {
@@ -219,6 +245,7 @@ func Run(seed int64, sc Scenario, replay string) Result {
 	return w.Run()
 }
 
+// Tenant returns the workload snapshot for the named tenant, or a zero value.
 func (r Result) Tenant(name string) workload.TenantSnapshot {
 	for _, ts := range r.Workload.Tenants {
 		if ts.Name == name {
@@ -228,6 +255,8 @@ func (r Result) Tenant(name string) workload.TenantSnapshot {
 	return workload.TenantSnapshot{}
 }
 
+// Failures extracts the non-zero client failure reasons and database failure
+// classes from s as sparse maps for exact comparison.
 func Failures(s pgwire.WireSnapshot) (map[pgwire.Reason]int64, map[pgwire.Class]int64) {
 	c, d := map[pgwire.Reason]int64{}, map[pgwire.Class]int64{}
 	for i, v := range s.Client.StartupsFailed {
@@ -247,6 +276,9 @@ func sameCounts[K comparable](a, b map[K]int64) bool {
 	return maps.Equal(a, b)
 }
 
+// Verify checks conservation, exact failure counts (both at CheckAt and at the
+// end of the run), healthy tenant0 and recovery tenant1 completion, non-zero
+// counter movement, and TLS request/answer parity across proxy, workload, and fake.
 func (sc Scenario) Verify(r Result) error {
 	if r.Err != nil {
 		return r.Err
@@ -302,6 +334,7 @@ func (sc Scenario) Verify(r Result) error {
 	return nil
 }
 
+// FaultName returns the name of the scenario's fault-injecting tenant.
 func (r Result) FaultName() string {
 	if r.World.Scenario.Fault != nil && r.World.Scenario.Fault.Name != "" {
 		return r.World.Scenario.Fault.Name
@@ -332,6 +365,7 @@ func resetMidHandshake(w *World) {
 
 func one[K comparable](k K) map[K]int64 { return map[K]int64{k: 1} }
 
+// Scenarios returns the full ordered list of 19 wire-session scenarios.
 func Scenarios() []Scenario {
 	yes := fakepg.TLSConfig{Answer: 'S'}
 	dbFaultTenant := &workload.Tenant{}
@@ -373,6 +407,7 @@ func Scenarios() []Scenario {
 	}
 }
 
+// Lookup finds a scenario by name in Scenarios.
 func Lookup(name string) (Scenario, bool) {
 	for _, sc := range Scenarios() {
 		if sc.Name == name {

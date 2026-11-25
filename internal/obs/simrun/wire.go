@@ -47,10 +47,16 @@ func newRun(scenario string, seed int64, fingerprint string, opt Options, clock 
 	return run, nil
 }
 
+// WireInterval is the default virtual publish cadence for wire scenarios
+// (coarser than the 100 ms baseline default because wire runs span 30 s).
 const WireInterval = 5 * time.Second
 
+// WireFingerprint returns the deterministic config fingerprint for sc.
 func WireFingerprint(sc wireworld.Scenario) string { return sc.Name + "-wire" }
 
+// Wire builds and runs wire startup scenario sc on seed with sim, simnet,
+// fakepg, workload, and wire sources attached to all four observability
+// adapters, flushing at t=0, every WireInterval, at sc.CheckAt(), and at end.
 func Wire(sc wireworld.Scenario, seed int64, opt Options) (*Run, error) {
 	if opt.Interval <= 0 {
 		opt.Interval = WireInterval

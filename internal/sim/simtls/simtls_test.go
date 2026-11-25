@@ -2,6 +2,8 @@ package simtls
 
 import "testing"
 
+// TestHelloAndReplies proves simtls ClientHello validation and ServerReply
+// encode/parse round-trips across every reply kind and version.
 func TestHelloAndReplies(t *testing.T) {
 	if !ValidClientHello(AppendClientHello(nil)) || ValidClientHello(AppendBadClientHello(nil)) || ValidClientHello([]byte("short")) {
 		t.Fatal("client hello")

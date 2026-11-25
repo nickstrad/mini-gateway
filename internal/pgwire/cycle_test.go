@@ -76,6 +76,9 @@ func requireCycleChunkings(t *testing.T, stream []byte, queries int, eof bool) (
 	return base, st.Snapshot()
 }
 
+// TestCycleTrackerProbeShapes proves CycleTracker produces the right events,
+// status byte, and end offset for every Phase 1 probe reply shape across every
+// byte-boundary split.
 func TestCycleTrackerProbeShapes(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -137,6 +140,8 @@ func noticeMsg() []byte {
 	return finishMessage(b, at)
 }
 
+// TestCycleTrackerFatalEndsTheStreamWithoutAMarker proves EOF after FATAL or
+// mid-message counts as EndWithoutMarker, while clean EOF after Ready does not.
 func TestCycleTrackerFatalEndsTheStreamWithoutAMarker(t *testing.T) {
 	_, tr, st := runCycle(cat(rowDesc(), AppendFatal(nil, "57P01", "bye")), 1, true, func(b []byte) [][]byte { return [][]byte{b} })
 	if !tr.Closed() || st.Snapshot().Database.EndWithoutMarker != 1 || st.Snapshot().Database.FatalErrors != 1 {
@@ -152,6 +157,8 @@ func TestCycleTrackerFatalEndsTheStreamWithoutAMarker(t *testing.T) {
 	}
 }
 
+// TestCycleTrackerStreamsManyRowsWithoutBuffering proves 200,000 DataRow
+// messages stream through CycleTracker with a 0-byte body buffer.
 func TestCycleTrackerStreamsManyRowsWithoutBuffering(t *testing.T) {
 	const rows = 200_000
 	st := &WireStats{}
@@ -192,6 +199,8 @@ func TestCycleTrackerStreamsManyRowsWithoutBuffering(t *testing.T) {
 	}
 }
 
+// TestCycleTrackerSurprises proves malformed lengths, bad control bodies, and
+// oversized relayed headers close the tracker as violations across all splits.
 func TestCycleTrackerSurprises(t *testing.T) {
 	for _, stream := range [][]byte{{'D', 0, 0, 0, 1}, {'Z', 0, 0, 0, 5, 'Q'}, cat(AppendMessageHeader(nil, 'E', 2), []byte{'S', 'x'}),
 		cat(AppendMessageHeader(nil, 'S', 2), []byte{'a', 0}), {'Z', 0x40, 0, 0, 0}} {
@@ -207,6 +216,8 @@ func TestCycleTrackerSurprises(t *testing.T) {
 	}
 }
 
+// TestCycleTrackerReportsUnsolicitedMessagesOutsideACycle proves an unsolicited
+// ParameterStatus outside an active query is surfaced with InCycle=false.
 func TestCycleTrackerReportsUnsolicitedMessagesOutsideACycle(t *testing.T) {
 	out, _ := requireCycleChunkings(t, AppendParameterStatus(nil, "application_name", "fakepg-surprise-1"), 0, false)
 	if !strings.HasPrefix(out, "parameter-status:S:") || !strings.Contains(out, ":false:") || !strings.Contains(out, "application_name=fakepg-surprise-1") {
@@ -233,6 +244,9 @@ func runFront(stream []byte, chunk func([]byte) [][]byte) (string, *WireStats) {
 	return out.String(), st
 }
 
+// TestFrontendTrackerRecognisesQueriesTerminateAndExtended proves
+// FrontendTracker classifies Query, Terminate, all 11 extended-protocol types,
+// and violations identically under every byte chunking.
 func TestFrontendTrackerRecognisesQueriesTerminateAndExtended(t *testing.T) {
 	ext := cat(AppendMessageHeader(nil, MsgParse, 3), []byte("s\x00\x00"), AppendMessageHeader(nil, MsgBind, 0), AppendMessageHeader(nil, MsgExecute, 0),
 		AppendMessageHeader(nil, MsgDescribe, 0), AppendMessageHeader(nil, MsgClose, 0), AppendMessageHeader(nil, MsgFlush, 0),
@@ -270,6 +284,8 @@ func TestFrontendTrackerRecognisesQueriesTerminateAndExtended(t *testing.T) {
 	}
 }
 
+// TestCycleTrackerPassesARowLargerThanItsMessageLimit proves a skipped DataRow
+// larger than the inspected-message cap passes without buffering or error.
 func TestCycleTrackerPassesARowLargerThanItsMessageLimit(t *testing.T) {
 	const limit = 128
 	rows := cat(rowDesc(), dataRow(strings.Repeat("r", 4096)), complete("SELECT 1"))

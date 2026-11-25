@@ -45,6 +45,9 @@ func readN(t *testing.T, c *simConn, n int) []byte {
 	return out
 }
 
+// TestProxyKeepsBytesCoalescedWithTheClientHello proves the simulated harness
+// retains bytes delivered in the same write as ClientHello and feeds them after
+// the handshake completes.
 func TestProxyKeepsBytesCoalescedWithTheClientHello(t *testing.T) {
 	d, err := NewSimFidelity(7)
 	if err != nil {

@@ -8,16 +8,21 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/testclient"
 )
 
+// TLSRequest configures whether a simulated tenant sends SSLRequest before
+// StartupMessage, matching libpq's disable, prefer, and require behaviors.
 type TLSRequest uint8
 
+// Client-side TLS negotiation modes (zero keeps chunk 2's plaintext default).
 const (
 	TLSOff TLSRequest = iota
 	TLSPrefer
 	TLSRequire
 )
 
+// TLSFault injects one of the client-side TLS startup faults of PLAN.md 10.4.
 type TLSFault uint8
 
+// Client-side TLS fault kinds indexed into StartupCounters.TLSFaults.
 const (
 	TLSFaultNone TLSFault = iota
 	TLSFaultStall
@@ -29,6 +34,7 @@ const (
 
 var tlsFaultNames = [NumTLSFaults]string{"none", "stall-after-request", "bad-hello", "plaintext-after-request", "second-request"}
 
+// String returns the canonical hyphenated name of f.
 func (f TLSFault) String() string {
 	if f < NumTLSFaults {
 		return tlsFaultNames[f]
@@ -36,6 +42,8 @@ func (f TLSFault) String() string {
 	return "unknown"
 }
 
+// StartupCounters tracks per-tenant TLS negotiation, handshake, fault, and
+// SCRAM counts inside TenantSnapshot.
 type StartupCounters struct {
 	TLSRequests      int64
 	TLSAnsweredYes   int64

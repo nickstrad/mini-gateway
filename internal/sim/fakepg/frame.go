@@ -85,6 +85,8 @@ func (f *Framer) Next() (byte, []byte, bool, error) {
 	return typ, body, true, nil
 }
 
+// TakeRaw pops exactly n unframed bytes from the buffer (used to read the
+// fixed 16-byte simulated TLS ClientHello after answering 'S').
 func (f *Framer) TakeRaw(n int) ([]byte, bool) {
 	if f.Buffered() < n {
 		return nil, false

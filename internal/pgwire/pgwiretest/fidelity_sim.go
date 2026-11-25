@@ -13,18 +13,25 @@ import (
 )
 
 const (
-	FidelityUser     = "postgres"
+	// FidelityUser is the role used by the startup fidelity script.
+	FidelityUser = "postgres"
+	// FidelityDatabase is the database used by the startup fidelity script.
 	FidelityDatabase = "postgres"
+	// FidelityPassword is the SCRAM password configured in the tier R container and fake.
 	FidelityPassword = "mg-tier-r-scram"
 	maxSimSteps      = 1 << 20
 )
 
+// SimDialer adapts a simulated fakepg.Server to the Dialer interface by
+// stepping the simulator kernel synchronously inside Read and Write.
 type SimDialer struct {
 	S   *sim.Sim
 	Net *simnet.Net
 	PG  *fakepg.Server
 }
 
+// NewSimFidelity creates an isolated simulator and SCRAM-enabled fakepg server
+// matching the tier R startup fidelity configuration.
 func NewSimFidelity(seed int64) (*SimDialer, error) {
 	s := sim.New(sim.Config{Seed: seed, Scenario: "startup-fidelity"})
 	n := simnet.New(s)
@@ -52,6 +59,7 @@ func (d *SimDialer) step() bool {
 	return ok && err == nil
 }
 
+// Dial configures the fake's TLS answer for target and dials it over simnet.
 func (d *SimDialer) Dial(target string) (Transport, error) {
 	switch target {
 	case TargetSSLOff:

@@ -117,6 +117,9 @@ func expectedFailure(sc wireworld.Scenario) (string, bool) {
 	return "", false
 }
 
+// TestWireSQLCatchesPlantedNumbers proves all three SQL assertion files fail
+// with violating rows on planted wrong numbers and dropped startup failures
+// across all 19 wire scenarios.
 func TestWireSQLCatchesPlantedNumbers(t *testing.T) {
 	requireDuckDB(t)
 	baselineRuns(t)
@@ -143,6 +146,8 @@ func TestWireSQLCatchesPlantedNumbers(t *testing.T) {
 	}
 }
 
+// TestWireRunsUseTheScenarioRunIDs proves each wire scenario's run.csv records
+// the expected "<scenario>/1/base" run ID.
 func TestWireRunsUseTheScenarioRunIDs(t *testing.T) {
 	root := baselineRuns(t)
 	for _, sc := range wireworld.Scenarios() {
