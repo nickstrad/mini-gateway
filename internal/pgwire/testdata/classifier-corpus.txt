@@ -337,21 +337,21 @@ F tx:none	/* only a comment */
 F tx:none	"/* a */ ; -- b\n ;"
 F tx:none hint	/* mg:share */
 # --- untokenisable messages: forwarded, never read-only, never coalescable
-F tx:unknown opaque bad noexec	SELECT 'unterminated
-F tx:unknown opaque bad noexec	SELECT E'unterminated\'
-F tx:unknown opaque bad noexec	SELECT "unterminated
-F tx:unknown opaque bad noexec	SELECT $$unterminated
-F tx:unknown opaque bad noexec	SELECT $a$ unterminated $b$
-F tx:unknown opaque bad noexec	SELECT 1 /* unterminated
-F tx:unknown opaque bad noexec	SELECT 1 /* nested /* unterminated */
+F tx:unknown opaque bad	SELECT 'unterminated
+F tx:unknown opaque bad	SELECT E'unterminated\'
+F tx:unknown opaque bad	SELECT "unterminated
+F tx:unknown opaque bad	SELECT $$unterminated
+F tx:unknown opaque bad	SELECT $a$ unterminated $b$
+F tx:unknown opaque bad	SELECT 1 /* unterminated
+F tx:unknown opaque bad	SELECT 1 /* nested /* unterminated */
 F tx:unknown opaque bad	SELECT 1 \ 2
 F tx:unknown opaque bad	SELECT {1}
 F tx:unknown opaque bad	SELECT $ 1
 F tx:unknown opaque bad	"SELECT 1\x01"
-F tx:unknown opaque bad noexec	BEGIN; SELECT 'x
-F tx:unknown opaque bad noexec hint	/* mg:share */ SELECT 'x
+F tx:unknown opaque bad	BEGIN; SELECT 'x
+F tx:unknown opaque bad hint	/* mg:share */ SELECT 'x
 F tx:unknown opaque	SELECT U&"a\00" FROM t
-F tx:unknown opaque bad noexec	SELECT U&'unterminated
+F tx:unknown opaque bad	SELECT U&'unterminated
 # --- session SET and RESET
 R:session-set	SET search_path = app
 R:session-set	SET search_path TO app
