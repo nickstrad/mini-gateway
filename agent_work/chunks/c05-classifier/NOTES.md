@@ -644,10 +644,16 @@ Rows the orchestrator may add to `agent_work/INDEX.md`:
 
 ## Gate result
 
-`scripts/gate.sh c05-classifier` at the build stage on commit `de4cecf` (clean tree),
-2026-11-25: **overall pass, counts_for_landing true**. G0–G3 pass (unit 33 s); G4 markers
-pass, sweep pass (200 seeds per scenario, 385 s); G5 fuzz pass (9 targets, 20 s each);
-G6 tier R pass (Postgres 17.11, 78 s); G7 csv `skip-not-built` (chunk 3's runner); G8
-gen-docs pass; G9 site pass; G10 extra pass (40 reject-list runs replayed across
-processes, SET canary caught). `result.json` was not committed; the orchestrator reruns
-the gate. Only this notes section changed after the gated commit.
+Repair round: `scripts/gate.sh c05-classifier` at the build stage on commit `35a1a00`
+(clean tree), 2026-11-25: **overall fail, counts_for_landing false, for one reason only**.
+G3 unit fails because `go test -count=1 ./...` includes
+`agent_work/adversarial/c05-classifier`, whose `TestAdv_3_RejectBeforeLexError` asserts
+the original claim 3 wording and is kept failing (see "Narrowed claims"; this round may
+not edit the adversary's tests, and the brief forbids bending the code to the over-broad
+claim). Every product package in G3 passes. All other stages pass: G0–G2, G3 race, G4
+markers and sweep (200 seeds per scenario, 384 s), G5 fuzz (9 targets, 20 s each), G6
+tier R (Postgres 17.11, 105 s, repair canaries included), G8 gen-docs, G9 site, G10 extra
+(40 reject-list runs replayed across processes, SET canary caught); G7 csv
+`skip-not-built`. The gate turns green once the orchestrator accepts the narrowed claim 3
+and retires or updates that adversarial test. `result.json` was not committed. Only this
+notes section changed after the gated commit.
