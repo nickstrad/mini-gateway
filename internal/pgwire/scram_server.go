@@ -39,6 +39,9 @@ func (s *ScramServer) First(mechanism string, data []byte) ([]byte, AuthCause) {
 	if mechanism != ScramMechanism {
 		return nil, AuthCauseBadMechanism
 	}
+	if scramTooLong(data) {
+		return nil, AuthCauseMalformed
+	}
 	msg := string(data)
 	if strings.HasPrefix(msg, "p=") {
 		return nil, AuthCauseChannelBindingRefused
@@ -75,6 +78,9 @@ func (s *ScramServer) Final(data []byte) ([]byte, AuthCause) {
 		return nil, AuthCauseMalformed
 	}
 	s.step = scramDone
+	if scramTooLong(data) {
+		return nil, AuthCauseMalformed
+	}
 	msg := string(data)
 	cut := strings.LastIndex(msg, ",p=")
 	if cut < 0 {

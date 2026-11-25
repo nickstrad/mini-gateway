@@ -224,6 +224,8 @@ const maxScramAttrs = 16
 
 func isAttrName(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }
 
+func scramTooLong(msg []byte) bool { return len(msg) > MaxScramMessage }
+
 func equalKeys(a, b []byte) bool { return subtle.ConstantTimeCompare(a, b) == 1 }
 
 func sha256Sum(b []byte) [ScramKeyLen]byte { return sha256.Sum256(b) }

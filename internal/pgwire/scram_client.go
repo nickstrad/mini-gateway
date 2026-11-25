@@ -29,6 +29,9 @@ func (c *ScramClient) Final(serverFirst []byte) ([]byte, AuthCause) {
 		return nil, AuthCauseMalformed
 	}
 	c.step = scramDone
+	if scramTooLong(serverFirst) {
+		return nil, AuthCauseMalformed
+	}
 	sf := string(serverFirst)
 	attrs, ok := parseAttrs(sf)
 	if !ok || len(attrs) < 3 || attrs[0].name != 'r' || attrs[1].name != 's' || attrs[2].name != 'i' {
@@ -67,6 +70,9 @@ func (c *ScramClient) Verify(serverFinal []byte) AuthCause {
 		return AuthCauseMalformed
 	}
 	c.step = scramDone
+	if scramTooLong(serverFinal) {
+		return AuthCauseMalformed
+	}
 	sf := string(serverFinal)
 	if strings.HasPrefix(sf, "e=") {
 		return AuthCauseServerRejected
