@@ -389,15 +389,18 @@ scripts/gate.sh c04-wire-sessions
 
 ## Gate result
 
-`scripts/gate.sh c04-wire-sessions`, build stage, clean tree at `f5427d4` (the last code
-commit; only this file and `docs/knowledge/wire-sessions.md` changed after it):
-`overall=pass`, `counts_for_landing=true`. G0, G1 (detlint on 12 package patterns), G2, G3
-unit (50 s), G4 markers, G4 sweep (629 s for every `TestScenario*` at 200 seeds; the wire
-scenarios are about 165 s of it), G5 fuzz (11 targets × 20 s, the four new ones included),
-G6 tier R (37 s, Postgres 17.11, three containers), G9 site, G10 extra (10 s) pass; G7 and
-G8 are `skip-not-built` (chunk 3 and 5 scripts). G3 race lists no package (none added: no
-concurrency in product code). `result.json` was not committed (moved out of the tree; the
-orchestrator reruns the gate).
+Repair round: `scripts/gate.sh c04-wire-sessions`, build stage, clean tree at `75501f9`
+(only this file changed after it): `overall=fail`, `counts_for_landing=false`, and the only
+red check is **G3 unit**, which fails on exactly one test, the adversary's
+`TestAdv_9_IndependentIssuerCollision` (claim 9 narrowed, above). G3 runs `go test ./...`,
+which includes `agent_work/adversarial/c04-wire-sessions`, and this round may not edit that
+folder (chunk 2's repair round ended the same way). Every product package passes in G3.
+G0, G1 (detlint on 12 package patterns), G2 comments, G3 race (no package listed), G4 markers,
+G4 sweep (368 s for every `TestScenario*` at 200 seeds, down from 629 s; the machine is
+shared, so treat the times as rough), G5 fuzz (11 targets × 20 s), G6 tier R (42 s, Postgres
+17.11, three containers), G9 site and G10 extra (SQL assertions, canary, 19 cross-process
+digests) pass; G7 and G8 are `skip-not-built`. `result.json` was not committed. Once the
+orchestrator accepts the narrowing and skips attack 9, the gate should go green.
 
 ## Index rows
 
