@@ -70,7 +70,7 @@ identifier (`U&"…"`, either case), string (`'…'` with `''`; `E'…'` with ba
 (digits, `_` between digits, fraction, exponent, `0x`/`0o`/`0b`), parameter (`$1`), operator
 (maximal run of `+-*/<>=~!@#%^&|\`?`, stopping before `--` or `/*`; as in Postgres's scanner, a
 multi-character operator ending in `+` or `-` loses its trailing signs unless it contains one
-of `~ ! @ # ^ & | \` ? %`, so `71+-3` is `71`, `+`, `-`, `3` and `@-` stays one operator), punctuation
+of `` ~ ! @ # ^ & | ` ? % ``, so `71+-3` is `71`, `+`, `-`, `3` and `@-` stays one operator), punctuation
 (`( ) [ ] , ; : .`), bad. Unterminated strings, quoted identifiers, dollar strings and
 comments make one bad token to the end of the input; any other byte the lexer does not know
 (`\`, `{`, `}`, a lone `$`, control bytes, NUL) is a one-byte bad token and lexing continues.
@@ -598,7 +598,7 @@ generator), `e8b2f47` (tier R repair shapes), `0ff1443` (scenario name, SQL guar
   reason) and over every reserved/type word, write keyword, known writing function, random
   name and near-miss of an allow-listed name (never read-only, never coalescable), plus
   every non-coalescable allow-listed function, per-call keyword, time type and relative-time
-  literal (never coalescable). Against `b8f45cf` it reports about 1,700 false positives;
+  literal (never coalescable). Against `b8f45cf` it reports about 1,800 failures (statement × transaction state);
   against the repair it reports none. Tier R extended in `e8b2f47` (see "Tier R").
 - **Side effects of the fixes (false negatives, by design)**: seven corpus records lost
   coalescable — two typed time literals (`DATE '2020-01-02'`, `TIMESTAMP '…'`) and five
