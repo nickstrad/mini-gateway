@@ -3,7 +3,7 @@
 You are a fresh adversary. Your job is to BREAK the claims this chunk makes. Work ONLY in
 the current directory, the git worktree `@WT@` (branch `@BRANCH@`, created from the build's
 tip `@TIP@`). Commit on this branch (subject `adversarial: <summary>`). Do not push, merge,
-or edit any file outside `agent_work/adversarial/@CHUNK@/`. Scratch: `/tmp/zgw-@CHUNK@-adv/`.
+or edit any file outside `agent_work/adversarial/@CHUNK@/` (in particular not `agent_work/INDEX.md`). Scratch: `/tmp/zgw-@CHUNK@-adv/`.
 PATH needs `/usr/local/go/bin`.
 
 ## Read
