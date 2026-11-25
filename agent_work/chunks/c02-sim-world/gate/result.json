@@ -1,0 +1,180 @@
+{
+  "chunk": "c02-sim-world",
+  "sha": "7e88a885fce5cd3739ee491dbdb0a537a8489f86",
+  "dirty_tree": false,
+  "stage": "final",
+  "partial": false,
+  "only": "",
+  "overall": "pass",
+  "counts_for_landing": true,
+  "go_version": "go version go1.26.8 linux/amd64",
+  "duckdb_version": "v1.5.5 (Variegata) d8cdaa33fd",
+  "started": "2026-11-25T03:12:50Z",
+  "finished": "2026-11-25T03:22:24Z",
+  "seconds": 574,
+  "comment_baseline": "none",
+  "preprose_commit": "fa41252970f94d807d2185f94dd492873b3ea13d",
+  "short": false,
+  "sweep_seeds": 200,
+  "fuzz_seconds": 20,
+  "skip_not_built": [
+    "G7 csv",
+    "G8 gen-docs"
+  ],
+  "checks": [
+    {
+      "gate": "G0",
+      "check": "tools",
+      "status": "pass",
+      "seconds": 3,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "gofmt",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "build",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "vet",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tools-vet",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tools-test",
+      "status": "pass",
+      "seconds": 4,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tidy",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "detlint",
+      "status": "pass",
+      "seconds": 4,
+      "note": "9 package patterns"
+    },
+    {
+      "gate": "G1",
+      "check": "importlint",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "boundlint",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "paniccheck",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G2",
+      "check": "astdiff",
+      "status": "pass",
+      "seconds": 1,
+      "note": "code compared with pre-prose commit fa41252970f94d807d2185f94dd492873b3ea13d"
+    },
+    {
+      "gate": "G3",
+      "check": "unit",
+      "status": "pass",
+      "seconds": 34,
+      "note": ""
+    },
+    {
+      "gate": "G3",
+      "check": "race",
+      "status": "pass",
+      "seconds": 0,
+      "note": "race-packages.txt lists no package yet"
+    },
+    {
+      "gate": "G4",
+      "check": "markers",
+      "status": "pass",
+      "seconds": 0,
+      "note": "7 not-built markers, compared with baseline 2609819e789673aca1b245928ca0ec4e8bae4462 and the history of HEAD"
+    },
+    {
+      "gate": "G4",
+      "check": "sweep",
+      "status": "pass",
+      "seconds": 343,
+      "note": "200 seeds per scenario from 1, tests matching ^TestScenario"
+    },
+    {
+      "gate": "G5",
+      "check": "fuzz",
+      "status": "pass",
+      "seconds": 153,
+      "note": "7 fuzz targets, 20s each"
+    },
+    {
+      "gate": "G6",
+      "check": "tier-r",
+      "status": "pass",
+      "seconds": 24,
+      "note": "Postgres 17.11 (Debian 17.11-1.pgdg13+2) in mg-tier-r-936451-main (127.0.0.1:34377) and mg-tier-r-936451-burst (127.0.0.1:47627)"
+    },
+    {
+      "gate": "G7",
+      "check": "csv",
+      "status": "skip-not-built",
+      "seconds": 0,
+      "note": "not built yet (marker scripts/.not-built/csv-assert)"
+    },
+    {
+      "gate": "G8",
+      "check": "gen-docs",
+      "status": "skip-not-built",
+      "seconds": 0,
+      "note": "not built yet (marker scripts/.not-built/gen-docs)"
+    },
+    {
+      "gate": "G9",
+      "check": "site",
+      "status": "pass",
+      "seconds": 2,
+      "note": ""
+    },
+    {
+      "gate": "G10",
+      "check": "extra",
+      "status": "pass",
+      "seconds": 2,
+      "note": "10 scenario runs replayed across processes with identical digests"
+    }
+  ]
+}

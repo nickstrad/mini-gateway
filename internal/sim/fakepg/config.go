@@ -1,0 +1,146 @@
+package fakepg
+
+import (
+	"time"
+
+	"github.com/nickstrad/mini-gateway/internal/sim"
+	"github.com/nickstrad/mini-gateway/internal/sim/simnet"
+)
+
+// Default configuration values and hard bounds for a fake Postgres server.
+const (
+	DefaultAddr           = "pg"
+	DefaultMaxConnections = 100
+	DefaultLogCap         = 1 << 20
+	MaxLogCap             = 1 << 24
+	DefaultMaxRows        = 1 << 20
+	DefaultAfterDelay     = 10 * time.Millisecond
+	MaxStallWindows       = 64
+	MaxDelayedSegments    = 1024
+	DefaultMaxReplyBytes  = 64 << 20
+	MaxReplyBytesLimit    = 1 << 32
+	readChunk             = 4096
+	outFill               = 64 << 10
+	firstPID              = 10_000
+	DefaultServerVersion  = "17.0 (fakepg)"
+)
+
+// LogMode selects whether an in-memory audit log retains entries or only counts them.
+type LogMode uint8
+
+const (
+	// LogRing retains the newest Cap entries in a fixed-size ring buffer.
+	LogRing LogMode = iota
+	// LogCountOnly drops every entry immediately while still counting total dropped entries.
+	LogCountOnly
+)
+
+// LogConfig bounds one server audit log (write, statement, or transaction log).
+type LogConfig struct {
+	Mode LogMode
+	Cap  int
+}
+
+// Row is one key/value entry in the fake server's kv table.
+type Row struct {
+	Key   string
+	Value string
+}
+
+// KindTime overrides the base service time for one statement Kind.
+type KindTime struct {
+	Kind Kind
+	Time time.Duration
+}
+
+// KeyTime adds extra service time whenever a statement targets Key.
+type KeyTime struct {
+	Key  string
+	Time time.Duration
+}
+
+// Stall defines a virtual-time window [From, To) that adds Extra to every
+// statement starting or in service during the window.
+type Stall struct {
+	From  sim.Time
+	To    sim.Time
+	Extra time.Duration
+}
+
+// Service configures the server's virtual-clock statement service-time model.
+type Service struct {
+	Fixed     time.Duration
+	JitterMax time.Duration
+	PerKind   []KindTime
+	PerKey    []KeyTime
+	Stalls    []Stall
+}
+
+// Config configures a simulated Postgres server created by New.
+type Config struct {
+	Addr           string
+	MaxConnections int
+	Users          []string
+	Databases      []string
+	Superusers     []string
+	Rows           []Row
+	MaxRows        int
+	Service        Service
+	Capacity       int
+	MaxMessage     int
+	MaxReplyBytes  int64
+	WriteLog       LogConfig
+	StatementLog   LogConfig
+	ServerVersion  string
+	AfterDelay     time.Duration
+	Options        simnet.Options
+	plant          plant
+}
+
+type plant struct {
+	doubleApply bool
+	idleInTx    bool
+	dropWrite   int64
+	phantomFrom int64
+	skipClear   sim.FaultKind
+}
+
+func (c Config) normalized() Config {
+	if c.Addr == "" {
+		c.Addr = DefaultAddr
+	}
+	if c.MaxConnections <= 0 {
+		c.MaxConnections = DefaultMaxConnections
+	}
+	if c.MaxRows <= 0 {
+		c.MaxRows = DefaultMaxRows
+	}
+	if c.MaxReplyBytes <= 0 {
+		c.MaxReplyBytes = DefaultMaxReplyBytes
+	}
+	if c.MaxReplyBytes > MaxReplyBytesLimit {
+		c.MaxReplyBytes = MaxReplyBytesLimit
+	}
+	if c.MaxMessage <= 0 {
+		c.MaxMessage = DefaultMaxMessage
+	}
+	if c.ServerVersion == "" {
+		c.ServerVersion = DefaultServerVersion
+	}
+	if c.AfterDelay <= 0 {
+		c.AfterDelay = DefaultAfterDelay
+	}
+	c.WriteLog = c.WriteLog.normalized()
+	c.StatementLog = c.StatementLog.normalized()
+	return c
+}
+
+func (l LogConfig) normalized() LogConfig {
+	if l.Cap <= 0 {
+		l.Cap = DefaultLogCap
+	}
+	if l.Cap > MaxLogCap {
+		l.Cap = MaxLogCap
+	}
+	return l
+}

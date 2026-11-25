@@ -1,6 +1,6 @@
 # C4 Level 3: Components: pool
 
-**Built so far: chunks 0–1. Dashed parts are planned.** In this diagram 0 of 10 elements and 0 of 12 relationships are built. Model: diagram `component-pool` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–2. Dashed parts are planned.** In this diagram 0 of 10 elements and 0 of 12 relationships are built. Model: diagram `component-pool` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 A request never waits inside the pool: the dispatcher releases it only when a lease is available. The pool's job is the cap, the creation rate, and never lending a connection that is not idle and clean.
 

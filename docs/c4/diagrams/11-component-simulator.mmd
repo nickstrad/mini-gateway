@@ -2,7 +2,8 @@ flowchart TB
   DEVELOPER(["Developer or reader"]):::built
   N_ENGINE["Engine"]:::planned
   N_PGWIRE["Wire layer"]:::planned
-  PGPROTO3[["pgproto3 (from pgx/v5)"]]:::planned
+  PGPROTO3[["pgproto3 (from pgx/v5)"]]:::built
+  PG[("Postgres")]:::planned
   subgraph SCOPE["Simulator harness"]
     S_LOOP["Event loop"]:::built
     S_CLOCK["Virtual clock and timers"]:::built
@@ -10,6 +11,9 @@ flowchart TB
     S_NET["Simulated byte streams"]:::built
     S_FAKEPG["Fake Postgres"]:::planned
     S_WORKLOAD["Clients and tenants"]:::planned
+    S_TESTCLIENT["Test client"]:::planned
+    S_RANDDIST["Float generators"]:::built
+    S_WORLD["Scenario world"]:::built
     S_FAULTS["Fault schedule and shrinker"]:::built
     S_TRACE["Decision trace and digests"]:::built
     S_INV["Invariants and quiesce check"]:::built
@@ -23,15 +27,15 @@ flowchart TB
   S_LOOP -->|4| S_CLOCK
   S_NET -->|5| S_LOOP
   S_NET -.->|6 implements| N_ENGINE
-  S_WORKLOAD -.->|7| S_NET
-  S_FAKEPG -.->|8| S_NET
+  S_WORKLOAD -->|7| S_NET
+  S_FAKEPG -->|8| S_NET
   S_FAULTS -->|9| S_NET
-  S_FAULTS -.->|10| S_FAKEPG
-  S_FAULTS -.->|11| S_WORKLOAD
-  S_WORKLOAD -.->|12| S_STREAMS
-  S_FAKEPG -.->|13| S_STREAMS
-  S_FAKEPG -.->|14| PGPROTO3
-  S_WORKLOAD -.->|15| PGPROTO3
+  S_FAULTS -->|10| S_FAKEPG
+  S_FAULTS -->|11| S_WORKLOAD
+  S_WORKLOAD -->|12| S_STREAMS
+  S_FAKEPG -->|13| S_STREAMS
+  S_FAKEPG -->|14| PGPROTO3
+  S_TESTCLIENT -->|15| PGPROTO3
   S_FAKEPG -.->|16| N_PGWIRE
   N_ENGINE -.->|17| S_TRACE
   S_INV -.->|18| N_ENGINE
@@ -45,6 +49,20 @@ flowchart TB
   S_TOY -->|26| S_SIMTEST
   DEVELOPER -->|27| S_SIMTEST
   S_CLI -->|28| S_TRACE
+  S_WORKLOAD -->|29| S_TESTCLIENT
+  S_WORKLOAD -.->|30| S_RANDDIST
+  S_TESTCLIENT -.->|31| N_PGWIRE
+  S_WORLD -->|32| S_FAKEPG
+  S_WORLD -->|33| S_WORKLOAD
+  S_WORLD -->|34| S_TESTCLIENT
+  S_WORLD -->|35| S_SIMTEST
+  S_WORLD -->|36| PG
+  S_CLI -->|37| S_WORLD
+  S_FAKEPG -->|38| S_TRACE
+  S_WORKLOAD -->|39| S_TRACE
+  S_FAKEPG -->|40| S_INV
+  S_WORKLOAD -->|41| S_INV
+  S_WORLD -->|42| S_FAULTS
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned

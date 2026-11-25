@@ -12,6 +12,7 @@ import (
 
 	"github.com/nickstrad/mini-gateway/internal/sim"
 	"github.com/nickstrad/mini-gateway/internal/sim/simtoy"
+	"github.com/nickstrad/mini-gateway/internal/sim/world"
 )
 
 const usage = `mgsim runs a named deterministic simulation scenario from a seed, outside go test.
@@ -43,6 +44,7 @@ func run(args []string, stdout, stderr io.Writer, exec runner) int {
 		for _, sc := range simtoy.Scenarios() {
 			fmt.Fprintln(stdout, sc.Name)
 		}
+		listWorld(stdout)
 		return 0
 	case "run":
 		return runScenario(args[1:], stdout, stderr, exec)
@@ -79,6 +81,9 @@ func runScenario(args []string, stdout, stderr io.Writer, exec runner) int {
 		return 2
 	}
 	sc, ok := simtoy.Lookup(name)
+	if ws, found := world.Lookup(name); !ok && found {
+		return runWorld(ws, *seed, *trace, stdout, stderr)
+	}
 	if !ok {
 		fmt.Fprintf(stderr, "mgsim: unknown scenario %q (see mgsim list)\n", name)
 		return 2

@@ -1,0 +1,6 @@
+# pinned seeds for the world scenarios (always run, before DST_SEEDS)
+1
+2
+3
+7
+42

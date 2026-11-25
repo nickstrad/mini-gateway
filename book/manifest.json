@@ -20,7 +20,7 @@
       "chunk": 2,
       "title": "A fake Postgres and hostile clients",
       "file": "book/chapters/02-simulated-world.md",
-      "status": "planned"
+      "status": "live"
     },
     {
       "number": 3,

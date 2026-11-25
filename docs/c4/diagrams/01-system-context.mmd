@@ -5,7 +5,7 @@ flowchart TB
   GW["mini-gateway"]:::planned
   PG[("Postgres")]:::planned
   TELEMETRY[["Metrics and log readers"]]:::planned
-  PGPROTO3[["pgproto3 (from pgx/v5)"]]:::planned
+  PGPROTO3[["pgproto3 (from pgx/v5)"]]:::built
   APP -.->|1| GW
   OPERATOR -.->|2| GW
   DEVELOPER -.->|3| GW

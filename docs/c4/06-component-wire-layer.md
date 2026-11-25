@@ -1,6 +1,6 @@
 # C4 Level 3: Components: wire layer
 
-**Built so far: chunks 0–1. Dashed parts are planned.** In this diagram 0 of 12 elements and 0 of 16 relationships are built. Model: diagram `component-wire` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–2. Dashed parts are planned.** In this diagram 1 of 12 elements and 0 of 16 relationships are built. Model: diagram `component-wire` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 pgproto3 gives message structs and nothing else. The framer, the session machines, SCRAM, transaction tracking, classification and error mapping are ours. Everything here is a pure state machine that accepts bytes in any fragments.
 
@@ -10,7 +10,7 @@ A solid box or arrow is built; a dashed one is planned. An arrow points to the s
 flowchart TB
   N_ENGINE["Engine"]:::planned
   N_WORK["Work vocabulary"]:::planned
-  PGPROTO3[["pgproto3 (from pgx/v5)"]]:::planned
+  PGPROTO3[["pgproto3 (from pgx/v5)"]]:::built
   subgraph SCOPE["Wire layer"]
     W_FRAMER["Framer"]:::planned
     W_CODEC["Codec boundary"]:::planned
@@ -62,7 +62,7 @@ flowchart TB
 | Error contract and reply builders | component | planned | One table: each refusal and failure, its SQLSTATE, whether anything reached the database, whether a write may have applied. Builds the ErrorResponse and the correct end marker. docs/error-contract.md is generated from it. |
 | Engine | neighbouring container | planned | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code. |
 | Work vocabulary | neighbouring container | planned | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
-| pgproto3 (from pgx/v5) | softwareSystem, external | planned | Go package github.com/jackc/pgx/v5/pgproto3: Postgres wire message structs with Encode and Decode. The one external dependency, used for message encoding only. |
+| pgproto3 (from pgx/v5) | softwareSystem, external | built (chunk 2) | Go package github.com/jackc/pgx/v5/pgproto3: Postgres wire message structs with Encode and Decode. The one external dependency, used for message encoding only. |
 
 ## Relationships
 

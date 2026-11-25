@@ -22,7 +22,7 @@ Evidence gathered in this phase (all in the repository):
 
 | What | Where | Used in |
 | --- | --- | --- |
-| Probe against a real Postgres 17: startup with SCRAM, transaction status bytes, pipelining, session state, kill mid-query, statement snapshots | `agent_work/phase1/probes/pgwire/` (`main.go`, `output-2026-11-24.txt`) | sections 4, 9, chunks 4–6, 11 |
+| Probe against a real Postgres 17: startup with SCRAM, transaction status bytes, pipelining, session state, kill mid-query, statement snapshots | `agent_work/phase1/probes/pgwire/` (`main.go.txt` — renamed in chunk 2 so that no Go file outside the wire packages imports `pgproto3`; copy it to a scratch folder as `main.go` to run it — and `output-2026-11-24.txt`) | sections 4, 9, chunks 4–6, 11 |
 | Evaluation of the object-store simulator, from its code | `agent_work/phase1/research/q8-object-store-simulator-evaluation.md` | section 5 |
 | *Release It!* notes mined for the build plan | `agent_work/phase1/research/release-it-mining.md` | section 10 and the landing gate |
 | TLS cost probe: `psql` and `pgbench` through a standard-library TLS-terminating relay in front of Postgres 17, TLS on either leg, handshake cost | `agent_work/phase1/probes/pgtls/` (`main.go`, `output-2026-11-24.txt`) | section 3.1, chunks 4 and 6 |

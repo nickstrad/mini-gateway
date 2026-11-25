@@ -31,7 +31,7 @@ from pathlib import Path
 # REL_BUILT relationship id -> chunk number, or None. Leave it empty unless the rule is
 #           wrong for one arrow. The rule: a relationship is built when both its ends are.
 #           A chunk number forces "built", None forces "planned".
-LANDED = 1
+LANDED = 2
 
 BUILT = {
     # chunk 1 — simulator kernel (diagram 11)
@@ -45,7 +45,11 @@ BUILT = {
     "s-net": 1,       # internal/sim/simnet
     "s-simtest": 1,   # internal/sim/simtest
     "s-toy": 1,       # internal/sim/simtoy
-    "s-cli": 1,       # cmd/mgsim
+    "s-cli": 1,       # cmd/mgsim (chunk 2 added world.go: the world scenarios and their result table)
+    # chunk 2 — simulated world (diagram 11)
+    "s-world": 2,     # internal/sim/world; tier R tests in tierr_test.go, run by scripts/tier-r.sh
+    "s-randdist": 2,  # internal/randdist
+    "pgproto3": 2,    # in go.mod (github.com/jackc/pgx/v5); imported by fakepg/proto.go and testclient/msg.go
     # chunk 1 — measurement half of internal/obs (diagram 12)
     "o-hist": 1,      # internal/obs: histogram.go
     "o-conserve": 1,  # internal/obs: snapshot.go
@@ -53,9 +57,20 @@ BUILT = {
 }
 
 PARTIAL = {
-    "c-sim": "Built in chunk 1: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy) and cmd/mgsim. "
-             "Not built: the fake Postgres and the simulated clients (chunk 2). No engine exists yet, so the harness "
-             "drives only the toy protocol.",
+    "c-sim": "Built in chunks 1 and 2: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, "
+             "the fake Postgres, the simulated clients, the test client, the scenario world with its five direct "
+             "baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. "
+             "Not built: SCRAM login and the TLS faults in the fake and the clients (chunk 4). No engine exists yet, so "
+             "the harness drives the fake Postgres and the toy protocol, and nothing implements the engine's transport seam.",
+    "s-fakepg": "Built in chunk 2 (internal/sim/fakepg): all of it with trust login, and the 24 database-side fault kinds "
+                "that need no TLS. Not built: SCRAM-SHA-256 login, and the two TLS faults (answers N to a TLS request; "
+                "a certificate that fails verification) (chunk 4).",
+    "s-workload": "Built in chunk 2 (internal/sim/workload): all of it, with the client-side faults that need no TLS "
+                  "(half a message, stops reading, disconnects, reconnect burst, cancel, aggressive retry). Not built: "
+                  "the four TLS client faults (stalls after a TLS request, fails the handshake, plaintext after a TLS "
+                  "request, a second TLS request) (chunk 4).",
+    "s-testclient": "Built in chunk 2 (internal/testclient): the framer, the codec and the session machine, with trust "
+                    "login. Not built: SCRAM-SHA-256 login (chunk 4).",
     "c-obs": "Built in chunk 1: the integer histogram, the conservation check and gauge, and the snapshot test helpers "
              "(obstest). Not built: the instance snapshot, the collector, the adapter interface and every adapter, "
              "fleet merge, health.",
@@ -64,6 +79,29 @@ PARTIAL = {
 }
 
 REL_BUILT = {
+    # Arrows that are wholly true of the code although one end is only partly built (PARTIAL):
+    # the fake Postgres, the clients and the test client lack only their SCRAM and TLS parts.
+    "m7": 2,    # workload dials and reads over simnet
+    "m8": 2,    # fakepg listens on simnet
+    "m10": 2,   # fakepg registers its fault kinds (fakepg/fault.go)
+    "m11": 2,   # workload registers its fault kinds (workload/fault.go)
+    "m12": 2,   # workload streams: arrivals, keys, mix, retry (workload/client.go)
+    "m13": 2,   # fakepg streams: fakepg/service/<conn>, fakepg/keys
+    "m14": 2,   # fakepg/proto.go imports pgproto3
+    "m15": 2,   # testclient/msg.go imports pgproto3
+    "m29": 2,   # workload/client.go and probe.go use testclient
+    "m32": 2,   # world/driver.go starts fakepg
+    "m33": 2,   # world/driver.go starts the workload
+    "m34": 2,   # world/fidelity.go reads testclient messages
+    "m36": 2,   # world/tierr_test.go, run by scripts/tier-r.sh (Postgres itself stays planned: nothing sits in front of it yet)
+    "m38": 2,   # fakepg trace kinds and state writer
+    "m39": 2,   # workload trace kinds and state writer
+    "m40": 2,   # fakepg invariant and quiesce check (fakepg/server.go)
+    "m41": 2,   # workload invariant and quiesce check (workload/workload.go)
+    # Container arrows of the partly built simulator harness that are wholly true of the code:
+    "s9": 2,    # the pgproto3 requirement entered go.mod in chunk 2
+    "s13": 1,   # cmd/mgsim and go test run scenarios from a seed since chunk 1
+    "s16": 2,   # scripts/tier-r.sh
 }
 # =========================================================================== end of AS BUILT
 
@@ -202,9 +240,11 @@ container("c-config", "Configuration",
           "internal/config. The config file, the static fleet block (instance count N; fleet budgets divided by N), "
           "and load-time validation that fails closed.", tech="Go")
 container("c-sim", "Simulator harness",
-          "internal/sim, internal/sim/simnet, fakepg, workload, simtest, simtoy, cmd/mgsim. A deterministic single-threaded "
-          "world: virtual clock, simulated byte streams, a fake Postgres, simulated clients, faults, replay. Test code; "
-          "built before any proxy code.", tech="Go test harness", tags=("test",))
+          "internal/sim and its sub-packages simnet, fakepg, workload, world, simtest and simtoy; internal/testclient; "
+          "internal/randdist; cmd/mgsim; scripts/tier-r.sh. A deterministic single-threaded world: virtual clock, "
+          "simulated byte streams, a fake Postgres, simulated clients, scenarios with a driver interface, faults, "
+          "replay. Its fake Postgres is checked against a real Postgres 17. Test code; built before any proxy code.",
+          tech="Go test harness", tags=("test",))
 container("c-e2e", "End-to-end suite and load generator",
           "test/e2e and cmd/loadgen. Each scenario is written once and runs on the simulator (tier S) and on the real "
           "binary against a real Postgres (tier R). The load generator is open-loop.", tech="Go test code", tags=("test",))
@@ -242,12 +282,13 @@ rel("s4", "c-adm", "c-work", "Written against these types only", "Go types")
 rel("s5", "c-pool", "c-work", "Written against these types only", "Go types")
 rel("s6", "c-coal", "c-work", "Written against these types only", "Go types")
 rel("s8", "c-retry", "c-work", "Written against these types only", "Go types")
-rel("s9", "c-sim", "pgproto3", "The fake Postgres and the simulated clients speak real wire bytes", "Go import, test code")
+rel("s9", "c-sim", "pgproto3", "The fake Postgres and the test client encode and decode real wire messages, in one file each", "Go import, test code")
 rel("s10", "c-e2e", "c-sim", "Tier S: runs each scenario on the simulator", "Go test")
 rel("s11", "c-e2e", "c-shell", "Tier R: runs the real binary and drives it with test clients and open-loop load", "Process, Postgres wire protocol")
 rel("s12", "c-e2e", "pg", "Tier R: starts a real Postgres 17 container and checks its state", "Docker, Postgres wire protocol")
 rel("s13", "developer", "c-sim", "Runs a scenario from a seed; replays a failure", "cmd/mgsim, go test")
 rel("s14", "developer", "c-e2e", "make test, make chaos, make bench", "make")
+rel("s16", "c-sim", "pg", "Tier R of the simulated world: the fidelity script and three direct baselines run against a real Postgres 17, to show the fake is faithful", "scripts/tier-r.sh, Docker, TCP")
 rel("s15", "c-sim", "c-work", "Synthetic workloads drive the cores directly, with no Postgres code", "Go types, test code")
 
 # --------------------------------------------------------------------------- engine components
@@ -500,12 +541,30 @@ comp(P, "s-net", "Simulated byte streams",
      "latency per direction, a bounded send window (back pressure), half-close and reset. Its faults: reset, "
      "stall, half-open, half-close, chunk, refuse, dial stall, accept-then-silence, and clear. Its own snapshot.")
 comp(P, "s-fakepg", "Fake Postgres",
-     "internal/sim/fakepg. Speaks the simple-query subset in real wire bytes; connection limit; transaction status; a "
-     "small keyed table with a write log; service-time models; every database-side fault; its own snapshot.",
+     "internal/sim/fakepg. Speaks the simple-query subset in real wire bytes with its own framer; login by trust or "
+     "SCRAM-SHA-256; a max_connections limit with Postgres's refusal; transaction status; a small keyed table with "
+     "write, statement and transaction logs; service-time models and a capacity limit; cancel requests; every "
+     "database-side fault; its own snapshot.",
      tech="Go, pgproto3")
 comp(P, "s-workload", "Clients and tenants",
-     "internal/sim/workload. Simulated clients: tenants, open-loop arrivals measured from intended send time, Zipf "
-     "keys, transactions, disconnects, cancels, aggressive retries.", tech="Go, pgproto3")
+     "internal/sim/workload. Simulated clients grouped in tenants: open-loop arrivals (constant or Poisson) and "
+     "closed-loop think time, latency measured from the intended send time, uniform, Zipf or fixed keys, "
+     "transactions of several statements, retries with backoff, every client-side fault, its own snapshot. A "
+     "client sends one request at a time; later arrivals wait in its bounded backlog. Also a hand-driven client "
+     "(Probe) for tests.")
+comp(P, "s-testclient", "Test client",
+     "internal/testclient. A Postgres client with no I/O: bytes in, messages out. Its own framer, a message codec, "
+     "and a session machine (phase, status byte, key data, parameters) with login by trust or SCRAM-SHA-256. Used "
+     "by the simulated clients on simulated streams and by the tier R tests on TCP.", tech="Go, pgproto3")
+comp(P, "s-randdist", "Float generators",
+     "internal/randdist. The only two functions that use floating point: exponential gaps for Poisson arrivals, "
+     "and a Zipf generator. Kept outside internal/sim, where float syntax is forbidden.")
+comp(P, "s-world", "Scenario world",
+     "internal/sim/world. The scenario type; the driver interface (start, connect, inject, run, observe, stop) and "
+     "its simulator implementation; five direct baselines with no proxy (500 connections, reconnect burst, 1,000 "
+     "identical reads, open-loop overload, mixed transactions); the write-log and transaction checks; the "
+     "fidelity runner, which plays one script against the fake and compares the transcript with Postgres 17's, "
+     "recorded for CI or live in tier R.")
 comp(P, "s-faults", "Fault schedule and shrinker",
      "internal/sim. Timed faults, each recorded in the trace when it is applied. A package registers the fault "
      "kinds it can apply. A schedule can be decoded from bytes for the fuzzer, and a delete-one-fault shrinker "
@@ -523,13 +582,14 @@ comp(P, "s-simtest", "Seeds, replay, sweep",
      "the failure report with the trace tail and the REPLAY line. scripts/sweep.sh and scripts/fuzz.sh run the "
      "scenario tests and fuzz targets through it.")
 comp(P, "s-cli", "cmd/mgsim",
-     "Lists the named scenarios; runs one from a seed outside go test, prints its digests (and the trace on "
-     "request) and exits 1 with the REPLAY line when it fails.", tech="Go CLI")
+     "Lists the named scenarios (toy and world); runs one from a seed outside go test, prints its digests (and the "
+     "trace on request; for a world scenario also its result table) and exits 1 with the REPLAY line when it fails.",
+     tech="Go CLI")
 comp(P, "s-toy", "Toy echo protocol",
      "internal/sim/simtoy. A line-echo client and server with a planted-bug switch, and eleven named scenarios "
      "that cover every network fault. Used only to test the harness itself.")
 rel("m1", "developer", "s-cli", "Runs a scenario with a seed", "Command line")
-rel("m2", "s-cli", "s-toy", "Looks up a scenario by name and runs it; the toy scenarios are the only ones so far", "Go")
+rel("m2", "s-cli", "s-toy", "Looks up a toy scenario by name and runs it", "Go")
 rel("m3", "s-simtest", "s-loop", "Runs a scenario twice from one seed", "Go")
 rel("m4", "s-loop", "s-clock", "Advances time to the next event", "Go")
 rel("m5", "s-net", "s-loop", "Schedules every delivery and notification as its own event", "Go")
@@ -537,13 +597,27 @@ rel("m6", "s-net", "n-engine", "Implements the engine's transport seam: bytes in
 rel("m7", "s-workload", "s-net", "Opens client connections; sends and reads", "Go")
 rel("m8", "s-fakepg", "s-net", "Accepts database connections; replies", "Go")
 rel("m9", "s-faults", "s-net", "Applies the network faults at their instants", "Go")
-rel("m10", "s-faults", "s-fakepg", "Slow, kill, freeze, refuse, garbage", "Go")
-rel("m11", "s-faults", "s-workload", "Disconnect, stop reading, retry storm", "Go")
-rel("m12", "s-workload", "s-streams", "Arrivals, keys, tenants", "Go")
-rel("m13", "s-fakepg", "s-streams", "Service times", "Go")
+rel("m10", "s-faults", "s-fakepg", "Applies the database fault kinds the fake registered: refuse, silence, slow, reset, garbage, kill, freeze, restart and more", "Go")
+rel("m11", "s-faults", "s-workload", "Applies the client fault kinds the workload registered: half a message, stop reading, disconnect, reconnect burst, cancel", "Go")
+rel("m12", "s-workload", "s-streams", "Arrivals, keys, request mix and retries, one stream each per client", "Go")
+rel("m13", "s-fakepg", "s-streams", "Service-time jitter, one stream per connection; cancel keys", "Go")
 rel("m14", "s-fakepg", "pgproto3", "Wire messages", "Go import")
-rel("m15", "s-workload", "pgproto3", "Wire messages", "Go import")
+rel("m15", "s-testclient", "pgproto3", "Wire messages", "Go import")
 rel("m16", "s-fakepg", "n-pgwire", "Reuses the SCRAM functions", "Go")
+rel("m29", "s-workload", "s-testclient", "Every client frames, decodes and tracks its session with it", "Go")
+rel("m30", "s-workload", "s-randdist", "Poisson gaps and Zipf keys", "Go")
+rel("m31", "s-testclient", "n-pgwire", "Reuses the SCRAM functions", "Go")
+rel("m32", "s-world", "s-fakepg", "Starts the fake for a scenario; reads its snapshot and logs for the checks", "Go")
+rel("m33", "s-world", "s-workload", "Starts the scenario's clients; reads their snapshot; the fidelity runner drives a Probe", "Go")
+rel("m34", "s-world", "s-testclient", "Turns the messages of a fidelity exchange into transcript tokens", "Go")
+rel("m35", "s-world", "s-simtest", "Its scenario tests run the pinned seeds and the sweep, every seed twice", "Go test")
+rel("m36", "s-world", "pg", "Tier R: plays the fidelity script and three baselines over TCP; on request rewrites the recorded transcript that CI replays", "scripts/tier-r.sh, Docker, go test")
+rel("m37", "s-cli", "s-world", "Looks up a world scenario by name, runs it and prints its result table", "Go")
+rel("m38", "s-fakepg", "s-trace", "Appends accepts, statements, writes, cancels and fired faults; writes its state for the state digest", "Go")
+rel("m39", "s-workload", "s-trace", "Appends arrivals, sends, completions and retries; writes its state for the state digest", "Go")
+rel("m40", "s-fakepg", "s-inv", "Registers its conservation laws, the connection limit and its quiesce check", "Go")
+rel("m41", "s-workload", "s-inv", "Registers request conservation per tenant and its quiesce check", "Go")
+rel("m42", "s-world", "s-faults", "Scenario fault schedules; random schedules decoded from fuzz input", "Go")
 rel("m17", "n-engine", "s-trace", "Appends each decision", "Go")
 rel("m18", "s-inv", "n-engine", "Reads snapshots at every event and at the end", "Go")
 rel("m19", "s-simtest", "s-trace", "Compares the digests of the two runs; prints the trace tail on failure", "Go")
@@ -687,7 +761,7 @@ diagram("container-seams", "container", "Containers: drivers and seams", "03-con
               "A second protocol would be a sibling of the wire layer producing the same vocabulary.",
         nodes=["developer", "c-sim", "c-e2e", "c-shell", "c-engine", "c-pgwire", "c-work", "c-adm", "c-pool", "c-coal",
                "c-retry", "pgproto3", "pg"],
-        rels=["c3", "s1", "c4", "s2", "s3", "s4", "s5", "s6", "s8", "s9", "s10", "s11", "s12", "s13", "s14", "s15", "c10"],
+        rels=["c3", "s1", "c4", "s2", "s3", "s4", "s5", "s6", "s8", "s9", "s10", "s11", "s12", "s13", "s14", "s15", "c10", "s16"],
         boundary="mini-gateway repository",
         detail={"c-sim": "component-simulator", "c-engine": "component-engine", "c-pgwire": "component-wire"})
 
@@ -740,12 +814,14 @@ component_diagram("component-retry", "Components: retry policy", "10-component-r
                   "The default policy is Off. Failures after anything reached the database are never retried under any policy.",
                   ["n-engine", "n-work"], ["t%d" % i for i in range(1, 8)])
 component_diagram("component-simulator", "Components: simulator harness", "11-component-simulator", "c-sim",
-                  "internal/sim and its sub-packages: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol",
+                  "internal/sim and its sub-packages, internal/testclient and internal/randdist: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, the test client, the scenario world with its baselines and fidelity runner, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol",
                   "The harness owns the world around the engine. It implements the engine's transport seam, so the engine "
                   "under test is the engine that ships. Several engines can run on one loop, which is how the "
                   "three-instance scenarios are made. The kernel came first (chunk 1) and is proved on a toy echo "
-                  "protocol, because no engine and no fake Postgres exist yet.",
-                  ["developer", "n-engine", "n-pgwire", "pgproto3"], ["m%d" % i for i in range(1, 29)])
+                  "protocol. Chunk 2 added the world the proxy will stand in: the fake Postgres, the simulated clients "
+                  "and scenarios that run the clients straight at the fake. No engine exists yet, so those direct "
+                  "baselines are the control arms for later chunks.",
+                  ["developer", "n-engine", "n-pgwire", "pgproto3", "pg"], ["m%d" % i for i in range(1, 43)])
 component_diagram("component-observability", "Components: observability", "12-component-observability", "c-obs",
                   "internal/obs: the one raw export (snapshots), the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus",
                   "The hard rule: one common raw export, then the collector interface, then adapters. Components fill "
