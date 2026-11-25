@@ -1,0 +1,177 @@
+{
+  "chunk": "c04-wire-sessions",
+  "sha": "b43bdfd0cf5c7801ac366208cd96b1be4f46d0b6",
+  "dirty_tree": false,
+  "stage": "final",
+  "partial": false,
+  "only": "",
+  "overall": "pass",
+  "counts_for_landing": true,
+  "go_version": "go version go1.26.8 linux/amd64",
+  "duckdb_version": "v1.5.5 (Variegata) d8cdaa33fd",
+  "started": "2026-11-25T07:11:41Z",
+  "finished": "2026-11-25T07:25:28Z",
+  "seconds": 827,
+  "comment_baseline": "none",
+  "preprose_commit": "e71b59c45930fec844cb7b5e5003c063d8677959",
+  "short": false,
+  "sweep_seeds": 200,
+  "fuzz_seconds": 20,
+  "skip_not_built": [],
+  "checks": [
+    {
+      "gate": "G0",
+      "check": "tools",
+      "status": "pass",
+      "seconds": 2,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "gofmt",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "build",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "vet",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tools-vet",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tools-test",
+      "status": "pass",
+      "seconds": 3,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tidy",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "detlint",
+      "status": "pass",
+      "seconds": 2,
+      "note": "16 package patterns"
+    },
+    {
+      "gate": "G1",
+      "check": "importlint",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "boundlint",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "paniccheck",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G2",
+      "check": "astdiff",
+      "status": "pass",
+      "seconds": 0,
+      "note": "code compared with pre-prose commit e71b59c45930fec844cb7b5e5003c063d8677959"
+    },
+    {
+      "gate": "G3",
+      "check": "unit",
+      "status": "pass",
+      "seconds": 131,
+      "note": ""
+    },
+    {
+      "gate": "G3",
+      "check": "race",
+      "status": "pass",
+      "seconds": 16,
+      "note": "1 package patterns under the race detector"
+    },
+    {
+      "gate": "G4",
+      "check": "markers",
+      "status": "pass",
+      "seconds": 0,
+      "note": "5 not-built markers, compared with baseline f9d45a57bc94cfc3b6f102bb7aafb122526f4d19 and the history of HEAD"
+    },
+    {
+      "gate": "G4",
+      "check": "sweep",
+      "status": "pass",
+      "seconds": 228,
+      "note": "200 seeds per scenario from 1, tests matching ^TestScenario"
+    },
+    {
+      "gate": "G5",
+      "check": "fuzz",
+      "status": "pass",
+      "seconds": 243,
+      "note": "11 fuzz targets, 20s each"
+    },
+    {
+      "gate": "G6",
+      "check": "tier-r",
+      "status": "pass",
+      "seconds": 25,
+      "note": "Postgres 17.11 (Debian 17.11-1.pgdg13+2) in mg-tier-r-1454165-main (127.0.0.1:53511), mg-tier-r-1454165-burst (127.0.0.1:47143) and mg-tier-r-1454165-scram (127.0.0.1:40581)"
+    },
+    {
+      "gate": "G7",
+      "check": "csv",
+      "status": "pass",
+      "seconds": 83,
+      "note": "v1.5.5 (Variegata) d8cdaa33fd; 48 run directories; 23 scenarios with SQL files"
+    },
+    {
+      "gate": "G8",
+      "check": "gen-docs",
+      "status": "pass",
+      "seconds": 1,
+      "note": "docs/csv-schema.md is current"
+    },
+    {
+      "gate": "G9",
+      "check": "site",
+      "status": "pass",
+      "seconds": 2,
+      "note": ""
+    },
+    {
+      "gate": "G10",
+      "check": "extra",
+      "status": "pass",
+      "seconds": 90,
+      "note": "SQL assertions on 19 wire scenarios, canary, and 19 scenario digests identical across processes"
+    }
+  ]
+}
