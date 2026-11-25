@@ -100,7 +100,7 @@ func (b *backend) session(st Stmt) *pgError {
 		if i < 0 {
 			return unknownSetting(st.Name)
 		}
-		b.emit(encCommand(encDataRow(encRowDesc(nil, strings.ToLower(st.Name), oidText, -1), []byte(b.settings[i].value)), "SHOW"))
+		b.emit(encCommand(encDataRow(nil, []byte(b.settings[i].value)), "SHOW"))
 	case KindDiscard:
 		if b.tx != nil {
 			return &pgError{severity: "ERROR", code: "25001", message: "DISCARD ALL cannot run inside a transaction block"}

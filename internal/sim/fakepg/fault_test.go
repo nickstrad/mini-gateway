@@ -50,11 +50,12 @@ func itoa(n int) string {
 }
 
 func elapsed(p *workload.Probe, from int, since sim.Time) time.Duration {
-	ev := p.Events()
-	if len(ev) <= from {
-		return -1
+	for _, e := range p.Events()[from:] {
+		if e.Kind == workload.EventMessage && e.Msg.Type == testclient.MsgReady {
+			return time.Duration(e.At - since)
+		}
 	}
-	return time.Duration(ev[from].At - since)
+	return -1
 }
 
 func faultCases() []faultCase {
@@ -165,7 +166,7 @@ func faultCases() []faultCase {
 			w.run(100 * time.Millisecond)
 			return p.TraceFrom(from)
 		}},
-		{name: "reset-during-reply", kind: fakepg.FaultReset, expect: "T reset", steps: func(w *world, f func(int64, int64, int64)) string {
+		{name: "reset-during-reply", kind: fakepg.FaultReset, expect: "T D reset", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
 			f(id(p), int64(fakepg.PointDuring), 0)
 			from := len(p.Events())
@@ -191,7 +192,7 @@ func faultCases() []faultCase {
 			w.run(time.Second)
 			return strings.ReplaceAll(p.TraceFrom(from), "T D ", "") + " | lost " + itoa(int(w.srv.Snapshot().TxLost))
 		}},
-		{name: "garbage-short-length", kind: fakepg.FaultGarbage, expect: "protocol-error", steps: func(w *world, f func(int64, int64, int64)) string {
+		{name: "garbage-short-length", kind: fakepg.FaultGarbage, expect: "T protocol-error", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
 			f(0, fakepg.GarbageShortLength, 0)
 			from := len(p.Events())
@@ -199,7 +200,7 @@ func faultCases() []faultCase {
 			w.run(100 * time.Millisecond)
 			return p.TraceFrom(from)
 		}},
-		{name: "garbage-huge-length", kind: fakepg.FaultGarbage, expect: "protocol-error", steps: func(w *world, f func(int64, int64, int64)) string {
+		{name: "garbage-huge-length", kind: fakepg.FaultGarbage, expect: "T protocol-error", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
 			f(id(p), fakepg.GarbageHugeLength, 0)
 			from := len(p.Events())

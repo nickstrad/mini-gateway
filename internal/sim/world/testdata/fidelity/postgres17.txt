@@ -1,0 +1,20 @@
+# Postgres 17 side of the fidelity script, recorded by scripts/tier-r.sh on 2026-11-25
+B0 startup: R:0 S*14 K Z:I
+B0 startup parameters: DateStyle,IntervalStyle,TimeZone,application_name,client_encoding,default_transaction_read_only,in_hot_standby,integer_datetimes,is_superuser,scram_iterations,server_encoding,server_version,session_authorization,standard_conforming_strings
+B1 begin and select in one message: C:BEGIN T1 D C:SELECT_1 Z:T
+B2 error inside the transaction: E:ERROR:22012 Z:E
+B2 rollback: C:ROLLBACK Z:I
+B3 two result sets: T1 D C:SELECT_1 T1 D C:SELECT_1 Z:I
+B4 three pipelined, the middle fails: T1 D C:SELECT_1 Z:I E:ERROR:22012 Z:I T1 D C:SELECT_1 Z:I
+B5 pipelined after begin: C:BEGIN Z:T T1 D C:SELECT_1 Z:T
+B5 cleanup: C:ROLLBACK Z:I
+B6 session state: C:SET Z:I C:SET S:application_name Z:I T1 D C:SHOW Z:I
+B6 discard all: C:DISCARD_ALL S:application_name Z:I T1 D C:SHOW Z:I
+B7 empty query: I Z:I
+B8 large reply: T1 D*200000 C:SELECT_200000 Z:I
+B10 writer connection: R:0 S*14 K Z:I
+B10 writer connection parameters: DateStyle,IntervalStyle,TimeZone,application_name,client_encoding,default_transaction_read_only,in_hot_standby,integer_datetimes,is_superuser,scram_iterations,server_encoding,server_version,session_authorization,standard_conforming_strings
+B10 write during the read: C:UPDATE_1 Z:I
+B10 the in-flight read returns the old value: T2 D[1,t] C:SELECT_1 Z:I
+B10 a read after the write: T1 D[2] C:SELECT_1 Z:I
+B9 the reply ends without its end marker: T1 E:FATAL:57P01 EOF

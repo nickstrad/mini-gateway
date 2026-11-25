@@ -2,6 +2,7 @@ package fakepg
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/sim"
@@ -123,9 +124,45 @@ func (b *backend) beginService(r *run) {
 	d := srv.serviceTime(b, r)
 	if srv.faults.frozen {
 		r.remaining = d
-		return
+	} else {
+		r.timer = srv.s.After(d, func() { b.serviceDone(r) })
 	}
-	r.timer = srv.s.After(d, func() { b.serviceDone(r) })
+	if b.describeAtStart(r) && !srv.faults.frozen {
+		b.pump()
+	}
+}
+
+func (b *backend) describeAtStart(r *run) bool {
+	st := r.st
+	switch st.Kind {
+	case KindConst:
+		oid, size := oidText, int16(-1)
+		if _, err := strconv.ParseInt(st.Const, 10, 32); err == nil {
+			oid, size = oidInt4, 4
+		}
+		b.emit(encRowDesc(nil, "?column?", oid, size))
+	case KindTxid:
+		b.emit(encRowDesc(nil, "?column?", oidBool, 1))
+	case KindRead:
+		if st.Const == "sleep" {
+			b.emit(encRowDesc2(nil, "v", oidText, "?column?", oidBool))
+		} else {
+			b.emit(encRowDesc(nil, "v", oidText, -1))
+		}
+	case KindSleep:
+		b.emit(encRowDesc(nil, "pg_sleep", oidVoid, 4))
+	case KindRows:
+		b.emit(encRowDesc(nil, "repeat", oidText, -1))
+	case KindShow:
+		if findSetting(b.settings, st.Name) < 0 {
+			return false
+		}
+		b.emit(encRowDesc(nil, strings.ToLower(st.Name), oidText, -1))
+	default:
+		return false
+	}
+	r.described = true
+	return true
 }
 
 func (b *backend) serviceDone(r *run) {
@@ -282,21 +319,16 @@ func (b *backend) execute(r *run) *pgError {
 	}
 	switch st.Kind {
 	case KindConst:
-		oid, size := oidText, int16(-1)
-		if _, err := strconv.ParseInt(st.Const, 10, 32); err == nil {
-			oid, size = oidInt4, 4
-		}
-		b.emit(encCommand(encDataRow(encRowDesc(nil, "?column?", oid, size), []byte(st.Const)), "SELECT 1"))
+		b.emit(encCommand(encDataRow(nil, []byte(st.Const)), "SELECT 1"))
 	case KindDivZero:
 		return &pgError{severity: "ERROR", code: "22012", message: "division by zero"}
 	case KindTxid:
-		b.emit(encCommand(encDataRow(encRowDesc(nil, "?column?", oidBool, 1), []byte("t")), "SELECT 1"))
+		b.emit(encCommand(encDataRow(nil, []byte("t")), "SELECT 1"))
 	case KindRead:
 		b.readReply(r)
 	case KindSleep:
-		b.emit(encCommand(encDataRow(encRowDesc(nil, "pg_sleep", oidVoid, 4), []byte{}), "SELECT 1"))
+		b.emit(encCommand(encDataRow(nil, []byte{}), "SELECT 1"))
 	case KindRows:
-		b.emit(encRowDesc(nil, "repeat", oidText, -1))
 		b.emitRows(st.Const, st.Size, st.Rows)
 		b.emit(encCommand(nil, "SELECT "+strconv.FormatInt(st.Rows, 10)))
 	case KindUpdate, KindInsert, KindDelete:
@@ -312,10 +344,7 @@ func (b *backend) execute(r *run) *pgError {
 }
 
 func (b *backend) readReply(r *run) {
-	out := encRowDesc(nil, "v", oidText, -1)
-	if r.st.Const == "sleep" {
-		out = encRowDesc2(nil, "v", oidText, "?column?", oidBool)
-	}
+	var out []byte
 	n := int64(0)
 	if r.readFound {
 		if r.st.Const == "sleep" {

@@ -15,6 +15,7 @@ const (
 	DefaultMaxRows        = 1 << 20
 	DefaultAfterDelay     = 10 * time.Millisecond
 	MaxStallWindows       = 64
+	MaxDelayedSegments    = 1024
 	readChunk             = 4096
 	outFill               = 64 << 10
 	firstPID              = 10_000

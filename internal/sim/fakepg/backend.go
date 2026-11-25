@@ -49,6 +49,7 @@ type run struct {
 	cancelled bool
 	readVal   string
 	readFound bool
+	described bool
 }
 
 type segment struct {
@@ -124,7 +125,14 @@ func (b *backend) advance() {
 		if b.srv.faults.frozen || b.dying {
 			return
 		}
+		if b.cur != nil && b.cur.state == runDone {
+			b.finishStatement()
+			continue
+		}
 		if !b.pump() {
+			return
+		}
+		if b.after != afterNone && (len(b.out) > 0 || len(b.outBuf) > 0) {
 			return
 		}
 		if b.after != afterNone && b.after != afterDelayedReset {
@@ -140,11 +148,7 @@ func (b *backend) advance() {
 				b.drainMuted()
 				return
 			}
-			if b.cur.state != runDone {
-				return
-			}
-			b.finishStatement()
-			continue
+			return
 		}
 		if b.msg != nil {
 			b.startNext()
@@ -407,7 +411,7 @@ func (b *backend) pump() bool {
 			if !b.pumpTimer.Pending() {
 				b.pumpTimer = b.srv.s.At(seg.readyAt, b.advance)
 			}
-			return false
+			return len(b.out) < MaxDelayedSegments
 		}
 		if seg.rows == 0 {
 			b.outBuf = seg.data
