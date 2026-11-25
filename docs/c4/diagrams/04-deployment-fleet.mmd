@@ -1,24 +1,34 @@
 flowchart LR
   subgraph D_CLIENTS["Application hosts"]
-    I_SPREAD["Client connections"]
+    I_SPREAD["Client connections"]:::planned
   end
   subgraph D_TIER["Proxy tier, N = 3"]
-    I_GW1["mini-gateway instance 1"]
-    I_GW2["mini-gateway instance 2"]
-    I_GW3["mini-gateway instance 3"]
+    I_GW1["mini-gateway instance 1"]:::planned
+    I_GW2["mini-gateway instance 2"]:::planned
+    I_GW3["mini-gateway instance 3"]:::planned
   end
   subgraph D_DB["Database host"]
-    I_PG[("Postgres 17")]
+    I_PG[("Postgres 17")]:::planned
   end
   subgraph D_OPS["Operations"]
-    I_TEL["Scraper or collector"]
+    I_TEL["Scraper or collector"]:::planned
   end
-  I_SPREAD -->|1| I_GW1
-  I_SPREAD -->|2| I_GW2
-  I_SPREAD -->|3| I_GW3
-  I_GW1 -->|4| I_PG
-  I_GW2 -->|5| I_PG
-  I_GW3 -->|6| I_PG
-  I_TEL -->|7| I_GW1
-  I_TEL -->|8| I_GW2
-  I_TEL -->|9| I_GW3
+  I_SPREAD -.->|1| I_GW1
+  I_SPREAD -.->|2| I_GW2
+  I_SPREAD -.->|3| I_GW3
+  I_GW1 -.->|4| I_PG
+  I_GW2 -.->|5| I_PG
+  I_GW3 -.->|6| I_PG
+  I_TEL -.->|7| I_GW1
+  I_TEL -.->|8| I_GW2
+  I_TEL -.->|9| I_GW3
+  subgraph KEY["Key"]
+    KEY_BUILT["Built"]:::built
+    KEY_PLANNED["Planned"]:::planned
+  end
+  classDef built fill:#d9ecd9,stroke:#2e6b34,stroke-width:2px,color:#1c1e21
+  classDef planned stroke-width:1px,stroke-dasharray:6 4
+  style D_CLIENTS stroke-dasharray:6 4
+  style D_TIER stroke-dasharray:6 4
+  style D_DB stroke-dasharray:6 4
+  style D_OPS stroke-dasharray:6 4

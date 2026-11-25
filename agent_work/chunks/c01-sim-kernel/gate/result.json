@@ -1,0 +1,181 @@
+{
+  "chunk": "c01-sim-kernel",
+  "sha": "ff06abc16802391b1db97ad88ff5e83552d3b5af",
+  "dirty_tree": false,
+  "stage": "final",
+  "partial": false,
+  "only": "",
+  "overall": "pass",
+  "counts_for_landing": true,
+  "go_version": "go version go1.26.8 linux/amd64",
+  "duckdb_version": "v1.5.5 (Variegata) d8cdaa33fd",
+  "started": "2026-11-25T00:28:22Z",
+  "finished": "2026-11-25T00:29:24Z",
+  "seconds": 62,
+  "comment_baseline": "none",
+  "preprose_commit": "43f4efa7ed2ecda4858fd5bfda3a976e2267edb4",
+  "short": false,
+  "sweep_seeds": 200,
+  "fuzz_seconds": 20,
+  "skip_not_built": [
+    "G6 tier-r",
+    "G7 csv",
+    "G8 gen-docs"
+  ],
+  "checks": [
+    {
+      "gate": "G0",
+      "check": "tools",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "gofmt",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "build",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "vet",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tools-vet",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tools-test",
+      "status": "pass",
+      "seconds": 3,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tidy",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "detlint",
+      "status": "pass",
+      "seconds": 1,
+      "note": "4 package patterns"
+    },
+    {
+      "gate": "G1",
+      "check": "importlint",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "boundlint",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "paniccheck",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G2",
+      "check": "astdiff",
+      "status": "pass",
+      "seconds": 0,
+      "note": "code compared with pre-prose commit 43f4efa7ed2ecda4858fd5bfda3a976e2267edb4"
+    },
+    {
+      "gate": "G3",
+      "check": "unit",
+      "status": "pass",
+      "seconds": 3,
+      "note": ""
+    },
+    {
+      "gate": "G3",
+      "check": "race",
+      "status": "pass",
+      "seconds": 0,
+      "note": "race-packages.txt lists no package yet"
+    },
+    {
+      "gate": "G4",
+      "check": "markers",
+      "status": "pass",
+      "seconds": 1,
+      "note": "8 not-built markers, compared with baseline 08c6e6b50134d74767dc2f7114d95f38b317f42f and the history of HEAD"
+    },
+    {
+      "gate": "G4",
+      "check": "sweep",
+      "status": "pass",
+      "seconds": 3,
+      "note": "200 seeds per scenario from 1, tests matching ^TestScenario"
+    },
+    {
+      "gate": "G5",
+      "check": "fuzz",
+      "status": "pass",
+      "seconds": 45,
+      "note": "2 fuzz targets, 20s each"
+    },
+    {
+      "gate": "G6",
+      "check": "tier-r",
+      "status": "skip-not-built",
+      "seconds": 0,
+      "note": "not built yet (marker scripts/.not-built/tier-r)"
+    },
+    {
+      "gate": "G7",
+      "check": "csv",
+      "status": "skip-not-built",
+      "seconds": 0,
+      "note": "not built yet (marker scripts/.not-built/csv-assert)"
+    },
+    {
+      "gate": "G8",
+      "check": "gen-docs",
+      "status": "skip-not-built",
+      "seconds": 0,
+      "note": "not built yet (marker scripts/.not-built/gen-docs)"
+    },
+    {
+      "gate": "G9",
+      "check": "site",
+      "status": "pass",
+      "seconds": 2,
+      "note": ""
+    },
+    {
+      "gate": "G10",
+      "check": "extra",
+      "status": "pass",
+      "seconds": 1,
+      "note": "11 toy scenarios on pinned seeds, canary and cross-process replay"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 # mini-gateway: the commands a builder runs. Each target is one script; read the script's
 # header for what it does.
 #
-#   make test             the CI set                     (not built yet: chunk 1)
+#   make test             the CI set (scripts/ci-fast.sh)
 #   make chaos            the named chaos scenarios      (not built yet: chunk 6)
 #   make bench            the benchmarks                 (not built yet: chunk 14)
 #   make gate CHUNK=c01-sim-kernel    the local landing gate for one chunk

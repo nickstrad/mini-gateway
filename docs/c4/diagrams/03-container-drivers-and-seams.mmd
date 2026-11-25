@@ -1,33 +1,40 @@
 flowchart TB
-  DEVELOPER(["Developer or reader"])
-  PGPROTO3[["pgproto3 (from pgx/v5)"]]
-  PG[("Postgres")]
+  DEVELOPER(["Developer or reader"]):::built
+  PGPROTO3[["pgproto3 (from pgx/v5)"]]:::planned
+  PG[("Postgres")]:::planned
   subgraph SCOPE["mini-gateway repository"]
-    C_SIM["Simulator harness<br/>internal/sim"]
-    C_E2E["End-to-end suite and load generator<br/>test/e2e"]
-    C_SHELL["Shell and binary<br/>cmd/mini-gateway"]
-    C_ENGINE["Engine<br/>internal/proxy"]
-    C_PGWIRE["Wire layer<br/>internal/pgwire"]
-    C_WORK["Work vocabulary<br/>internal/work"]
-    C_ADM["Admission<br/>internal/admission"]
-    C_POOL["Pool<br/>internal/pool"]
-    C_COAL["Coalescer<br/>internal/coalesce"]
-    C_RETRY["Retry policy<br/>internal/retry"]
+    C_SIM["Simulator harness<br/>internal/sim"]:::planned
+    C_E2E["End-to-end suite and load generator<br/>test/e2e"]:::planned
+    C_SHELL["Shell and binary<br/>cmd/mini-gateway"]:::planned
+    C_ENGINE["Engine<br/>internal/proxy"]:::planned
+    C_PGWIRE["Wire layer<br/>internal/pgwire"]:::planned
+    C_WORK["Work vocabulary<br/>internal/work"]:::planned
+    C_ADM["Admission<br/>internal/admission"]:::planned
+    C_POOL["Pool<br/>internal/pool"]:::planned
+    C_COAL["Coalescer<br/>internal/coalesce"]:::planned
+    C_RETRY["Retry policy<br/>internal/retry"]:::planned
   end
-  C_SHELL -->|1| C_ENGINE
-  C_SIM -->|2| C_ENGINE
-  C_ENGINE -->|3| C_PGWIRE
-  C_PGWIRE -->|4| PGPROTO3
-  C_PGWIRE -->|5| C_WORK
-  C_ADM -->|6| C_WORK
-  C_POOL -->|7| C_WORK
-  C_COAL -->|8| C_WORK
-  C_RETRY -->|9| C_WORK
-  C_SIM -->|10| PGPROTO3
-  C_E2E -->|11| C_SIM
-  C_E2E -->|12| C_SHELL
-  C_E2E -->|13| PG
-  DEVELOPER -->|14| C_SIM
-  DEVELOPER -->|15| C_E2E
-  C_SIM -->|16| C_WORK
-  C_SHELL -->|17| PG
+  C_SHELL -.->|1| C_ENGINE
+  C_SIM -.->|2| C_ENGINE
+  C_ENGINE -.->|3| C_PGWIRE
+  C_PGWIRE -.->|4| PGPROTO3
+  C_PGWIRE -.->|5| C_WORK
+  C_ADM -.->|6| C_WORK
+  C_POOL -.->|7| C_WORK
+  C_COAL -.->|8| C_WORK
+  C_RETRY -.->|9| C_WORK
+  C_SIM -.->|10| PGPROTO3
+  C_E2E -.->|11| C_SIM
+  C_E2E -.->|12| C_SHELL
+  C_E2E -.->|13| PG
+  DEVELOPER -.->|14| C_SIM
+  DEVELOPER -.->|15| C_E2E
+  C_SIM -.->|16| C_WORK
+  C_SHELL -.->|17| PG
+  subgraph KEY["Key"]
+    KEY_BUILT["Built"]:::built
+    KEY_PLANNED["Planned"]:::planned
+  end
+  classDef built fill:#d9ecd9,stroke:#2e6b34,stroke-width:2px,color:#1c1e21
+  classDef planned stroke-width:1px,stroke-dasharray:6 4
+  style SCOPE stroke-dasharray:6 4

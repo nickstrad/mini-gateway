@@ -8,14 +8,67 @@ diagram (Mermaid picture, element table, numbered relationship table), the Merma
 sources under docs/c4/diagrams/, and the diagram table in docs/c4/README.md between its
 markers. Standard library only. Validation steps are in docs/c4/README.md.
 
-Everything here describes the TARGET architecture of PLAN.md (status "planned").
+The tables describe the TARGET architecture of PLAN.md. What is already built is said in ONE
+place, the AS BUILT block just below; at a chunk landing that block is the only edit
+(how: docs/knowledge/c4-as-built.md).
 """
 import json
 import re
 from pathlib import Path
 
+# =========================================================================== AS BUILT
+# The only part of this file to edit at a chunk landing. Statuses are the c4-sdk's:
+# "existing" (drawn solid) for what is listed in BUILT, "planned" (drawn dashed) for the rest.
+#
+# LANDED    the last chunk that has landed (PLAN.md section 13). Chunk 0 built no element.
+# BUILT     element id -> the chunk that built it. List an element only when ALL of its
+#           description is true of the code. Never list a neighbour twin (id prefix "n-"):
+#           it follows its container. A container is listed only when every one of its
+#           components is.
+# PARTIAL   element id -> one plain sentence saying what exists so far. The element stays
+#           "planned" and the sentence becomes its plannedNotes entry. A container with a
+#           built component must be here (or in BUILT); gen.py refuses otherwise.
+# REL_BUILT relationship id -> chunk number, or None. Leave it empty unless the rule is
+#           wrong for one arrow. The rule: a relationship is built when both its ends are.
+#           A chunk number forces "built", None forces "planned".
+LANDED = 1
+
+BUILT = {
+    # chunk 1 — simulator kernel (diagram 11)
+    "developer": 1,   # can run mgsim, the sweep and the fuzz scripts
+    "s-loop": 1,      # internal/sim: sim.go, queue.go, errors.go
+    "s-clock": 1,     # internal/sim: time.go, Timer in sim.go
+    "s-streams": 1,   # internal/sim: stream.go
+    "s-trace": 1,     # internal/sim: trace.go
+    "s-faults": 1,    # internal/sim: fault.go
+    "s-inv": 1,       # internal/sim: RegisterInvariant, RegisterQuiesce in sim.go
+    "s-net": 1,       # internal/sim/simnet
+    "s-simtest": 1,   # internal/sim/simtest
+    "s-toy": 1,       # internal/sim/simtoy
+    "s-cli": 1,       # cmd/mgsim
+    # chunk 1 — measurement half of internal/obs (diagram 12)
+    "o-hist": 1,      # internal/obs: histogram.go
+    "o-conserve": 1,  # internal/obs: snapshot.go
+    "o-obstest": 1,   # internal/obs/obstest
+}
+
+PARTIAL = {
+    "c-sim": "Built in chunk 1: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy) and cmd/mgsim. "
+             "Not built: the fake Postgres and the simulated clients (chunk 2). No engine exists yet, so the harness "
+             "drives only the toy protocol.",
+    "c-obs": "Built in chunk 1: the integer histogram, the conservation check and gauge, and the snapshot test helpers "
+             "(obstest). Not built: the instance snapshot, the collector, the adapter interface and every adapter, "
+             "fleet merge, health.",
+    "o-contract": "Built in chunk 1: the Snapshotter interface, and the obstest check that a snapshot is a plain struct "
+                  "with no time and no map. Not built: the instance snapshot and the components that fill it (chunk 3 on).",
+}
+
+REL_BUILT = {
+}
+# =========================================================================== end of AS BUILT
+
 HERE = Path(__file__).resolve().parent
-REVISION = "target-approved-2026-11-24-rulings"
+REVISION = "target-approved-2026-11-24-rulings+built-through-chunk-%d" % LANDED
 SRC = ["plan"]
 
 E = {}      # id -> element
@@ -149,7 +202,7 @@ container("c-config", "Configuration",
           "internal/config. The config file, the static fleet block (instance count N; fleet budgets divided by N), "
           "and load-time validation that fails closed.", tech="Go")
 container("c-sim", "Simulator harness",
-          "internal/sim, internal/sim/simnet, fakepg, workload, simtest, cmd/mgsim. A deterministic single-threaded "
+          "internal/sim, internal/sim/simnet, fakepg, workload, simtest, simtoy, cmd/mgsim. A deterministic single-threaded "
           "world: virtual clock, simulated byte streams, a fake Postgres, simulated clients, faults, replay. Test code; "
           "built before any proxy code.", tech="Go test harness", tags=("test",))
 container("c-e2e", "End-to-end suite and load generator",
@@ -433,14 +486,19 @@ rel("t7", "r-policy", "n-work", "Reads the outcome's reached-the-database fact",
 # --------------------------------------------------------------------------- simulator components
 P = "c-sim"
 comp(P, "s-loop", "Event loop",
-     "One thread, one heap ordered by (time, sequence), opaque events. Step budget, stall errors, panic guard.")
+     "internal/sim. One thread, one heap ordered by (time, sequence). An event is a closure, or an opaque handler "
+     "with an integer code. Step, run until a time, run until quiet. A step budget, typed stall errors (budget "
+     "spent, time frozen, heap full) and a panic guard, each carrying the REPLAY line.")
 comp(P, "s-clock", "Virtual clock and timers",
-     "64-bit nanoseconds, cancellable timers. Time moves only when the loop moves it.")
+     "internal/sim. 64-bit nanoseconds that saturate instead of overflowing. Cancellable timers: a cancel removes "
+     "the event from the heap. A timer marked background does not count in the quiesce check. Time moves only "
+     "when the loop moves it.")
 comp(P, "s-streams", "Named random streams",
-     "One generator per (seed, label), so a new draw in one place does not shift any other.")
+     "internal/sim. One generator per (seed, label), so a new draw in one place does not shift any other.")
 comp(P, "s-net", "Simulated byte streams",
-     "internal/sim/simnet. Ordered byte connections with chosen fragmentation (down to one byte), latency per "
-     "direction, a bounded send window, half-close, reset, stall, half-open.")
+     "internal/sim/simnet. Listeners and ordered byte connections with chosen fragmentation (down to one byte), "
+     "latency per direction, a bounded send window (back pressure), half-close and reset. Its faults: reset, "
+     "stall, half-open, half-close, chunk, refuse, dial stall, accept-then-silence, and clear. Its own snapshot.")
 comp(P, "s-fakepg", "Fake Postgres",
      "internal/sim/fakepg. Speaks the simple-query subset in real wire bytes; connection limit; transaction status; a "
      "small keyed table with a write log; service-time models; every database-side fault; its own snapshot.",
@@ -448,31 +506,37 @@ comp(P, "s-fakepg", "Fake Postgres",
 comp(P, "s-workload", "Clients and tenants",
      "internal/sim/workload. Simulated clients: tenants, open-loop arrivals measured from intended send time, Zipf "
      "keys, transactions, disconnects, cancels, aggressive retries.", tech="Go, pgproto3")
-comp(P, "s-faults", "Fault schedule",
-     "Timed faults recorded in the trace; decodable from bytes for the fuzzer; a delete-one-fault shrinker. Faults are "
-     "injected only from outside the proxy code.")
+comp(P, "s-faults", "Fault schedule and shrinker",
+     "internal/sim. Timed faults, each recorded in the trace when it is applied. A package registers the fault "
+     "kinds it can apply. A schedule can be decoded from bytes for the fuzzer, and a delete-one-fault shrinker "
+     "cuts a failing schedule down. Faults are injected only from outside the code under test.")
 comp(P, "s-trace", "Decision trace and digests",
-     "Every decision (accepted, coalesced, shed, timed out) appended in order; separate digests for the trace and for "
-     "final state. Same seed, same digests.")
-comp(P, "s-inv", "Invariants",
-     "Checked at every event: connection cap, conservation of requests. Checked at the end: quiesce (nothing in use, "
-     "nothing queued, no flight, no timer).")
+     "internal/sim. Any actor appends a record (time, kind, four integers) in order; the last records are kept in "
+     "a ring for failure reports. Two digests: one of the trace, one of final state as written by registered "
+     "state writers. Same seed, same digests.")
+comp(P, "s-inv", "Invariants and quiesce check",
+     "internal/sim. A package registers its checks. Invariants run after every event (or every Nth); the quiesce "
+     "checks run at the end of a run: nothing in use, nothing in flight, no timer left. A failed check fails "
+     "the run.")
 comp(P, "s-simtest", "Seeds, replay, sweep",
-     "internal/sim/simtest. Seed flags and pinned seeds, the run-twice check, sweeps, the REPLAY line printed on every "
-     "failure.")
+     "internal/sim/simtest. The seed flag and variables, pinned seeds, the sweep over seeds, the run-twice check, "
+     "the failure report with the trace tail and the REPLAY line. scripts/sweep.sh and scripts/fuzz.sh run the "
+     "scenario tests and fuzz targets through it.")
 comp(P, "s-cli", "cmd/mgsim",
-     "Runs a named scenario from a seed outside go test and prints the digests.", tech="Go CLI")
+     "Lists the named scenarios; runs one from a seed outside go test, prints its digests (and the trace on "
+     "request) and exits 1 with the REPLAY line when it fails.", tech="Go CLI")
 comp(P, "s-toy", "Toy echo protocol",
-     "A tiny protocol with a planted-bug switch, used only to test the harness itself.")
+     "internal/sim/simtoy. A line-echo client and server with a planted-bug switch, and eleven named scenarios "
+     "that cover every network fault. Used only to test the harness itself.")
 rel("m1", "developer", "s-cli", "Runs a scenario with a seed", "Command line")
-rel("m2", "s-cli", "s-simtest", "Run, verify, report", "Go")
-rel("m3", "s-simtest", "s-loop", "Runs the scenario twice and compares digests", "Go")
+rel("m2", "s-cli", "s-toy", "Looks up a scenario by name and runs it; the toy scenarios are the only ones so far", "Go")
+rel("m3", "s-simtest", "s-loop", "Runs a scenario twice from one seed", "Go")
 rel("m4", "s-loop", "s-clock", "Advances time to the next event", "Go")
-rel("m5", "s-loop", "s-net", "Delivers byte and connection events", "Go")
+rel("m5", "s-net", "s-loop", "Schedules every delivery and notification as its own event", "Go")
 rel("m6", "s-net", "n-engine", "Implements the engine's transport seam: bytes in, bytes out, opened, closed", "Go", "implementation")
 rel("m7", "s-workload", "s-net", "Opens client connections; sends and reads", "Go")
 rel("m8", "s-fakepg", "s-net", "Accepts database connections; replies", "Go")
-rel("m9", "s-faults", "s-net", "Stall, reset, fragment, half-open", "Go")
+rel("m9", "s-faults", "s-net", "Applies the network faults at their instants", "Go")
 rel("m10", "s-faults", "s-fakepg", "Slow, kill, freeze, refuse, garbage", "Go")
 rel("m11", "s-faults", "s-workload", "Disconnect, stop reading, retry storm", "Go")
 rel("m12", "s-workload", "s-streams", "Arrivals, keys, tenants", "Go")
@@ -482,8 +546,16 @@ rel("m15", "s-workload", "pgproto3", "Wire messages", "Go import")
 rel("m16", "s-fakepg", "n-pgwire", "Reuses the SCRAM functions", "Go")
 rel("m17", "n-engine", "s-trace", "Appends each decision", "Go")
 rel("m18", "s-inv", "n-engine", "Reads snapshots at every event and at the end", "Go")
-rel("m19", "s-simtest", "s-trace", "Compares digests across runs", "Go")
+rel("m19", "s-simtest", "s-trace", "Compares the digests of the two runs; prints the trace tail on failure", "Go")
 rel("m20", "s-toy", "s-net", "Echo over simulated streams, for the meta-tests", "Go")
+rel("m21", "s-net", "s-streams", "Latency and fragment sizes, one stream per connection and direction", "Go")
+rel("m22", "s-net", "s-trace", "Appends dials, writes, deliveries, resets and closes; writes its state for the state digest", "Go")
+rel("m23", "s-net", "s-inv", "Registers byte conservation and its quiesce check", "Go")
+rel("m24", "s-loop", "s-inv", "Runs the registered checks after every event", "Go")
+rel("m25", "s-toy", "s-faults", "Scenario fault schedules; schedules decoded from fuzz input; shrinks a failing one", "Go")
+rel("m26", "s-toy", "s-simtest", "Its scenario tests sweep seeds and run every seed twice", "Go test")
+rel("m27", "developer", "s-simtest", "Runs seed sweeps and fuzz targets", "scripts/sweep.sh, scripts/fuzz.sh, go test")
+rel("m28", "s-cli", "s-trace", "Prints the digests and, on request, every trace record", "Go")
 
 # --------------------------------------------------------------------------- observability components
 P = "c-obs"
@@ -493,6 +565,12 @@ comp(P, "o-contract", "Snapshot conventions",
 comp(P, "o-hist", "Integer histogram",
      "Fixed array, fixed relative error, no allocation on record; record, merge, percentile. Out-of-range values are "
      "clamped and counted.")
+comp(P, "o-conserve", "Conservation check and gauge",
+     "A check that a total equals the sum of its parts (for example written = delivered + discarded + in flight); "
+     "its error names each term and which side is higher. A gauge type that keeps a value and its peak.")
+comp(P, "o-obstest", "Snapshot test helpers",
+     "internal/obs/obstest. Test plumbing: checks that a snapshot is a plain struct of integers (no time, no map), "
+     "and that every counter in it moved in at least one test.", tags=("test",))
 comp(P, "o-collector", "Collector",
      "Assembles one instance snapshot from the component snapshots, with instance id, build and config fingerprint. "
      "Keeps the last published copy; readers never wait on the engine. The only reader of component snapshots.")
@@ -540,6 +618,9 @@ rel("o18", "n-e2e", "o-csv", "Turns the flush on for every run; checks the final
 rel("o19", "n-e2e", "duckdb", "Runs SQL assertions and report queries after a run", "scripts/csv-assert.sh")
 rel("o20", "prom", "otelcol", "Scrapes the Collector's Prometheus endpoint", "HTTP")
 rel("o21", "prom", "n-shell", "Can scrape /metrics directly instead (no Collector)", "HTTP admin port")
+rel("o22", "n-sim", "o-obstest", "Scenario tests check that snapshots are plain and that every counter moves", "Go test")
+rel("o23", "o-obstest", "o-contract", "Checks a snapshot against the conventions", "Go test")
+rel("o24", "o-contract", "o-conserve", "Counters in a snapshot are checked for conservation; gauges keep their peak", "Go")
 
 # --------------------------------------------------------------------------- deployment (N = 3)
 ENV = "fleet-of-3"
@@ -659,11 +740,12 @@ component_diagram("component-retry", "Components: retry policy", "10-component-r
                   "The default policy is Off. Failures after anything reached the database are never retried under any policy.",
                   ["n-engine", "n-work"], ["t%d" % i for i in range(1, 8)])
 component_diagram("component-simulator", "Components: simulator harness", "11-component-simulator", "c-sim",
-                  "internal/sim and its sub-packages: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, faults, the trace, invariants, replay",
+                  "internal/sim and its sub-packages: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol",
                   "The harness owns the world around the engine. It implements the engine's transport seam, so the engine "
                   "under test is the engine that ships. Several engines can run on one loop, which is how the "
-                  "three-instance scenarios are made.",
-                  ["developer", "n-engine", "n-pgwire", "pgproto3"], ["m%d" % i for i in range(1, 21)])
+                  "three-instance scenarios are made. The kernel came first (chunk 1) and is proved on a toy echo "
+                  "protocol, because no engine and no fake Postgres exist yet.",
+                  ["developer", "n-engine", "n-pgwire", "pgproto3"], ["m%d" % i for i in range(1, 29)])
 component_diagram("component-observability", "Components: observability", "12-component-observability", "c-obs",
                   "internal/obs: the one raw export (snapshots), the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus",
                   "The hard rule: one common raw export, then the collector interface, then adapters. Components fill "
@@ -673,11 +755,67 @@ component_diagram("component-observability", "Components: observability", "12-co
                   "files, and tests and DuckDB read them with nothing else running. The production path: the OTLP "
                   "adapter pushes to an OpenTelemetry Collector, which Prometheus scrapes. DuckDB is an analysis tool "
                   "over files, never a dependency of the proxy.",
-                  ["n-engine", "n-shell", "n-e2e", "csvfiles", "duckdb", "otelcol", "prom"],
-                  ["o%d" % i for i in (1, 2, 3, 4, 15, 8, 9, 10, 11, 12, 5, 6, 7, 16, 18, 17, 19, 13, 20, 21, 14)])
+                  ["n-engine", "n-shell", "n-e2e", "n-sim", "csvfiles", "duckdb", "otelcol", "prom"],
+                  ["o%d" % i for i in (1, 2, 3, 24, 4, 15, 8, 9, 10, 11, 12, 5, 6, 7, 16, 18, 17, 19, 13, 20, 21, 14, 22, 23)])
 
 
 # --------------------------------------------------------------------------- output
+def apply_built():
+    """Turns the AS BUILT block into statuses and plannedNotes. Fails on a claim that cannot be right."""
+    assert not set(BUILT) & set(PARTIAL), sorted(set(BUILT) & set(PARTIAL))
+    for i in list(BUILT) + list(PARTIAL):
+        assert i in E, "AS BUILT names an unknown element: %s" % i
+        assert "neighbour" not in E[i]["tags"], "list the container, not its twin: %s" % i
+    for i, chunk in BUILT.items():
+        assert isinstance(chunk, int) and 0 <= chunk <= LANDED, "BUILT[%s] is not a landed chunk" % i
+        E[i]["status"] = "existing"
+    for i, note in PARTIAL.items():
+        E[i]["plannedNotes"] = [note]
+    for i, e in E.items():
+        if e["kind"] == "component" and i in BUILT:
+            assert e["parentId"] in BUILT or e["parentId"] in PARTIAL, \
+                "%s is built, so its container %s must be in BUILT or PARTIAL" % (i, e["parentId"])
+        if e["kind"] == "container" and i in BUILT:
+            missing = [c for c, x in E.items() if x["kind"] == "component" and x.get("parentId") == i and c not in BUILT]
+            assert not missing, "%s is in BUILT but these components are not: %s" % (i, missing)
+    for i, e in E.items():
+        if "neighbour" in e["tags"]:
+            real = E["c-" + i[2:]]
+            e["status"], e["plannedNotes"] = real["status"], list(real["plannedNotes"])
+    for i, v in REL_BUILT.items():
+        assert i in R, "REL_BUILT names an unknown relationship: %s" % i
+        assert v is None or (isinstance(v, int) and 0 <= v <= LANDED), "REL_BUILT[%s] is not a landed chunk" % i
+    for i, r in R.items():
+        built = REL_BUILT[i] is not None if i in REL_BUILT else built_el(r["sourceId"]) and built_el(r["targetId"])
+        r["status"] = "existing" if built else "planned"
+
+
+def built_el(i):
+    return E[i]["status"] == "existing"
+
+
+def built_rel(i):
+    return R[i]["status"] == "existing"
+
+
+def built_line():
+    if LANDED == 0:
+        return "Built so far: chunk 0, which built no part of these diagrams. Dashed parts are planned."
+    return "Built so far: chunks 0–%d. Dashed parts are planned." % LANDED
+
+
+def counts(d):
+    return (sum(built_el(n) for n in d["nodes"]), len(d["nodes"]),
+            sum(built_rel(r) for r in d["rels"]), len(d["rels"]))
+
+
+def diagram_status(d):
+    be, ne, br, nr = counts(d)
+    if be + br == 0:
+        return "planned"
+    return "existing" if (be, br) == (ne, nr) else "mixed"
+
+
 def legend(kind, node_ids):
     entries = []
     kinds = {E[n]["kind"] for n in node_ids}
@@ -691,16 +829,18 @@ def legend(kind, node_ids):
     if kind == "deployment":
         entries.append({"id": "boundary", "label": "Deployment node", "description": "A host or group of hosts",
                         "swatch": {"shape": "boundary", "tone": "default", "stroke": "solid"}})
-    entries.append({"id": "box", "label": "Element", "description": "A system, container, component or instance",
-                    "swatch": {"shape": "box", "tone": "default", "stroke": "solid"}})
     if ext:
         entries.append({"id": "external", "label": "External or neighbouring element",
                         "description": "Outside the scope of this view",
                         "swatch": {"shape": "box", "tone": "external", "stroke": "solid"}})
-    entries.append({"id": "planned", "label": "Planned", "description": "Target architecture: not built yet",
+    entries.append({"id": "built", "label": "Built", "description": "Solid outline: exists in the code",
+                    "swatch": {"shape": "box", "tone": "default", "stroke": "solid"}})
+    entries.append({"id": "planned", "label": "Planned", "description": "Dashed outline: target architecture, not built yet",
                     "swatch": {"shape": "box", "tone": "default", "stroke": "dashed"}})
-    entries.append({"id": "edge", "label": "Relationship", "description": "The arrow points to the supplier",
+    entries.append({"id": "edge", "label": "Relationship, built", "description": "Solid line. The arrow points to the supplier",
                     "swatch": {"shape": "line", "tone": "default", "stroke": "solid", "arrow": "forward"}})
+    entries.append({"id": "edge-planned", "label": "Relationship, planned", "description": "Dashed line. The arrow points to the supplier",
+                    "swatch": {"shape": "line", "tone": "default", "stroke": "dashed", "arrow": "forward"}})
     return {"title": "Key", "entries": entries}
 
 
@@ -713,7 +853,7 @@ def model():
             if n in d["detail"]:
                 node["detail"] = {"diagramId": d["detail"][n]}
             nodes.append(node)
-        dj = {"id": d["id"], "kind": d["kind"], "title": d["title"], "status": "planned", "nodes": nodes,
+        dj = {"id": d["id"], "kind": d["kind"], "title": d["title"], "status": diagram_status(d), "nodes": nodes,
               "edges": [{"relationshipId": r} for r in d["rels"]], "legend": legend(d["kind"], d["nodes"]),
               "docIds": [], "sourceIds": SRC, "layout": {"mode": "auto", "direction": d["direction"]}}
         if d["scope"]:
@@ -729,7 +869,8 @@ def model():
             "diagrams": diagrams, "documents": [],
             "sources": [{"id": "plan", "title": "mini-gateway PLAN.md (approved 2026-11-24)",
                          "url": "https://github.com/nickstrad/mini-gateway/blob/main/PLAN.md",
-                         "notes": "Target architecture. Every element is planned; nothing is built yet."}]}
+                         "notes": "Target architecture. " + built_line() + " Status existing means the element is in the "
+                                  "code; status planned means it is not, or not all of it (see its plannedNotes)."}]}
 
 
 def mid(x):
@@ -748,18 +889,23 @@ def mlabel(e):
 def mnode(n):
     e = E[n]
     lab = mlabel(e)
+    cls = ":::built" if built_el(n) else ":::planned"
     if e["kind"] == "person":
-        return '%s(["%s"])' % (mid(n), lab)
+        return '%s(["%s"])%s' % (mid(n), lab, cls)
     if n == "pg" or n == "i-pg":
-        return '%s[("%s")]' % (mid(n), lab)
+        return '%s[("%s")]%s' % (mid(n), lab, cls)
     if "external" in e["tags"] and "neighbour" not in e["tags"]:
-        return '%s[["%s"]]' % (mid(n), lab)
-    return '%s["%s"]' % (mid(n), lab)
+        return '%s[["%s"]]%s' % (mid(n), lab, cls)
+    return '%s["%s"]%s' % (mid(n), lab, cls)
+
+
+DASH = "stroke-dasharray:6 4"
 
 
 def mermaid(d):
     out = ["flowchart %s" % d["direction"]]
     inside = []
+    dashed_groups = []
     if d["kind"] == "deployment":
         grouped = set()
         for g, members in d["groups"]:
@@ -768,6 +914,8 @@ def mermaid(d):
                 out.append("    " + mnode(m))
                 grouped.add(m)
             out.append("  end")
+            if not built_el(g):
+                dashed_groups.append(mid(g))
     else:
         for n in d["nodes"]:
             e = E[n]
@@ -781,10 +929,21 @@ def mermaid(d):
             for n in inside:
                 out.append("    " + mnode(n))
             out.append("  end")
+            if not built_el(d["scope"]):
+                dashed_groups.append("SCOPE")
     for i, r in enumerate(d["rels"], 1):
         x = R[r]
-        arrow = "-.->" if r in IMPL else "-->"
-        out.append("  %s %s|%d| %s" % (mid(x["sourceId"]), arrow, i, mid(x["targetId"])))
+        arrow = "-->" if built_rel(r) else "-.->"
+        label = "%d implements" % i if r in IMPL else "%d" % i
+        out.append("  %s %s|%s| %s" % (mid(x["sourceId"]), arrow, label, mid(x["targetId"])))
+    out.append('  subgraph KEY["Key"]')
+    out.append('    KEY_BUILT["Built"]:::built')
+    out.append('    KEY_PLANNED["Planned"]:::planned')
+    out.append("  end")
+    out.append("  classDef built fill:#d9ecd9,stroke:#2e6b34,stroke-width:2px,color:#1c1e21")
+    out.append("  classDef planned stroke-width:1px,%s" % DASH)
+    for g in dashed_groups:
+        out.append("  style %s %s" % (g, DASH))
     return "\n".join(out) + "\n"
 
 
@@ -797,12 +956,16 @@ def page(d, n):
     (HERE / "diagrams").mkdir(exist_ok=True)
     (HERE / "diagrams" / (d["file"] + ".mmd")).write_text(mm)
     L = ["# C4 %s: %s" % (LEVEL[d["kind"]].split(" — ")[0] if d["kind"] != "deployment" else "Deployment", d["title"]), ""]
-    L += ["**Target architecture (planned). Nothing in this diagram is built yet.** Model: diagram `%s` in "
-          "[model.json](model.json). Source of this page: [gen.py](gen.py)." % d["id"], "", d["intro"], ""]
+    be, ne, br, nr = counts(d)
+    L += ["**%s** In this diagram %d of %d elements and %d of %d relationships are built. Model: diagram `%s` in "
+          "[model.json](model.json). Source of this page: [gen.py](gen.py)." % (built_line(), be, ne, br, nr, d["id"]),
+          "", d["intro"], ""]
+    key = "A solid box or arrow is built; a dashed one is planned. An arrow points to the supplier."
     if any(r in IMPL for r in d["rels"]):
-        L += ["A dashed arrow means \"implements\"; a solid arrow means \"uses\" and points to the supplier.", ""]
+        key += " An arrow marked \"implements\" means the source implements the target's interface; every other arrow means \"uses\"."
+    L += [key, ""]
     L += ["```mermaid", mm.rstrip("\n"), "```", ""]
-    L += ["## Elements", "", "| Element | Kind | What it is |", "| --- | --- | --- |"]
+    L += ["## Elements", "", "| Element | Kind | Status | What it is |", "| --- | --- | --- | --- |"]
     for nid in d["nodes"]:
         e = E[nid]
         kind = e["kind"]
@@ -815,17 +978,23 @@ def page(d, n):
                 kind += ", external"
             if "test" in e["tags"]:
                 kind += ", test code"
-        L.append("| %s | %s | %s |" % (e["name"], kind, desc.replace("|", "\\|")))
-    L += ["", "## Relationships", "", "| # | From | To | What | How |", "| --- | --- | --- | --- | --- |"]
+        real = "c-" + nid[2:] if "neighbour" in e["tags"] else nid
+        status = "built (chunk %d)" % BUILT[real] if real in BUILT else "planned"
+        if e["plannedNotes"]:
+            desc += " **So far:** " + " ".join(e["plannedNotes"])
+        L.append("| %s | %s | %s | %s |" % (e["name"], kind, status, desc.replace("|", "\\|")))
+    L += ["", "## Relationships", "", "| # | From | To | Status | What | How |", "| --- | --- | --- | --- | --- | --- |"]
     for i, r in enumerate(d["rels"], 1):
         x = R[r]
-        L.append("| %d | %s | %s | %s | %s |" % (i, E[x["sourceId"]]["name"], E[x["targetId"]]["name"],
-                                                x["label"].replace("|", "\\|"), x.get("technology", "")))
+        L.append("| %d | %s | %s | %s | %s | %s |" % (i, E[x["sourceId"]]["name"], E[x["targetId"]]["name"],
+                                                     "built" if built_rel(r) else "planned",
+                                                     x["label"].replace("|", "\\|"), x.get("technology", "")))
     L.append("")
     (HERE / (d["file"] + ".md")).write_text("\n".join(L))
 
 
 def main():
+    apply_built()
     for d in D:
         for n in d["nodes"]:
             assert n in E, (d["id"], n)
@@ -835,16 +1004,19 @@ def main():
     used = {r for d in D for r in d["rels"]}
     assert used == set(R), sorted(set(R) - used)
     (HERE / "model.json").write_text(json.dumps(model(), indent=1, ensure_ascii=False) + "\n")
-    rows = ["| # | Level | File | Shows |", "| --- | --- | --- | --- |"]
+    rows = ["**%s** The Built column counts the elements of each diagram that exist in the code." % built_line(), "",
+            "| # | Level | File | Built | Shows |", "| --- | --- | --- | --- | --- |"]
     for n, d in enumerate(D, 1):
         page(d, n)
-        rows.append("| %d | %s | [%s.md](%s.md) | %s |" % (n, LEVEL[d["kind"]].split(" — ")[-1], d["file"], d["file"], d["shows"]))
+        rows.append("| %d | %s | [%s.md](%s.md) | %d of %d | %s |" % (n, LEVEL[d["kind"]].split(" — ")[-1], d["file"], d["file"],
+                                                                 counts(d)[0], counts(d)[1], d["shows"]))
     readme = HERE / "README.md"
     text = readme.read_text()
     a, b = "<!-- diagram-table:start -->", "<!-- diagram-table:end -->"
     text = text[:text.index(a) + len(a)] + "\n" + "\n".join(rows) + "\n" + text[text.index(b):]
     readme.write_text(text)
-    print("%d elements, %d relationships, %d diagrams" % (len(E), len(R), len(D)))
+    print("%d elements (%d built), %d relationships (%d built), %d diagrams; %s"
+          % (len(E), sum(built_el(i) for i in E), len(R), sum(built_rel(i) for i in R), len(D), built_line()))
 
 
 if __name__ == "__main__":

@@ -2,13 +2,13 @@
 
 `mini-gateway` is a Go proxy that sits in front of one ordinary Postgres server and speaks the Postgres wire protocol (the message format Postgres clients already use). It gives the database a bounded pool of connections lent one transaction at a time (transaction pooling), terminates client TLS (encrypted connections), and lets identical in-flight read-only statements share one database round trip. Under overload, it applies per-tenant admission control: it decides which requests wait, which run, and which are refused quickly with an error stating whether a retry is safe. A deterministic simulator (a single-threaded test harness with a virtual clock and seeded randomness) is built first, before any proxy code.
 
-**Status:** Plan approved by Nick on 2026-11-24, as amended by his rulings ([section 18 of the plan](../PLAN.md#18-nicks-rulings-the-decision-record)). Build in progress. Only the foundation (Go module, local landing gate, lints, CI, scripts, and book scaffold) has landed so far; no chapters of the book are live yet.
+**Status:** Plan approved by Nick on 2026-11-24, as amended by his rulings ([section 18 of the plan](../PLAN.md#18-nicks-rulings-the-decision-record)). Build in progress. Chunk 0 (foundation) and Chunk 1 (simulator kernel) have landed, and [Chapter 1: A world that repeats: the simulator kernel](../book/chapters/01-simulator-kernel.md) is live.
 
 ## On this site
 
 | Read | What it is |
 | --- | --- |
-| [The book](../book/index.md) | One chapter per build step, published as each chunk lands (front page live; no chapters yet) |
+| [The book](../book/index.md) | One chapter per build step, published as each chunk lands ([Chapter 1](../book/chapters/01-simulator-kernel.md) is live) |
 | [The plan](../PLAN.md) | What is being built in 16 chunks after the foundation, with tests, observability duties, landing criteria, and Nick's rulings |
 | [C4 diagrams](c4/README.md) | Architecture diagrams: system context, containers, the three-instance deployment, and eight component views |
 | [Influences summary](influences-summary.md) | What Phase 0 found, what Nick steered, and where the steering overrode earlier recommendations |
