@@ -1,39 +1,54 @@
 flowchart TB
-  DEVELOPER(["Developer or reader"])
-  N_ENGINE["Engine"]
-  N_PGWIRE["Wire layer"]
-  PGPROTO3[["pgproto3 (from pgx/v5)"]]
+  DEVELOPER(["Developer or reader"]):::built
+  N_ENGINE["Engine"]:::planned
+  N_PGWIRE["Wire layer"]:::planned
+  PGPROTO3[["pgproto3 (from pgx/v5)"]]:::planned
   subgraph SCOPE["Simulator harness"]
-    S_LOOP["Event loop"]
-    S_CLOCK["Virtual clock and timers"]
-    S_STREAMS["Named random streams"]
-    S_NET["Simulated byte streams"]
-    S_FAKEPG["Fake Postgres"]
-    S_WORKLOAD["Clients and tenants"]
-    S_FAULTS["Fault schedule"]
-    S_TRACE["Decision trace and digests"]
-    S_INV["Invariants"]
-    S_SIMTEST["Seeds, replay, sweep"]
-    S_CLI["cmd/mgsim"]
-    S_TOY["Toy echo protocol"]
+    S_LOOP["Event loop"]:::built
+    S_CLOCK["Virtual clock and timers"]:::built
+    S_STREAMS["Named random streams"]:::built
+    S_NET["Simulated byte streams"]:::built
+    S_FAKEPG["Fake Postgres"]:::planned
+    S_WORKLOAD["Clients and tenants"]:::planned
+    S_FAULTS["Fault schedule and shrinker"]:::built
+    S_TRACE["Decision trace and digests"]:::built
+    S_INV["Invariants and quiesce check"]:::built
+    S_SIMTEST["Seeds, replay, sweep"]:::built
+    S_CLI["cmd/mgsim"]:::built
+    S_TOY["Toy echo protocol"]:::built
   end
   DEVELOPER -->|1| S_CLI
-  S_CLI -->|2| S_SIMTEST
+  S_CLI -->|2| S_TOY
   S_SIMTEST -->|3| S_LOOP
   S_LOOP -->|4| S_CLOCK
-  S_LOOP -->|5| S_NET
-  S_NET -.->|6| N_ENGINE
-  S_WORKLOAD -->|7| S_NET
-  S_FAKEPG -->|8| S_NET
+  S_NET -->|5| S_LOOP
+  S_NET -.->|6 implements| N_ENGINE
+  S_WORKLOAD -.->|7| S_NET
+  S_FAKEPG -.->|8| S_NET
   S_FAULTS -->|9| S_NET
-  S_FAULTS -->|10| S_FAKEPG
-  S_FAULTS -->|11| S_WORKLOAD
-  S_WORKLOAD -->|12| S_STREAMS
-  S_FAKEPG -->|13| S_STREAMS
-  S_FAKEPG -->|14| PGPROTO3
-  S_WORKLOAD -->|15| PGPROTO3
-  S_FAKEPG -->|16| N_PGWIRE
-  N_ENGINE -->|17| S_TRACE
-  S_INV -->|18| N_ENGINE
+  S_FAULTS -.->|10| S_FAKEPG
+  S_FAULTS -.->|11| S_WORKLOAD
+  S_WORKLOAD -.->|12| S_STREAMS
+  S_FAKEPG -.->|13| S_STREAMS
+  S_FAKEPG -.->|14| PGPROTO3
+  S_WORKLOAD -.->|15| PGPROTO3
+  S_FAKEPG -.->|16| N_PGWIRE
+  N_ENGINE -.->|17| S_TRACE
+  S_INV -.->|18| N_ENGINE
   S_SIMTEST -->|19| S_TRACE
   S_TOY -->|20| S_NET
+  S_NET -->|21| S_STREAMS
+  S_NET -->|22| S_TRACE
+  S_NET -->|23| S_INV
+  S_LOOP -->|24| S_INV
+  S_TOY -->|25| S_FAULTS
+  S_TOY -->|26| S_SIMTEST
+  DEVELOPER -->|27| S_SIMTEST
+  S_CLI -->|28| S_TRACE
+  subgraph KEY["Key"]
+    KEY_BUILT["Built"]:::built
+    KEY_PLANNED["Planned"]:::planned
+  end
+  classDef built fill:#d9ecd9,stroke:#2e6b34,stroke-width:2px,color:#1c1e21
+  classDef planned stroke-width:1px,stroke-dasharray:6 4
+  style SCOPE stroke-dasharray:6 4

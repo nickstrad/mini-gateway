@@ -87,3 +87,10 @@ Build all: `BIN=$(mktemp -d); (cd tools/detlint && go build -o "$BIN" ./...)`. T
 | Path | Purpose and how to run | Author seat | What it proved / last result |
 | --- | --- | --- | --- |
 | `adversarial/c00-foundation/attack.sh` | 103 attacks on the gate, the lints, the site build and `orch/land.sh`, each in a throwaway clone under `/tmp/zgw-c00-adv/`. Run from the repository root: `agent_work/adversarial/c00-foundation/attack.sh [attack-id ...]`. It rewrites `RESULTS.md`, `evidence.json` and `STATE.md` beside it, so to try a change without touching them, run it in a scratch copy of the tree | Adversary seat | Before the repair round: 87 held, 16 broken (`RESULTS.md`). After it, run in a scratch copy of the repaired tree: 102 held, 1 broken (`foundation-reuse`: the gate now refuses with exit 2 where the attack expects a red G2); see "Repair round" in `chunks/c00-foundation/NOTES.md` |
+
+### C4 as-built mechanism (2026-11-24)
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../docs/c4/gen.py` | Source of the C4 set, now with the AS BUILT block at its top (`LANDED`, `BUILT`, `PARTIAL`, `REL_BUILT`): the one edit at a chunk landing. Built parts are written with status `existing` and drawn solid, the rest `planned` and dashed. Run: `python3 docs/c4/gen.py`. How to mark a chunk: `../docs/knowledge/c4-as-built.md` | Fable | Chunk 1 marked: 118 elements (14 built), 177 relationships (16 built), 12 diagrams. `c4-check.mjs`: decode ok, 0 errors, 0 warnings, 12 of 12 scenes. Site built (18 pages); `check-mermaid.py` against a local server: 12 of 12 pictures drew |
+| `phase1/check-mermaid.py` | Also works on a local build: `scripts/site.sh /tmp/c4-site`, then `python3 -m http.server 8765 --bind 127.0.0.1` in that folder, then `agent_work/phase1/check-mermaid.py http://127.0.0.1:8765` | Fable | 2026-11-24, local build with chunk 1 marked: 18 pages ok, 12 of 12 pictures drew |

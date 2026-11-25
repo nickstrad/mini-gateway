@@ -1,30 +1,37 @@
 flowchart TB
-  APP(["Client application"])
-  OPERATOR(["Operator"])
-  PG[("Postgres")]
-  TELEMETRY[["Metrics and log readers"]]
+  APP(["Client application"]):::planned
+  OPERATOR(["Operator"]):::planned
+  PG[("Postgres")]:::planned
+  TELEMETRY[["Metrics and log readers"]]:::planned
   subgraph SCOPE["mini-gateway process"]
-    C_SHELL["Shell and binary<br/>cmd/mini-gateway"]
-    C_ENGINE["Engine<br/>internal/proxy"]
-    C_PGWIRE["Wire layer<br/>internal/pgwire"]
-    C_ADM["Admission<br/>internal/admission"]
-    C_COAL["Coalescer<br/>internal/coalesce"]
-    C_POOL["Pool<br/>internal/pool"]
-    C_RETRY["Retry policy<br/>internal/retry"]
-    C_OBS["Observability<br/>internal/obs"]
-    C_CONFIG["Configuration<br/>internal/config"]
+    C_SHELL["Shell and binary<br/>cmd/mini-gateway"]:::planned
+    C_ENGINE["Engine<br/>internal/proxy"]:::planned
+    C_PGWIRE["Wire layer<br/>internal/pgwire"]:::planned
+    C_ADM["Admission<br/>internal/admission"]:::planned
+    C_COAL["Coalescer<br/>internal/coalesce"]:::planned
+    C_POOL["Pool<br/>internal/pool"]:::planned
+    C_RETRY["Retry policy<br/>internal/retry"]:::planned
+    C_OBS["Observability<br/>internal/obs"]:::planned
+    C_CONFIG["Configuration<br/>internal/config"]:::planned
   end
-  APP -->|1| C_SHELL
-  OPERATOR -->|2| C_SHELL
-  C_SHELL -->|3| C_ENGINE
-  C_ENGINE -->|4| C_PGWIRE
-  C_ENGINE -->|5| C_ADM
-  C_ENGINE -->|6| C_COAL
-  C_ENGINE -->|7| C_POOL
-  C_ENGINE -->|8| C_RETRY
-  C_SHELL -->|9| PG
-  C_ENGINE -->|10| C_OBS
-  C_SHELL -->|11| C_OBS
-  TELEMETRY -->|12| C_SHELL
-  C_OBS -->|13| TELEMETRY
-  C_SHELL -->|14| C_CONFIG
+  APP -.->|1| C_SHELL
+  OPERATOR -.->|2| C_SHELL
+  C_SHELL -.->|3| C_ENGINE
+  C_ENGINE -.->|4| C_PGWIRE
+  C_ENGINE -.->|5| C_ADM
+  C_ENGINE -.->|6| C_COAL
+  C_ENGINE -.->|7| C_POOL
+  C_ENGINE -.->|8| C_RETRY
+  C_SHELL -.->|9| PG
+  C_ENGINE -.->|10| C_OBS
+  C_SHELL -.->|11| C_OBS
+  TELEMETRY -.->|12| C_SHELL
+  C_OBS -.->|13| TELEMETRY
+  C_SHELL -.->|14| C_CONFIG
+  subgraph KEY["Key"]
+    KEY_BUILT["Built"]:::built
+    KEY_PLANNED["Planned"]:::planned
+  end
+  classDef built fill:#d9ecd9,stroke:#2e6b34,stroke-width:2px,color:#1c1e21
+  classDef planned stroke-width:1px,stroke-dasharray:6 4
+  style SCOPE stroke-dasharray:6 4

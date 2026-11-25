@@ -1,99 +1,106 @@
 # C4 Level 3: Components: engine
 
-**Target architecture (planned). Nothing in this diagram is built yet.** Model: diagram `component-engine` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–1. Dashed parts are planned.** In this diagram 0 of 18 elements and 0 of 20 relationships are built. Model: diagram `component-engine` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 The engine is where the seams meet. The transport seam below it has two implementations. The pipeline above calls each core through a small stage interface, so a core can be replaced by a pass-through (which is how each scenario's ablation run is made).
 
-A dashed arrow means "implements"; a solid arrow means "uses" and points to the supplier.
+A solid box or arrow is built; a dashed one is planned. An arrow points to the supplier. An arrow marked "implements" means the source implements the target's interface; every other arrow means "uses".
 
 ```mermaid
 flowchart TB
-  N_SHELL["Shell and binary"]
-  N_SIM["Simulator harness"]
-  N_PGWIRE["Wire layer"]
-  N_ADM["Admission"]
-  N_COAL["Coalescer"]
-  N_POOL["Pool"]
-  N_RETRY["Retry policy"]
-  N_OBS["Observability"]
-  N_WORK["Work vocabulary"]
+  N_SHELL["Shell and binary"]:::planned
+  N_SIM["Simulator harness"]:::planned
+  N_PGWIRE["Wire layer"]:::planned
+  N_ADM["Admission"]:::planned
+  N_COAL["Coalescer"]:::planned
+  N_POOL["Pool"]:::planned
+  N_RETRY["Retry policy"]:::planned
+  N_OBS["Observability"]:::planned
+  N_WORK["Work vocabulary"]:::planned
   subgraph SCOPE["Engine"]
-    E_TRANSPORT["Transport seam"]
-    E_SESSIONS["Client session table"]
-    E_BACKENDS["Database connection table"]
-    E_PIPELINE["Request pipeline"]
-    E_RELAY["Reply relay"]
-    E_FAIL["Failure classifier"]
-    E_CLOCK["Deadline table"]
-    E_DRAIN["Drain controller"]
-    E_PUBLISH["Snapshot publisher"]
+    E_TRANSPORT["Transport seam"]:::planned
+    E_SESSIONS["Client session table"]:::planned
+    E_BACKENDS["Database connection table"]:::planned
+    E_PIPELINE["Request pipeline"]:::planned
+    E_RELAY["Reply relay"]:::planned
+    E_FAIL["Failure classifier"]:::planned
+    E_CLOCK["Deadline table"]:::planned
+    E_DRAIN["Drain controller"]:::planned
+    E_PUBLISH["Snapshot publisher"]:::planned
   end
-  N_SHELL -.->|1| E_TRANSPORT
-  N_SIM -.->|2| E_TRANSPORT
-  E_TRANSPORT -->|3| E_SESSIONS
-  E_TRANSPORT -->|4| E_BACKENDS
-  E_SESSIONS -->|5| N_PGWIRE
-  E_BACKENDS -->|6| N_PGWIRE
-  E_SESSIONS -->|7| E_PIPELINE
-  E_PIPELINE -->|8| N_ADM
-  E_PIPELINE -->|9| N_COAL
-  E_PIPELINE -->|10| N_POOL
-  E_PIPELINE -->|11| N_RETRY
-  E_PIPELINE -->|12| E_BACKENDS
-  E_BACKENDS -->|13| E_RELAY
-  E_RELAY -->|14| E_SESSIONS
-  E_PIPELINE -->|15| E_FAIL
-  E_FAIL -->|16| N_PGWIRE
-  E_CLOCK -->|17| E_PIPELINE
-  E_DRAIN -->|18| E_PIPELINE
-  E_PUBLISH -->|19| N_OBS
-  E_PIPELINE -->|20| N_WORK
+  N_SHELL -.->|1 implements| E_TRANSPORT
+  N_SIM -.->|2 implements| E_TRANSPORT
+  E_TRANSPORT -.->|3| E_SESSIONS
+  E_TRANSPORT -.->|4| E_BACKENDS
+  E_SESSIONS -.->|5| N_PGWIRE
+  E_BACKENDS -.->|6| N_PGWIRE
+  E_SESSIONS -.->|7| E_PIPELINE
+  E_PIPELINE -.->|8| N_ADM
+  E_PIPELINE -.->|9| N_COAL
+  E_PIPELINE -.->|10| N_POOL
+  E_PIPELINE -.->|11| N_RETRY
+  E_PIPELINE -.->|12| E_BACKENDS
+  E_BACKENDS -.->|13| E_RELAY
+  E_RELAY -.->|14| E_SESSIONS
+  E_PIPELINE -.->|15| E_FAIL
+  E_FAIL -.->|16| N_PGWIRE
+  E_CLOCK -.->|17| E_PIPELINE
+  E_DRAIN -.->|18| E_PIPELINE
+  E_PUBLISH -.->|19| N_OBS
+  E_PIPELINE -.->|20| N_WORK
+  subgraph KEY["Key"]
+    KEY_BUILT["Built"]:::built
+    KEY_PLANNED["Planned"]:::planned
+  end
+  classDef built fill:#d9ecd9,stroke:#2e6b34,stroke-width:2px,color:#1c1e21
+  classDef planned stroke-width:1px,stroke-dasharray:6 4
+  style SCOPE stroke-dasharray:6 4
 ```
 
 ## Elements
 
-| Element | Kind | What it is |
-| --- | --- | --- |
-| Transport seam | component | Dialer and byte-stream connection events and actions: open, bytes in, bytes out, closed. Knows no protocol. Two implementations: TCP in the shell, simulated streams in the harness. |
-| Client session table | component | One entry per client connection: its wire state machine, tenant, transaction state, the single request it may have inside the proxy, and its bounded reply buffer. |
-| Database connection table | component | One entry per database connection: its wire state machine, the query-cycle tracker, and who holds it. |
-| Request pipeline | component | The fixed order every request takes, each stage a small interface: classify, reject list, draining, breaker, rate gate, coalesce, queue, lease, forward, release. Statements inside an open transaction skip from classify straight to forward on the connection the client already holds. |
-| Reply relay | component | Streams database messages to the client (or to every waiter of a shared read) through bounded buffers, with back pressure in both directions. Never sends a short reply that looks complete. |
-| Failure classifier | component | For every failure records whether any byte reached the database, and picks the error-contract row. |
-| Deadline table | component | Every wait in the timeout budget, as deadlines on the injected clock; returns the next wake-up time as an action. |
-| Drain controller | component | Sequences shutdown: stop admitting, finish transactions in progress within a bound, close idle connections, exit. |
-| Snapshot publisher | component | Collects every component's Snapshot() between events and hands the copy to the collector. |
-| Shell and binary | neighbouring container | cmd/mini-gateway and internal/shell. Listeners, one reader and one writer goroutine per connection, bounded mailboxes, a deadline on every socket operation, TLS on both legs with crypto/tls (it answers a client's TLS request, upgrades the socket and buffers nothing across the upgrade), the admin listener on its own port, signal handling. Makes no decisions: it posts events to the engine and performs the actions the engine returns. |
-| Simulator harness | neighbouring container | internal/sim, internal/sim/simnet, fakepg, workload, simtest, cmd/mgsim. A deterministic single-threaded world: virtual clock, simulated byte streams, a fake Postgres, simulated clients, faults, replay. Test code; built before any proxy code. |
-| Wire layer | neighbouring container | internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the statement classifier, the error contract. The only product package that imports pgproto3. |
-| Admission | neighbouring container | internal/admission. Rate gate, per-tenant queues with two selectable queue rules, adaptive LIFO, round-robin dispatcher with shares that bind under saturation, adaptive concurrency limit. |
-| Coalescer | neighbouring container | internal/coalesce. Identical provably-read-only statements share one database read. Never writes. |
-| Pool | neighbouring container | internal/pool. Hard-capped database connections, creation limiter, leases per transaction, the one breaker, the dirty-connection table. |
-| Retry policy | neighbouring container | internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached the database, within a 10% budget. |
-| Observability | neighbouring container | internal/obs. Snapshot conventions (the one raw export), integer histogram, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health. |
-| Work vocabulary | neighbouring container | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
+| Element | Kind | Status | What it is |
+| --- | --- | --- | --- |
+| Transport seam | component | planned | Dialer and byte-stream connection events and actions: open, bytes in, bytes out, closed. Knows no protocol. Two implementations: TCP in the shell, simulated streams in the harness. |
+| Client session table | component | planned | One entry per client connection: its wire state machine, tenant, transaction state, the single request it may have inside the proxy, and its bounded reply buffer. |
+| Database connection table | component | planned | One entry per database connection: its wire state machine, the query-cycle tracker, and who holds it. |
+| Request pipeline | component | planned | The fixed order every request takes, each stage a small interface: classify, reject list, draining, breaker, rate gate, coalesce, queue, lease, forward, release. Statements inside an open transaction skip from classify straight to forward on the connection the client already holds. |
+| Reply relay | component | planned | Streams database messages to the client (or to every waiter of a shared read) through bounded buffers, with back pressure in both directions. Never sends a short reply that looks complete. |
+| Failure classifier | component | planned | For every failure records whether any byte reached the database, and picks the error-contract row. |
+| Deadline table | component | planned | Every wait in the timeout budget, as deadlines on the injected clock; returns the next wake-up time as an action. |
+| Drain controller | component | planned | Sequences shutdown: stop admitting, finish transactions in progress within a bound, close idle connections, exit. |
+| Snapshot publisher | component | planned | Collects every component's Snapshot() between events and hands the copy to the collector. |
+| Shell and binary | neighbouring container | planned | cmd/mini-gateway and internal/shell. Listeners, one reader and one writer goroutine per connection, bounded mailboxes, a deadline on every socket operation, TLS on both legs with crypto/tls (it answers a client's TLS request, upgrades the socket and buffers nothing across the upgrade), the admin listener on its own port, signal handling. Makes no decisions: it posts events to the engine and performs the actions the engine returns. |
+| Simulator harness | neighbouring container | planned | internal/sim, internal/sim/simnet, fakepg, workload, simtest, simtoy, cmd/mgsim. A deterministic single-threaded world: virtual clock, simulated byte streams, a fake Postgres, simulated clients, faults, replay. Test code; built before any proxy code. **So far:** Built in chunk 1: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy) and cmd/mgsim. Not built: the fake Postgres and the simulated clients (chunk 2). No engine exists yet, so the harness drives only the toy protocol. |
+| Wire layer | neighbouring container | planned | internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the statement classifier, the error contract. The only product package that imports pgproto3. |
+| Admission | neighbouring container | planned | internal/admission. Rate gate, per-tenant queues with two selectable queue rules, adaptive LIFO, round-robin dispatcher with shares that bind under saturation, adaptive concurrency limit. |
+| Coalescer | neighbouring container | planned | internal/coalesce. Identical provably-read-only statements share one database read. Never writes. |
+| Pool | neighbouring container | planned | internal/pool. Hard-capped database connections, creation limiter, leases per transaction, the one breaker, the dirty-connection table. |
+| Retry policy | neighbouring container | planned | internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached the database, within a 10% budget. |
+| Observability | neighbouring container | planned | internal/obs. Snapshot conventions (the one raw export), integer histogram, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health. **So far:** Built in chunk 1: the integer histogram, the conservation check and gauge, and the snapshot test helpers (obstest). Not built: the instance snapshot, the collector, the adapter interface and every adapter, fleet merge, health. |
+| Work vocabulary | neighbouring container | planned | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
 
 ## Relationships
 
-| # | From | To | What | How |
-| --- | --- | --- | --- | --- |
-| 1 | Shell and binary | Transport seam | Implements it with TCP sockets; posts events through bounded mailboxes | Go, interface implementation |
-| 2 | Simulator harness | Transport seam | Implements it with simulated byte streams on the event loop | Go, interface implementation |
-| 3 | Transport seam | Client session table | Client bytes and connection events | Go |
-| 4 | Transport seam | Database connection table | Database bytes and connection events | Go |
-| 5 | Client session table | Wire layer | Client session machine; statement classifier | Go |
-| 6 | Database connection table | Wire layer | Database session machine; query-cycle tracker | Go |
-| 7 | Client session table | Request pipeline | One work unit at a time per client | Go |
-| 8 | Request pipeline | Admission | Gate, queue, dispatch, limit | Go |
-| 9 | Request pipeline | Coalescer | Join or lead a shared read | Go |
-| 10 | Request pipeline | Pool | Lend, release, breaker state, dirty connections | Go |
-| 11 | Request pipeline | Retry policy | May this failure be retried | Go |
-| 12 | Request pipeline | Database connection table | Forwards the statement on the lent connection | Go |
-| 13 | Database connection table | Reply relay | Reply messages and the end-of-reply status byte | Go |
-| 14 | Reply relay | Client session table | Reply bytes for each recipient | Go |
-| 15 | Request pipeline | Failure classifier | Every refusal and failure | Go |
-| 16 | Failure classifier | Wire layer | Builds the error reply for its contract row | Go |
-| 17 | Deadline table | Request pipeline | A deadline was reached | Go |
-| 18 | Drain controller | Request pipeline | Sets the draining input | Go |
-| 19 | Snapshot publisher | Observability | Hands over the instance snapshot | Go, plain structs |
-| 20 | Request pipeline | Work vocabulary | Passes work units and outcomes between stages | Go types |
+| # | From | To | Status | What | How |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Shell and binary | Transport seam | planned | Implements it with TCP sockets; posts events through bounded mailboxes | Go, interface implementation |
+| 2 | Simulator harness | Transport seam | planned | Implements it with simulated byte streams on the event loop | Go, interface implementation |
+| 3 | Transport seam | Client session table | planned | Client bytes and connection events | Go |
+| 4 | Transport seam | Database connection table | planned | Database bytes and connection events | Go |
+| 5 | Client session table | Wire layer | planned | Client session machine; statement classifier | Go |
+| 6 | Database connection table | Wire layer | planned | Database session machine; query-cycle tracker | Go |
+| 7 | Client session table | Request pipeline | planned | One work unit at a time per client | Go |
+| 8 | Request pipeline | Admission | planned | Gate, queue, dispatch, limit | Go |
+| 9 | Request pipeline | Coalescer | planned | Join or lead a shared read | Go |
+| 10 | Request pipeline | Pool | planned | Lend, release, breaker state, dirty connections | Go |
+| 11 | Request pipeline | Retry policy | planned | May this failure be retried | Go |
+| 12 | Request pipeline | Database connection table | planned | Forwards the statement on the lent connection | Go |
+| 13 | Database connection table | Reply relay | planned | Reply messages and the end-of-reply status byte | Go |
+| 14 | Reply relay | Client session table | planned | Reply bytes for each recipient | Go |
+| 15 | Request pipeline | Failure classifier | planned | Every refusal and failure | Go |
+| 16 | Failure classifier | Wire layer | planned | Builds the error reply for its contract row | Go |
+| 17 | Deadline table | Request pipeline | planned | A deadline was reached | Go |
+| 18 | Drain controller | Request pipeline | planned | Sets the draining input | Go |
+| 19 | Snapshot publisher | Observability | planned | Hands over the instance snapshot | Go, plain structs |
+| 20 | Request pipeline | Work vocabulary | planned | Passes work units and outcomes between stages | Go types |

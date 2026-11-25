@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "id": "mini-gateway",
  "title": "mini-gateway — target architecture",
- "revision": "target-approved-2026-11-24-rulings",
+ "revision": "target-approved-2026-11-24-rulings+built-through-chunk-1",
  "defaultDiagramId": "context",
  "model": {
   "elements": [
@@ -37,7 +37,7 @@
     "kind": "person",
     "name": "Developer or reader",
     "description": "Runs simulator scenarios from a seed, replays a failure from its printed REPLAY line, runs make test / chaos / bench.",
-    "status": "planned",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -457,7 +457,9 @@
     "description": "internal/obs. Snapshot conventions (the one raw export), integer histogram, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 1: the integer histogram, the conservation check and gauge, and the snapshot test helpers (obstest). Not built: the instance snapshot, the collector, the adapter interface and every adapter, fleet merge, health."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -476,7 +478,9 @@
      "external",
      "neighbour"
     ],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 1: the integer histogram, the conservation check and gauge, and the snapshot test helpers (obstest). Not built: the instance snapshot, the collector, the adapter interface and every adapter, fleet merge, health."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -524,12 +528,14 @@
     "id": "c-sim",
     "kind": "container",
     "name": "Simulator harness",
-    "description": "internal/sim, internal/sim/simnet, fakepg, workload, simtest, cmd/mgsim. A deterministic single-threaded world: virtual clock, simulated byte streams, a fake Postgres, simulated clients, faults, replay. Test code; built before any proxy code.",
+    "description": "internal/sim, internal/sim/simnet, fakepg, workload, simtest, simtoy, cmd/mgsim. A deterministic single-threaded world: virtual clock, simulated byte streams, a fake Postgres, simulated clients, faults, replay. Test code; built before any proxy code.",
     "status": "planned",
     "tags": [
      "test"
     ],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 1: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy) and cmd/mgsim. Not built: the fake Postgres and the simulated clients (chunk 2). No engine exists yet, so the harness drives only the toy protocol."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -548,7 +554,9 @@
      "external",
      "neighbour"
     ],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 1: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy) and cmd/mgsim. Not built: the fake Postgres and the simulated clients (chunk 2). No engine exists yet, so the harness drives only the toy protocol."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -1320,8 +1328,8 @@
     "id": "s-loop",
     "kind": "component",
     "name": "Event loop",
-    "description": "One thread, one heap ordered by (time, sequence), opaque events. Step budget, stall errors, panic guard.",
-    "status": "planned",
+    "description": "internal/sim. One thread, one heap ordered by (time, sequence). An event is a closure, or an opaque handler with an integer code. Step, run until a time, run until quiet. A step budget, typed stall errors (budget spent, time frozen, heap full) and a panic guard, each carrying the REPLAY line.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1335,8 +1343,8 @@
     "id": "s-clock",
     "kind": "component",
     "name": "Virtual clock and timers",
-    "description": "64-bit nanoseconds, cancellable timers. Time moves only when the loop moves it.",
-    "status": "planned",
+    "description": "internal/sim. 64-bit nanoseconds that saturate instead of overflowing. Cancellable timers: a cancel removes the event from the heap. A timer marked background does not count in the quiesce check. Time moves only when the loop moves it.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1350,8 +1358,8 @@
     "id": "s-streams",
     "kind": "component",
     "name": "Named random streams",
-    "description": "One generator per (seed, label), so a new draw in one place does not shift any other.",
-    "status": "planned",
+    "description": "internal/sim. One generator per (seed, label), so a new draw in one place does not shift any other.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1365,8 +1373,8 @@
     "id": "s-net",
     "kind": "component",
     "name": "Simulated byte streams",
-    "description": "internal/sim/simnet. Ordered byte connections with chosen fragmentation (down to one byte), latency per direction, a bounded send window, half-close, reset, stall, half-open.",
-    "status": "planned",
+    "description": "internal/sim/simnet. Listeners and ordered byte connections with chosen fragmentation (down to one byte), latency per direction, a bounded send window (back pressure), half-close and reset. Its faults: reset, stall, half-open, half-close, chunk, refuse, dial stall, accept-then-silence, and clear. Its own snapshot.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1409,9 +1417,9 @@
    {
     "id": "s-faults",
     "kind": "component",
-    "name": "Fault schedule",
-    "description": "Timed faults recorded in the trace; decodable from bytes for the fuzzer; a delete-one-fault shrinker. Faults are injected only from outside the proxy code.",
-    "status": "planned",
+    "name": "Fault schedule and shrinker",
+    "description": "internal/sim. Timed faults, each recorded in the trace when it is applied. A package registers the fault kinds it can apply. A schedule can be decoded from bytes for the fuzzer, and a delete-one-fault shrinker cuts a failing schedule down. Faults are injected only from outside the code under test.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1425,8 +1433,8 @@
     "id": "s-trace",
     "kind": "component",
     "name": "Decision trace and digests",
-    "description": "Every decision (accepted, coalesced, shed, timed out) appended in order; separate digests for the trace and for final state. Same seed, same digests.",
-    "status": "planned",
+    "description": "internal/sim. Any actor appends a record (time, kind, four integers) in order; the last records are kept in a ring for failure reports. Two digests: one of the trace, one of final state as written by registered state writers. Same seed, same digests.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1439,9 +1447,9 @@
    {
     "id": "s-inv",
     "kind": "component",
-    "name": "Invariants",
-    "description": "Checked at every event: connection cap, conservation of requests. Checked at the end: quiesce (nothing in use, nothing queued, no flight, no timer).",
-    "status": "planned",
+    "name": "Invariants and quiesce check",
+    "description": "internal/sim. A package registers its checks. Invariants run after every event (or every Nth); the quiesce checks run at the end of a run: nothing in use, nothing in flight, no timer left. A failed check fails the run.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1455,8 +1463,8 @@
     "id": "s-simtest",
     "kind": "component",
     "name": "Seeds, replay, sweep",
-    "description": "internal/sim/simtest. Seed flags and pinned seeds, the run-twice check, sweeps, the REPLAY line printed on every failure.",
-    "status": "planned",
+    "description": "internal/sim/simtest. The seed flag and variables, pinned seeds, the sweep over seeds, the run-twice check, the failure report with the trace tail and the REPLAY line. scripts/sweep.sh and scripts/fuzz.sh run the scenario tests and fuzz targets through it.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1470,8 +1478,8 @@
     "id": "s-cli",
     "kind": "component",
     "name": "cmd/mgsim",
-    "description": "Runs a named scenario from a seed outside go test and prints the digests.",
-    "status": "planned",
+    "description": "Lists the named scenarios; runs one from a seed outside go test, prints its digests (and the trace on request) and exits 1 with the REPLAY line when it fails.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1485,8 +1493,8 @@
     "id": "s-toy",
     "kind": "component",
     "name": "Toy echo protocol",
-    "description": "A tiny protocol with a planted-bug switch, used only to test the harness itself.",
-    "status": "planned",
+    "description": "internal/sim/simtoy. A line-echo client and server with a planted-bug switch, and eleven named scenarios that cover every network fault. Used only to test the harness itself.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1503,7 +1511,9 @@
     "description": "The one common raw export. What every component's Snapshot() returns: a plain struct of monotonic counters and current gauges. No wall-clock time, no map order, no telemetry imports. Nothing else leaves a component.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 1: the Snapshotter interface, and the obstest check that a snapshot is a plain struct with no time and no map. Not built: the instance snapshot and the components that fill it (chunk 3 on)."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -1516,8 +1526,40 @@
     "kind": "component",
     "name": "Integer histogram",
     "description": "Fixed array, fixed relative error, no allocation on record; record, merge, percentile. Out-of-range values are clamped and counted.",
-    "status": "planned",
+    "status": "existing",
     "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-conserve",
+    "kind": "component",
+    "name": "Conservation check and gauge",
+    "description": "A check that a total equals the sum of its parts (for example written = delivered + discarded + in flight); its error names each term and which side is higher. A gauge type that keeps a value and its peak.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-obstest",
+    "kind": "component",
+    "name": "Snapshot test helpers",
+    "description": "internal/obs/obstest. Test plumbing: checks that a snapshot is a plain struct of integers (no time, no map), and that every counter in it moved in at least one test.",
+    "status": "existing",
+    "tags": [
+     "test"
+    ],
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3329,7 +3371,7 @@
     "sourceId": "developer",
     "targetId": "s-cli",
     "label": "Runs a scenario with a seed",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3340,9 +3382,9 @@
    {
     "id": "m2",
     "sourceId": "s-cli",
-    "targetId": "s-simtest",
-    "label": "Run, verify, report",
-    "status": "planned",
+    "targetId": "s-toy",
+    "label": "Looks up a scenario by name and runs it; the toy scenarios are the only ones so far",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3354,8 +3396,8 @@
     "id": "m3",
     "sourceId": "s-simtest",
     "targetId": "s-loop",
-    "label": "Runs the scenario twice and compares digests",
-    "status": "planned",
+    "label": "Runs a scenario twice from one seed",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3368,7 +3410,7 @@
     "sourceId": "s-loop",
     "targetId": "s-clock",
     "label": "Advances time to the next event",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3378,10 +3420,10 @@
    },
    {
     "id": "m5",
-    "sourceId": "s-loop",
-    "targetId": "s-net",
-    "label": "Delivers byte and connection events",
-    "status": "planned",
+    "sourceId": "s-net",
+    "targetId": "s-loop",
+    "label": "Schedules every delivery and notification as its own event",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3432,8 +3474,8 @@
     "id": "m9",
     "sourceId": "s-faults",
     "targetId": "s-net",
-    "label": "Stall, reset, fragment, half-open",
-    "status": "planned",
+    "label": "Applies the network faults at their instants",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3562,8 +3604,8 @@
     "id": "m19",
     "sourceId": "s-simtest",
     "targetId": "s-trace",
-    "label": "Compares digests across runs",
-    "status": "planned",
+    "label": "Compares the digests of the two runs; prints the trace tail on failure",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3576,7 +3618,111 @@
     "sourceId": "s-toy",
     "targetId": "s-net",
     "label": "Echo over simulated streams, for the meta-tests",
-    "status": "planned",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m21",
+    "sourceId": "s-net",
+    "targetId": "s-streams",
+    "label": "Latency and fragment sizes, one stream per connection and direction",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m22",
+    "sourceId": "s-net",
+    "targetId": "s-trace",
+    "label": "Appends dials, writes, deliveries, resets and closes; writes its state for the state digest",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m23",
+    "sourceId": "s-net",
+    "targetId": "s-inv",
+    "label": "Registers byte conservation and its quiesce check",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m24",
+    "sourceId": "s-loop",
+    "targetId": "s-inv",
+    "label": "Runs the registered checks after every event",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m25",
+    "sourceId": "s-toy",
+    "targetId": "s-faults",
+    "label": "Scenario fault schedules; schedules decoded from fuzz input; shrinks a failing one",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m26",
+    "sourceId": "s-toy",
+    "targetId": "s-simtest",
+    "label": "Its scenario tests sweep seeds and run every seed twice",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
+   },
+   {
+    "id": "m27",
+    "sourceId": "developer",
+    "targetId": "s-simtest",
+    "label": "Runs seed sweeps and fuzz targets",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "scripts/sweep.sh, scripts/fuzz.sh, go test"
+   },
+   {
+    "id": "m28",
+    "sourceId": "s-cli",
+    "targetId": "s-trace",
+    "label": "Prints the digests and, on request, every trace record",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3858,6 +4004,45 @@
     "technology": "HTTP admin port"
    },
    {
+    "id": "o22",
+    "sourceId": "n-sim",
+    "targetId": "o-obstest",
+    "label": "Scenario tests check that snapshots are plain and that every counter moves",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
+   },
+   {
+    "id": "o23",
+    "sourceId": "o-obstest",
+    "targetId": "o-contract",
+    "label": "Checks a snapshot against the conventions",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
+   },
+   {
+    "id": "o24",
+    "sourceId": "o-contract",
+    "targetId": "o-conserve",
+    "label": "Counters in a snapshot are checked for conservation; gauges keep their peak",
+    "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
     "id": "x1",
     "sourceId": "i-spread",
     "targetId": "i-gw1",
@@ -3981,7 +4166,7 @@
    "id": "context",
    "kind": "context",
    "title": "System context",
-   "status": "planned",
+   "status": "mixed",
    "nodes": [
     {
      "elementId": "app"
@@ -4055,16 +4240,6 @@
       }
      },
      {
-      "id": "box",
-      "label": "Element",
-      "description": "A system, container, component or instance",
-      "swatch": {
-       "shape": "box",
-       "tone": "default",
-       "stroke": "solid"
-      }
-     },
-     {
       "id": "external",
       "label": "External or neighbouring element",
       "description": "Outside the scope of this view",
@@ -4075,9 +4250,19 @@
       }
      },
      {
+      "id": "built",
+      "label": "Built",
+      "description": "Solid outline: exists in the code",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
       "id": "planned",
       "label": "Planned",
-      "description": "Target architecture: not built yet",
+      "description": "Dashed outline: target architecture, not built yet",
       "swatch": {
        "shape": "box",
        "tone": "default",
@@ -4086,12 +4271,23 @@
      },
      {
       "id": "edge",
-      "label": "Relationship",
-      "description": "The arrow points to the supplier",
+      "label": "Relationship, built",
+      "description": "Solid line. The arrow points to the supplier",
       "swatch": {
        "shape": "line",
        "tone": "default",
        "stroke": "solid",
+       "arrow": "forward"
+      }
+     },
+     {
+      "id": "edge-planned",
+      "label": "Relationship, planned",
+      "description": "Dashed line. The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "dashed",
        "arrow": "forward"
       }
      }
@@ -4232,16 +4428,6 @@
       }
      },
      {
-      "id": "box",
-      "label": "Element",
-      "description": "A system, container, component or instance",
-      "swatch": {
-       "shape": "box",
-       "tone": "default",
-       "stroke": "solid"
-      }
-     },
-     {
       "id": "external",
       "label": "External or neighbouring element",
       "description": "Outside the scope of this view",
@@ -4252,9 +4438,19 @@
       }
      },
      {
+      "id": "built",
+      "label": "Built",
+      "description": "Solid outline: exists in the code",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
       "id": "planned",
       "label": "Planned",
-      "description": "Target architecture: not built yet",
+      "description": "Dashed outline: target architecture, not built yet",
       "swatch": {
        "shape": "box",
        "tone": "default",
@@ -4263,12 +4459,23 @@
      },
      {
       "id": "edge",
-      "label": "Relationship",
-      "description": "The arrow points to the supplier",
+      "label": "Relationship, built",
+      "description": "Solid line. The arrow points to the supplier",
       "swatch": {
        "shape": "line",
        "tone": "default",
        "stroke": "solid",
+       "arrow": "forward"
+      }
+     },
+     {
+      "id": "edge-planned",
+      "label": "Relationship, planned",
+      "description": "Dashed line. The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "dashed",
        "arrow": "forward"
       }
      }
@@ -4291,7 +4498,7 @@
    "id": "container-seams",
    "kind": "container",
    "title": "Containers: drivers and seams",
-   "status": "planned",
+   "status": "mixed",
    "nodes": [
     {
      "elementId": "developer"
@@ -4409,16 +4616,6 @@
       }
      },
      {
-      "id": "box",
-      "label": "Element",
-      "description": "A system, container, component or instance",
-      "swatch": {
-       "shape": "box",
-       "tone": "default",
-       "stroke": "solid"
-      }
-     },
-     {
       "id": "external",
       "label": "External or neighbouring element",
       "description": "Outside the scope of this view",
@@ -4429,9 +4626,19 @@
       }
      },
      {
+      "id": "built",
+      "label": "Built",
+      "description": "Solid outline: exists in the code",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
       "id": "planned",
       "label": "Planned",
-      "description": "Target architecture: not built yet",
+      "description": "Dashed outline: target architecture, not built yet",
       "swatch": {
        "shape": "box",
        "tone": "default",
@@ -4440,12 +4647,23 @@
      },
      {
       "id": "edge",
-      "label": "Relationship",
-      "description": "The arrow points to the supplier",
+      "label": "Relationship, built",
+      "description": "Solid line. The arrow points to the supplier",
       "swatch": {
        "shape": "line",
        "tone": "default",
        "stroke": "solid",
+       "arrow": "forward"
+      }
+     },
+     {
+      "id": "edge-planned",
+      "label": "Relationship, planned",
+      "description": "Dashed line. The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "dashed",
        "arrow": "forward"
       }
      }
@@ -4544,9 +4762,9 @@
       }
      },
      {
-      "id": "box",
-      "label": "Element",
-      "description": "A system, container, component or instance",
+      "id": "built",
+      "label": "Built",
+      "description": "Solid outline: exists in the code",
       "swatch": {
        "shape": "box",
        "tone": "default",
@@ -4556,7 +4774,7 @@
      {
       "id": "planned",
       "label": "Planned",
-      "description": "Target architecture: not built yet",
+      "description": "Dashed outline: target architecture, not built yet",
       "swatch": {
        "shape": "box",
        "tone": "default",
@@ -4565,12 +4783,23 @@
      },
      {
       "id": "edge",
-      "label": "Relationship",
-      "description": "The arrow points to the supplier",
+      "label": "Relationship, built",
+      "description": "Solid line. The arrow points to the supplier",
       "swatch": {
        "shape": "line",
        "tone": "default",
        "stroke": "solid",
+       "arrow": "forward"
+      }
+     },
+     {
+      "id": "edge-planned",
+      "label": "Relationship, planned",
+      "description": "Dashed line. The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "dashed",
        "arrow": "forward"
       }
      }
@@ -4716,16 +4945,6 @@
     "title": "Key",
     "entries": [
      {
-      "id": "box",
-      "label": "Element",
-      "description": "A system, container, component or instance",
-      "swatch": {
-       "shape": "box",
-       "tone": "default",
-       "stroke": "solid"
-      }
-     },
-     {
       "id": "external",
       "label": "External or neighbouring element",
       "description": "Outside the scope of this view",
@@ -4736,9 +4955,19 @@
       }
      },
      {
+      "id": "built",
+      "label": "Built",
+      "description": "Solid outline: exists in the code",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
       "id": "planned",
       "label": "Planned",
-      "description": "Target architecture: not built yet",
+      "description": "Dashed outline: target architecture, not built yet",
       "swatch": {
        "shape": "box",
        "tone": "default",
@@ -4747,12 +4976,23 @@
      },
      {
       "id": "edge",
-      "label": "Relationship",
-      "description": "The arrow points to the supplier",
+      "label": "Relationship, built",
+      "description": "Solid line. The arrow points to the supplier",
       "swatch": {
        "shape": "line",
        "tone": "default",
        "stroke": "solid",
+       "arrow": "forward"
+      }
+     },
+     {
+      "id": "edge-planned",
+      "label": "Relationship, planned",
+      "description": "Dashed line. The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "dashed",
        "arrow": "forward"
       }
      }
@@ -4868,16 +5108,6 @@
     "title": "Key",
     "entries": [
      {
-      "id": "box",
-      "label": "Element",
-      "description": "A system, container, component or instance",
-      "swatch": {
-       "shape": "box",
-       "tone": "default",
-       "stroke": "solid"
-      }
-     },
-     {
       "id": "external",
       "label": "External or neighbouring element",
       "description": "Outside the scope of this view",
@@ -4888,9 +5118,19 @@
       }
      },
      {
+      "id": "built",
+      "label": "Built",
+      "description": "Solid outline: exists in the code",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
       "id": "planned",
       "label": "Planned",
-      "description": "Target architecture: not built yet",
+      "description": "Dashed outline: target architecture, not built yet",
       "swatch": {
        "shape": "box",
        "tone": "default",
@@ -4899,12 +5139,23 @@
      },
      {
       "id": "edge",
-      "label": "Relationship",
-      "description": "The arrow points to the supplier",
+      "label": "Relationship, built",
+      "description": "Solid line. The arrow points to the supplier",
       "swatch": {
        "shape": "line",
        "tone": "default",
        "stroke": "solid",
+       "arrow": "forward"
+      }
+     },
+     {
+      "id": "edge-planned",
+      "label": "Relationship, planned",
+      "description": "Dashed line. The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "dashed",
        "arrow": "forward"
       }
      }
@@ -5017,16 +5268,6 @@
     "title": "Key",
     "entries": [
      {
-      "id": "box",
-      "label": "Element",
-      "description": "A system, container, component or instance",
-      "swatch": {
-       "shape": "box",
-       "tone": "default",
-       "stroke": "solid"
-      }
-     },
-     {
       "id": "external",
       "label": "External or neighbouring element",
       "description": "Outside the scope of this view",
@@ -5037,9 +5278,19 @@
       }
      },
      {
+      "id": "built",
+      "label": "Built",
+      "description": "Solid outline: exists in the code",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
       "id": "planned",
       "label": "Planned",
-      "description": "Target architecture: not built yet",
+      "description": "Dashed outline: target architecture, not built yet",
       "swatch": {
        "shape": "box",
        "tone": "default",
@@ -5048,12 +5299,23 @@
      },
      {
       "id": "edge",
-      "label": "Relationship",
-      "description": "The arrow points to the supplier",
+      "label": "Relationship, built",
+      "description": "Solid line. The arrow points to the supplier",
       "swatch": {
        "shape": "line",
        "tone": "default",
        "stroke": "solid",
+       "arrow": "forward"
+      }
+     },
+     {
+      "id": "edge-planned",
+      "label": "Relationship, planned",
+      "description": "Dashed line. The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "dashed",
        "arrow": "forward"
       }
      }
@@ -5151,16 +5413,6 @@
     "title": "Key",
     "entries": [
      {
-      "id": "box",
-      "label": "Element",
-      "description": "A system, container, component or instance",
-      "swatch": {
-       "shape": "box",
-       "tone": "default",
-       "stroke": "solid"
-      }
-     },
-     {
       "id": "external",
       "label": "External or neighbouring element",
       "description": "Outside the scope of this view",
@@ -5171,9 +5423,19 @@
       }
      },
      {
+      "id": "built",
+      "label": "Built",
+      "description": "Solid outline: exists in the code",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
       "id": "planned",
       "label": "Planned",
-      "description": "Target architecture: not built yet",
+      "description": "Dashed outline: target architecture, not built yet",
       "swatch": {
        "shape": "box",
        "tone": "default",
@@ -5182,12 +5444,23 @@
      },
      {
       "id": "edge",
-      "label": "Relationship",
-      "description": "The arrow points to the supplier",
+      "label": "Relationship, built",
+      "description": "Solid line. The arrow points to the supplier",
       "swatch": {
        "shape": "line",
        "tone": "default",
        "stroke": "solid",
+       "arrow": "forward"
+      }
+     },
+     {
+      "id": "edge-planned",
+      "label": "Relationship, planned",
+      "description": "Dashed line. The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "dashed",
        "arrow": "forward"
       }
      }
@@ -5279,16 +5552,6 @@
     "title": "Key",
     "entries": [
      {
-      "id": "box",
-      "label": "Element",
-      "description": "A system, container, component or instance",
-      "swatch": {
-       "shape": "box",
-       "tone": "default",
-       "stroke": "solid"
-      }
-     },
-     {
       "id": "external",
       "label": "External or neighbouring element",
       "description": "Outside the scope of this view",
@@ -5299,9 +5562,19 @@
       }
      },
      {
+      "id": "built",
+      "label": "Built",
+      "description": "Solid outline: exists in the code",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
       "id": "planned",
       "label": "Planned",
-      "description": "Target architecture: not built yet",
+      "description": "Dashed outline: target architecture, not built yet",
       "swatch": {
        "shape": "box",
        "tone": "default",
@@ -5310,12 +5583,23 @@
      },
      {
       "id": "edge",
-      "label": "Relationship",
-      "description": "The arrow points to the supplier",
+      "label": "Relationship, built",
+      "description": "Solid line. The arrow points to the supplier",
       "swatch": {
        "shape": "line",
        "tone": "default",
        "stroke": "solid",
+       "arrow": "forward"
+      }
+     },
+     {
+      "id": "edge-planned",
+      "label": "Relationship, planned",
+      "description": "Dashed line. The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "dashed",
        "arrow": "forward"
       }
      }
@@ -5389,16 +5673,6 @@
     "title": "Key",
     "entries": [
      {
-      "id": "box",
-      "label": "Element",
-      "description": "A system, container, component or instance",
-      "swatch": {
-       "shape": "box",
-       "tone": "default",
-       "stroke": "solid"
-      }
-     },
-     {
       "id": "external",
       "label": "External or neighbouring element",
       "description": "Outside the scope of this view",
@@ -5409,9 +5683,19 @@
       }
      },
      {
+      "id": "built",
+      "label": "Built",
+      "description": "Solid outline: exists in the code",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
       "id": "planned",
       "label": "Planned",
-      "description": "Target architecture: not built yet",
+      "description": "Dashed outline: target architecture, not built yet",
       "swatch": {
        "shape": "box",
        "tone": "default",
@@ -5420,12 +5704,23 @@
      },
      {
       "id": "edge",
-      "label": "Relationship",
-      "description": "The arrow points to the supplier",
+      "label": "Relationship, built",
+      "description": "Solid line. The arrow points to the supplier",
       "swatch": {
        "shape": "line",
        "tone": "default",
        "stroke": "solid",
+       "arrow": "forward"
+      }
+     },
+     {
+      "id": "edge-planned",
+      "label": "Relationship, planned",
+      "description": "Dashed line. The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "dashed",
        "arrow": "forward"
       }
      }
@@ -5448,7 +5743,7 @@
    "id": "component-simulator",
    "kind": "component",
    "title": "Components: simulator harness",
-   "status": "planned",
+   "status": "mixed",
    "nodes": [
     {
      "elementId": "s-loop"
@@ -5559,6 +5854,30 @@
     },
     {
      "relationshipId": "m20"
+    },
+    {
+     "relationshipId": "m21"
+    },
+    {
+     "relationshipId": "m22"
+    },
+    {
+     "relationshipId": "m23"
+    },
+    {
+     "relationshipId": "m24"
+    },
+    {
+     "relationshipId": "m25"
+    },
+    {
+     "relationshipId": "m26"
+    },
+    {
+     "relationshipId": "m27"
+    },
+    {
+     "relationshipId": "m28"
     }
    ],
    "legend": {
@@ -5575,16 +5894,6 @@
       }
      },
      {
-      "id": "box",
-      "label": "Element",
-      "description": "A system, container, component or instance",
-      "swatch": {
-       "shape": "box",
-       "tone": "default",
-       "stroke": "solid"
-      }
-     },
-     {
       "id": "external",
       "label": "External or neighbouring element",
       "description": "Outside the scope of this view",
@@ -5595,9 +5904,19 @@
       }
      },
      {
+      "id": "built",
+      "label": "Built",
+      "description": "Solid outline: exists in the code",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
       "id": "planned",
       "label": "Planned",
-      "description": "Target architecture: not built yet",
+      "description": "Dashed outline: target architecture, not built yet",
       "swatch": {
        "shape": "box",
        "tone": "default",
@@ -5606,12 +5925,23 @@
      },
      {
       "id": "edge",
-      "label": "Relationship",
-      "description": "The arrow points to the supplier",
+      "label": "Relationship, built",
+      "description": "Solid line. The arrow points to the supplier",
       "swatch": {
        "shape": "line",
        "tone": "default",
        "stroke": "solid",
+       "arrow": "forward"
+      }
+     },
+     {
+      "id": "edge-planned",
+      "label": "Relationship, planned",
+      "description": "Dashed line. The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "dashed",
        "arrow": "forward"
       }
      }
@@ -5634,13 +5964,19 @@
    "id": "component-observability",
    "kind": "component",
    "title": "Components: observability",
-   "status": "planned",
+   "status": "mixed",
    "nodes": [
     {
      "elementId": "o-contract"
     },
     {
      "elementId": "o-hist"
+    },
+    {
+     "elementId": "o-conserve"
+    },
+    {
+     "elementId": "o-obstest"
     },
     {
      "elementId": "o-collector"
@@ -5679,6 +6015,9 @@
      "elementId": "n-e2e"
     },
     {
+     "elementId": "n-sim"
+    },
+    {
      "elementId": "csvfiles"
     },
     {
@@ -5700,6 +6039,9 @@
     },
     {
      "relationshipId": "o3"
+    },
+    {
+     "relationshipId": "o24"
     },
     {
      "relationshipId": "o4"
@@ -5754,21 +6096,17 @@
     },
     {
      "relationshipId": "o14"
+    },
+    {
+     "relationshipId": "o22"
+    },
+    {
+     "relationshipId": "o23"
     }
    ],
    "legend": {
     "title": "Key",
     "entries": [
-     {
-      "id": "box",
-      "label": "Element",
-      "description": "A system, container, component or instance",
-      "swatch": {
-       "shape": "box",
-       "tone": "default",
-       "stroke": "solid"
-      }
-     },
      {
       "id": "external",
       "label": "External or neighbouring element",
@@ -5780,9 +6118,19 @@
       }
      },
      {
+      "id": "built",
+      "label": "Built",
+      "description": "Solid outline: exists in the code",
+      "swatch": {
+       "shape": "box",
+       "tone": "default",
+       "stroke": "solid"
+      }
+     },
+     {
       "id": "planned",
       "label": "Planned",
-      "description": "Target architecture: not built yet",
+      "description": "Dashed outline: target architecture, not built yet",
       "swatch": {
        "shape": "box",
        "tone": "default",
@@ -5791,12 +6139,23 @@
      },
      {
       "id": "edge",
-      "label": "Relationship",
-      "description": "The arrow points to the supplier",
+      "label": "Relationship, built",
+      "description": "Solid line. The arrow points to the supplier",
       "swatch": {
        "shape": "line",
        "tone": "default",
        "stroke": "solid",
+       "arrow": "forward"
+      }
+     },
+     {
+      "id": "edge-planned",
+      "label": "Relationship, planned",
+      "description": "Dashed line. The arrow points to the supplier",
+      "swatch": {
+       "shape": "line",
+       "tone": "default",
+       "stroke": "dashed",
        "arrow": "forward"
       }
      }
@@ -5822,7 +6181,7 @@
    "id": "plan",
    "title": "mini-gateway PLAN.md (approved 2026-11-24)",
    "url": "https://github.com/nickstrad/mini-gateway/blob/main/PLAN.md",
-   "notes": "Target architecture. Every element is planned; nothing is built yet."
+   "notes": "Target architecture. Built so far: chunks 0–1. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
   }
  ]
 }

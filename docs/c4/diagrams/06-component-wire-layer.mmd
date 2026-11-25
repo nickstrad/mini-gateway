@@ -1,31 +1,38 @@
 flowchart TB
-  N_ENGINE["Engine"]
-  N_WORK["Work vocabulary"]
-  PGPROTO3[["pgproto3 (from pgx/v5)"]]
+  N_ENGINE["Engine"]:::planned
+  N_WORK["Work vocabulary"]:::planned
+  PGPROTO3[["pgproto3 (from pgx/v5)"]]:::planned
   subgraph SCOPE["Wire layer"]
-    W_FRAMER["Framer"]
-    W_CODEC["Codec boundary"]
-    W_CLIENT["Client session machine"]
-    W_BACKEND["Database session machine"]
-    W_CYCLE["Query-cycle tracker"]
-    W_SCRAM["SCRAM-SHA-256 functions"]
-    W_LEXER["SQL lexer"]
-    W_CLASSIFIER["Statement classifier"]
-    W_ERRORS["Error contract and reply builders"]
+    W_FRAMER["Framer"]:::planned
+    W_CODEC["Codec boundary"]:::planned
+    W_CLIENT["Client session machine"]:::planned
+    W_BACKEND["Database session machine"]:::planned
+    W_CYCLE["Query-cycle tracker"]:::planned
+    W_SCRAM["SCRAM-SHA-256 functions"]:::planned
+    W_LEXER["SQL lexer"]:::planned
+    W_CLASSIFIER["Statement classifier"]:::planned
+    W_ERRORS["Error contract and reply builders"]:::planned
   end
-  N_ENGINE -->|1| W_CLIENT
-  N_ENGINE -->|2| W_BACKEND
-  N_ENGINE -->|3| W_CYCLE
-  N_ENGINE -->|4| W_CLASSIFIER
-  N_ENGINE -->|5| W_ERRORS
-  W_CLIENT -->|6| W_CODEC
-  W_BACKEND -->|7| W_CODEC
-  W_CYCLE -->|8| W_CODEC
-  W_ERRORS -->|9| W_CODEC
-  W_CODEC -->|10| W_FRAMER
-  W_CODEC -->|11| PGPROTO3
-  W_CLIENT -->|12| W_SCRAM
-  W_BACKEND -->|13| W_SCRAM
-  W_CLASSIFIER -->|14| W_LEXER
-  W_CLASSIFIER -->|15| N_WORK
-  W_CYCLE -->|16| N_WORK
+  N_ENGINE -.->|1| W_CLIENT
+  N_ENGINE -.->|2| W_BACKEND
+  N_ENGINE -.->|3| W_CYCLE
+  N_ENGINE -.->|4| W_CLASSIFIER
+  N_ENGINE -.->|5| W_ERRORS
+  W_CLIENT -.->|6| W_CODEC
+  W_BACKEND -.->|7| W_CODEC
+  W_CYCLE -.->|8| W_CODEC
+  W_ERRORS -.->|9| W_CODEC
+  W_CODEC -.->|10| W_FRAMER
+  W_CODEC -.->|11| PGPROTO3
+  W_CLIENT -.->|12| W_SCRAM
+  W_BACKEND -.->|13| W_SCRAM
+  W_CLASSIFIER -.->|14| W_LEXER
+  W_CLASSIFIER -.->|15| N_WORK
+  W_CYCLE -.->|16| N_WORK
+  subgraph KEY["Key"]
+    KEY_BUILT["Built"]:::built
+    KEY_PLANNED["Planned"]:::planned
+  end
+  classDef built fill:#d9ecd9,stroke:#2e6b34,stroke-width:2px,color:#1c1e21
+  classDef planned stroke-width:1px,stroke-dasharray:6 4
+  style SCOPE stroke-dasharray:6 4
