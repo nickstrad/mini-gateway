@@ -3,6 +3,8 @@ package workload
 import (
 	"math/rand/v2"
 	"strconv"
+
+	"github.com/nickstrad/mini-gateway/internal/randdist"
 )
 
 type KeyChooser struct {
@@ -14,7 +16,7 @@ type KeyChooser struct {
 func NewKeyChooser(r *rand.Rand, k Keys) *KeyChooser {
 	kc := &KeyChooser{cfg: k, r: r}
 	if k.Kind == KeysZipf && k.N > 0 && k.Zipf > 1000 {
-		kc.zipf = newZipf(r, k.Zipf, k.N)
+		kc.zipf = randdist.NewZipf(r, k.Zipf, k.N)
 	}
 	return kc
 }

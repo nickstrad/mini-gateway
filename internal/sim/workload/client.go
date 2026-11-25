@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/nickstrad/mini-gateway/internal/randdist"
 	"github.com/nickstrad/mini-gateway/internal/sim"
 	"github.com/nickstrad/mini-gateway/internal/sim/simnet"
 	"github.com/nickstrad/mini-gateway/internal/testclient"
@@ -140,7 +141,7 @@ func (c *client) arrive() {
 	if c.moreArrivals() && t.Arrival != ArrivalClosed {
 		gap := t.Interval
 		if t.Arrival == ArrivalPoisson {
-			gap = expGap(c.arrivals, t.Interval)
+			gap = randdist.ExpGap(c.arrivals, t.Interval)
 		}
 		c.arrivalT = c.w.s.After(gap, c.arrive)
 	}

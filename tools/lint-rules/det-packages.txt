@@ -16,3 +16,4 @@ internal/sim/fakepg
 internal/sim/workload
 internal/sim/world
 internal/testclient
+internal/randdist
