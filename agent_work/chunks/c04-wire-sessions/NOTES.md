@@ -493,6 +493,12 @@ scripts/gate.sh c04-wire-sessions
 
 ## Gate result
 
+Integration with chunk 3: `scripts/gate.sh c04-wire-sessions`, build stage, clean tree at
+`f02fb92`: `overall=pass`, `counts_for_landing=true`. Every check passes: G3 unit 136 s, G4
+sweep 222 s (200 seeds), G5 fuzz, G6 tier R (Postgres 17.11), G7 csv 79 s (48 run
+directories, 23 scenarios with SQL files, the 19 wire scenarios among them), G8 gen-docs, G10
+extra 99 s. `result.json` was deleted, not committed. The repair-round result below is history.
+
 Repair round: `scripts/gate.sh c04-wire-sessions`, build stage, clean tree at `75501f9`
 (only this file changed after it): `overall=fail`, `counts_for_landing=false`, and the only
 red check is **G3 unit**, which fails on exactly one test, the adversary's
