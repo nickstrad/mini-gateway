@@ -20,13 +20,12 @@ const (
 	ReasonAuthFailed
 	ReasonUnknownDatabase
 	ReasonCancelRequest
-	ReasonTerminate
 	NumReasons
 )
 
 var reasonNames = [NumReasons]string{"none", "client-closed", "deadline", "protocol-violation", "tls-failed",
 	"plaintext-refused", "protocol-version", "parameter-refused", "no-user", "auth-failed", "unknown-database",
-	"cancel-request", "terminate"}
+	"cancel-request"}
 
 func (r Reason) String() string {
 	if r < NumReasons {
@@ -75,12 +74,13 @@ const (
 	ViolationBadMessage
 	ViolationBadTLSAnswer
 	ViolationUnknownMessage
+	ViolationBadHandshake
 	NumViolations
 )
 
 var violationNames = [NumViolations]string{"none", "bad-length", "too-large", "bytes-before-handshake",
 	"second-tls-request", "second-gss-request", "bad-startup-packet", "unexpected-message", "bad-message",
-	"bad-tls-answer", "unknown-message"}
+	"bad-tls-answer", "unknown-message", "bad-handshake"}
 
 func (v Violation) String() string {
 	if v < NumViolations {
@@ -166,6 +166,16 @@ func (v TLSVersion) String() string {
 type HandshakeResult struct {
 	Outcome HandshakeOutcome
 	Version TLSVersion
+}
+
+func (r HandshakeResult) normalized() HandshakeResult {
+	if r.Outcome >= NumHandshakeOutcomes {
+		r.Outcome = HandshakeFailed
+	}
+	if r.Version >= NumTLSVersions {
+		r.Version = TLSVersionOther
+	}
+	return r
 }
 
 type SideCounters struct {
@@ -261,7 +271,7 @@ func (s WireSnapshot) Check() error {
 	if c.InStartup < 0 || d.InStartup < 0 {
 		errs = append(errs, fmt.Errorf("%w: negative sessions in startup", ErrConservation))
 	}
-	if c.StartupsFailed[ReasonNone] != 0 || c.StartupsFailed[ReasonTerminate] != 0 || d.StartupsFailed[ClassNone] != 0 {
+	if c.StartupsFailed[ReasonNone] != 0 || d.StartupsFailed[ClassNone] != 0 {
 		errs = append(errs, fmt.Errorf("%w: a startup failed without a reason", ErrConservation))
 	}
 	if waiting := d.TLSRequests - sumInt64(d.TLSAnswers[:]); waiting < 0 || waiting > d.InStartup {

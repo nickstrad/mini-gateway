@@ -87,6 +87,7 @@ func busyStats(t *testing.T) *WireStats {
 		{BackendTLSRequire, serverPlan{tlsAnswer: 'Q'}},
 		{BackendTLSRequire, serverPlan{tlsAnswer: 'S', handshake: HandshakeFailed}},
 		{BackendTLSVerifyFull, serverPlan{tlsAnswer: 'S', handshake: HandshakeFailedVerification}},
+		{BackendTLSRequire, serverPlan{tlsAnswer: 'S', handshake: HandshakeViolation}},
 		{BackendTLSDisable, serverPlan{auth: AuthSASL, password: "x"}},
 		{BackendTLSDisable, serverPlan{auth: AuthSASL, tamperFinal: true}},
 		{BackendTLSDisable, serverPlan{auth: AuthMD5Password}},
@@ -134,7 +135,7 @@ func TestWireCountersMoveAndConserve(t *testing.T) {
 	}
 	gauges := map[string]bool{"InStartup": true}
 	impossible := map[string]map[int]bool{
-		"StartupsFailed": {int(ReasonNone): true, int(ReasonTerminate): true},
+		"StartupsFailed": {int(ReasonNone): true},
 		"AuthFailures":   {int(AuthCauseNone): true},
 		"Violations":     {int(ViolationNone): true},
 		"TLSFailed":      {int(HandshakeCompleted): true},

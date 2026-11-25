@@ -186,6 +186,7 @@ func (s *ClientSession) close(acts []Action, a Action) []Action {
 		s.st.InStartup--
 	}
 	s.state = csClosed
+	s.scram = nil
 	s.reason = a.Reason
 	a.Kind = ActClose
 	return append(acts, a)
@@ -203,8 +204,15 @@ func (s *ClientSession) HandshakeDone(acts []Action, r HandshakeResult) []Action
 	if s.state != csTLSWait {
 		return acts
 	}
+	r = r.normalized()
 	if r.Outcome != HandshakeCompleted {
 		s.st.TLSFailed[r.Outcome]++
+		switch r.Outcome {
+		case HandshakeDeadline:
+			return s.close(acts, Action{Reason: ReasonDeadline})
+		case HandshakeViolation:
+			return s.violation(acts, ViolationBadHandshake, false)
+		}
 		return s.close(acts, Action{Reason: ReasonTLSFailed})
 	}
 	s.st.TLSCompleted[r.Version]++

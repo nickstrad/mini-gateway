@@ -52,7 +52,6 @@ type CycleTracker struct {
 	offset      int64
 	outstanding int64
 	closed      bool
-	midMessage  bool
 }
 
 func NewCycleTracker(maxMessage int, stats *WireStats) *CycleTracker {

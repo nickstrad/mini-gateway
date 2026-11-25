@@ -126,17 +126,16 @@ func (s *BackendSession) sendStartup(acts []Action) []Action {
 }
 
 func (s *BackendSession) fail(acts []Action, a Action) []Action {
-	if s.state == bsClosed {
+	if !s.inStartup() {
 		return acts
 	}
 	if s.state == bsTLSAnswer {
 		s.st.TLSAnswers[AnswerNone]++
 	}
-	if s.inStartup() {
-		s.st.StartupsFailed[a.Class]++
-		s.st.InStartup--
-	}
+	s.st.StartupsFailed[a.Class]++
+	s.st.InStartup--
 	s.state = bsClosed
+	s.scram = nil
 	s.class = a.Class
 	a.Kind = ActClose
 	return append(acts, a)
@@ -201,8 +200,15 @@ func (s *BackendSession) HandshakeDone(acts []Action, r HandshakeResult) []Actio
 	if s.state != bsTLSWait {
 		return acts
 	}
+	r = r.normalized()
 	if r.Outcome != HandshakeCompleted {
 		s.st.TLSFailed[r.Outcome]++
+		switch r.Outcome {
+		case HandshakeDeadline:
+			return s.fail(acts, Action{Class: ClassDeadline})
+		case HandshakeViolation:
+			return s.violation(acts, ViolationBadHandshake)
+		}
 		return s.fail(acts, Action{Class: ClassTLSFailed})
 	}
 	s.st.TLSCompleted[r.Version]++
