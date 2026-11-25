@@ -4,7 +4,8 @@
 # Usage (from the MAIN checkout): agent_work/orch/finish.sh <short> <chunk-dir> <message-file> <site-path>...
 # The pre-prose commit is the parent of the oldest commit on the branch whose subject starts
 # with "prose:" or "book:" (the prose seat's commits come last on a branch).
-# Exit 0 only when the chunk is merged, pushed and every site path returns 200.
+# Exit 0 only when the chunk is merged, pushed, every site path returns 200 and the CI run
+# of the merge commit on GitHub is green.
 set -eu
 set -o pipefail
 short=$1; chunk=$2; msg=$(readlink -f "$3"); shift 3
@@ -28,5 +29,13 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 cd "$main"
 agent_work/orch/land.sh "$chunk" "$branch" "$msg" | tail -1
 agent_work/orch/pages-check.sh "$(git rev-parse HEAD)" "$@"
+sha=$(git rev-parse HEAD); ci=
+for _ in $(seq 60); do
+  ci=$(gh run list -R nickstrad/mini-gateway --workflow ci.yml --commit "$sha" --json status,conclusion --jq '.[0] | "\(.status) \(.conclusion)"' 2>/dev/null || true)
+  case "$ci" in completed\ *) break ;; esac
+  sleep 10
+done
+echo "finish: CI on GitHub: ${ci:-no run found}"
+[ "$ci" = "completed success" ] || { echo "finish: CI is not green for $sha — the chunk is merged; fix CI before the next chunk" >&2; exit 1; }
 git worktree remove "$wt" && git branch -q -d "$branch"
 echo "finish: $chunk landed at $(git rev-parse --short HEAD)"

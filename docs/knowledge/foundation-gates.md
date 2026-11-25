@@ -197,3 +197,13 @@ points at an unpacked copy elsewhere.
 - The link check reads every `href` and `src` attribute of every tag in a page, Markdown
   links and raw HTML alike, in double quotes, single quotes or none. Not read: `srcset`,
   URLs inside CSS, and links a script builds at run time.
+
+## CI leaves out the attack harnesses (2026-11-25)
+
+`scripts/ci-fast.sh` (the gate with `GATE_SHORT=1`) runs `go test -short` on every package
+except those under `agent_work/adversarial/`. The adversaries' tests call tools that exist
+on vm-1 and not on a GitHub runner (the DuckDB CLI, Docker, Go at `/usr/local/go/bin/go`),
+and CI is the fast set only (PLAN.md section 6.3). The local landing gate runs them all, on
+every chunk. CI was red from the chunk 1 landing (`d21b26d`) to `b342e48` for this reason
+only; no product test failed. After a landing, check the CI run as well as the Pages run:
+`gh run list -R nickstrad/mini-gateway --workflow ci.yml --limit 1`.

@@ -26,7 +26,8 @@
 #                          only while the tree holds no product Go: with any .go file
 #                          outside tools/ and agent_work/ the run is refused (exit 2).
 #   GATE_ONLY=G0,G3        run a subset; the result is marked partial and never counts.
-#   GATE_SHORT=1           G3 runs `go test -short` (the CI set); never counts.
+#   GATE_SHORT=1           G3 runs `go test -short` without agent_work/adversarial/... (the CI
+#                          set: attack harnesses need vm-1 tools); never counts.
 #   GATE_OUT=<dir>         write the result somewhere else; never counts.
 #   SWEEP_SEEDS=200        G4 seed budget per scenario.
 #   FUZZ_SECONDS=20        G5 time per fuzz target.
@@ -334,7 +335,12 @@ g2_astdiff() {
 g3_unit() {
   no_go && return 0
   [ "$short" = false ] || echo "NOTE: short run (go test -short); does not count for landing"
-  go test -count=1 -timeout 30m "${short_flag[@]}" ./...
+  if [ "$short" = true ]; then
+    echo "NOTE: the CI set leaves out agent_work/adversarial/... (attack harnesses use vm-1 tools: DuckDB, Docker, the host Go path); the landing gate runs them"
+    go test -count=1 -timeout 30m "${short_flag[@]}" $(go list ./... | grep -v '/agent_work/adversarial/')
+  else
+    go test -count=1 -timeout 30m ./...
+  fi
 }
 g3_race() {
   local pkgs p; pkgs=$(list_file tools/lint-rules/race-packages.txt) || return 1
