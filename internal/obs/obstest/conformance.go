@@ -302,6 +302,15 @@ func compare(f Fidelity, reg *obs.Registry, want, got obs.InstanceSnapshot) erro
 				return fmt.Errorf("headline %s.%s = %d, snapshot %d (present %v)", p.Component, p.Metric, p.Value, w.Value, ok)
 			}
 		}
+		for _, p := range want.Points {
+			d, ok := reg.Lookup(p.Component, p.Metric)
+			if !ok || !d.Headline || p.Labels.Tenant != "" {
+				continue
+			}
+			if _, ok := got.Point(p.Component, p.Metric, p.Labels); !ok {
+				return fmt.Errorf("headline %s.%s %+v missing from the output", p.Component, p.Metric, p.Labels)
+			}
+		}
 		return nil
 	}
 	var missing []string
