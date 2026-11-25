@@ -3,7 +3,7 @@
 First pass, against the build tip: **HELD 29, BROKEN 3** —
 `agent_work/adversarial/c05-classifier/RESULTS.md`.
 
-After the one repair round (orchestrator's run, 2026-11-25): **31 attacks pass, 0 fail,
+After the one repair round (orchestrator's run, 2026-11-25): **28 attacks pass, 0 fail, 3 need the real-Postgres tier (they run under `MG_TIER_R=1` and passed in the adversary's own run),
 1 settled by the orchestrator**.
 
 Fixed product defects: time-dependent literals (`'now'::timestamp` and similar) were
