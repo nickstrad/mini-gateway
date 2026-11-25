@@ -1,7 +1,7 @@
 #!/bin/bash
 # Launch one headless agent, detached, in a worktree.
 # Usage: agent_work/orch/launch.sh <run-name> <seat> <workdir> <brief-file>
-#   seat: opus | fable | neon | neon-oc | astra
+#   seat: opus | fable | neon | neon-oc | astra | muse
 # Writes $RUNS/zgateway-p2-<run-name>.{log,pid,exit}; the exit file appears when the agent stops.
 # Checks 15 s in that the process is alive and that its working directory is <workdir>;
 # a run found anywhere else is killed.
@@ -11,6 +11,8 @@
 #   neon     Antigravity `agy`, model gemini-4-neon-high (review and prose) — the default route
 #   neon-oc  OpenCode direct route — out-of-pocket fallback only; note its use in the chunk notes
 #   astra    codex exec, model gpt-6-astra (adversarial harnesses)
+#   muse     muse exec, model muse-wonder-full-1.0, Standard mode (arbitration: the top seat
+#            outside the Opus/Neon build and review pair)
 # Every brief must end by asking for a final line `AGENT-DONE`; a run that exits 0 without
 # that line in its last lines is recorded as exit 70 (stopped early).
 set -u
@@ -30,6 +32,7 @@ case "$seat" in
   neon)    inner="agy -p \"$ask\" --model ${NEON_MODEL:-gemini-4-neon-high} --dangerously-skip-permissions </dev/null" ;;
   neon-oc) inner="set -a; . /root/Software/.secrets/yt-transcribe.env; . /root/Software/.secrets/gemini-neon.env; set +a; opencode run --auto --variant ${NEON_VARIANT:-high} -m google/gemini-4-neon \"$ask\" </dev/null" ;;
   astra)   inner="codex exec -m gpt-6-astra --dangerously-bypass-approvals-and-sandbox \"$ask\" </dev/null" ;;
+  muse)    printf '%s\n' "$ask" > "$base.prompt"; inner="muse exec --prompt-file '$base.prompt' --model muse-wonder-full-1.0 --contributor-mode off --workspace '$wd' --trust-workspace --approval-mode never </dev/null" ;;
   *) echo "unknown seat $seat" >&2; exit 2 ;;
 esac
 cd "$wd" || exit 2
