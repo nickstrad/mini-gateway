@@ -252,6 +252,18 @@ with every adapter attached and a 100 ms publish interval takes 1–4 s of wall 
   `run.csv`.
 - No adapter recovers from a panic in another adapter.
 
+## Gate result (build stage)
+
+`scripts/gate.sh c03-obs-spine` on a clean tree at `f1d3759` (2026-11-25): every check passes
+except **G3 unit**, which fails only on the two chunk 1 adversarial attacks described under
+"Deviations" (all 22 product and adversarial packages otherwise `ok`, including
+`agent_work/adversarial/c02-sim-world`). G0 all, G1 detlint/importlint/boundlint/paniccheck,
+G2 comments, G3 race (`./internal/obs/csvflush/...`), G4 markers, G4 sweep (200 seeds, 607 s),
+G5 fuzz (7 × 20 s), G6 tier R (Postgres 17.11), G7 csv (DuckDB v1.5.5, 10 run directories from
+the sweep: 5 baselines × seeds 1 and 42, 4 scenarios with SQL files, 5 SQL files), G8
+gen-docs, G9 site, G10 extra (45 s): pass. `overall=fail` until the orchestrator rules on the
+two attacks. `result.json` was not committed (builder rules).
+
 ## Deviations
 
 - **Gate G3 is red on two chunk 1 adversarial tests, by construction of this brief.**
