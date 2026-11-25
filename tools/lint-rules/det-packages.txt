@@ -26,3 +26,6 @@ internal/obs/catalog
 internal/pgwire
 internal/sim/simtls
 internal/pgwire/pgwiretest
+# Chunk 4 integration with chunk 3: the wire snapshot mapping and the wire scenario world.
+internal/obs/wiresrc
+internal/pgwire/pgwiretest/wireworld
