@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +33,13 @@ var clsTierRSchema = []string{
 	"CREATE SEQUENCE s",
 	"SELECT nextval('s')",
 	"CREATE MATERIALIZED VIEW mv AS SELECT 1 AS a",
+	"CREATE TABLE w (n int)",
+	`CREATE FUNCTION public."select"() RETURNS int LANGUAGE sql AS $$INSERT INTO w VALUES (1) RETURNING 1$$`,
+	`CREATE FUNCTION public."in"(int) RETURNS int LANGUAGE sql AS $$INSERT INTO w VALUES ($1) RETURNING 1$$`,
+	`CREATE FUNCTION public."exists"() RETURNS int LANGUAGE sql AS $$INSERT INTO w VALUES (2) RETURNING 1$$`,
+	`CREATE FUNCTION public."current_timestamp"(int) RETURNS int LANGUAGE sql AS $$INSERT INTO w VALUES ($1) RETURNING 1$$`,
+	`CREATE FUNCTION evil_write(r t) RETURNS int LANGUAGE sql AS $$INSERT INTO w VALUES (r.a) RETURNING 1$$`,
+	`CREATE FUNCTION evil_write_text(r t) RETURNS text LANGUAGE sql AS $$INSERT INTO w VALUES (r.a) RETURNING 'x'$$`,
 }
 
 const clsTierRChecksum = `SELECT md5(concat_ws('|',
@@ -39,6 +47,7 @@ const clsTierRChecksum = `SELECT md5(concat_ws('|',
  (SELECT string_agg(a || ':' || coalesce(b, ''), ',' ORDER BY a, b) FROM t),
  (SELECT string_agg(a || ':' || coalesce(b, ''), ',' ORDER BY a, b) FROM u),
  (SELECT last_value::text FROM s),
+ (SELECT count(*)::text FROM w),
  (SELECT count(*)::text FROM pg_class WHERE relnamespace = 'public'::regnamespace),
  (SELECT count(*)::text FROM pg_largeobject_metadata),
  (SELECT count(*)::text FROM pg_prepared_xacts)))`
@@ -406,6 +415,7 @@ func clsTierROracleCanaries(t *testing.T, addr string, admin *clsPG) {
 	if err := clsTierRLexingSettingHidesSet(addr); err != nil {
 		t.Error(err)
 	}
+	clsTierRRepairCanaries(t, addr, admin)
 	for _, q := range []string{
 		"SELECT nextval('s')",
 		"WITH d AS (DELETE FROM kv WHERE k = 'a' RETURNING *) SELECT * FROM d",
@@ -422,4 +432,113 @@ func clsTierROracleCanaries(t *testing.T, addr string, admin *clsPG) {
 			t.Errorf("oracle canary: the transaction oracle accepts %q", q)
 		}
 	}
+}
+
+func clsTierRRepairCanaries(t *testing.T, addr string, admin *clsPG) {
+	t.Helper()
+	for _, q := range []string{
+		"BEGIN; SET LOCAL search_path = 'pg_temp'; CREATE TABLE sneaky1 (a int); COMMIT",
+		"BEGIN; SELECT set_config('search_path', 'pg_temp', true); CREATE TABLE sneaky2 (a int); COMMIT",
+		"BEGIN; SET LOCAL SCHEMA 'pg_temp'; CREATE TABLE sneaky3 (a int); COMMIT",
+		"BEGIN; SELECT set_config('search_path', 'PG_TEMP, public', true); CREATE TABLE sneaky4 (a int); COMMIT",
+		"BEGIN; SET LOCAL search_path = $$pg_temp$$; CREATE TABLE sneaky5 (a int); COMMIT",
+		`BEGIN; SET LOCAL search_path = E'pg\x5ftemp'; CREATE TABLE sneaky6 (a int); COMMIT`,
+		"BEGIN; SELECT set_config('search_path', 'pg_' || 'temp', true); CREATE TABLE sneaky7 (a int); COMMIT",
+	} {
+		if err := clsTierRSessionUnchangedErr(addr, admin, clsCase{text: q}); err == nil {
+			t.Errorf("repair canary: Postgres kept no session temp table after %q", q)
+		}
+		if u := ClassifyQuery([]byte(q), false); u.Class != work.ClassReject || u.Reason != work.RejectTempObject {
+			t.Errorf("repair canary %q: %s, want reject temp-object", q, clsDescribe(u))
+		}
+	}
+	for _, q := range []string{
+		"SELECT public.select()",
+		"SELECT public.in(1)",
+		"SELECT public.exists()",
+		"SELECT public.current_timestamp(3)",
+		`SELECT "public" . select /* c */ ()`,
+		"SELECT a IS DISTINCT FROM t.evil_write FROM t",
+		"SELECT a IS NOT DISTINCT FROM t.evil_write FROM t",
+		"SELECT trim(FROM t.evil_write_text) FROM t",
+		"SELECT trim(BOTH 'x' FROM t.evil_write_text) FROM t",
+		"SELECT substring('abc' FROM t.evil_write) FROM t",
+		"SELECT 1 FROM t WHERE a IS DISTINCT FROM t.evil_write",
+		`EXPLAIN ("analyze") SELECT public.select()`,
+		`EXPLAIN ("analyze" true) SELECT public.select()`,
+		`EXPLAIN (U&"analyze") SELECT public.select()`,
+	} {
+		err := clsTierRReadOnlyErr(addr, admin, clsCase{text: q})
+		if err == nil || !strings.Contains(err.Error(), "tables changed") {
+			t.Errorf("repair canary: Postgres did not write through %q: %v", q, err)
+		}
+		if u := ClassifyQuery([]byte(q), false); u.ReadOnly || u.Coalescable {
+			t.Errorf("repair canary %q: %s, want neither read-only nor coalescable", q, clsDescribe(u))
+		}
+	}
+	if err := clsTierRTimeLiteralsMove(addr); err != nil {
+		t.Error(err)
+	}
+	if err := clsTierRUnaryOperatorBoundary(addr); err != nil {
+		t.Error(err)
+	}
+}
+
+func clsTierRTimeLiteralsMove(addr string) error {
+	p, err := clsDialPG(addr, clsTierRDB)
+	if err != nil {
+		return err
+	}
+	defer p.close()
+	for _, q := range []string{
+		"SELECT 'now'::timestamptz::text",
+		"SELECT CAST('now' AS timestamp)::text",
+		"SELECT ('n' || 'ow')::timestamptz::text",
+		"SELECT extract(epoch FROM 'now'::timestamptz)::text",
+	} {
+		if u := ClassifyQuery([]byte(q), false); u.Coalescable {
+			return fmt.Errorf("repair canary %q is coalescable", q)
+		}
+		a, err := p.value(q)
+		if err != nil {
+			return err
+		}
+		if _, err := p.must("SELECT pg_sleep(0.01)"); err != nil {
+			return err
+		}
+		b, err := p.value(q)
+		if err != nil {
+			return err
+		}
+		if a == b {
+			return fmt.Errorf("repair canary %q gave %q twice: the per-call hazard did not show", q, a)
+		}
+	}
+	return nil
+}
+
+func clsTierRUnaryOperatorBoundary(addr string) error {
+	p, err := clsDialPG(addr, clsTierRDB)
+	if err != nil {
+		return err
+	}
+	defer p.close()
+	for _, pair := range [][2]string{{"SELECT 71+-3", "SELECT 71+ -3"}, {"SELECT 1=-1", "SELECT 1 = -1"}, {"SELECT 1 +++ 2", "SELECT 1 + + + 2"}} {
+		a, err := p.value(pair[0])
+		if err != nil {
+			return err
+		}
+		b, err := p.value(pair[1])
+		if err != nil {
+			return err
+		}
+		if a != b {
+			return fmt.Errorf("repair canary: Postgres gives %q for %q and %q for %q", a, pair[0], b, pair[1])
+		}
+		x, y := ClassifyQuery([]byte(pair[0]), false), ClassifyQuery([]byte(pair[1]), false)
+		if !clsSame(x, y) || !x.ReadOnly {
+			return fmt.Errorf("repair canary: %q %s versus %q %s", pair[0], clsDescribe(x), pair[1], clsDescribe(y))
+		}
+	}
+	return nil
 }
