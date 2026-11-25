@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"math/rand/v2"
+	"slices"
 	"strconv"
 	"time"
 
@@ -28,6 +29,7 @@ type request struct {
 	intended  sim.Time
 	sentAt    sim.Time
 	stmts     []string
+	orig      []string
 	next      int
 	attempts  int
 	everSent  bool
@@ -76,6 +78,7 @@ type client struct {
 	holdT     sim.Timer
 	connT     sim.Timer
 	stallT    sim.Timer
+	resumeT   sim.Timer
 
 	halfMessage bool
 	stalled     bool
@@ -130,6 +133,7 @@ func (c *client) arrive() {
 	c.made++
 	st.intended++
 	r := &request{id: c.made, intended: c.w.s.Now(), stmts: c.statements()}
+	r.orig = r.stmts
 	c.w.s.Trace(kindArrive, int64(c.id), r.id, 0, 0)
 	if len(c.backlog) >= t.Backlog {
 		st.dropped++
@@ -448,7 +452,7 @@ func (c *client) onReady(status byte) {
 		}
 	}
 	if status == 'E' && r.next < len(r.stmts) {
-		r.stmts = append(r.stmts[:r.next], c.tag("ROLLBACK"))
+		r.stmts = append(slices.Clip(r.stmts[:r.next]), c.tag("ROLLBACK"))
 	}
 	if r.next < len(r.stmts) && (r.code == "" || status == 'E') {
 		if d := c.cfg().TxThink; d > 0 {
@@ -463,7 +467,10 @@ func (c *client) onReady(status byte) {
 		return
 	}
 	if r.code != "" {
-		c.complete(OutcomeError)
+		c.cur = nil
+		c.deadlineT.Cancel()
+		c.fail(r, OutcomeError)
+		c.afterRequest()
 		return
 	}
 	c.complete(OutcomeOK)
@@ -574,6 +581,7 @@ func (c *client) fail(r *request, o Outcome) {
 		r.attempts++
 		r.next = 0
 		r.code = ""
+		r.stmts = r.orig
 		c.t.st.retries++
 		c.waiting++
 		c.w.s.Trace(kindRetry, int64(c.id), r.id, int64(r.attempts), int64(o))

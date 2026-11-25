@@ -1,6 +1,7 @@
 package workload
 
 import (
+	"slices"
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/sim"
@@ -85,8 +86,9 @@ func (c *client) applyFault(f sim.Fault) bool {
 	case FaultStopReading:
 		c.stopReading = true
 		c.t.st.stopReads++
+		c.resumeT.Cancel()
 		if f.Arg2 > 0 {
-			c.w.s.After(time.Duration(f.Arg2), c.resumeReading)
+			c.resumeT = c.w.s.After(time.Duration(f.Arg2), c.resumeReading)
 		}
 	case FaultDisconnect:
 		reset := f.Arg2 != 0
@@ -119,6 +121,7 @@ func (c *client) applyFault(f sim.Fault) bool {
 }
 
 func (c *client) resumeReading() {
+	c.resumeT.Cancel()
 	if !c.stopReading {
 		return
 	}
@@ -130,9 +133,9 @@ func (c *client) sendCancel(wrongKey bool) bool {
 	if c.phase != cReady || len(c.w.cancels) >= MaxCancelConns {
 		return false
 	}
-	secret := c.sess.Secret()
-	if wrongKey {
-		secret = []byte{0, 0, 0, 0}
+	secret := slices.Clone(c.sess.Secret())
+	if wrongKey && len(secret) > 0 {
+		secret[0] ^= 1
 	}
 	p := NewProbe(c.w.n, c.w.cfg.Addr, c.w.cfg.Options)
 	p.Send(testclient.EncodeCancel(nil, c.sess.ProcessID(), secret))
