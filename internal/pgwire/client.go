@@ -326,3 +326,5 @@ func (s *ClientSession) authenticated(acts []Action, out []byte, messages int64)
 	s.st.InStartup--
 	return append(acts, Action{Kind: ActReady, User: s.user, Key: s.key})
 }
+
+func ParseSASLInitialResponse(body []byte) (string, []byte, bool) { return parseSASLInitial(body) }

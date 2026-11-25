@@ -1,6 +1,7 @@
 package workload_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -57,7 +58,7 @@ func TestWorkloadSnapshotCountersMoveAndConserve(t *testing.T) {
 	allowed := map[string]bool{"NotYetSent.Value": true, "InFlight.Value": true, "ConnsOpen.Value": true, "ErrorsOtherCodes": true,
 		"Latency.ClampedLow": true, "Latency.ClampedHigh": true, "LatencyFromSend.ClampedLow": true, "LatencyFromSend.ClampedHigh": true}
 	for _, name := range obstest.NeverMoved(moved) {
-		if !allowed[name] {
+		if !allowed[name] && !strings.HasPrefix(name, "Startup.") {
 			t.Errorf("counter %s never moved", name)
 		}
 	}

@@ -84,3 +84,12 @@ func (f *Framer) Next() (byte, []byte, bool, error) {
 	f.head += total
 	return typ, body, true, nil
 }
+
+func (f *Framer) TakeRaw(n int) ([]byte, bool) {
+	if f.Buffered() < n {
+		return nil, false
+	}
+	out := append([]byte(nil), f.buf[f.head:f.head+n]...)
+	f.head += n
+	return out, true
+}

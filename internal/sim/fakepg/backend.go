@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/nickstrad/mini-gateway/internal/pgwire"
 	"github.com/nickstrad/mini-gateway/internal/sim"
 	"github.com/nickstrad/mini-gateway/internal/sim/simnet"
 )
@@ -106,6 +107,10 @@ type backend struct {
 	resetLeft   time.Duration
 	dying       bool
 	stream      *rand.Rand
+	step        startStep
+	overTLS     bool
+	tlsTimer    sim.Timer
+	scram       *pgwire.ScramServer
 }
 
 func (b *backend) OnEvent(_ *simnet.End, ev simnet.Event) {
@@ -207,6 +212,12 @@ func (b *backend) readMessage() bool {
 			b.drainMuted()
 			return false
 		}
+		if b.phase == phaseStartup && b.step == stepHello {
+			return b.readHello()
+		}
+		if b.phase == phaseStartup && b.step == stepHandshake {
+			return false
+		}
 		typ, body, ok, err := b.fr.Next()
 		if err != nil {
 			b.protocolFatal(err.Error())
@@ -240,6 +251,10 @@ func (b *backend) readMessage() bool {
 
 func (b *backend) dispatch(typ byte, body []byte) {
 	if b.phase == phaseStartup {
+		if b.step == stepSASLFirst || b.step == stepSASLFinal {
+			b.authMessage(typ, body)
+			return
+		}
 		b.startup(body)
 		return
 	}
@@ -280,7 +295,11 @@ func (b *backend) startup(body []byte) {
 	// cancel request (uncounting its slot), protocol version, restart window,
 	// max_connections, missing/unknown user, and unknown database.
 	switch pkt.kind {
-	case startupSSL, startupGSS:
+	case startupSSL:
+		b.answerSSL()
+		return
+	case startupGSS:
+		b.srv.auth.stats.GSSAnsweredNo++
 		b.emit([]byte{'N'})
 		return
 	case startupCancel:
@@ -307,6 +326,11 @@ func (b *backend) startup(body []byte) {
 	}
 	if pkt.db == "" {
 		pkt.db = pkt.user
+	}
+	if b.srv.cfg.Auth == AuthSCRAM {
+		b.user, b.db, b.appName = pkt.user, pkt.db, pkt.appName
+		b.beginAuth()
+		return
 	}
 	if !allowed(b.srv.cfg.Users, pkt.user) {
 		b.refuseWith(RefuseUnknownUser, errorf("FATAL", "28000", "role %q does not exist", pkt.user))
@@ -483,6 +507,7 @@ func (b *backend) finalize() {
 	b.phase = phaseClosed
 	b.pumpTimer.Cancel()
 	b.resetTimer.Cancel()
+	b.tlsTimer.Cancel()
 	if r := b.cur; r != nil {
 		b.leaveService(r)
 		b.cur = nil

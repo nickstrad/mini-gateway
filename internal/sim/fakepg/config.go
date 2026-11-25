@@ -94,6 +94,9 @@ type Config struct {
 	ServerVersion  string
 	AfterDelay     time.Duration
 	Options        simnet.Options
+	Auth           AuthMode
+	Verifiers      []UserVerifier
+	TLS            TLSConfig
 	plant          plant
 }
 

@@ -87,6 +87,7 @@ type client struct {
 	leaveOnSend bool
 	sessions    int64
 	leaveReset  bool
+	ss          startupState
 }
 
 func newClient(w *Workload, t *tenantState, id, local int) *client {
@@ -275,6 +276,7 @@ func (c *client) connect() {
 	c.connTry++
 	c.phase = cConnecting
 	c.sess = testclient.Session{}
+	c.ss = startupState{nonces: c.ss.nonces}
 	c.out = nil
 	c.cc = &conn{c: c}
 	c.cc.end = c.w.n.Dial(c.w.cfg.Addr, c.w.cfg.Options, c.cc)
@@ -290,7 +292,7 @@ func (c *client) onNet(ev simnet.Event) {
 	case simnet.EvConnected:
 		if c.phase == cConnecting {
 			c.phase = cStartup
-			c.send(c.sess.Startup(nil, []testclient.Param{{Name: "user", Value: c.cfg().Name}, {Name: "database", Value: c.cfg().Database}}))
+			c.beginStartup()
 		}
 	case simnet.EvRefused:
 		c.connectFailed("", false)
@@ -325,7 +327,14 @@ func (c *client) readAll() {
 		end := c.cc.end
 		n, err := end.Read(c.w.readBuf[:])
 		if n > 0 {
-			c.sess.Feed(c.w.readBuf[:n])
+			data := c.w.readBuf[:n]
+			if c.ss.tlsWait {
+				data = c.takeHello(data)
+				if c.cc == nil || c.cc.end != end {
+					return
+				}
+			}
+			c.sess.Feed(data)
 			if !c.drainMessages() {
 				return
 			}
@@ -360,6 +369,14 @@ func (c *client) drainMessages() bool {
 
 func (c *client) onMessage(m testclient.Msg) {
 	switch m.Type {
+	case testclient.MsgSSLAnswer:
+		if c.phase == cStartup {
+			c.onTLSAnswer(m.Status)
+		}
+	case testclient.MsgAuth:
+		if c.phase == cStartup {
+			c.onAuth(m)
+		}
 	case testclient.MsgError:
 		if c.phase == cStartup {
 			c.connectFailed(m.Code, false)

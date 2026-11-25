@@ -66,6 +66,7 @@ type tenantStats struct {
 	cancelsSent    int64
 	disconnects    int64
 	burstDrops     int64
+	startup        StartupCounters
 }
 
 func (t *tenantStats) code(c string) {
@@ -133,6 +134,7 @@ type TenantSnapshot struct {
 	BurstDrops       int64
 	Latency          obs.HistogramSnapshot
 	LatencyFromSend  obs.HistogramSnapshot
+	Startup          StartupCounters
 }
 
 // FaultSnapshot counts workload faults applied by kind and missed targets.
@@ -159,7 +161,7 @@ func (t *tenantState) snapshot() TenantSnapshot {
 		Retries: s.retries, Connects: s.connects, ConnectsOK: s.connectsOK, ConnectsFailed: s.connectsFailed,
 		Reconnects: s.reconnects, ConnsOpen: s.open, HalfMessages: s.halfMessages, StoppedReading: s.stopReads,
 		CancelsSent: s.cancelsSent, Disconnects: s.disconnects, BurstDrops: s.burstDrops,
-		Latency: t.latency.Snapshot(), LatencyFromSend: t.fromSend.Snapshot(),
+		Latency: t.latency.Snapshot(), LatencyFromSend: t.fromSend.Snapshot(), Startup: s.startup,
 	}
 }
 
@@ -225,6 +227,7 @@ func (o obsTotal) add(t *TenantSnapshot, s TenantSnapshot) {
 	t.CancelsSent += s.CancelsSent
 	t.Disconnects += s.Disconnects
 	t.BurstDrops += s.BurstDrops
+	t.Startup.add(s.Startup)
 }
 
 // Code returns the count of requests that ended with SQLSTATE code c, or 0.
