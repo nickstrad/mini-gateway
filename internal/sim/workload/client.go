@@ -135,7 +135,11 @@ func (c *client) arrive() {
 	r := &request{id: c.made, intended: c.w.s.Now(), stmts: c.statements()}
 	r.orig = r.stmts
 	c.w.s.Trace(kindArrive, int64(c.id), r.id, 0, 0)
-	if len(c.backlog) >= t.Backlog {
+	queued := len(c.backlog) + c.waiting
+	if c.cur != nil && c.cur.attempts < t.Retry.Max {
+		queued++
+	}
+	if queued >= t.Backlog {
 		st.dropped++
 		c.w.s.Trace(kindDrop, int64(c.id), r.id, 0, 0)
 	} else {

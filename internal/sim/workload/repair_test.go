@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nickstrad/mini-gateway/internal/sim"
 	"github.com/nickstrad/mini-gateway/internal/sim/fakepg"
 	"github.com/nickstrad/mini-gateway/internal/sim/workload"
 )
@@ -71,5 +72,32 @@ func TestStopReadingTimerOfAClearedFaultDoesNotResumeALaterOne(t *testing.T) {
 	w.finish(t)
 	if c := w.wl.Snapshot().Total; c.OK != 1 {
 		t.Fatalf("%+v", c)
+	}
+}
+
+func TestBacklogCapCountsRetryingRequests(t *testing.T) {
+	tenant := workload.Tenant{Name: "a", Clients: 1, Requests: 50, Interval: time.Millisecond, Backlog: 2,
+		Keys:  workload.Keys{N: 1},
+		Retry: workload.Retry{Max: 3, Backoff: 200 * time.Millisecond, OnConnect: true}}
+	w := build(t, 1, fakepg.Config{Rows: []fakepg.Row{{Key: "k0", Value: "v"}}}, workload.Config{Tenants: []workload.Tenant{tenant}})
+	w.s.ApplyFault(sim.Fault{Kind: fakepg.FaultMaxConn, Arg1: 0})
+	if err := w.s.RunFor(100 * time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	c := w.wl.Snapshot().Total
+	if c.Retries == 0 || c.Dropped == 0 || c.NotYetSent.Peak > 2 || c.NotYetSent.Value > 2 {
+		t.Fatalf("with every connect refused: retries %d, dropped %d, not yet sent %v, intended %d", c.Retries, c.Dropped, c.NotYetSent, c.Intended)
+	}
+	if err := c.Check(); err != nil {
+		t.Fatal(err)
+	}
+	w.s.ApplyFault(sim.Fault{Kind: fakepg.FaultClear, Arg1: int64(fakepg.FaultMaxConn)})
+	w.finish(t)
+	c = w.wl.Snapshot().Total
+	if c.Intended != 50 || c.OK == 0 || c.Dropped == 0 || c.NotYetSent.Peak > 2 {
+		t.Fatalf("after the clear: %+v", c)
+	}
+	if err := c.Check(); err != nil {
+		t.Fatal(err)
 	}
 }
