@@ -511,6 +511,15 @@ reproduced first (the regression tests below failed before their fix).
 | Adversarial claim 11 `TestAdv_11_AllGoImportsIncludingTests` | fixed outside `tools/` (`9bd436b`): the phase-1 probe (`agent_work/phase1/probes/pgwire/main.go`, its own module) is kept as `main.go.txt`, runnable from a scratch copy (command in `agent_work/INDEX.md`); repository-wide test added. Still fails on the `tools/` lint fixtures (narrowed, above). `PLAN.md` line 25 still names `main.go`; the orchestrator owns that file |
 | Brief item 5: test gaps | `CheckWriteLog` detects missing writes (above); direct tests for exported fakepg and workload behaviour that had none (`3a22f13`: `fakepg/api_test.go`, `workload/api_test.go`: `Kind.IsWrite`, `CodeValue`, config defaults and limits, `New`'s refusals, fault and outcome names, transaction log, log ring, server framer, workload configuration errors, key names, `Done`, the `Probe` API). The remaining exported functions without a direct test are the simnet handler callbacks (`OnEvent`), exercised by every test |
 
+Gate (`scripts/gate.sh c02-sim-world`, build stage, clean tree at `73c9ea5`): every check
+passes or is a legitimate not-built skip (G7, G8) except **G3 unit**, which fails only on the
+two adversarial attacks above (`TestAdv_7_SendWindowIndependentOfService`,
+`TestAdv_11_AllGoImportsIncludingTests`), because G3 runs `go test ./...` including
+`agent_work/adversarial/c02-sim-world`, which this round may not edit. Every product package
+passes in G3; G4 sweep (200 seeds per scenario), G5 fuzz (7 targets × 20 s), G6 tier R
+(Postgres 17.11) and G10 (cross-process replay) pass. So `overall=fail` until the
+orchestrator accepts the two narrowed claims and decides what to do with those attacks.
+
 Commit granularity: the first commit (`6fc0e83`) holds several fakepg defect fixes that touch
 the same functions; each has its own regression test named above.
 
