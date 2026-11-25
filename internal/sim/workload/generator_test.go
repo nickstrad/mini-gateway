@@ -175,3 +175,86 @@ func TestClosedLoopThinkTime(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 }
+
+func TestOpenLoopArrivalsIgnoreABusyClientAndLatencyIsExact(t *testing.T) {
+	const n, gap, start, service = 17, time.Millisecond, 10 * time.Millisecond, time.Second
+	kindSend, kindDone := sim.K("wl.send"), sim.K("wl.done")
+	s := sim.New(sim.Config{Seed: 81173, Scenario: t.Name()})
+	arrived := map[int64]sim.Time{}
+	sent := map[int64]sim.Time{}
+	type done struct {
+		at      sim.Time
+		latency int64
+	}
+	finished := map[int64]done{}
+	s.SetTraceTap(func(r sim.Record) {
+		switch r.Kind {
+		case kindArrive:
+			arrived[r.B] = r.At
+		case kindSend:
+			if r.C == 1 {
+				sent[r.B] = r.At
+			}
+		case kindDone:
+			finished[r.B] = done{r.At, r.D}
+		}
+	})
+	tenant := workload.Tenant{Name: "a", Clients: 1, Requests: n, Interval: gap, Start: start, ConnectFirst: true, Keys: workload.Keys{N: 1}}
+	w := buildOn(t, s, fakepg.Config{Rows: []fakepg.Row{{Key: "k0", Value: "v"}}, Service: fakepg.Service{Fixed: service}},
+		workload.Config{Tenants: []workload.Tenant{tenant}})
+	if err := s.RunFor(40 * time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	mid := w.wl.Snapshot().Total
+	if mid.Intended != n || mid.Sent != 1 || mid.NotYetSent.Value != n-1 {
+		t.Fatalf("at 40ms: %+v", mid)
+	}
+	w.finish(t)
+	snap := w.wl.Snapshot().Total
+	if snap.OK != n || snap.Latency.Count != n {
+		t.Fatalf("%+v", snap)
+	}
+	minL, maxL := int64(math.MaxInt64), int64(0)
+	for id := int64(1); id <= n; id++ {
+		want := sim.Time(start + time.Duration(id-1)*gap)
+		if arrived[id] != want {
+			t.Fatalf("request %d intended at %d, want %d", id, arrived[id], want)
+		}
+		d := finished[id]
+		if d.latency != int64(d.at-arrived[id]) {
+			t.Fatalf("request %d: latency %d, completion minus intended time %d", id, d.latency, d.at-arrived[id])
+		}
+		if id > 1 && sent[id] != finished[id-1].at {
+			t.Fatalf("request %d sent at %d, the previous reply ended at %d", id, sent[id], finished[id-1].at)
+		}
+		if d.latency < int64(time.Duration(id)*service-time.Duration(id-1)*gap) {
+			t.Fatalf("request %d: latency %d does not include its wait behind %d earlier requests", id, d.latency, id-1)
+		}
+		minL, maxL = min(minL, d.latency), max(maxL, d.latency)
+	}
+	if snap.Latency.Min != minL || snap.Latency.Max != maxL {
+		t.Fatalf("histogram min %d max %d, trace min %d max %d", snap.Latency.Min, snap.Latency.Max, minL, maxL)
+	}
+}
+
+func TestRetriedRequestKeepsItsIntendedTime(t *testing.T) {
+	kindDone := sim.K("wl.done")
+	s := sim.New(sim.Config{Seed: 1, Scenario: t.Name()})
+	var latency int64
+	var at sim.Time
+	s.SetTraceTap(func(r sim.Record) {
+		if r.Kind == kindDone {
+			latency, at = r.D, r.At
+		}
+	})
+	tenant := workload.Tenant{Name: "a", Clients: 1, Requests: 1, Statement: "SELECT 1/0", Start: 5 * time.Millisecond, ConnectFirst: true,
+		Keys: workload.Keys{N: 1}, Retry: workload.Retry{Max: 2, Backoff: 20 * time.Millisecond, OnCodes: []string{"22012"}}}
+	w := buildOn(t, s, fakepg.Config{}, workload.Config{Tenants: []workload.Tenant{tenant}})
+	w.finish(t)
+	if latency != int64(at)-int64(5*time.Millisecond) || latency < int64(60*time.Millisecond) {
+		t.Fatalf("latency %d at %d: not measured from the first intended time", latency, at)
+	}
+	if c := w.wl.Snapshot().Total; c.Retries != 2 || c.Errors != 1 || c.Latency.Count != 1 {
+		t.Fatalf("%+v", c)
+	}
+}
