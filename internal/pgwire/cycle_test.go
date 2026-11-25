@@ -159,7 +159,7 @@ func TestCycleTrackerStreamsManyRowsWithoutBuffering(t *testing.T) {
 	tr.QuerySent()
 	row := dataRow(strings.Repeat("v", 90))
 	var evs []CycleEvent
-	feed := func(b []byte) {
+	feed := func(b []byte, rowsOnly bool) {
 		for len(b) > 0 {
 			piece := b[:min(len(b), 64<<10-3)]
 			var n int
@@ -168,25 +168,26 @@ func TestCycleTrackerStreamsManyRowsWithoutBuffering(t *testing.T) {
 				t.Fatalf("consumed %d of %d", n, len(piece))
 			}
 			b = b[n:]
-			if tr.BufferCap() > 1024 {
-				t.Fatalf("tracker buffers %d bytes", tr.BufferCap())
+			if rowsOnly && tr.BufferCap() != 0 {
+				t.Fatalf("tracker buffers %d bytes of row data", tr.BufferCap())
 			}
 		}
 	}
-	feed(rowDesc())
+	feed(rowDesc(), true)
 	chunk := make([]byte, 0, 1000*len(row))
 	for i := 0; i < 1000; i++ {
 		chunk = append(chunk, row...)
 	}
 	for i := 0; i < rows/1000; i++ {
-		feed(chunk)
+		feed(chunk, true)
 	}
-	feed(cat(complete("SELECT 200000"), AppendReadyForQuery(nil, 'I')))
+	feed(complete("SELECT 200000"), true)
+	feed(AppendReadyForQuery(nil, 'I'), false)
 	snap := st.Snapshot().Database
 	if snap.MessagesIn != rows+3 || snap.Replies != 1 || tr.Outstanding() != 0 || snap.BytesIn != tr.Offset() {
 		t.Fatalf("%+v", snap)
 	}
-	if len(evs) != 2 || evs[1].Kind != CycleReady {
+	if len(evs) != 1 || evs[0].Kind != CycleReady {
 		t.Fatalf("%v", evs)
 	}
 }
@@ -265,6 +266,30 @@ func TestFrontendTrackerRecognisesQueriesTerminateAndExtended(t *testing.T) {
 		out, _ := runFront(bad, func(b []byte) [][]byte { return [][]byte{b} })
 		if !strings.HasPrefix(out, "violation") {
 			t.Fatalf("%x: %s", bad, out)
+		}
+	}
+}
+
+func TestCycleTrackerPassesARowLargerThanItsMessageLimit(t *testing.T) {
+	const limit = 128
+	rows := cat(rowDesc(), dataRow(strings.Repeat("r", 4096)), complete("SELECT 1"))
+	stream := cat(rows, AppendReadyForQuery(nil, StatusIdle))
+	for _, chunk := range []func(int, []byte) [][]byte{whole, oneByte} {
+		st := &WireStats{}
+		tr := NewCycleTracker(limit, st)
+		tr.QuerySent()
+		var evs []CycleEvent
+		fed := 0
+		for _, piece := range chunk(0, stream) {
+			evs, _ = tr.Receive(evs, piece)
+			fed += len(piece)
+			if fed <= len(rows) && tr.BufferCap() != 0 {
+				t.Fatalf("tracker buffers %d bytes of row data", tr.BufferCap())
+			}
+		}
+		snap := st.Snapshot().Database
+		if tr.Closed() || snap.Oversized != 0 || snap.Replies != 1 || len(evs) != 4 || evs[3].Kind != CycleReady {
+			t.Fatalf("%s %+v", describeCycle(evs), snap)
 		}
 	}
 }
