@@ -3,6 +3,7 @@ package logline_test
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"strconv"
 	"strings"
 	"testing"
@@ -11,6 +12,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs/logline"
 	"github.com/nickstrad/mini-gateway/internal/obs/obstest"
 )
+
+var update = flag.Bool("update", false, "rewrite the golden files in testdata")
 
 type failWriter struct{}
 
@@ -72,7 +75,7 @@ func TestConformance(t *testing.T) { obstest.Conformance(t, subject()) }
 
 func TestGolden(t *testing.T) {
 	s, reg := obstest.FixtureSnapshot(t)
-	obstest.Golden(t, "fixture.log", logline.Render(reg, s))
+	obstest.Golden(t, *update, "fixture.log", logline.Render(reg, s))
 }
 
 func TestOneBoundedLineInFixedOrder(t *testing.T) {

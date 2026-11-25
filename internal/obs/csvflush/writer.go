@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/obs"
 )
@@ -67,11 +66,6 @@ type Config struct {
 	plant  plant
 	create func(path string) (io.WriteCloser, error)
 	gate   func()
-}
-
-func MonotonicClock() func() int64 {
-	start := time.Now()
-	return func() int64 { return int64(time.Since(start)) }
 }
 
 type job struct {

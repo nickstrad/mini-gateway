@@ -2,18 +2,15 @@ package obstest
 
 import (
 	"bytes"
-	"flag"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-var update = flag.Bool("update", false, "rewrite golden files")
-
-func Golden(t testing.TB, name string, got []byte) {
+func Golden(t testing.TB, update bool, name string, got []byte) {
 	t.Helper()
 	path := filepath.Join("testdata", name)
-	if *update {
+	if update {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}

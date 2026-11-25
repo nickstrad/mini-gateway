@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"time"
 
@@ -24,7 +23,6 @@ const (
 	DefaultArm      = "base"
 	Instance        = "sim-1"
 	Build           = "sim"
-	EnvRunDir       = "RUN_DIR"
 	MaxPublishes    = 100_000
 )
 
@@ -165,13 +163,6 @@ func Scenario(sc world.Scenario, seed int64, opt Options) (*Run, error) {
 }
 
 func Baseline(name string) (world.Scenario, bool) { return world.Lookup(name) }
-
-func Dir(fallback string) string {
-	if v := os.Getenv(EnvRunDir); v != "" {
-		return v
-	}
-	return fallback
-}
 
 func (r *Run) Check() error {
 	var errs []error

@@ -3,6 +3,7 @@ package csvflush_test
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,6 +15,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs/csvflush"
 	"github.com/nickstrad/mini-gateway/internal/obs/obstest"
 )
+
+var update = flag.Bool("update", false, "rewrite the golden files in testdata")
 
 type fixedClock struct{ t int64 }
 
@@ -162,7 +165,7 @@ func TestGoldenFilesAndByteIdentity(t *testing.T) {
 		if i == 0 {
 			for _, f := range []string{csvflush.MetricsFile, csvflush.HistogramsFile, csvflush.RunFile} {
 				b, _ := os.ReadFile(filepath.Join(w.RunDir(), f))
-				obstest.Golden(t, "fixture-"+f, b)
+				obstest.Golden(t, *update, "fixture-"+f, b)
 			}
 		}
 	}

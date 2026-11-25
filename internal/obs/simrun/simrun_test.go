@@ -50,7 +50,7 @@ func TestScenarioFlush(t *testing.T) {
 			for _, seed := range flushSeeds(t) {
 				t.Run(fmt.Sprintf("seed=%d", seed), func(t *testing.T) {
 					replay := fmt.Sprintf("REPLAY: go test ./internal/obs/simrun -run '^TestScenarioFlush$/^%s$' -seed=%d -count=1", sc.Name, seed)
-					a, err := simrun.Scenario(sc, seed, simrun.Options{Dir: simrun.Dir(t.TempDir())})
+					a, err := simrun.Scenario(sc, seed, simrun.Options{Dir: runDir(t)})
 					if err != nil {
 						t.Fatalf("%v\n%s", err, replay)
 					}
@@ -151,4 +151,11 @@ func TestDetailOffExportsNoHistogramAndNoTenant(t *testing.T) {
 	if err := r.Check(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func runDir(t *testing.T) string {
+	if v := os.Getenv("RUN_DIR"); v != "" {
+		return v
+	}
+	return t.TempDir()
 }

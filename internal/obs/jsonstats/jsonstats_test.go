@@ -3,12 +3,15 @@ package jsonstats_test
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"testing"
 
 	"github.com/nickstrad/mini-gateway/internal/obs"
 	"github.com/nickstrad/mini-gateway/internal/obs/jsonstats"
 	"github.com/nickstrad/mini-gateway/internal/obs/obstest"
 )
+
+var update = flag.Bool("update", false, "rewrite the golden files in testdata")
 
 type failWriter struct{}
 
@@ -45,7 +48,7 @@ func TestGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	obstest.Golden(t, "fixture.json", b)
+	obstest.Golden(t, *update, "fixture.json", b)
 }
 
 func TestEveryTenantAndStableOrder(t *testing.T) {

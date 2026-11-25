@@ -3,7 +3,6 @@ package promtext
 import (
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,7 +15,7 @@ var ErrGrammar = errors.New("promtext: exposition grammar")
 type Sample struct {
 	Name   string
 	Labels [][2]string
-	Value  float64
+	Value  int64
 }
 
 func (s Sample) Label(name string) string {
@@ -164,9 +163,9 @@ func parseSample(line string) (Sample, error) {
 	if len(fields) < 1 || len(fields) > 2 || fields[0] == "" {
 		return s, errors.New("bad value or timestamp")
 	}
-	v, err := strconv.ParseFloat(fields[0], 64)
+	v, err := strconv.ParseInt(fields[0], 10, 64)
 	if err != nil {
-		return s, fmt.Errorf("value %q", fields[0])
+		return s, fmt.Errorf("value %q is not an integer (this project exports integers only)", fields[0])
 	}
 	if len(fields) == 2 {
 		if _, err := strconv.ParseInt(fields[1], 10, 64); err != nil {
@@ -273,7 +272,7 @@ func Check(text []byte) error {
 		}
 		if f.Type == "counter" {
 			for _, s := range f.Samples {
-				if s.Value < 0 || math.IsNaN(s.Value) {
+				if s.Value < 0 {
 					return fmt.Errorf("%w: counter %s is negative", ErrGrammar, f.Name)
 				}
 			}
@@ -299,11 +298,11 @@ func withoutLe(ls [][2]string) string {
 
 func checkHistogram(f Family) error {
 	type hseries struct {
-		les    []float64
-		counts []float64
-		inf    float64
+		les    []int64
+		counts []int64
+		inf    int64
 		hasInf bool
-		count  float64
+		count  int64
 		hasCnt bool
 	}
 	var keys []string
@@ -328,7 +327,7 @@ func checkHistogram(f Family) error {
 				h.inf, h.hasInf = s.Value, true
 				continue
 			}
-			v, err := strconv.ParseFloat(le, 64)
+			v, err := strconv.ParseInt(le, 10, 64)
 			if err != nil {
 				return fmt.Errorf("%w: %s: le %q", ErrGrammar, f.Name, le)
 			}
@@ -368,7 +367,7 @@ func Decode(reg *obs.Registry, text []byte) (obs.InstanceSnapshot, error) {
 		}
 		if d.Kind != obs.KindHistogram {
 			for _, x := range f.Samples {
-				s.Points = append(s.Points, obs.Point{Component: d.Component, Metric: d.Name, Kind: d.Kind, Labels: labelsOf(x), Value: int64(x.Value)})
+				s.Points = append(s.Points, obs.Point{Component: d.Component, Metric: d.Name, Kind: d.Kind, Labels: labelsOf(x), Value: x.Value})
 			}
 			continue
 		}
@@ -387,8 +386,8 @@ func Decode(reg *obs.Registry, text []byte) (obs.InstanceSnapshot, error) {
 				hists[k] = h
 				order = append(order, k)
 			}
-			c := int64(x.Value) - prev[k]
-			prev[k] = int64(x.Value)
+			c := x.Value - prev[k]
+			prev[k] = x.Value
 			lo := lastLe[k] + 1
 			hi := obs.MaxValue
 			if le := x.Label("le"); le != "+Inf" {

@@ -102,95 +102,108 @@ func FixtureSnapshot(t testing.TB) (obs.InstanceSnapshot, *obs.Registry) {
 	return s, c.Registry()
 }
 
+type Check struct {
+	Name string
+	Run  func(t testing.TB, sub Subject, snap obs.InstanceSnapshot, reg *obs.Registry)
+}
+
 func Conformance(t *testing.T, sub Subject) {
 	snap, reg := FixtureSnapshot(t)
-	t.Run("values", func(t *testing.T) {
-		in := sub.New(t, reg)
-		if err := in.Adapter.Export(snap); err != nil {
-			t.Fatal(err)
-		}
-		in.Output(t)
-		got := in.Decoded(t)
-		if err := compare(sub.Fidelity, reg, snap, got); err != nil {
-			t.Fatal(err)
-		}
-	})
-	t.Run("labels", func(t *testing.T) {
-		in := sub.New(t, reg)
-		if err := in.Adapter.Export(snap); err != nil {
-			t.Fatal(err)
-		}
-		in.Output(t)
-		got := in.Decoded(t)
-		for _, p := range got.Points {
-			if err := declaredLabels(reg, p.Component, p.Metric, p.Labels); err != nil {
-				t.Fatal(err)
-			}
-		}
-		for _, h := range got.Hists {
-			if err := declaredLabels(reg, h.Component, h.Metric, h.Labels); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if sub.LabelPolicy != nil {
-			if err := sub.LabelPolicy(got); err != nil {
-				t.Fatal(err)
-			}
-		}
-	})
-	t.Run("deterministic", func(t *testing.T) {
-		var outs [][]byte
-		for i := 0; i < 2; i++ {
-			s2, _ := FixtureSnapshot(t)
+	for _, c := range Checks() {
+		t.Run(c.Name, func(t *testing.T) { c.Run(t, sub, snap, reg) })
+	}
+}
+
+func Checks() []Check {
+	return []Check{
+		{"values", func(t testing.TB, sub Subject, snap obs.InstanceSnapshot, reg *obs.Registry) {
 			in := sub.New(t, reg)
-			if err := in.Adapter.Export(s2); err != nil {
+			if err := in.Adapter.Export(snap); err != nil {
 				t.Fatal(err)
 			}
-			outs = append(outs, in.Output(t))
-		}
-		if len(outs[0]) == 0 || !bytes.Equal(outs[0], outs[1]) {
-			t.Fatalf("equal inputs gave different or empty outputs (%d and %d bytes)", len(outs[0]), len(outs[1]))
-		}
-	})
-	t.Run("no-retained-reference", func(t *testing.T) {
-		ref := sub.New(t, reg)
-		if err := ref.Adapter.Export(snap); err != nil {
-			t.Fatal(err)
-		}
-		want := ref.Output(t)
-		c := snap.Clone()
-		in := sub.New(t, reg)
-		if err := in.Adapter.Export(c); err != nil {
-			t.Fatal(err)
-		}
-		if !obs.Equal(c, snap) {
-			t.Fatal("the adapter modified the snapshot it was given")
-		}
-		Scribble(&c)
-		if got := in.Output(t); !bytes.Equal(got, want) {
-			t.Fatal("changing the snapshot after Export changed the adapter's output: it kept a reference")
-		}
-	})
-	t.Run("error-counted-not-propagated", func(t *testing.T) {
-		if sub.NewFailing == nil {
-			t.Fatal("subject has no failing mode")
-		}
-		c, _ := Fixture(t)
-		a := sub.NewFailing(t, c.Registry())
-		if err := c.Attach(a); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := c.Publish(); err != nil {
-			t.Fatalf("an adapter error reached the collector: %v", err)
-		}
-		s, err := c.Publish()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if n := s.Value(obs.ComponentObs, obs.MetricExportErrors, obs.Labels{Reason: a.Name()}); n != 1 {
-			t.Fatalf("export errors for %s = %d, want 1", a.Name(), n)
-		}
-	})
+			in.Output(t)
+			got := in.Decoded(t)
+			if err := compare(sub.Fidelity, reg, snap, got); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"labels", func(t testing.TB, sub Subject, snap obs.InstanceSnapshot, reg *obs.Registry) {
+			in := sub.New(t, reg)
+			if err := in.Adapter.Export(snap); err != nil {
+				t.Fatal(err)
+			}
+			in.Output(t)
+			got := in.Decoded(t)
+			for _, p := range got.Points {
+				if err := declaredLabels(reg, p.Component, p.Metric, p.Labels); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, h := range got.Hists {
+				if err := declaredLabels(reg, h.Component, h.Metric, h.Labels); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if sub.LabelPolicy != nil {
+				if err := sub.LabelPolicy(got); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}},
+		{"deterministic", func(t testing.TB, sub Subject, snap obs.InstanceSnapshot, reg *obs.Registry) {
+			var outs [][]byte
+			for i := 0; i < 2; i++ {
+				s2, _ := FixtureSnapshot(t)
+				in := sub.New(t, reg)
+				if err := in.Adapter.Export(s2); err != nil {
+					t.Fatal(err)
+				}
+				outs = append(outs, in.Output(t))
+			}
+			if len(outs[0]) == 0 || !bytes.Equal(outs[0], outs[1]) {
+				t.Fatalf("equal inputs gave different or empty outputs (%d and %d bytes)", len(outs[0]), len(outs[1]))
+			}
+		}},
+		{"no-retained-reference", func(t testing.TB, sub Subject, snap obs.InstanceSnapshot, reg *obs.Registry) {
+			ref := sub.New(t, reg)
+			if err := ref.Adapter.Export(snap); err != nil {
+				t.Fatal(err)
+			}
+			want := ref.Output(t)
+			c := snap.Clone()
+			in := sub.New(t, reg)
+			if err := in.Adapter.Export(c); err != nil {
+				t.Fatal(err)
+			}
+			if !obs.Equal(c, snap) {
+				t.Fatal("the adapter modified the snapshot it was given")
+			}
+			Scribble(&c)
+			if got := in.Output(t); !bytes.Equal(got, want) {
+				t.Fatal("changing the snapshot after Export changed the adapter's output: it kept a reference")
+			}
+		}},
+		{"error-counted-not-propagated", func(t testing.TB, sub Subject, snap obs.InstanceSnapshot, reg *obs.Registry) {
+			if sub.NewFailing == nil {
+				t.Fatal("subject has no failing mode")
+			}
+			c, _ := Fixture(t)
+			a := sub.NewFailing(t, c.Registry())
+			if err := c.Attach(a); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := c.Publish(); err != nil {
+				t.Fatalf("an adapter error reached the collector: %v", err)
+			}
+			s, err := c.Publish()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n := s.Value(obs.ComponentObs, obs.MetricExportErrors, obs.Labels{Reason: a.Name()}); n != 1 {
+				t.Fatalf("export errors for %s = %d, want 1", a.Name(), n)
+			}
+		}},
+	}
 }
 
 func Scribble(s *obs.InstanceSnapshot) {

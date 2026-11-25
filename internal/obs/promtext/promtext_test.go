@@ -3,6 +3,7 @@ package promtext_test
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"strconv"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs/obstest"
 	"github.com/nickstrad/mini-gateway/internal/obs/promtext"
 )
+
+var update = flag.Bool("update", false, "rewrite the golden files in testdata")
 
 type failWriter struct{}
 
@@ -80,7 +83,7 @@ func TestGolden(t *testing.T) {
 	if err := promtext.Check(a.Last()); err != nil {
 		t.Fatal(err)
 	}
-	obstest.Golden(t, "fixture.prom", a.Last())
+	obstest.Golden(t, *update, "fixture.prom", a.Last())
 }
 
 func manyTenants(n int) (*obs.Registry, func(round int) obs.InstanceSnapshot) {
