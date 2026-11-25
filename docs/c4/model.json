@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "id": "mini-gateway",
  "title": "mini-gateway — target architecture",
- "revision": "target-approved-2026-11-24-rulings+built-through-chunk-3",
+ "revision": "target-approved-2026-11-24-rulings+built-through-chunk-4",
  "defaultDiagramId": "context",
  "model": {
   "elements": [
@@ -244,10 +244,12 @@
     "id": "c-pgwire",
     "kind": "container",
     "name": "Wire layer",
-    "description": "internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the statement classifier, the error contract. The only product package that imports pgproto3.",
+    "description": "internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the statement classifier, the error contract, the wire snapshot. The only product package allowed to import pgproto3. Its test packages pgwiretest and wireworld run the session machines in the simulator.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 4 (internal/pgwire): the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the query-cycle tracker, the client query-phase tracker, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest (startup-only proxy, startup fidelity runner) and wireworld (19 wire scenarios). Not built: the codec boundary (no file in the package imports pgproto3 yet), the SQL lexer, the statement classifier, the error contract and its reply builders (chunk 5). No engine exists yet, so only the test proxy drives the machines."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -266,7 +268,9 @@
      "external",
      "neighbour"
     ],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 4 (internal/pgwire): the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the query-cycle tracker, the client query-phase tracker, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest (startup-only proxy, startup fidelity runner) and wireworld (19 wire scenarios). Not built: the codec boundary (no file in the package imports pgproto3 yet), the SQL lexer, the statement classifier, the error contract and its reply builders (chunk 5). No engine exists yet, so only the test proxy drives the machines."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -458,7 +462,7 @@
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunks 1 and 3: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP."
+     "Built in chunks 1, 3 and 4: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP."
     ],
     "docIds": [],
     "sourceIds": [
@@ -479,7 +483,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunks 1 and 3: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP."
+     "Built in chunks 1, 3 and 4: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP."
     ],
     "docIds": [],
     "sourceIds": [
@@ -528,13 +532,13 @@
     "id": "c-sim",
     "kind": "container",
     "name": "Simulator harness",
-    "description": "internal/sim and its sub-packages simnet, fakepg, workload, world, simtest and simtoy; internal/testclient; internal/randdist; cmd/mgsim; scripts/tier-r.sh. A deterministic single-threaded world: virtual clock, simulated byte streams, a fake Postgres, simulated clients, scenarios with a driver interface, faults, replay. Its fake Postgres is checked against a real Postgres 17. Test code; built before any proxy code.",
+    "description": "internal/sim and its sub-packages simnet, simtls, fakepg, workload, world, simtest and simtoy; internal/testclient; internal/randdist; cmd/mgsim; scripts/tier-r.sh. A deterministic single-threaded world: virtual clock, simulated byte streams, a simulated TLS handshake, a fake Postgres, simulated clients, scenarios with a driver interface, faults, replay. Its fake Postgres is checked against a real Postgres 17. Test code; built before any proxy code.",
     "status": "planned",
     "tags": [
      "test"
     ],
     "plannedNotes": [
-     "Built in chunks 1 and 2: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: SCRAM login and the TLS faults in the fake and the clients (chunk 4). No engine exists yet, so the harness drives the fake Postgres and the toy protocol, and nothing implements the engine's transport seam."
+     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: no engine exists yet, so the harness drives the fake Postgres, the toy protocol and the wire layer's startup-only test proxy; nothing implements the engine's transport seam, and no synthetic workload drives the cores."
     ],
     "docIds": [],
     "sourceIds": [
@@ -555,7 +559,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunks 1 and 2: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: SCRAM login and the TLS faults in the fake and the clients (chunk 4). No engine exists yet, so the harness drives the fake Postgres and the toy protocol, and nothing implements the engine's transport seam."
+     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: no engine exists yet, so the harness drives the fake Postgres, the toy protocol and the wire layer's startup-only test proxy; nothing implements the engine's transport seam, and no synthetic workload drives the cores."
     ],
     "docIds": [],
     "sourceIds": [
@@ -741,8 +745,23 @@
     "id": "w-framer",
     "kind": "component",
     "name": "Framer",
-    "description": "Ours. Cuts a byte stream into messages (type byte, 4-byte length, body) whatever the fragmentation, down to one byte at a time; enforces a maximum message size.",
-    "status": "planned",
+    "description": "Ours. Cuts a byte stream into messages (type byte, 4-byte length, body) whatever the fragmentation, down to one byte at a time; also the untyped packets before startup. Enforces a maximum message size and refuses an oversized message from its header alone. Can skip the bodies of chosen message types instead of buffering them.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-msgs",
+    "kind": "component",
+    "name": "Message coding",
+    "description": "Ours, written by hand, no pgproto3. Appends each message the session machines write (TLS and startup packets, authentication, parameter status, key data, ready, query, terminate, cancel) and parses the startup packet and its parameters.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -756,7 +775,7 @@
     "id": "w-codec",
     "kind": "component",
     "name": "Codec boundary",
-    "description": "The only product code that touches pgproto3: decodes a framed body into a message struct and encodes structs to bytes. pgproto3's own blocking reader is not used.",
+    "description": "The only product code that touches pgproto3: encodes message structs to bytes for the reply builders. pgproto3's own blocking reader is not used. The session machines and the trackers do not pass through it; they use the hand-written message coding.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -771,8 +790,8 @@
     "id": "w-client",
     "kind": "component",
     "name": "Client session machine",
-    "description": "Client-facing. Runs the exchange before startup: answers a TLS request yes or no by config and asks the shell to upgrade the connection, answers a GSS encryption request no. Reads the startup message, finds the tenant by user, runs SCRAM-SHA-256 (server side; trust only as a named test setting), sends the parameter set and proxy-issued key data, recognises cancel requests, takes in one query at a time, handles terminate.",
-    "status": "planned",
+    "description": "Client-facing, startup only: events in, actions out. Runs the exchange before startup: answers a TLS request S or N by client_tls.mode and asks its driver to start TLS (at most one upgrade; a byte before the handshake result is a violation), answers a GSS encryption request N. Reads the startup message, refuses plaintext when TLS is required, negotiates protocol 3.x down to 3.0, finds the tenant by user, runs SCRAM-SHA-256 (server side; trust only as a named test setting; an unknown user gets the wrong-password reply), sends the parameter set and proxy-issued key data, recognises cancel requests. Every failed startup ends under one reason. Consumes no byte after ready.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -786,8 +805,8 @@
     "id": "w-backend",
     "kind": "component",
     "name": "Database session machine",
-    "description": "Database-facing. Asks for TLS first when the config requires it, then startup, SCRAM-SHA-256 (client side), collects server parameters and key data, reaches ready.",
-    "status": "planned",
+    "description": "Database-facing, startup only: events in, actions out. Sends a TLS request first when backend_tls.mode asks for one (an N answer is a connect failure; a byte after S before the handshake result is a violation), then startup, SCRAM-SHA-256 (client side, never -PLUS), collects server parameters and key data, reaches ready. Every failed startup ends in one class (TLS refused or failed, authentication, too many connections, server FATAL, violation, deadline, connection lost).",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -801,8 +820,23 @@
     "id": "w-cycle",
     "kind": "component",
     "name": "Query-cycle tracker",
-    "description": "Follows a reply to its ReadyForQuery, reports the transaction status byte (idle, in transaction, failed), flags an unsolicited ParameterStatus (the connection is now dirty) and any protocol surprise.",
-    "status": "planned",
+    "description": "Follows a reply to its ReadyForQuery, reports the transaction status byte (idle, in transaction, failed), flags an unsolicited ParameterStatus (the connection is now dirty) and any protocol surprise, including a stream that ends without its marker. Never buffers row data. Unknown but well-framed message types are reported and passed through.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-front",
+    "kind": "component",
+    "name": "Client query-phase tracker",
+    "description": "Reads the client's bytes after login. Reports each Query (body copied, bounded), Terminate, and every extended-protocol message as one to refuse; any other message type is a violation.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -816,8 +850,8 @@
     "id": "w-scram",
     "kind": "component",
     "name": "SCRAM-SHA-256 functions",
-    "description": "Pure functions on the standard library. Shared with the simulator's fake Postgres and test clients.",
-    "status": "planned",
+    "description": "Pure functions on the standard library: verifier, key derivation, nonce, the GS2 header rule, and the server and client sides of the exchange with bounded messages. Shared with the simulator's fake Postgres and simulated clients.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -826,6 +860,36 @@
     ],
     "parentId": "c-pgwire",
     "technology": "Go, crypto/pbkdf2, hmac, sha256"
+   },
+   {
+    "id": "w-fatal",
+    "kind": "component",
+    "name": "Startup FATAL replies",
+    "description": "The replies the session machines make themselves during startup: an ErrorResponse with severity, SQLSTATE and message, the old-format error for a protocol 2 client, and NegotiateProtocolVersion. Also parses the severity and SQLSTATE of an ErrorResponse from the database. The error contract takes the replies over when it lands.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-snapshot",
+    "kind": "component",
+    "name": "Wire snapshot",
+    "description": "The wire layer's counters as one plain struct, per side: startups begun, completed, in progress and failed by reason; pre-startup requests by kind and answer; TLS handshakes by version and failure; plaintext refused; authentication failures by cause; messages and bytes each way; violations; oversized messages; what the trackers saw. Its check: begun = completed + failed + in startup, on each side.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
    },
    {
     "id": "w-lexer",
@@ -864,6 +928,40 @@
     "description": "One table: each refusal and failure, its SQLSTATE, whether anything reached the database, whether a write may have applied. Builds the ErrorResponse and the correct end marker. docs/error-contract.md is generated from it.",
     "status": "planned",
     "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-harness",
+    "kind": "component",
+    "name": "Startup-only test proxy and startup fidelity runner",
+    "description": "internal/pgwire/pgwiretest. A proxy for tests on simulated streams: the two session machines back to back, one database connection per client, no pool; after login it relays queries and replies through both trackers. A database startup failure reaches the client as FATAL 08006. Also the startup fidelity runner: one script (TLS answers, SCRAM, protocol versions) played against the fake Postgres and compared with Postgres 17's transcript, recorded for CI or live in tier R.",
+    "status": "existing",
+    "tags": [
+     "test"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-world",
+    "kind": "component",
+    "name": "Wire scenarios",
+    "description": "internal/pgwire/pgwiretest/wireworld. 19 named scenarios with their exact checks: the test proxy between simulated clients and the fake Postgres, plaintext and TLS, one-byte delivery, and one startup fault each on the client side (TLS stall, bad hello, smuggled bytes, second TLS request, plaintext refused, wrong password, unknown user) or the database side (silence, connect stall, garbage, reset, connection limit, TLS refused, bad certificate, handshake stall). Each failure must be counted under its one reason within its deadline.",
+    "status": "existing",
+    "tags": [
+     "test"
+    ],
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -1388,12 +1486,10 @@
     "id": "s-fakepg",
     "kind": "component",
     "name": "Fake Postgres",
-    "description": "internal/sim/fakepg. Speaks the simple-query subset in real wire bytes with its own framer; login by trust or SCRAM-SHA-256; a max_connections limit with Postgres's refusal; transaction status; a small keyed table with write, statement and transaction logs; service-time models and a capacity limit; cancel requests; every database-side fault; its own snapshot.",
-    "status": "planned",
+    "description": "internal/sim/fakepg. Speaks the simple-query subset in real wire bytes with its own framer; login by trust or SCRAM-SHA-256; answers a TLS request S or N and plays the simulated handshake; a max_connections limit with Postgres's refusal; transaction status; a small keyed table with write, statement and transaction logs; service-time models and a capacity limit; cancel requests; every database-side fault (the TLS ones — answers N, a handshake that fails or stalls, a certificate that fails verification — are a setting that can change during a run, not fault kinds); its own snapshots.",
+    "status": "existing",
     "tags": [],
-    "plannedNotes": [
-     "Built in chunk 2 (internal/sim/fakepg): all of it with trust login, and the 24 database-side fault kinds that need no TLS. Not built: SCRAM-SHA-256 login, and the two TLS faults (answers N to a TLS request; a certificate that fails verification) (chunk 4)."
-    ],
+    "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -1405,12 +1501,10 @@
     "id": "s-workload",
     "kind": "component",
     "name": "Clients and tenants",
-    "description": "internal/sim/workload. Simulated clients grouped in tenants: open-loop arrivals (constant or Poisson) and closed-loop think time, latency measured from the intended send time, uniform, Zipf or fixed keys, transactions of several statements, retries with backoff, every client-side fault, its own snapshot. A client sends one request at a time; later arrivals wait in its bounded backlog. Also a hand-driven client (Probe) for tests.",
-    "status": "planned",
+    "description": "internal/sim/workload. Simulated clients grouped in tenants: open-loop arrivals (constant or Poisson) and closed-loop think time, latency measured from the intended send time, uniform, Zipf or fixed keys, transactions of several statements, retries with backoff; login by trust or SCRAM-SHA-256, with a TLS request first when the tenant asks; every client-side fault (the four TLS ones — stall after the request, bad hello, plaintext after the request, a second request — are a per-tenant setting); its own snapshot. A client sends one request at a time; later arrivals wait in its bounded backlog. Also a hand-driven client (Probe) for tests.",
+    "status": "existing",
     "tags": [],
-    "plannedNotes": [
-     "Built in chunk 2 (internal/sim/workload): all of it, with the client-side faults that need no TLS (half a message, stops reading, disconnects, reconnect burst, cancel, aggressive retry). Not built: the four TLS client faults (stalls after a TLS request, fails the handshake, plaintext after a TLS request, a second TLS request) (chunk 4)."
-    ],
+    "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -1422,18 +1516,31 @@
     "id": "s-testclient",
     "kind": "component",
     "name": "Test client",
-    "description": "internal/testclient. A Postgres client with no I/O: bytes in, messages out. Its own framer, a message codec, and a session machine (phase, status byte, key data, parameters) with login by trust or SCRAM-SHA-256. Used by the simulated clients on simulated streams and by the tier R tests on TCP.",
-    "status": "planned",
+    "description": "internal/testclient. A Postgres client with no I/O: bytes in, messages out. Its own framer, a message codec, and a session machine (phase, status byte, key data, parameters) with trust login. It hands the data of each authentication message to its caller, which is how the simulated clients run SCRAM. Used by the simulated clients on simulated streams and by the tier R tests on TCP.",
+    "status": "existing",
     "tags": [],
-    "plannedNotes": [
-     "Built in chunk 2 (internal/testclient): the framer, the codec and the session machine, with trust login. Not built: SCRAM-SHA-256 login (chunk 4)."
-    ],
+    "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
     "parentId": "c-sim",
     "technology": "Go, pgproto3"
+   },
+   {
+    "id": "s-simtls",
+    "kind": "component",
+    "name": "Simulated TLS handshake",
+    "description": "internal/sim/simtls. A handshake as an exchange with an outcome, not cryptography: a 16-byte client hello (or a bad one) and a 16-byte server reply that says completed with a TLS version, bad certificate, or alert. Models the outcome and the duration only.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-sim",
+    "technology": "Go"
    },
    {
     "id": "s-randdist",
@@ -1803,11 +1910,26 @@
     "id": "o-simsrc",
     "kind": "component",
     "name": "Simulator source mappings",
-    "description": "internal/obs/simsrc. The metric declarations and the snapshot-to-points mappings of the four simulator components that exist: the kernel, simnet, the fake Postgres and the workload. It lives here because the simulator packages are frozen; a later component writes the same two functions in its own package.",
+    "description": "internal/obs/simsrc. The metric declarations and the snapshot-to-points mappings of the four simulator components that exist: the kernel, simnet, the fake Postgres (its authentication and TLS counters too) and the workload (its startup counters too). It lives here because the simulator packages are frozen; a later component writes the same two functions in its own package.",
     "status": "existing",
     "tags": [
      "test"
     ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-wiresrc",
+    "kind": "component",
+    "name": "Wire source mapping",
+    "description": "internal/obs/wiresrc. The metric declarations of component wire and the mapping from the wire snapshot to points. The side is in the metric name (client_..., database_...); labels are reason, outcome and mode; every known label value is emitted, zero included; no tenant label.",
+    "status": "existing",
+    "tags": [],
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -1835,7 +1957,7 @@
     "id": "o-simrun",
     "kind": "component",
     "name": "Scenario flush harness",
-    "description": "internal/obs/simrun. Runs a simulator world scenario with a collector that publishes on the virtual clock and with the CSV, JSON, Prometheus and log adapters attached, then checks every output against the final snapshot. Its tests run the five direct baselines twice per seed and compare the files byte for byte.",
+    "description": "internal/obs/simrun. Runs a simulator world scenario, or a wire scenario, with a collector that publishes on the virtual clock and with the CSV, JSON, Prometheus and log adapters attached, then checks every output against the final snapshot. Its tests run the five direct baselines and every wire scenario twice per seed and compare the files byte for byte.",
     "status": "existing",
     "tags": [
      "test"
@@ -1852,7 +1974,7 @@
     "id": "o-assert",
     "kind": "component",
     "name": "SQL assertions and their runner",
-    "description": "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The first assertion files check the direct baselines' counts.",
+    "description": "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The assertion files check the direct baselines' counts and, for each wire scenario, that startup failures by reason, TLS requests by answer and handshake failures equal what was injected and sent.",
     "status": "existing",
     "tags": [
      "test"
@@ -2752,7 +2874,7 @@
     "id": "w1",
     "sourceId": "n-engine",
     "targetId": "w-client",
-    "label": "Client bytes in; events and bytes out",
+    "label": "Client bytes and events in; actions out, until the client is ready",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
@@ -2765,7 +2887,7 @@
     "id": "w2",
     "sourceId": "n-engine",
     "targetId": "w-backend",
-    "label": "Database bytes in; events and bytes out",
+    "label": "Database bytes and events in; actions out, until the connection is ready",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
@@ -2814,36 +2936,10 @@
     "technology": "Go"
    },
    {
-    "id": "w6",
-    "sourceId": "w-client",
-    "targetId": "w-codec",
-    "label": "Decode and encode messages",
-    "status": "planned",
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "technology": "Go"
-   },
-   {
-    "id": "w7",
-    "sourceId": "w-backend",
-    "targetId": "w-codec",
-    "label": "Decode and encode messages",
-    "status": "planned",
-    "plannedNotes": [],
-    "docIds": [],
-    "sourceIds": [
-     "plan"
-    ],
-    "technology": "Go"
-   },
-   {
-    "id": "w8",
-    "sourceId": "w-cycle",
-    "targetId": "w-codec",
-    "label": "Decode message headers and status",
+    "id": "w17",
+    "sourceId": "n-engine",
+    "targetId": "w-front",
+    "label": "Client bytes after login in; queries and terminate out",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
@@ -2892,11 +2988,128 @@
     "technology": "Go import"
    },
    {
+    "id": "w18",
+    "sourceId": "w-client",
+    "targetId": "w-framer",
+    "label": "Cuts the client's startup packets and messages",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w19",
+    "sourceId": "w-backend",
+    "targetId": "w-framer",
+    "label": "Cuts the server's startup messages",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w20",
+    "sourceId": "w-cycle",
+    "targetId": "w-framer",
+    "label": "Message boundaries; row bodies skipped, not buffered",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w21",
+    "sourceId": "w-front",
+    "targetId": "w-framer",
+    "label": "Message boundaries; extended-protocol bodies skipped",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w22",
+    "sourceId": "w-client",
+    "targetId": "w-msgs",
+    "label": "Parses the startup packet; encodes its replies",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w23",
+    "sourceId": "w-backend",
+    "targetId": "w-msgs",
+    "label": "Encodes the TLS request, the startup message and the SASL responses",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w24",
+    "sourceId": "w-client",
+    "targetId": "w-fatal",
+    "label": "Builds each refusal it sends",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w25",
+    "sourceId": "w-backend",
+    "targetId": "w-fatal",
+    "label": "Reads the SQLSTATE of a server error during startup",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w26",
+    "sourceId": "w-cycle",
+    "targetId": "w-fatal",
+    "label": "Reads the severity and SQLSTATE of an ErrorResponse",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
     "id": "w12",
     "sourceId": "w-client",
     "targetId": "w-scram",
     "label": "Server side of the exchange",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2909,7 +3122,59 @@
     "sourceId": "w-backend",
     "targetId": "w-scram",
     "label": "Client side of the exchange",
-    "status": "planned",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w27",
+    "sourceId": "w-client",
+    "targetId": "w-snapshot",
+    "label": "Counts client startups, requests, handshakes and failures",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w28",
+    "sourceId": "w-backend",
+    "targetId": "w-snapshot",
+    "label": "Counts database startups, TLS answers and failures by class",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w29",
+    "sourceId": "w-cycle",
+    "targetId": "w-snapshot",
+    "label": "Counts replies, ready by status, errors and unsolicited messages",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w30",
+    "sourceId": "w-front",
+    "targetId": "w-snapshot",
+    "label": "Counts queries seen, terminates and extended messages refused",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2955,6 +3220,123 @@
      "plan"
     ],
     "technology": "Go types"
+   },
+   {
+    "id": "w31",
+    "sourceId": "w-harness",
+    "targetId": "w-client",
+    "label": "Drives one per client connection, with the simulated handshake and a startup deadline",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w32",
+    "sourceId": "w-harness",
+    "targetId": "w-backend",
+    "label": "Drives one per database connection, opened after the client is authenticated",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w37",
+    "sourceId": "w-harness",
+    "targetId": "w-cycle",
+    "label": "Relays each reply through it",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w38",
+    "sourceId": "w-harness",
+    "targetId": "w-front",
+    "label": "Relays each client message through it",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w39",
+    "sourceId": "w-harness",
+    "targetId": "w-snapshot",
+    "label": "Registers its conservation check as a simulator invariant",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w33",
+    "sourceId": "w-harness",
+    "targetId": "n-sim",
+    "label": "Listens and dials on simulated streams; plays the simulated TLS handshake; the fidelity runner dials the fake Postgres",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w34",
+    "sourceId": "w-world",
+    "targetId": "w-harness",
+    "label": "Builds one test proxy per scenario and reads its wire snapshot",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w35",
+    "sourceId": "w-world",
+    "targetId": "n-sim",
+    "label": "Starts the fake Postgres and the simulated clients; injects the scenario's fault",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w36",
+    "sourceId": "w-harness",
+    "targetId": "pg",
+    "label": "Tier R: plays the startup fidelity script against two Postgres 17 servers, ssl off and ssl on with SCRAM; on request rewrites the recording CI replays",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "scripts/tier-r.sh, Docker, go test"
    },
    {
     "id": "a1",
@@ -3740,8 +4122,8 @@
     "id": "m16",
     "sourceId": "s-fakepg",
     "targetId": "n-pgwire",
-    "label": "Reuses the SCRAM functions",
-    "status": "planned",
+    "label": "Reuses the SCRAM functions (server side) and the NegotiateProtocolVersion encoder",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3767,7 +4149,7 @@
     "sourceId": "s-workload",
     "targetId": "s-randdist",
     "label": "Poisson gaps and Zipf keys",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3776,11 +4158,37 @@
     "technology": "Go"
    },
    {
-    "id": "m31",
-    "sourceId": "s-testclient",
+    "id": "m43",
+    "sourceId": "s-workload",
     "targetId": "n-pgwire",
-    "label": "Reuses the SCRAM functions",
-    "status": "planned",
+    "label": "Reuses the SCRAM functions (client side)",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m44",
+    "sourceId": "s-fakepg",
+    "targetId": "s-simtls",
+    "label": "Reads the client hello; replies with the configured outcome",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "m45",
+    "sourceId": "s-workload",
+    "targetId": "s-simtls",
+    "label": "Sends the client hello, or a bad one; reads the reply",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4507,7 +4915,7 @@
     "id": "o34",
     "sourceId": "o-simsrc",
     "targetId": "n-sim",
-    "label": "Reads the snapshots of the kernel, simnet, the fake Postgres and the workload",
+    "label": "Reads the snapshots of the kernel, simnet, the fake Postgres (both of its snapshots) and the workload",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -4585,7 +4993,7 @@
     "id": "o41",
     "sourceId": "o-simrun",
     "targetId": "o-collector",
-    "label": "Creates it, attaches the four adapters, publishes every 100 ms of virtual time and at the end",
+    "label": "Creates it, attaches the four adapters, publishes every 100 ms of virtual time (every 5 s and at the deadline check for a wire scenario) and at the end",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -4684,6 +5092,71 @@
      "plan"
     ],
     "technology": "Bash"
+   },
+   {
+    "id": "o52",
+    "sourceId": "o-wiresrc",
+    "targetId": "n-pgwire",
+    "label": "Reads the wire snapshot",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o53",
+    "sourceId": "o-wiresrc",
+    "targetId": "o-collector",
+    "label": "Gives it one source for component wire, with its metric declarations",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o54",
+    "sourceId": "o-catalog",
+    "targetId": "o-wiresrc",
+    "label": "Lists every metric it declares",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o55",
+    "sourceId": "o-simrun",
+    "targetId": "n-pgwire",
+    "label": "Builds and runs a wire scenario (wireworld) and checks it with the scenario's own assertions",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o56",
+    "sourceId": "o-simrun",
+    "targetId": "o-wiresrc",
+    "label": "Takes the wire source of the scenario's test proxy",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
    },
    {
     "id": "o50",
@@ -5693,6 +6166,9 @@
      "elementId": "w-framer"
     },
     {
+     "elementId": "w-msgs"
+    },
+    {
      "elementId": "w-codec"
     },
     {
@@ -5705,7 +6181,16 @@
      "elementId": "w-cycle"
     },
     {
+     "elementId": "w-front"
+    },
+    {
      "elementId": "w-scram"
+    },
+    {
+     "elementId": "w-fatal"
+    },
+    {
+     "elementId": "w-snapshot"
     },
     {
      "elementId": "w-lexer"
@@ -5717,13 +6202,25 @@
      "elementId": "w-errors"
     },
     {
+     "elementId": "w-harness"
+    },
+    {
+     "elementId": "w-world"
+    },
+    {
      "elementId": "n-engine"
     },
     {
      "elementId": "n-work"
     },
     {
+     "elementId": "n-sim"
+    },
+    {
      "elementId": "pgproto3"
+    },
+    {
+     "elementId": "pg"
     }
    ],
    "edges": [
@@ -5737,19 +6234,58 @@
      "relationshipId": "w3"
     },
     {
+     "relationshipId": "w17"
+    },
+    {
      "relationshipId": "w4"
     },
     {
      "relationshipId": "w5"
     },
     {
-     "relationshipId": "w6"
+     "relationshipId": "w18"
     },
     {
-     "relationshipId": "w7"
+     "relationshipId": "w19"
     },
     {
-     "relationshipId": "w8"
+     "relationshipId": "w20"
+    },
+    {
+     "relationshipId": "w21"
+    },
+    {
+     "relationshipId": "w22"
+    },
+    {
+     "relationshipId": "w23"
+    },
+    {
+     "relationshipId": "w24"
+    },
+    {
+     "relationshipId": "w25"
+    },
+    {
+     "relationshipId": "w26"
+    },
+    {
+     "relationshipId": "w12"
+    },
+    {
+     "relationshipId": "w13"
+    },
+    {
+     "relationshipId": "w27"
+    },
+    {
+     "relationshipId": "w28"
+    },
+    {
+     "relationshipId": "w29"
+    },
+    {
+     "relationshipId": "w30"
     },
     {
      "relationshipId": "w9"
@@ -5761,12 +6297,6 @@
      "relationshipId": "w11"
     },
     {
-     "relationshipId": "w12"
-    },
-    {
-     "relationshipId": "w13"
-    },
-    {
      "relationshipId": "w14"
     },
     {
@@ -5774,6 +6304,33 @@
     },
     {
      "relationshipId": "w16"
+    },
+    {
+     "relationshipId": "w31"
+    },
+    {
+     "relationshipId": "w32"
+    },
+    {
+     "relationshipId": "w37"
+    },
+    {
+     "relationshipId": "w38"
+    },
+    {
+     "relationshipId": "w39"
+    },
+    {
+     "relationshipId": "w33"
+    },
+    {
+     "relationshipId": "w34"
+    },
+    {
+     "relationshipId": "w35"
+    },
+    {
+     "relationshipId": "w36"
     }
    ],
    "legend": {
@@ -6439,6 +6996,9 @@
      "elementId": "s-testclient"
     },
     {
+     "elementId": "s-simtls"
+    },
+    {
      "elementId": "s-randdist"
     },
     {
@@ -6570,9 +7130,6 @@
      "relationshipId": "m30"
     },
     {
-     "relationshipId": "m31"
-    },
-    {
      "relationshipId": "m32"
     },
     {
@@ -6604,6 +7161,15 @@
     },
     {
      "relationshipId": "m42"
+    },
+    {
+     "relationshipId": "m43"
+    },
+    {
+     "relationshipId": "m44"
+    },
+    {
+     "relationshipId": "m45"
     }
    ],
    "legend": {
@@ -6744,6 +7310,9 @@
      "elementId": "o-simsrc"
     },
     {
+     "elementId": "o-wiresrc"
+    },
+    {
      "elementId": "o-catalog"
     },
     {
@@ -6763,6 +7332,9 @@
     },
     {
      "elementId": "n-sim"
+    },
+    {
+     "elementId": "n-pgwire"
     },
     {
      "elementId": "csvfiles"
@@ -6887,7 +7459,16 @@
      "relationshipId": "o35"
     },
     {
+     "relationshipId": "o52"
+    },
+    {
+     "relationshipId": "o53"
+    },
+    {
      "relationshipId": "o37"
+    },
+    {
+     "relationshipId": "o54"
     },
     {
      "relationshipId": "o38"
@@ -6903,6 +7484,12 @@
     },
     {
      "relationshipId": "o42"
+    },
+    {
+     "relationshipId": "o55"
+    },
+    {
+     "relationshipId": "o56"
     },
     {
      "relationshipId": "o43"
@@ -7000,7 +7587,7 @@
    "id": "plan",
    "title": "mini-gateway PLAN.md (approved 2026-11-24)",
    "url": "https://github.com/nickstrad/mini-gateway/blob/main/PLAN.md",
-   "notes": "Target architecture. Built so far: chunks 0–3. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
+   "notes": "Target architecture. Built so far: chunks 0–4. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
   }
  ]
 }

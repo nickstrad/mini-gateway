@@ -1,8 +1,8 @@
 # C4 Level 3: Components: observability
 
-**Built so far: chunks 0–3. Dashed parts are planned.** In this diagram 20 of 28 elements and 38 of 48 relationships are built. Model: diagram `component-observability` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–4. Dashed parts are planned.** In this diagram 21 of 30 elements and 43 of 53 relationships are built. Model: diagram `component-observability` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
-The hard rule: one common raw export, then the collector interface, then adapters. Components fill plain structs; the collector assembles them; every output form is an adapter that reads only what the collector publishes. No component knows about CSV, DuckDB, OTel or Prometheus, and adding an adapter touches no component. Two paths leave the process. The testing path: the CSV flush adapter writes files, and tests and DuckDB read them with nothing else running. The production path: the OTLP adapter pushes to an OpenTelemetry Collector, which Prometheus scrapes. DuckDB is an analysis tool over files, never a dependency of the proxy. Chunk 3 built the spine before the proxy's components: so far the sources are the simulator's kernel, network, fake Postgres and workload, and the scenario flush harness is what publishes.
+The hard rule: one common raw export, then the collector interface, then adapters. Components fill plain structs; the collector assembles them; every output form is an adapter that reads only what the collector publishes. No component knows about CSV, DuckDB, OTel or Prometheus, and adding an adapter touches no component. Two paths leave the process. The testing path: the CSV flush adapter writes files, and tests and DuckDB read them with nothing else running. The production path: the OTLP adapter pushes to an OpenTelemetry Collector, which Prometheus scrapes. DuckDB is an analysis tool over files, never a dependency of the proxy. Chunk 3 built the spine before the proxy's components: so far the sources are the simulator's kernel, network, fake Postgres and workload and, since chunk 4, the wire layer's snapshot (the first product source), and the scenario flush harness is what publishes.
 
 A solid box or arrow is built; a dashed one is planned. An arrow points to the supplier. An arrow marked "implements" means the source implements the target's interface; every other arrow means "uses".
 
@@ -12,6 +12,7 @@ flowchart TB
   N_SHELL["Shell and binary"]:::planned
   N_E2E["End-to-end suite and load generator"]:::planned
   N_SIM["Simulator harness"]:::planned
+  N_PGWIRE["Wire layer"]:::planned
   CSVFILES[["Flushed CSV files"]]:::built
   DUCKDB[["DuckDB (analysis tool)"]]:::built
   OTELCOL[["OpenTelemetry Collector"]]:::planned
@@ -34,6 +35,7 @@ flowchart TB
     O_LOG["Log-line exporter"]:::built
     O_OTLP["OTLP/HTTP push exporter"]:::planned
     O_SIMSRC["Simulator source mappings"]:::built
+    O_WIRESRC["Wire source mapping"]:::built
     O_CATALOG["Metric catalog and schema document"]:::built
     O_SIMRUN["Scenario flush harness"]:::built
     O_ASSERT["SQL assertions and their runner"]:::built
@@ -74,18 +76,23 @@ flowchart TB
   N_SIM -->|34| O_HIST
   O_SIMSRC -->|35| N_SIM
   O_SIMSRC -->|36| O_COLLECTOR
-  O_CATALOG -->|37| O_SIMSRC
-  O_CATALOG -->|38| O_CSV
-  O_CATALOG -->|39| O_REGISTRY
-  O_SIMRUN -->|40| N_SIM
-  O_SIMRUN -->|41| O_COLLECTOR
-  O_SIMRUN -->|42| O_SIMSRC
-  O_SIMRUN -->|43| O_CSV
-  O_SIMRUN -->|44| O_PROM
-  O_SIMRUN -->|45| O_JSON
-  O_SIMRUN -->|46| O_ASSERT
-  O_ASSERT -->|47| DUCKDB
-  O_ASSERT -->|48| CSVFILES
+  O_WIRESRC -->|37| N_PGWIRE
+  O_WIRESRC -->|38| O_COLLECTOR
+  O_CATALOG -->|39| O_SIMSRC
+  O_CATALOG -->|40| O_WIRESRC
+  O_CATALOG -->|41| O_CSV
+  O_CATALOG -->|42| O_REGISTRY
+  O_SIMRUN -->|43| N_SIM
+  O_SIMRUN -->|44| O_COLLECTOR
+  O_SIMRUN -->|45| O_SIMSRC
+  O_SIMRUN -->|46| N_PGWIRE
+  O_SIMRUN -->|47| O_WIRESRC
+  O_SIMRUN -->|48| O_CSV
+  O_SIMRUN -->|49| O_PROM
+  O_SIMRUN -->|50| O_JSON
+  O_SIMRUN -->|51| O_ASSERT
+  O_ASSERT -->|52| DUCKDB
+  O_ASSERT -->|53| CSVFILES
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned
@@ -115,14 +122,16 @@ flowchart TB
 | CSV flush adapter | component | built (chunk 3) | internal/obs/csvflush. Flushes snapshots to disk at each publish and at the end of a run, in a stable versioned schema with unbounded per-tenant rows. The testing path: tests assert on the files with no Collector or Prometheus running. Bounded size; drop-and-count at the cap, on a write error and on a full queue. Writes in the caller (simulator and tests) or through a bounded queue that never blocks the caller (real process). Holds the reader and the round-trip check: the final flush read back equals the snapshot. |
 | Log-line exporter | component | built (chunk 3) | internal/obs/logline. One structured line per publish: sequence number, instance, build, config fingerprint and the headline metrics. At most 1,024 bytes. |
 | OTLP/HTTP push exporter | component | planned | The final adapter and the proxy's end of the production path. Hand-written on the standard library, no SDK. Cumulative sums, gauges, short-list histogram buckets, bounded tenant label. Bounded queue, timeout, drop-and-count when the Collector is down. Lands in the last build chunk and touches no component. |
-| Simulator source mappings | component, test code | built (chunk 3) | internal/obs/simsrc. The metric declarations and the snapshot-to-points mappings of the four simulator components that exist: the kernel, simnet, the fake Postgres and the workload. It lives here because the simulator packages are frozen; a later component writes the same two functions in its own package. |
+| Simulator source mappings | component, test code | built (chunk 3) | internal/obs/simsrc. The metric declarations and the snapshot-to-points mappings of the four simulator components that exist: the kernel, simnet, the fake Postgres (its authentication and TLS counters too) and the workload (its startup counters too). It lives here because the simulator packages are frozen; a later component writes the same two functions in its own package. |
+| Wire source mapping | component | built (chunk 4) | internal/obs/wiresrc. The metric declarations of component wire and the mapping from the wire snapshot to points. The side is in the metric name (client_..., database_...); labels are reason, outcome and mode; every known label value is emitted, zero included; no tenant label. |
 | Metric catalog and schema document | component | built (chunk 3) | internal/obs/catalog. The registry of every source the product registers, and the generator of docs/csv-schema.md (columns of the three files and every metric). Its test fails when the committed document differs from the code; scripts/gen-docs.sh regenerates or checks it. |
-| Scenario flush harness | component, test code | built (chunk 3) | internal/obs/simrun. Runs a simulator world scenario with a collector that publishes on the virtual clock and with the CSV, JSON, Prometheus and log adapters attached, then checks every output against the final snapshot. Its tests run the five direct baselines twice per seed and compare the files byte for byte. |
-| SQL assertions and their runner | component, test code | built (chunk 3) | scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The first assertion files check the direct baselines' counts. |
+| Scenario flush harness | component, test code | built (chunk 3) | internal/obs/simrun. Runs a simulator world scenario, or a wire scenario, with a collector that publishes on the virtual clock and with the CSV, JSON, Prometheus and log adapters attached, then checks every output against the final snapshot. Its tests run the five direct baselines and every wire scenario twice per seed and compare the files byte for byte. |
+| SQL assertions and their runner | component, test code | built (chunk 3) | scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The assertion files check the direct baselines' counts and, for each wire scenario, that startup failures by reason, TLS requests by answer and handshake failures equal what was injected and sent. |
 | Engine | neighbouring container | planned | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code. |
 | Shell and binary | neighbouring container | planned | cmd/mini-gateway and internal/shell. Listeners, one reader and one writer goroutine per connection, bounded mailboxes, a deadline on every socket operation, TLS on both legs with crypto/tls (it answers a client's TLS request, upgrades the socket and buffers nothing across the upgrade), the admin listener on its own port, signal handling. Makes no decisions: it posts events to the engine and performs the actions the engine returns. |
 | End-to-end suite and load generator | neighbouring container | planned | test/e2e and cmd/loadgen. Each scenario is written once and runs on the simulator (tier S) and on the real binary against a real Postgres (tier R). The load generator is open-loop. |
-| Simulator harness | neighbouring container | planned | internal/sim and its sub-packages simnet, fakepg, workload, world, simtest and simtoy; internal/testclient; internal/randdist; cmd/mgsim; scripts/tier-r.sh. A deterministic single-threaded world: virtual clock, simulated byte streams, a fake Postgres, simulated clients, scenarios with a driver interface, faults, replay. Its fake Postgres is checked against a real Postgres 17. Test code; built before any proxy code. **So far:** Built in chunks 1 and 2: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: SCRAM login and the TLS faults in the fake and the clients (chunk 4). No engine exists yet, so the harness drives the fake Postgres and the toy protocol, and nothing implements the engine's transport seam. |
+| Simulator harness | neighbouring container | planned | internal/sim and its sub-packages simnet, simtls, fakepg, workload, world, simtest and simtoy; internal/testclient; internal/randdist; cmd/mgsim; scripts/tier-r.sh. A deterministic single-threaded world: virtual clock, simulated byte streams, a simulated TLS handshake, a fake Postgres, simulated clients, scenarios with a driver interface, faults, replay. Its fake Postgres is checked against a real Postgres 17. Test code; built before any proxy code. **So far:** Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: no engine exists yet, so the harness drives the fake Postgres, the toy protocol and the wire layer's startup-only test proxy; nothing implements the engine's transport seam, and no synthetic workload drives the cores. |
+| Wire layer | neighbouring container | planned | internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the statement classifier, the error contract, the wire snapshot. The only product package allowed to import pgproto3. Its test packages pgwiretest and wireworld run the session machines in the simulator. **So far:** Built in chunk 4 (internal/pgwire): the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the query-cycle tracker, the client query-phase tracker, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest (startup-only proxy, startup fidelity runner) and wireworld (19 wire scenarios). Not built: the codec boundary (no file in the package imports pgproto3 yet), the SQL lexer, the statement classifier, the error contract and its reply builders (chunk 5). No engine exists yet, so only the test proxy drives the machines. |
 | Flushed CSV files | softwareSystem, external | built (chunk 3) | One directory per run on local disk: run.csv, metrics.csv, histograms.csv, schema version 1 (PLAN.md section 7.7; columns in docs/csv-schema.md). Same columns in every flush; every tenant has its own rows; run.csv is written last, so a run without it did not finish. Nothing has to be running to read them. |
 | DuckDB (analysis tool) | softwareSystem, external | built (chunk 3) | The DuckDB command-line tool (version family 1.5.x), run after a run by scripts/csv-assert.sh and by hand. Reads the flushed files with read_csv and runs SQL over them. Never imported, linked or started by the proxy. |
 | OpenTelemetry Collector | softwareSystem, external | planned | Receives the proxy's OTLP/HTTP push, batches it and exposes the metrics on a Prometheus endpoint. Dev setup: docker-compose in deploy/obs-dev (chunk 15). |
@@ -166,17 +175,22 @@ flowchart TB
 | 32 | Snapshot and adapter test helpers | Snapshot conventions | built | Checks a snapshot against the conventions | Go test |
 | 33 | Simulator harness | Conservation check and gauge | built | The fake Postgres and the workload keep gauges with peaks and check conservation | Go |
 | 34 | Simulator harness | Integer histogram | built | The workload records latencies in it; the world checks read its snapshots | Go |
-| 35 | Simulator source mappings | Simulator harness | built | Reads the snapshots of the kernel, simnet, the fake Postgres and the workload | Go |
+| 35 | Simulator source mappings | Simulator harness | built | Reads the snapshots of the kernel, simnet, the fake Postgres (both of its snapshots) and the workload | Go |
 | 36 | Simulator source mappings | Collector | built | Registers one source per simulator component, with its metric declarations | Go |
-| 37 | Metric catalog and schema document | Simulator source mappings | built | Lists every metric it declares | Go |
-| 38 | Metric catalog and schema document | CSV flush adapter | built | Reads the column lists of the three files | Go |
-| 39 | Metric catalog and schema document | Metric registry | built | Builds the full registry, the collector's own metrics included | Go |
-| 40 | Scenario flush harness | Simulator harness | built | Runs a world scenario through the simulator driver; publishes from a timer on the virtual clock | Go |
-| 41 | Scenario flush harness | Collector | built | Creates it, attaches the four adapters, publishes every 100 ms of virtual time and at the end | Go |
-| 42 | Scenario flush harness | Simulator source mappings | built | Takes the sources of the scenario's world | Go |
-| 43 | Scenario flush harness | CSV flush adapter | built | Checks the final flush read back equals the final snapshot | Go |
-| 44 | Scenario flush harness | Prometheus text exporter | built | Checks the text with the grammar checker | Go |
-| 45 | Scenario flush harness | JSON stats exporter | built | Checks the document decodes to the final snapshot | Go |
-| 46 | Scenario flush harness | SQL assertions and their runner | built | Its tests run the runner over the baseline runs and over planted bad runs | Go test |
-| 47 | SQL assertions and their runner | DuckDB (analysis tool) | built | Runs the guard, the views and each assertion file | DuckDB CLI |
-| 48 | SQL assertions and their runner | Flushed CSV files | built | Finds the run directories and checks the three headers | Bash |
+| 37 | Wire source mapping | Wire layer | built | Reads the wire snapshot | Go |
+| 38 | Wire source mapping | Collector | built | Gives it one source for component wire, with its metric declarations | Go |
+| 39 | Metric catalog and schema document | Simulator source mappings | built | Lists every metric it declares | Go |
+| 40 | Metric catalog and schema document | Wire source mapping | built | Lists every metric it declares | Go |
+| 41 | Metric catalog and schema document | CSV flush adapter | built | Reads the column lists of the three files | Go |
+| 42 | Metric catalog and schema document | Metric registry | built | Builds the full registry, the collector's own metrics included | Go |
+| 43 | Scenario flush harness | Simulator harness | built | Runs a world scenario through the simulator driver; publishes from a timer on the virtual clock | Go |
+| 44 | Scenario flush harness | Collector | built | Creates it, attaches the four adapters, publishes every 100 ms of virtual time (every 5 s and at the deadline check for a wire scenario) and at the end | Go |
+| 45 | Scenario flush harness | Simulator source mappings | built | Takes the sources of the scenario's world | Go |
+| 46 | Scenario flush harness | Wire layer | built | Builds and runs a wire scenario (wireworld) and checks it with the scenario's own assertions | Go |
+| 47 | Scenario flush harness | Wire source mapping | built | Takes the wire source of the scenario's test proxy | Go |
+| 48 | Scenario flush harness | CSV flush adapter | built | Checks the final flush read back equals the final snapshot | Go |
+| 49 | Scenario flush harness | Prometheus text exporter | built | Checks the text with the grammar checker | Go |
+| 50 | Scenario flush harness | JSON stats exporter | built | Checks the document decodes to the final snapshot | Go |
+| 51 | Scenario flush harness | SQL assertions and their runner | built | Its tests run the runner over the baseline runs and over planted bad runs | Go test |
+| 52 | SQL assertions and their runner | DuckDB (analysis tool) | built | Runs the guard, the views and each assertion file | DuckDB CLI |
+| 53 | SQL assertions and their runner | Flushed CSV files | built | Finds the run directories and checks the three headers | Bash |

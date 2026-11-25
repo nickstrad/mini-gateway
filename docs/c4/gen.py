@@ -31,7 +31,7 @@ from pathlib import Path
 # REL_BUILT relationship id -> chunk number, or None. Leave it empty unless the rule is
 #           wrong for one arrow. The rule: a relationship is built when both its ends are.
 #           A chunk number forces "built", None forces "planned".
-LANDED = 3
+LANDED = 4
 
 BUILT = {
     # chunk 1 — simulator kernel (diagram 11)
@@ -46,6 +46,11 @@ BUILT = {
     "s-simtest": 1,   # internal/sim/simtest
     "s-toy": 1,       # internal/sim/simtoy
     "s-cli": 1,       # cmd/mgsim (chunk 2 added world.go: the world scenarios and their result table)
+    # chunks 2 and 4 — simulated world (diagram 11)
+    "s-fakepg": 4,    # internal/sim/fakepg (chunk 2); chunk 4 added SCRAM, the TLS answer and the simulated handshake in auth.go
+    "s-workload": 4,  # internal/sim/workload (chunk 2); chunk 4 added SCRAM, the TLS request and the four TLS faults in startup.go
+    "s-testclient": 4,  # internal/testclient (chunk 2); chunk 4 added Msg.Data in msg.go, which the workload's SCRAM reads
+    "s-simtls": 4,    # internal/sim/simtls
     # chunk 2 — simulated world (diagram 11)
     "s-world": 2,     # internal/sim/world; tier R tests in tierr_test.go, run by scripts/tier-r.sh
     "s-randdist": 2,  # internal/randdist
@@ -66,30 +71,41 @@ BUILT = {
     "o-json": 3,      # internal/obs/jsonstats
     "o-csv": 3,       # internal/obs/csvflush (schema.go, writer.go, reader.go)
     "o-log": 3,       # internal/obs/logline
-    "o-simsrc": 3,    # internal/obs/simsrc
+    "o-simsrc": 3,    # internal/obs/simsrc (chunk 4 added the fake's authentication counters and the clients' startup counters)
     "o-catalog": 3,   # internal/obs/catalog; scripts/gen-docs.sh, scripts/gen-docs.d/c03-csv-schema.sh; docs/csv-schema.md
-    "o-simrun": 3,    # internal/obs/simrun
-    "o-assert": 3,    # scripts/csv-assert.sh, test/analysis (views.sql, guard.sql, five assertion files); make csv-assert
+    "o-simrun": 3,    # internal/obs/simrun (chunk 4 added wire.go: the wire scenarios)
+    "o-assert": 3,    # scripts/csv-assert.sh, test/analysis (views.sql, guard.sql, 62 assertion files: 5 of chunk 3, 57 of chunk 4); make csv-assert
+    "o-wiresrc": 4,   # internal/obs/wiresrc
     "csvfiles": 3,    # written by internal/obs/csvflush; described in docs/csv-schema.md
     "duckdb": 3,      # the command-line tool, pinned to 1.5.x in scripts/csv-assert.sh
+    # chunk 4 — wire sessions (diagram 6)
+    "w-framer": 4,    # internal/pgwire: frame.go
+    "w-msgs": 4,      # internal/pgwire: frame_encode.go, params.go
+    "w-client": 4,    # internal/pgwire: client.go, prestartup.go, client_tenants.go
+    "w-backend": 4,   # internal/pgwire: backend.go
+    "w-scram": 4,     # internal/pgwire: scram.go, scram_server.go, scram_client.go
+    "w-cycle": 4,     # internal/pgwire: CycleTracker in cycle.go
+    "w-front": 4,     # internal/pgwire: FrontendTracker in cycle.go
+    "w-fatal": 4,     # internal/pgwire: fatal.go
+    "w-snapshot": 4,  # internal/pgwire: snapshot_wire.go
+    "w-harness": 4,   # internal/pgwire/pgwiretest (proxy.go, fidelity.go, fidelity_sim.go); recording in testdata/startup-postgres17.txt
+    "w-world": 4,     # internal/pgwire/pgwiretest/wireworld; run by internal/pgwire/client_sim_test.go and internal/obs/simrun/wire_test.go
 }
 
 PARTIAL = {
-    "c-sim": "Built in chunks 1 and 2: the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, "
-             "the fake Postgres, the simulated clients, the test client, the scenario world with its five direct "
-             "baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. "
-             "Not built: SCRAM login and the TLS faults in the fake and the clients (chunk 4). No engine exists yet, so "
-             "the harness drives the fake Postgres and the toy protocol, and nothing implements the engine's transport seam.",
-    "s-fakepg": "Built in chunk 2 (internal/sim/fakepg): all of it with trust login, and the 24 database-side fault kinds "
-                "that need no TLS. Not built: SCRAM-SHA-256 login, and the two TLS faults (answers N to a TLS request; "
-                "a certificate that fails verification) (chunk 4).",
-    "s-workload": "Built in chunk 2 (internal/sim/workload): all of it, with the client-side faults that need no TLS "
-                  "(half a message, stops reading, disconnects, reconnect burst, cancel, aggressive retry). Not built: "
-                  "the four TLS client faults (stalls after a TLS request, fails the handshake, plaintext after a TLS "
-                  "request, a second TLS request) (chunk 4).",
-    "s-testclient": "Built in chunk 2 (internal/testclient): the framer, the codec and the session machine, with trust "
-                    "login. Not built: SCRAM-SHA-256 login (chunk 4).",
-    "c-obs": "Built in chunks 1 and 3: everything except the OTLP push adapter (chunk 15) and the health rules that "
+    "c-sim": "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy "
+             "protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS "
+             "handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no "
+             "proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: no engine exists yet, so the harness "
+             "drives the fake Postgres, the toy protocol and the wire layer's startup-only test proxy; nothing "
+             "implements the engine's transport seam, and no synthetic workload drives the cores.",
+    "c-pgwire": "Built in chunk 4 (internal/pgwire): the framer, the hand-written message coding, both session machines, "
+                "the SCRAM-SHA-256 functions, the query-cycle tracker, the client query-phase tracker, the startup FATAL "
+                "replies, the wire snapshot, and the test packages pgwiretest (startup-only proxy, startup fidelity "
+                "runner) and wireworld (19 wire scenarios). Not built: the codec boundary (no file in the package imports "
+                "pgproto3 yet), the SQL lexer, the statement classifier, the error contract and its reply builders "
+                "(chunk 5). No engine exists yet, so only the test proxy drives the machines.",
+    "c-obs": "Built in chunks 1, 3 and 4: everything except the OTLP push adapter (chunk 15) and the health rules that "
              "read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario "
              "harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP.",
     "o-health": "Built in chunk 3 (internal/obs: health.go): the three states, the rule table (overall state is the "
@@ -99,36 +115,28 @@ PARTIAL = {
 }
 
 REL_BUILT = {
-    # Arrows that are wholly true of the code although one end is only partly built (PARTIAL):
-    # the fake Postgres, the clients and the test client lack only their SCRAM and TLS parts.
-    "m7": 2,    # workload dials and reads over simnet
-    "m8": 2,    # fakepg listens on simnet
-    "m10": 2,   # fakepg registers its fault kinds (fakepg/fault.go)
-    "m11": 2,   # workload registers its fault kinds (workload/fault.go)
-    "m12": 2,   # workload streams: arrivals, keys, mix, retry (workload/client.go)
-    "m13": 2,   # fakepg streams: fakepg/service/<conn>, fakepg/keys
-    "m14": 2,   # fakepg/proto.go imports pgproto3
-    "m15": 2,   # testclient/msg.go imports pgproto3
-    "m29": 2,   # workload/client.go and probe.go use testclient
-    "m32": 2,   # world/driver.go starts fakepg
-    "m33": 2,   # world/driver.go starts the workload
-    "m34": 2,   # world/fidelity.go reads testclient messages
-    "m36": 2,   # world/tierr_test.go, run by scripts/tier-r.sh (Postgres itself stays planned: nothing sits in front of it yet)
-    "m38": 2,   # fakepg trace kinds and state writer
-    "m39": 2,   # workload trace kinds and state writer
-    "m40": 2,   # fakepg invariant and quiesce check (fakepg/server.go)
-    "m41": 2,   # workload invariant and quiesce check (workload/workload.go)
+    # Arrows that are wholly true of the code although one end is only partly built (PARTIAL)
+    # or is Postgres, which stays planned: nothing sits in front of it yet.
+    "m16": 4,   # fakepg/auth.go and backend.go import internal/pgwire (ScramServer, Verifier, AppendNegotiateProtocolVersion)
+    "m43": 4,   # workload/startup.go imports internal/pgwire (ScramClient)
+    "m36": 2,   # world/tierr_test.go, run by scripts/tier-r.sh
     # Container arrows of the partly built simulator harness that are wholly true of the code:
     "s9": 2,    # the pgproto3 requirement entered go.mod in chunk 2
     "s13": 1,   # cmd/mgsim and go test run scenarios from a seed since chunk 1
     "s16": 2,   # scripts/tier-r.sh
+    # Diagram 6 arrows from the wire layer's test packages to the partly built simulator harness and to Postgres:
+    "w33": 4,   # pgwiretest/proxy.go and fidelity_sim.go import sim, simnet, simtls, fakepg
+    "w35": 4,   # wireworld/wireworld.go imports sim, simnet, fakepg, workload
+    "w36": 4,   # pgwiretest/fidelity_test.go: TestTierRStartupFidelity, run by scripts/tier-r.sh
     # Diagram 12 arrows that are wholly true of the code although one end is only partly built:
     "o4": 3,    # Collector.Health evaluates a HealthTable (obs/health.go)
     "o22": 2,   # simtoy, fakepg and workload tests call obstest.RequirePlain, MergeMoved, NeverMoved
-    "o34": 3,   # simsrc maps sim.Snapshot, simnet.Snapshot, fakepg.Snapshot, workload.Snapshot
+    "o34": 3,   # simsrc maps sim.Snapshot, simnet.Snapshot, fakepg.Snapshot and AuthSnapshot, workload.Snapshot
     "o40": 3,   # simrun wraps world.SimDriver and calls world.Drive
     "o50": 2,   # obs.Gauge and obs.Conserve in fakepg/snapshot.go and workload/snapshot.go
     "o51": 2,   # obs.Histogram in workload/workload.go; obs.HistogramSnapshot in world/check.go
+    "o52": 4,   # wiresrc/wiresrc.go maps pgwire.WireSnapshot
+    "o55": 4,   # simrun/wire.go builds and runs a wireworld.World
 }
 # =========================================================================== end of AS BUILT
 
@@ -242,7 +250,8 @@ container("c-engine", "Engine",
           "shell drive this same code.", tech="Go, pure state machine")
 container("c-pgwire", "Wire layer",
           "internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle "
-          "tracker, the statement classifier, the error contract. The only product package that imports pgproto3.",
+          "tracker, the statement classifier, the error contract, the wire snapshot. The only product package allowed to "
+          "import pgproto3. Its test packages pgwiretest and wireworld run the session machines in the simulator.",
           tech="Go, pure state machines, pgproto3")
 container("c-work", "Work vocabulary",
           "internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share "
@@ -269,9 +278,9 @@ container("c-config", "Configuration",
           "internal/config. The config file, the static fleet block (instance count N; fleet budgets divided by N), "
           "and load-time validation that fails closed.", tech="Go")
 container("c-sim", "Simulator harness",
-          "internal/sim and its sub-packages simnet, fakepg, workload, world, simtest and simtoy; internal/testclient; "
+          "internal/sim and its sub-packages simnet, simtls, fakepg, workload, world, simtest and simtoy; internal/testclient; "
           "internal/randdist; cmd/mgsim; scripts/tier-r.sh. A deterministic single-threaded world: virtual clock, "
-          "simulated byte streams, a fake Postgres, simulated clients, scenarios with a driver interface, faults, "
+          "simulated byte streams, a simulated TLS handshake, a fake Postgres, simulated clients, scenarios with a driver interface, faults, "
           "replay. Its fake Postgres is checked against a real Postgres 17. Test code; built before any proxy code.",
           tech="Go test harness", tags=("test",))
 container("c-e2e", "End-to-end suite and load generator",
@@ -370,23 +379,52 @@ rel("e21", "e-pipeline", "n-work", "Passes work units and outcomes between stage
 P = "c-pgwire"
 comp(P, "w-framer", "Framer",
      "Ours. Cuts a byte stream into messages (type byte, 4-byte length, body) whatever the fragmentation, down to "
-     "one byte at a time; enforces a maximum message size.")
+     "one byte at a time; also the untyped packets before startup. Enforces a maximum message size and refuses an "
+     "oversized message from its header alone. Can skip the bodies of chosen message types instead of buffering them.")
+comp(P, "w-msgs", "Message coding",
+     "Ours, written by hand, no pgproto3. Appends each message the session machines write (TLS and startup "
+     "packets, authentication, parameter status, key data, ready, query, terminate, cancel) and parses the startup "
+     "packet and its parameters.")
 comp(P, "w-codec", "Codec boundary",
-     "The only product code that touches pgproto3: decodes a framed body into a message struct and encodes structs "
-     "to bytes. pgproto3's own blocking reader is not used.", tech="Go, pgproto3")
+     "The only product code that touches pgproto3: encodes message structs to bytes for the reply builders. "
+     "pgproto3's own blocking reader is not used. The session machines and the trackers do not pass through it; "
+     "they use the hand-written message coding.", tech="Go, pgproto3")
 comp(P, "w-client", "Client session machine",
-     "Client-facing. Runs the exchange before startup: answers a TLS request yes or no by config and asks the shell to "
-     "upgrade the connection, answers a GSS encryption request no. Reads the startup message, finds the tenant by "
-     "user, runs SCRAM-SHA-256 (server side; trust only as a named test setting), sends the parameter set and proxy-issued key data, recognises cancel "
-     "requests, takes in one query at a time, handles terminate.")
+     "Client-facing, startup only: events in, actions out. Runs the exchange before startup: answers a TLS request S "
+     "or N by client_tls.mode and asks its driver to start TLS (at most one upgrade; a byte before the handshake "
+     "result is a violation), answers a GSS encryption request N. Reads the startup message, refuses plaintext when "
+     "TLS is required, negotiates protocol 3.x down to 3.0, finds the tenant by user, runs SCRAM-SHA-256 (server "
+     "side; trust only as a named test setting; an unknown user gets the wrong-password reply), sends the parameter "
+     "set and proxy-issued key data, recognises cancel requests. Every failed startup ends under one reason. "
+     "Consumes no byte after ready.")
 comp(P, "w-backend", "Database session machine",
-     "Database-facing. Asks for TLS first when the config requires it, then startup, SCRAM-SHA-256 (client side), collects server parameters and key data, reaches ready.")
+     "Database-facing, startup only: events in, actions out. Sends a TLS request first when backend_tls.mode asks "
+     "for one (an N answer is a connect failure; a byte after S before the handshake result is a violation), then "
+     "startup, SCRAM-SHA-256 (client side, never -PLUS), collects server parameters and key data, reaches ready. "
+     "Every failed startup ends in one class (TLS refused or failed, authentication, too many connections, server "
+     "FATAL, violation, deadline, connection lost).")
 comp(P, "w-cycle", "Query-cycle tracker",
      "Follows a reply to its ReadyForQuery, reports the transaction status byte (idle, in transaction, failed), "
-     "flags an unsolicited ParameterStatus (the connection is now dirty) and any protocol surprise.")
+     "flags an unsolicited ParameterStatus (the connection is now dirty) and any protocol surprise, including a "
+     "stream that ends without its marker. Never buffers row data. Unknown but well-framed message types are "
+     "reported and passed through.")
+comp(P, "w-front", "Client query-phase tracker",
+     "Reads the client's bytes after login. Reports each Query (body copied, bounded), Terminate, and every "
+     "extended-protocol message as one to refuse; any other message type is a violation.")
 comp(P, "w-scram", "SCRAM-SHA-256 functions",
-     "Pure functions on the standard library. Shared with the simulator's fake Postgres and test clients.",
+     "Pure functions on the standard library: verifier, key derivation, nonce, the GS2 header rule, and the server "
+     "and client sides of the exchange with bounded messages. Shared with the simulator's fake Postgres and "
+     "simulated clients.",
      tech="Go, crypto/pbkdf2, hmac, sha256")
+comp(P, "w-fatal", "Startup FATAL replies",
+     "The replies the session machines make themselves during startup: an ErrorResponse with severity, SQLSTATE and "
+     "message, the old-format error for a protocol 2 client, and NegotiateProtocolVersion. Also parses the severity "
+     "and SQLSTATE of an ErrorResponse from the database. The error contract takes the replies over when it lands.")
+comp(P, "w-snapshot", "Wire snapshot",
+     "The wire layer's counters as one plain struct, per side: startups begun, completed, in progress and failed by "
+     "reason; pre-startup requests by kind and answer; TLS handshakes by version and failure; plaintext refused; "
+     "authentication failures by cause; messages and bytes each way; violations; oversized messages; what the "
+     "trackers saw. Its check: begun = completed + failed + in startup, on each side.")
 comp(P, "w-lexer", "SQL lexer",
      "Tokens only: strings, escape strings, dollar quotes, comments, identifiers; splits a message into statements. "
      "Not a parser.")
@@ -396,22 +434,55 @@ comp(P, "w-classifier", "Statement classifier",
 comp(P, "w-errors", "Error contract and reply builders",
      "One table: each refusal and failure, its SQLSTATE, whether anything reached the database, whether a write may "
      "have applied. Builds the ErrorResponse and the correct end marker. docs/error-contract.md is generated from it.")
-rel("w1", "n-engine", "w-client", "Client bytes in; events and bytes out", "Go")
-rel("w2", "n-engine", "w-backend", "Database bytes in; events and bytes out", "Go")
+comp(P, "w-harness", "Startup-only test proxy and startup fidelity runner",
+     "internal/pgwire/pgwiretest. A proxy for tests on simulated streams: the two session machines back to back, "
+     "one database connection per client, no pool; after login it relays queries and replies through both trackers. "
+     "A database startup failure reaches the client as FATAL 08006. Also the startup fidelity runner: one script "
+     "(TLS answers, SCRAM, protocol versions) played against the fake Postgres and compared with Postgres 17's "
+     "transcript, recorded for CI or live in tier R.", tags=("test",))
+comp(P, "w-world", "Wire scenarios",
+     "internal/pgwire/pgwiretest/wireworld. 19 named scenarios with their exact checks: the test proxy between "
+     "simulated clients and the fake Postgres, plaintext and TLS, one-byte delivery, and one startup fault each on "
+     "the client side (TLS stall, bad hello, smuggled bytes, second TLS request, plaintext refused, wrong password, "
+     "unknown user) or the database side (silence, connect stall, garbage, reset, connection limit, TLS refused, bad "
+     "certificate, handshake stall). Each failure must be counted under its one reason within its deadline.",
+     tags=("test",))
+rel("w1", "n-engine", "w-client", "Client bytes and events in; actions out, until the client is ready", "Go")
+rel("w2", "n-engine", "w-backend", "Database bytes and events in; actions out, until the connection is ready", "Go")
 rel("w3", "n-engine", "w-cycle", "Reply bytes in; status and message boundaries out", "Go")
 rel("w4", "n-engine", "w-classifier", "Statement text in; work unit out", "Go")
 rel("w5", "n-engine", "w-errors", "Contract row in; reply bytes out", "Go")
-rel("w6", "w-client", "w-codec", "Decode and encode messages", "Go")
-rel("w7", "w-backend", "w-codec", "Decode and encode messages", "Go")
-rel("w8", "w-cycle", "w-codec", "Decode message headers and status", "Go")
+rel("w17", "n-engine", "w-front", "Client bytes after login in; queries and terminate out", "Go")
 rel("w9", "w-errors", "w-codec", "Encode ErrorResponse and ReadyForQuery", "Go")
 rel("w10", "w-codec", "w-framer", "Framed message bodies", "Go")
 rel("w11", "w-codec", "pgproto3", "Message structs: Encode, Decode", "Go import")
+rel("w18", "w-client", "w-framer", "Cuts the client's startup packets and messages", "Go")
+rel("w19", "w-backend", "w-framer", "Cuts the server's startup messages", "Go")
+rel("w20", "w-cycle", "w-framer", "Message boundaries; row bodies skipped, not buffered", "Go")
+rel("w21", "w-front", "w-framer", "Message boundaries; extended-protocol bodies skipped", "Go")
+rel("w22", "w-client", "w-msgs", "Parses the startup packet; encodes its replies", "Go")
+rel("w23", "w-backend", "w-msgs", "Encodes the TLS request, the startup message and the SASL responses", "Go")
+rel("w24", "w-client", "w-fatal", "Builds each refusal it sends", "Go")
+rel("w25", "w-backend", "w-fatal", "Reads the SQLSTATE of a server error during startup", "Go")
+rel("w26", "w-cycle", "w-fatal", "Reads the severity and SQLSTATE of an ErrorResponse", "Go")
 rel("w12", "w-client", "w-scram", "Server side of the exchange", "Go")
 rel("w13", "w-backend", "w-scram", "Client side of the exchange", "Go")
+rel("w27", "w-client", "w-snapshot", "Counts client startups, requests, handshakes and failures", "Go")
+rel("w28", "w-backend", "w-snapshot", "Counts database startups, TLS answers and failures by class", "Go")
+rel("w29", "w-cycle", "w-snapshot", "Counts replies, ready by status, errors and unsolicited messages", "Go")
+rel("w30", "w-front", "w-snapshot", "Counts queries seen, terminates and extended messages refused", "Go")
 rel("w14", "w-classifier", "w-lexer", "Tokens and statement boundaries", "Go")
 rel("w15", "w-classifier", "n-work", "Produces work units", "Go types")
 rel("w16", "w-cycle", "n-work", "Produces outcomes", "Go types")
+rel("w31", "w-harness", "w-client", "Drives one per client connection, with the simulated handshake and a startup deadline", "Go, test code")
+rel("w32", "w-harness", "w-backend", "Drives one per database connection, opened after the client is authenticated", "Go, test code")
+rel("w37", "w-harness", "w-cycle", "Relays each reply through it", "Go, test code")
+rel("w38", "w-harness", "w-front", "Relays each client message through it", "Go, test code")
+rel("w39", "w-harness", "w-snapshot", "Registers its conservation check as a simulator invariant", "Go, test code")
+rel("w33", "w-harness", "n-sim", "Listens and dials on simulated streams; plays the simulated TLS handshake; the fidelity runner dials the fake Postgres", "Go, test code")
+rel("w34", "w-world", "w-harness", "Builds one test proxy per scenario and reads its wire snapshot", "Go, test code")
+rel("w35", "w-world", "n-sim", "Starts the fake Postgres and the simulated clients; injects the scenario's fault", "Go, test code")
+rel("w36", "w-harness", "pg", "Tier R: plays the startup fidelity script against two Postgres 17 servers, ssl off and ssl on with SCRAM; on request rewrites the recording CI replays", "scripts/tier-r.sh, Docker, go test")
 
 # --------------------------------------------------------------------------- admission components
 P = "c-adm"
@@ -571,20 +642,29 @@ comp(P, "s-net", "Simulated byte streams",
      "stall, half-open, half-close, chunk, refuse, dial stall, accept-then-silence, and clear. Its own snapshot.")
 comp(P, "s-fakepg", "Fake Postgres",
      "internal/sim/fakepg. Speaks the simple-query subset in real wire bytes with its own framer; login by trust or "
-     "SCRAM-SHA-256; a max_connections limit with Postgres's refusal; transaction status; a small keyed table with "
+     "SCRAM-SHA-256; answers a TLS request S or N and plays the simulated handshake; a max_connections limit with "
+     "Postgres's refusal; transaction status; a small keyed table with "
      "write, statement and transaction logs; service-time models and a capacity limit; cancel requests; every "
-     "database-side fault; its own snapshot.",
+     "database-side fault (the TLS ones — answers N, a handshake that fails or stalls, a certificate that fails "
+     "verification — are a setting that can change during a run, not fault kinds); its own snapshots.",
      tech="Go, pgproto3")
 comp(P, "s-workload", "Clients and tenants",
      "internal/sim/workload. Simulated clients grouped in tenants: open-loop arrivals (constant or Poisson) and "
      "closed-loop think time, latency measured from the intended send time, uniform, Zipf or fixed keys, "
-     "transactions of several statements, retries with backoff, every client-side fault, its own snapshot. A "
+     "transactions of several statements, retries with backoff; login by trust or SCRAM-SHA-256, with a TLS request "
+     "first when the tenant asks; every client-side fault (the four TLS ones — stall after the request, bad hello, "
+     "plaintext after the request, a second request — are a per-tenant setting); its own snapshot. A "
      "client sends one request at a time; later arrivals wait in its bounded backlog. Also a hand-driven client "
      "(Probe) for tests.")
 comp(P, "s-testclient", "Test client",
      "internal/testclient. A Postgres client with no I/O: bytes in, messages out. Its own framer, a message codec, "
-     "and a session machine (phase, status byte, key data, parameters) with login by trust or SCRAM-SHA-256. Used "
+     "and a session machine (phase, status byte, key data, parameters) with trust login. It hands the data of "
+     "each authentication message to its caller, which is how the simulated clients run SCRAM. Used "
      "by the simulated clients on simulated streams and by the tier R tests on TCP.", tech="Go, pgproto3")
+comp(P, "s-simtls", "Simulated TLS handshake",
+     "internal/sim/simtls. A handshake as an exchange with an outcome, not cryptography: a 16-byte client hello (or "
+     "a bad one) and a 16-byte server reply that says completed with a TLS version, bad certificate, or alert. "
+     "Models the outcome and the duration only.")
 comp(P, "s-randdist", "Float generators",
      "internal/randdist. The only two functions that use floating point: exponential gaps for Poisson arrivals, "
      "and a Zipf generator. Kept outside internal/sim, where float syntax is forbidden.")
@@ -632,10 +712,12 @@ rel("m12", "s-workload", "s-streams", "Arrivals, keys, request mix and retries, 
 rel("m13", "s-fakepg", "s-streams", "Service-time jitter, one stream per connection; cancel keys", "Go")
 rel("m14", "s-fakepg", "pgproto3", "Wire messages", "Go import")
 rel("m15", "s-testclient", "pgproto3", "Wire messages", "Go import")
-rel("m16", "s-fakepg", "n-pgwire", "Reuses the SCRAM functions", "Go")
+rel("m16", "s-fakepg", "n-pgwire", "Reuses the SCRAM functions (server side) and the NegotiateProtocolVersion encoder", "Go")
 rel("m29", "s-workload", "s-testclient", "Every client frames, decodes and tracks its session with it", "Go")
 rel("m30", "s-workload", "s-randdist", "Poisson gaps and Zipf keys", "Go")
-rel("m31", "s-testclient", "n-pgwire", "Reuses the SCRAM functions", "Go")
+rel("m43", "s-workload", "n-pgwire", "Reuses the SCRAM functions (client side)", "Go")
+rel("m44", "s-fakepg", "s-simtls", "Reads the client hello; replies with the configured outcome", "Go")
+rel("m45", "s-workload", "s-simtls", "Sends the client hello, or a bad one; reads the reply", "Go")
 rel("m32", "s-world", "s-fakepg", "Starts the fake for a scenario; reads its snapshot and logs for the checks", "Go")
 rel("m33", "s-world", "s-workload", "Starts the scenario's clients; reads their snapshot; the fidelity runner drives a Probe", "Go")
 rel("m34", "s-world", "s-testclient", "Turns the messages of a fidelity exchange into transcript tokens", "Go")
@@ -727,23 +809,31 @@ comp(P, "o-otlp", "OTLP/HTTP push exporter",
      "drop-and-count when the Collector is down. Lands in the last build chunk and touches no component.")
 comp(P, "o-simsrc", "Simulator source mappings",
      "internal/obs/simsrc. The metric declarations and the snapshot-to-points mappings of the four simulator "
-     "components that exist: the kernel, simnet, the fake Postgres and the workload. It lives here because the "
+     "components that exist: the kernel, simnet, the fake Postgres (its authentication and TLS counters too) and "
+     "the workload (its startup counters too). It lives here because the "
      "simulator packages are frozen; a later component writes the same two functions in its own package.",
      tags=("test",))
+comp(P, "o-wiresrc", "Wire source mapping",
+     "internal/obs/wiresrc. The metric declarations of component wire and the mapping from the wire snapshot to "
+     "points. The side is in the metric name (client_..., database_...); labels are reason, outcome and mode; "
+     "every known label value is emitted, zero included; no tenant label.")
 comp(P, "o-catalog", "Metric catalog and schema document",
      "internal/obs/catalog. The registry of every source the product registers, and the generator of "
      "docs/csv-schema.md (columns of the three files and every metric). Its test fails when the committed document "
      "differs from the code; scripts/gen-docs.sh regenerates or checks it.")
 comp(P, "o-simrun", "Scenario flush harness",
-     "internal/obs/simrun. Runs a simulator world scenario with a collector that publishes on the virtual clock and "
+     "internal/obs/simrun. Runs a simulator world scenario, or a wire scenario, with a collector that publishes on "
+     "the virtual clock and "
      "with the CSV, JSON, Prometheus and log adapters attached, then checks every output against the final "
-     "snapshot. Its tests run the five direct baselines twice per seed and compare the files byte for byte.",
+     "snapshot. Its tests run the five direct baselines and every wire scenario twice per seed and compare the "
+     "files byte for byte.",
      tags=("test",))
 comp(P, "o-assert", "SQL assertions and their runner",
      "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema "
      "version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each "
-     "assertion file; a returned row is a violation. Fails closed and never skips. The first assertion files check "
-     "the direct baselines' counts.", tech="Bash, SQL", tags=("test",))
+     "assertion file; a returned row is a violation. Fails closed and never skips. The assertion files check "
+     "the direct baselines' counts and, for each wire scenario, that startup failures by reason, TLS requests by "
+     "answer and handshake failures equal what was injected and sent.", tech="Bash, SQL", tags=("test",))
 rel("o1", "n-engine", "o-collector", "Registers each component as a source and publishes once per interval", "Go, plain structs")
 rel("o2", "o-collector", "o-contract", "Calls every source's Snapshot and mapping at each publish", "Go")
 rel("o3", "o-contract", "o-hist", "Histograms inside snapshots", "Go")
@@ -776,13 +866,13 @@ rel("o29", "o-instance", "o-hist", "Histogram points carry its bucket lists", "G
 rel("o31", "o-prom", "o-registry", "Reads each metric's kind, unit and help text", "Go")
 rel("o32", "o-log", "o-registry", "Reads which metrics are headline", "Go")
 rel("o33", "o-merge", "o-registry", "Reads each metric's merge rule", "Go")
-rel("o34", "o-simsrc", "n-sim", "Reads the snapshots of the kernel, simnet, the fake Postgres and the workload", "Go")
+rel("o34", "o-simsrc", "n-sim", "Reads the snapshots of the kernel, simnet, the fake Postgres (both of its snapshots) and the workload", "Go")
 rel("o35", "o-simsrc", "o-collector", "Registers one source per simulator component, with its metric declarations", "Go")
 rel("o37", "o-catalog", "o-simsrc", "Lists every metric it declares", "Go")
 rel("o38", "o-catalog", "o-csv", "Reads the column lists of the three files", "Go")
 rel("o39", "o-catalog", "o-registry", "Builds the full registry, the collector's own metrics included", "Go")
 rel("o40", "o-simrun", "n-sim", "Runs a world scenario through the simulator driver; publishes from a timer on the virtual clock", "Go")
-rel("o41", "o-simrun", "o-collector", "Creates it, attaches the four adapters, publishes every 100 ms of virtual time and at the end", "Go")
+rel("o41", "o-simrun", "o-collector", "Creates it, attaches the four adapters, publishes every 100 ms of virtual time (every 5 s and at the deadline check for a wire scenario) and at the end", "Go")
 rel("o42", "o-simrun", "o-simsrc", "Takes the sources of the scenario's world", "Go")
 rel("o43", "o-simrun", "o-csv", "Checks the final flush read back equals the final snapshot", "Go")
 rel("o44", "o-simrun", "o-prom", "Checks the text with the grammar checker", "Go")
@@ -790,6 +880,11 @@ rel("o45", "o-simrun", "o-json", "Checks the document decodes to the final snaps
 rel("o46", "o-simrun", "o-assert", "Its tests run the runner over the baseline runs and over planted bad runs", "Go test")
 rel("o47", "o-assert", "duckdb", "Runs the guard, the views and each assertion file", "DuckDB CLI")
 rel("o48", "o-assert", "csvfiles", "Finds the run directories and checks the three headers", "Bash")
+rel("o52", "o-wiresrc", "n-pgwire", "Reads the wire snapshot", "Go")
+rel("o53", "o-wiresrc", "o-collector", "Gives it one source for component wire, with its metric declarations", "Go")
+rel("o54", "o-catalog", "o-wiresrc", "Lists every metric it declares", "Go")
+rel("o55", "o-simrun", "n-pgwire", "Builds and runs a wire scenario (wireworld) and checks it with the scenario's own assertions", "Go")
+rel("o56", "o-simrun", "o-wiresrc", "Takes the wire source of the scenario's test proxy", "Go")
 rel("o50", "n-sim", "o-conserve", "The fake Postgres and the workload keep gauges with peaks and check conservation", "Go")
 rel("o51", "n-sim", "o-hist", "The workload records latencies in it; the world checks read its snapshots", "Go")
 
@@ -854,7 +949,7 @@ diagram("container-seams", "container", "Containers: drivers and seams", "03-con
         shows="Who drives the engine (the shell or the simulator), where the Postgres codec boundary is, and the work vocabulary the cores are written against",
         intro="The verdict on the backend interface, drawn. There is no generic backend interface. There are three seams: "
               "the engine's byte transport (implemented by the shell with TCP and by the simulator), the wire layer "
-              "(the only product package that imports pgproto3), and the work vocabulary (the only thing the cores see). "
+              "(the only product package allowed to import pgproto3), and the work vocabulary (the only thing the cores see). "
               "A second protocol would be a sibling of the wire layer producing the same vocabulary.",
         nodes=["developer", "c-sim", "c-e2e", "c-shell", "c-engine", "c-pgwire", "c-work", "c-adm", "c-pool", "c-coal",
                "c-retry", "pgproto3", "pg"],
@@ -886,11 +981,16 @@ component_diagram("component-engine", "Components: engine", "05-component-engine
                   ["n-shell", "n-sim", "n-pgwire", "n-adm", "n-coal", "n-pool", "n-retry", "n-obs", "n-work"],
                   ["e%d" % i for i in range(1, 22) if i != 11])
 component_diagram("component-wire", "Components: wire layer", "06-component-wire-layer", "c-pgwire",
-                  "internal/pgwire: the pgproto3 codec boundary, our framer, both session machines, the classifier, the error contract",
+                  "internal/pgwire: our framer and message coding, both session machines, SCRAM, the two trackers, the wire snapshot, the test proxy and its scenarios; planned: the pgproto3 codec boundary, the classifier, the error contract",
                   "pgproto3 gives message structs and nothing else. The framer, the session machines, SCRAM, transaction "
                   "tracking, classification and error mapping are ours. Everything here is a pure state machine that "
-                  "accepts bytes in any fragments.",
-                  ["n-engine", "n-work", "pgproto3"], ["w%d" % i for i in range(1, 17)])
+                  "accepts bytes in any fragments. Chunk 4 built the sessions: the machines and trackers code their "
+                  "few messages by hand, so no file in the package imports pgproto3 yet; the codec boundary comes "
+                  "with the reply builders. No engine exists yet, so a startup-only test proxy drives the machines "
+                  "in the simulator, between simulated clients and the fake Postgres.",
+                  ["n-engine", "n-work", "n-sim", "pgproto3", "pg"],
+                  ["w%d" % i for i in (1, 2, 3, 17, 4, 5, 18, 19, 20, 21, 22, 23, 24, 25, 26, 12, 13, 27, 28, 29, 30,
+                                         9, 10, 11, 14, 15, 16, 31, 32, 37, 38, 39, 33, 34, 35, 36)])
 component_diagram("component-admission", "Components: admission", "07-component-admission", "c-adm",
                   "internal/admission: the rate gate, per-tenant queues, both CoDel modes behind one interface, the dispatcher, the adaptive limit",
                   "Order of decisions: gate, then queue, then dispatch under the limit. The two queue rules are equal, "
@@ -911,14 +1011,15 @@ component_diagram("component-retry", "Components: retry policy", "10-component-r
                   "The default policy is Off. Failures after anything reached the database are never retried under any policy.",
                   ["n-engine", "n-work"], ["t%d" % i for i in range(1, 8)])
 component_diagram("component-simulator", "Components: simulator harness", "11-component-simulator", "c-sim",
-                  "internal/sim and its sub-packages, internal/testclient and internal/randdist: the loop, the clock, simulated byte streams, the fake Postgres, simulated clients, the test client, the scenario world with its baselines and fidelity runner, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol",
+                  "internal/sim and its sub-packages, internal/testclient and internal/randdist: the loop, the clock, simulated byte streams, the simulated TLS handshake, the fake Postgres, simulated clients, the test client, the scenario world with its baselines and fidelity runner, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol",
                   "The harness owns the world around the engine. It implements the engine's transport seam, so the engine "
                   "under test is the engine that ships. Several engines can run on one loop, which is how the "
                   "three-instance scenarios are made. The kernel came first (chunk 1) and is proved on a toy echo "
                   "protocol. Chunk 2 added the world the proxy will stand in: the fake Postgres, the simulated clients "
-                  "and scenarios that run the clients straight at the fake. No engine exists yet, so those direct "
-                  "baselines are the control arms for later chunks.",
-                  ["developer", "n-engine", "n-pgwire", "pgproto3", "pg"], ["m%d" % i for i in range(1, 43)])
+                  "and scenarios that run the clients straight at the fake. Chunk 4 added SCRAM login and the TLS "
+                  "request, answer and simulated handshake to the fake and the clients. No engine exists yet, so "
+                  "those direct baselines are the control arms for later chunks.",
+                  ["developer", "n-engine", "n-pgwire", "pgproto3", "pg"], ["m%d" % i for i in range(1, 46) if i != 31])
 component_diagram("component-observability", "Components: observability", "12-component-observability", "c-obs",
                   "internal/obs: the one raw export (snapshots), the metric registry, the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus",
                   "The hard rule: one common raw export, then the collector interface, then adapters. Components fill "
@@ -928,11 +1029,12 @@ component_diagram("component-observability", "Components: observability", "12-co
                   "files, and tests and DuckDB read them with nothing else running. The production path: the OTLP "
                   "adapter pushes to an OpenTelemetry Collector, which Prometheus scrapes. DuckDB is an analysis tool "
                   "over files, never a dependency of the proxy. Chunk 3 built the spine before the proxy's "
-                  "components: so far the sources are the simulator's kernel, network, fake Postgres and workload, "
+                  "components: so far the sources are the simulator's kernel, network, fake Postgres and workload "
+                  "and, since chunk 4, the wire layer's snapshot (the first product source), "
                   "and the scenario flush harness is what publishes.",
-                  ["n-engine", "n-shell", "n-e2e", "n-sim", "csvfiles", "duckdb", "otelcol", "prom"],
+                  ["n-engine", "n-shell", "n-e2e", "n-sim", "n-pgwire", "csvfiles", "duckdb", "otelcol", "prom"],
                   ["o%d" % i for i in (1, 2, 25, 26, 27, 3, 24, 28, 29, 4, 15, 8, 9, 10, 11, 12, 31, 32, 5, 6, 7, 16, 18, 17, 19,
-                                         13, 20, 21, 14, 33, 22, 23, 50, 51, 34, 35, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48)])
+                                         13, 20, 21, 14, 33, 22, 23, 50, 51, 34, 35, 52, 53, 37, 54, 38, 39, 40, 41, 42, 55, 56, 43, 44, 45, 46, 47, 48)])
 
 
 # --------------------------------------------------------------------------- output

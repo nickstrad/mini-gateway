@@ -9,9 +9,10 @@ flowchart TB
     S_CLOCK["Virtual clock and timers"]:::built
     S_STREAMS["Named random streams"]:::built
     S_NET["Simulated byte streams"]:::built
-    S_FAKEPG["Fake Postgres"]:::planned
-    S_WORKLOAD["Clients and tenants"]:::planned
-    S_TESTCLIENT["Test client"]:::planned
+    S_FAKEPG["Fake Postgres"]:::built
+    S_WORKLOAD["Clients and tenants"]:::built
+    S_TESTCLIENT["Test client"]:::built
+    S_SIMTLS["Simulated TLS handshake"]:::built
     S_RANDDIST["Float generators"]:::built
     S_WORLD["Scenario world"]:::built
     S_FAULTS["Fault schedule and shrinker"]:::built
@@ -36,7 +37,7 @@ flowchart TB
   S_FAKEPG -->|13| S_STREAMS
   S_FAKEPG -->|14| PGPROTO3
   S_TESTCLIENT -->|15| PGPROTO3
-  S_FAKEPG -.->|16| N_PGWIRE
+  S_FAKEPG -->|16| N_PGWIRE
   N_ENGINE -.->|17| S_TRACE
   S_INV -.->|18| N_ENGINE
   S_SIMTEST -->|19| S_TRACE
@@ -50,19 +51,21 @@ flowchart TB
   DEVELOPER -->|27| S_SIMTEST
   S_CLI -->|28| S_TRACE
   S_WORKLOAD -->|29| S_TESTCLIENT
-  S_WORKLOAD -.->|30| S_RANDDIST
-  S_TESTCLIENT -.->|31| N_PGWIRE
-  S_WORLD -->|32| S_FAKEPG
-  S_WORLD -->|33| S_WORKLOAD
-  S_WORLD -->|34| S_TESTCLIENT
-  S_WORLD -->|35| S_SIMTEST
-  S_WORLD -->|36| PG
-  S_CLI -->|37| S_WORLD
-  S_FAKEPG -->|38| S_TRACE
-  S_WORKLOAD -->|39| S_TRACE
-  S_FAKEPG -->|40| S_INV
-  S_WORKLOAD -->|41| S_INV
-  S_WORLD -->|42| S_FAULTS
+  S_WORKLOAD -->|30| S_RANDDIST
+  S_WORLD -->|31| S_FAKEPG
+  S_WORLD -->|32| S_WORKLOAD
+  S_WORLD -->|33| S_TESTCLIENT
+  S_WORLD -->|34| S_SIMTEST
+  S_WORLD -->|35| PG
+  S_CLI -->|36| S_WORLD
+  S_FAKEPG -->|37| S_TRACE
+  S_WORKLOAD -->|38| S_TRACE
+  S_FAKEPG -->|39| S_INV
+  S_WORKLOAD -->|40| S_INV
+  S_WORLD -->|41| S_FAULTS
+  S_WORKLOAD -->|42| N_PGWIRE
+  S_FAKEPG -->|43| S_SIMTLS
+  S_WORKLOAD -->|44| S_SIMTLS
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned
