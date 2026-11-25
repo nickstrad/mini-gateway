@@ -77,3 +77,18 @@ the engine of chunk 6.
 test of `internal/pgwire` (`package pgwire`) must therefore not import `fakepg` (import
 cycle in tests); use an external test package (`package pgwire_test`), as
 `client_sim_test.go` does.
+
+## Flushing wire scenarios (integration with chunk 3)
+
+- The wire scenario table lives in `internal/pgwire/pgwiretest/wireworld` (not in a test
+  file) because the flush tests must be in `internal/obs/simrun`: importlint reads test files,
+  and nothing under `internal/pgwire/...` may import `simrun` or an adapter.
+- `simrun.Wire(sc, seed, opts)` is the flush harness; `wiresrc.Source(proxy.Snapshot)` maps
+  `pgwire.WireSnapshot` to component `wire` (side in the metric name: `client_...`,
+  `database_...`). Run id `<scenario>/<seed>/base`.
+- Publish interval for wire runs is 5 s virtual (`simrun.WireInterval`): at 100 ms a 30 s
+  wire run wrote 13 MB and the DuckDB tests took minutes. Most of `csv-assert.sh`'s cost is
+  one DuckDB start per `-- requires:` metric, so keep that list to the metrics under test.
+- A new wire scenario needs its three files under `test/analysis/<scenario>/`
+  (`TestEveryWireScenarioHasItsAnalysisFiles`), and `TestCSVAssertBaselineCountsFromFlushedFiles`
+  then runs them over its seed-1 run.
