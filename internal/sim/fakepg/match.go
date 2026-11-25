@@ -250,6 +250,7 @@ var (
 	patDivZero   = words("select $num / 0")
 	patTxid      = words("select txid_current ( ) is not null")
 	patRead      = words("select v from kv where k = $str")
+	patReadSleep = words("select v , pg_sleep ( $num ) is not null from kv where k = $str")
 	patSleep     = words("select pg_sleep ( $num )")
 	patRows      = words("select repeat ( $str , $num ) from generate_series ( $num , $num )")
 	patUpdate    = words("update kv set v = $str where k = $str")
@@ -339,6 +340,12 @@ func matchBody(st *Stmt, toks []token) {
 	}
 	if c, ok := patRead.match(toks); ok {
 		st.Kind, st.Key = KindRead, c[0].text
+		return
+	}
+	if c, ok := patReadSleep.match(toks); ok {
+		if d, ok := parseSeconds(c[0].text); ok {
+			st.Kind, st.Key, st.Sleep, st.Const = KindRead, c[1].text, d, "sleep"
+		}
 		return
 	}
 	if c, ok := patSleep.match(toks); ok {

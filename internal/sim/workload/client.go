@@ -639,7 +639,7 @@ func (c *client) connectFailed(code string, timeout bool) {
 		}
 		c.wantConn, c.burst = false, false
 	}
-	c.pump()
+	c.afterRequest()
 }
 
 func (c *client) lost(code string) {

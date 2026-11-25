@@ -112,7 +112,16 @@ func encDataRow(dst []byte, v []byte) []byte {
 	return enc(dst, &pgproto3.DataRow{Values: [][]byte{v}})
 }
 
-func encEmptyRow(dst []byte) []byte { return enc(dst, &pgproto3.DataRow{}) }
+func encRowDesc2(dst []byte, n1 string, o1 uint32, n2 string, o2 uint32) []byte {
+	return enc(dst, &pgproto3.RowDescription{Fields: []pgproto3.FieldDescription{
+		{Name: []byte(n1), DataTypeOID: o1, DataTypeSize: -1, TypeModifier: -1},
+		{Name: []byte(n2), DataTypeOID: o2, DataTypeSize: 1, TypeModifier: -1},
+	}})
+}
+
+func encDataRow2(dst []byte, a, b []byte) []byte {
+	return enc(dst, &pgproto3.DataRow{Values: [][]byte{a, b}})
+}
 
 func encCommand(dst []byte, tag string) []byte {
 	return enc(dst, &pgproto3.CommandComplete{CommandTag: []byte(tag)})

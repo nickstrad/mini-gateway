@@ -313,9 +313,16 @@ func (b *backend) execute(r *run) *pgError {
 
 func (b *backend) readReply(r *run) {
 	out := encRowDesc(nil, "v", oidText, -1)
+	if r.st.Const == "sleep" {
+		out = encRowDesc2(nil, "v", oidText, "?column?", oidBool)
+	}
 	n := int64(0)
 	if r.readFound {
-		out = encDataRow(out, []byte(r.readVal))
+		if r.st.Const == "sleep" {
+			out = encDataRow2(out, []byte(r.readVal), []byte("t"))
+		} else {
+			out = encDataRow(out, []byte(r.readVal))
+		}
 		n = 1
 	}
 	b.emit(out)

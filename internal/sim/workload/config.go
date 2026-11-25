@@ -123,7 +123,7 @@ func (c Config) validate() error {
 		if t.Keys.Kind == KeysZipf && t.Keys.Zipf <= 1000 {
 			return fmt.Errorf("%w: tenant %d: the Zipf exponent (in thousandths) must be above 1000, got %d", ErrConfig, i, t.Keys.Zipf)
 		}
-		if t.Keys.Kind != KeysFixed && t.Keys.N <= 0 && needsKeys(t) {
+		if t.Keys.Kind != KeysFixed && t.Keys.N <= 0 && t.Requests > 0 && needsKeys(t) {
 			return fmt.Errorf("%w: tenant %d: no keys", ErrConfig, i)
 		}
 		if t.Arrival != ArrivalClosed && t.Interval <= 0 && t.Requests > 1 {
