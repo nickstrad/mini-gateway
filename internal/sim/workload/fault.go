@@ -17,7 +17,10 @@ const (
 	faultEnd
 )
 
-const MaxCancelConns = 1 << 16
+const (
+	MaxCancelConns = 1 << 16
+	CancelTimeout  = time.Second
+)
 
 var faultNames = [...]string{"wl.half-message", "wl.stop-reading", "wl.disconnect", "wl.burst", "wl.cancel", "wl.clear"}
 
@@ -134,6 +137,7 @@ func (c *client) sendCancel(wrongKey bool) bool {
 	p := NewProbe(c.w.n, c.w.cfg.Addr, c.w.cfg.Options)
 	p.Send(testclient.EncodeCancel(nil, c.sess.ProcessID(), secret))
 	c.w.cancels = append(c.w.cancels, p)
+	c.w.s.After(CancelTimeout, p.Close)
 	c.t.st.cancelsSent++
 	return true
 }

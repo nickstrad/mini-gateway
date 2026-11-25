@@ -501,6 +501,12 @@ func (c *client) record(r *request, o Outcome) {
 	} else {
 		st.notYet.Add(-1)
 	}
+	if o == OutcomeConnectFailed && r.everSent {
+		o = OutcomeLost
+		if r.code != "" {
+			o = OutcomeError
+		}
+	}
 	switch o {
 	case OutcomeOK:
 		st.ok++
@@ -552,7 +558,7 @@ func (c *client) retryable(r *request, o Outcome) bool {
 
 func (c *client) backoff(attempt int) time.Duration {
 	p := &c.cfg().Retry
-	d := sim.Scaled(int64(1)<<min(attempt, 30), p.Backoff)
+	d := sim.Scaled(int64(1)<<min(max(attempt, 0), 30), p.Backoff)
 	if p.Cap > 0 && d > p.Cap {
 		d = p.Cap
 	}
