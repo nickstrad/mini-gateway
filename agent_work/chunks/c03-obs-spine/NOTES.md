@@ -30,6 +30,7 @@ outside (`internal/obs/simrun`), using only exported API.
 | Scenario harness: a world scenario with the collector publishing on the virtual clock and every adapter attached | `internal/obs/simrun/simrun.go` |
 | Metric catalog and the generator of `docs/csv-schema.md` (through the package test: `-update` rewrites the document, `-out <path>` writes it elsewhere; no main package, so `internal/obs/...` holds no process code) | `internal/obs/catalog/` |
 | DuckDB views | `test/analysis/views.sql` |
+| Schema guard run before every SQL file (repair round) | `test/analysis/guard.sql` |
 | First SQL assertions | `test/analysis/direct-500-connections/{peak-connections,sent-equals-intended}.sql`, `test/analysis/direct-1000-identical-reads/database-reads.sql`, `test/analysis/direct-open-loop-overload/sent-equals-intended.sql`, `test/analysis/direct-reconnect-burst/refusals.sql` |
 | Assertion runner | `scripts/csv-assert.sh` (marker `scripts/.not-built/csv-assert` deleted) |
 | Generated documents driver + this chunk's generator | `scripts/gen-docs.sh` (marker `scripts/.not-built/gen-docs` deleted), `scripts/gen-docs.d/c03-csv-schema.sh` |
@@ -84,32 +85,45 @@ existing run directory with the same id (a rerun replaces it).
 7. **`obs.detail` off** folds tenant labels into the empty tenant (sum, max for high-water
    marks) and drops histogram points in the emitter (one branch per point); on the recording
    side `DetailHistogram` holds no buckets. The collector config field is `obs.Config.Detail`.
-8. **Unlabelled metrics must be emitted every collect** (an error otherwise); labelled ones
-   are not checked, but every mapping emits every known label value. The CSV writer also
-   persists every row key it has written once (generalising "a tenant's rows stay").
+8. **Metrics without a tenant label must be emitted every collect** (an error otherwise):
+   an unlabelled one exactly once, one labelled by outcome/reason/mode at least once (every
+   mapping emits every known label value). A declaration marked `WithOpenLabels()` (a label
+   other than tenant whose values are open-ended; only `obs.export_errors` and
+   `obs.adapter_failing`, one value per attached adapter) is exempt. Tenant-labelled metrics are
+   not checked (no tenant may exist yet). The CSV writer also persists every row key it has
+   written once (generalising "a tenant's rows stay").
 9. **Persisted rows keep their last value** (counters and gauges alike).
 10. **The obs component's CSV and Prometheus numbers** come from adapters implementing
     `obs.FlushReporter` / `obs.TenantReporter`; the collector does not know which adapter is
     the CSV one. Snapshot N shows the adapters' state before publish N, so a run's final
     `csv_flushes` is one less than its flush count.
 11. **Adapter errors**: `Export` returning an error is counted in `export_errors{reason=<name>}`
-    and the adapter is marked failed for the health rule; `Publish` returns only emit errors.
+    and sets the gauge `adapter_failing{reason=<name>}` to 1 until an export of that adapter
+    succeeds (read by the health rule); `Publish` returns only emit errors.
     Panics in adapters are not recovered.
 12. **`Last()` returns a deep copy** (the published value cannot be changed by a reader);
     adapters get the published value itself and must not change it (the conformance test
     checks that). `Publish` returns a copy too.
 13. **Merge** (`obs.Merge(reg, instance, snaps...)`): points by declared rule, histograms by
     adding bucket counts with equal bounds, `Seq` = max, build/fingerprint `mixed` when they
-    differ; refuses an undeclared metric (when the registry is non-empty) and kind or unit
-    clashes. Ratios are never stored anywhere.
+    differ. With a non-nil, non-empty registry every point and histogram is checked first,
+    also one that appears in a single snapshot: undeclared is `ErrUndeclared`, a kind or unit
+    other than the declaration's is `ErrMergeKind`; a nil registry sums everything. A sum that
+    would overflow int64 (points or bucket counts) is `ErrMergeOverflow`. Ratios are never
+    stored anywhere.
 14. **Health**: `obs.HealthTable` with named `Rule{Name, Check(snapshot) (State, reason)}`,
     overall = worst; the only rule now is `obs.CollectorRule()` (`collector`: degraded before
-    the first publish, after emit errors, or while an adapter has export errors; never
-    `failed`). JSON: `{"state":…,"checks":[{"name":…,"state":…,"reason":…}]}` with a hand-written
+    the first publish, while the latest publish had emit errors (`obs.emit_failing`), or while
+    an adapter's latest export failed (`obs.adapter_failing`); recovers when they clear; never
+    `failed`). `Collector.Health` evaluates the last snapshot with the `obs` points recomputed
+    now, so it reflects publish N right after publish N; the published snapshot itself carries
+    the `obs` state from before its publish (decision 10), so a rule applied to `Last()` lags
+    one publish. JSON: `{"state":…,"checks":[{"name":…,"state":…,"reason":…}]}` with a hand-written
     escaper (byte-equal to `encoding/json`, tested on random strings), because `obs` is in the
     determinism list and may not import `encoding/json`.
 15. **CSV final flush**: the owner publishes a last time and then calls `Close`; `Close` also
-    re-writes the last snapshot if that one was dropped from a full async queue. After the cap
+    re-writes the last snapshot if that one was dropped from a full async queue (the drop
+    stays counted: counters never go down; the re-write is one more flush). After the cap
     or a write error the writer stops for good, and `run.csv` is not written: the run stays
     visibly unfinished and every assertion on it fails (fail closed). `Close` closes the data
     files before writing `run.csv`.
@@ -132,9 +146,12 @@ existing run directory with the same id (a rerun replaces it).
     the line is at most 1,024 bytes and ends ` truncated=1` when cut.
 19. **csv-assert.sh**: the SQL file header is `-- requires: comp.metric ...` (each must have rows
     in the final flush of the runs); a SQL file returns one text column, rows are violations;
-    every SQL file starts with the schema-version guard over `runs`. The runner also checks each
-    run directory's three headers and every `schema_version` field with `awk` before DuckDB reads
-    anything. In root mode a root with no runs is a note, a missing root is a failure, a scenario
+    every SQL file starts with the schema-version guard over `runs`. The runner checks each
+    run directory's three headers in the shell, then runs `test/analysis/guard.sql` with DuckDB
+    over all the runs (any `schema_version` other than 1 in any file, an empty field in a
+    required column, run.csv rows ≠ run directories or a run id twice, a run without metric
+    rows, metric or bucket rows of a run id no run.csv names). Each `-- requires:` metric must
+    have rows (metric or histogram) in the final flush of every run. In root mode a root with no runs is a note, a missing root is a failure, a scenario
     with SQL files and no run is a failure, and no run at all is a failure. Pinned family `1.5.x`.
 20. **Seeds of the flush test**: `TestScenarioFlush` runs the pinned seeds 1 and 42 (not the
     sweep's 200: the sweep already checks the replay law for every seed in `world`), or only
@@ -150,14 +167,14 @@ existing run directory with the same id (a rerun replaces it).
 | --- | --- | --- |
 | 1 | One raw export; no component or simulator package imports an adapter | `tools/lint-rules/imports.txt` chunk 3 `deny` lines (G1 importlint; checked by planting both directions of violation during the build: both reported); `simrun/imports_test.go: TestOneRawExportImportRule`; adapters take only `obs.InstanceSnapshot` (`obs.Adapter`) |
 | 2 | Adapter output deterministic; snapshots carry no time and no map order | `obstest.Conformance` "deterministic" for every adapter; `simrun_test.go: TestScenarioFlush` (two runs per seed: CSV files, Prometheus, JSON and log lines byte-identical, trace digests equal); `obs/collector_test.go: TestSnapshotIsSortedAndHasNoTime` |
-| 3 | CSV schema 1 exactly (columns, order, sorting, zero rows, tenant persistence, integers, `run.csv` last) | `csvflush_test.go: TestGoldenHeader`, `TestGoldenFilesAndByteIdentity` (golden `testdata/fixture-*.csv`), `TestRowsSortedZeroRowsPresentIntegersOnly`, `TestTenantRowsPersistAfterTheTenantGoesQuiet`, `TestAsyncWriterNeverBlocksTheCaller` (no `run.csv` before Close), `TestSizeCapIsCountedAndAFailureInTestMode` (no `run.csv` after stop); `catalog_test.go: TestCSVSchemaDocumentIsGeneratedFromTheCode` |
-| 4 | Round trip exact for every metric and bucket | `csvflush.RoundTrip` called by `simrun.Run.Check` for every baseline scenario (`TestScenarioFlush`, both seeds); canaries `csvflush/csvflush_test.go: TestRoundTripCatchesPlantedBugs`, `csvflush/canary_test.go: TestRoundTripCatchesAPlantedBugInABaselineRun` (drop the last bucket row; stale values) |
+| 3 | CSV schema 1 exactly (columns, order, sorting, zero rows, tenant persistence, integers, `run.csv` last) | `obs/collector_repair_test.go: TestEveryMetricWithoutATenantLabelIsEmittedAtEveryCollect`, `TestOpenLabelsAreOptionalAndNeedANonTenantLabel`; `csvflush/repair_test.go: TestRowsOfOneFlushAreOrderedBySeqThenInstance`; `csvflush_test.go: TestGoldenHeader`, `TestGoldenFilesAndByteIdentity` (golden `testdata/fixture-*.csv`), `TestRowsSortedZeroRowsPresentIntegersOnly`, `TestTenantRowsPersistAfterTheTenantGoesQuiet`, `TestAsyncWriterNeverBlocksTheCaller` (no `run.csv` before Close), `TestSizeCapIsCountedAndAFailureInTestMode` (no `run.csv` after stop); `catalog_test.go: TestCSVSchemaDocumentIsGeneratedFromTheCode` |
+| 4 | Round trip exact for every metric and bucket | `csvflush/roundtrip_test.go: TestRoundTripRejectsDuplicateAndFabricatedRows`, `TestCarriageReturnsInLabelsRoundTrip`; `csvflush.RoundTrip` called by `simrun.Run.Check` for every baseline scenario (`TestScenarioFlush`, both seeds); canaries `csvflush/csvflush_test.go: TestRoundTripCatchesPlantedBugs`, `csvflush/canary_test.go: TestRoundTripCatchesAPlantedBugInABaselineRun` (drop the last bucket row; stale values) |
 | 5 | Tier S flush files byte-identical for one seed | `TestScenarioFlush` (same process); gate extra step 3 (two processes, `diff -r`, 15 files) |
-| 6 | CSV never blocks the caller in real-process mode; drops and counts at the cap, on write errors, on a full queue | `TestAsyncWriterNeverBlocksTheCaller` (writer goroutine held; 5 publishes onto a full queue return at once, 5 drops counted; final flush lands on Close), `TestAsyncWriterUnderConcurrentStatsReads`, `TestSizeCapIsCountedAndAFailureInTestMode` (strict and real-process), `TestWriteErrorIsCountedAndAFailureInTestMode`; package in `race-packages.txt`; gate extra step 4 (`-race -count=10`) |
-| 7 | The assertion runner fails closed and never skips | `simrun/csvassert_test.go: TestCSVAssertFailsClosed` (planted wrong number, no rows for the metric, no requires line, missing `run.csv`, unknown schema version, unknown header, bad SQL, scenario without runs, missing root, wrong DuckDB version — each must exit non-zero with the reason in the message), `TestCSVAssertFailsWithoutDuckDB`; gate extra step 1 (`MG_REQUIRE_DUCKDB=1`, a SKIP is a failure) |
-| 8 | Prometheus output parses; at most `prom_tenant_max` + 1 tenant values, hostile names included | `promtext_test.go: TestConformance` (fixture with quotes, newline, backslash, 160-byte name, `other`, unicode; label policy checked), `TestTenantLabelBoundWithTenThousandHostileTenants` (10,000 tenants, max 0/1/32/100, three publishes, totals preserved), `TestQuietTenantsAreEvicted`, `TestCheckerRejectsBadExposition` (18 malformed texts), `TestRebucketIsCumulativeOnTheShortList`; `simrun.Run.Check` runs the checker on every baseline run |
-| 9 | Merge laws | `obs/merge_test.go: TestMergeOfInstancesEqualsOneInstanceThatSawEverything` (300 seeds, 1–5 instances), `TestMergeIsAssociativeAndCommutative`, `TestHighWaterMergesByMaxAndCountersBySum`, `TestMergeRefusesUndeclaredAndKindClash`, `TestMergeBucketsAddsPerBucket` |
-| 10 | Recording allocates nothing; detail off holds no histogram memory | `obs/cost_test.go: TestRecordingAllocatesNothing` (`testing.AllocsPerRun`, 5 paths); `obs/collector_test.go: TestDetailOffFoldsTenantsAndHoldsNoHistogram`; `simrun_test.go: TestDetailOffExportsNoHistogramAndNoTenant` |
+| 6 | CSV never blocks the caller in real-process mode; drops and counts at the cap, on write errors, on a full queue | `TestAsyncWriterNeverBlocksTheCaller` (writer goroutine held; 5 publishes onto a full queue return at once, 5 drops counted; final flush lands on Close), `TestAsyncWriterUnderConcurrentStatsReads`, `TestSizeCapIsCountedAndAFailureInTestMode` (strict and real-process), `repair_test.go: TestByteCapCountsTheHeaders` (caps below the headers and between body and body + headers, sync and async, and a close without flushes), `TestWriteErrorIsCountedAndAFailureInTestMode`; counters never decrease (`TestAsyncWriterNeverBlocksTheCaller` compares the stats before and after `Close`); package in `race-packages.txt`; gate extra step 4 (`-race -count=10`) |
+| 7 | The assertion runner fails closed and never skips | `simrun/csvassert_test.go: TestCSVAssertChecksEveryRunAndEveryField` (one of two runs empty, one of two runs without the required metric, two directories with one run id, an empty value, an empty bucket count — each fails naming the reason; two good runs, a histogram requirement and the fixture with quoted newlines pass), `TestCSVAssertFailsClosed` (planted wrong number, no rows for the metric, no requires line, missing `run.csv`, unknown schema version, unknown header, bad SQL, scenario without runs, missing root, wrong DuckDB version — each must exit non-zero with the reason in the message), `TestCSVAssertFailsWithoutDuckDB`; gate extra step 1 (`MG_REQUIRE_DUCKDB=1`, a SKIP is a failure) |
+| 8 | Prometheus output parses; at most `prom_tenant_max` + 1 tenant values, hostile names included | `promtext_test.go: TestConformance` (fixture with quotes, newline, backslash, 160-byte name, `other`, unicode; label policy checked), `TestTenantLabelBoundWithTenThousandHostileTenants` (10,000 tenants, `TenantMax` 0 (meaning the default 32), 1, 32 and 100, three publishes, totals preserved), `TestQuietTenantsAreEvicted`, `TestCheckerRejectsBadExposition` (20 malformed texts, negative histogram buckets included), `TestPointsOfTheWrongKindAreNotExported`; `obs/collector_repair_test.go: TestRegistryRefusesExpositionNameClashes` (declarations whose series names would collide are refused), `TestRebucketIsCumulativeOnTheShortList`; `simrun.Run.Check` runs the checker on every baseline run |
+| 9 | Merge laws | `obs/merge_test.go: TestMergeOfInstancesEqualsOneInstanceThatSawEverything` (300 seeds, 1–5 instances), `TestMergeIsAssociativeAndCommutative`, `TestHighWaterMergesByMaxAndCountersBySum`, `TestMergeRefusesUndeclaredAndKindClash`, `TestMergeBucketsAddsPerBucket`; `obs/mergecheck_test.go: TestMergeChecksEveryPointAndHistogramAgainstTheRegistry`, `TestMergeWithoutARegistrySumsAndDoesNotPanic`, `TestMergeRefusesOverflow` |
+| 10 | Recording allocates nothing; detail off holds no histogram memory | `obs/cost_test.go: TestRecordingAllocatesNothing` (`testing.AllocsPerRun`, 5 paths); `obs/collector_test.go: TestDetailOffFoldsTenantsAndHoldsNoHistogram`; `obs/collector_repair_test.go: TestDetailOffDropsHistogramsAtTheEmitter` (a source calls `e.Histogram` unconditionally with detail off: no histogram, no clamp counters; undeclared, wrong-label and wrong-kind calls still fail); `simrun_test.go: TestDetailOffExportsNoHistogramAndNoTenant` |
 | 11 | Baseline counts from the flushed files with DuckDB equal the simulator's | `simrun/csvassert_test.go: TestCSVAssertBaselineCountsFromFlushedFiles` (5 SQL files over the 5 baselines); gate G7 over the sweep's run directories; Go-side cross-check `simrun_test.go: checkBaselineCounts` (exported = `world.Observation`, 500/500, 1,000/1,000, sent and intended) |
 | 12 | No metric exported without being declared and documented | `collector_test.go: TestUndeclaredMetricIsAnError`, `TestEmitterRefusesWrongKindLabelDuplicateNegativeAndMissing`; `catalog_test.go: TestCSVSchemaDocumentIsGeneratedFromTheCode`, `TestEveryDeclaredMetricIsInTheDocument`; `simrun/registry_test.go: TestEveryDeclaredMetricIsEmittedAndEveryEmittedOneDocumented`; G8 `scripts/gen-docs.sh --check` |
 
@@ -168,7 +185,8 @@ deterministic, hides its errors); each must fail exactly the checks named for it
 
 Also: `obstest.Conformance` passes for `jsonstats` (exact), `csvflush` (exact), `promtext`
 (folded: untenanted points exact, totals over tenants exact; three configurations) and `logline`
-(headline: every value present equals the snapshot). Its six parts: values, labels (only
+(headline: every headline value of the snapshot is present and equal; `obstest/headline_test.go:
+TestHeadlineFidelityNeedsEveryHeadlineValue`). Its five checks (`obstest.Checks()`): values, labels (only
 declared labels, plus the subject's policy), deterministic, no retained reference (the snapshot
 is scribbled after `Export` and the output must not change; the snapshot must not be modified
 by `Export`), error counted and not propagated (a failing adapter attached to a collector:
@@ -182,7 +200,7 @@ package that imports it).
 Counters must move: `simsrc_test.go: TestMappingsMoveEveryMetric` fills every field of each
 snapshot with a distinct non-zero value by reflection and requires every declared metric to
 move and every field to reach an exported value (it failed, as it should, when one mapping
-line was deleted during the build). The baseline runs emit all 113 declared metrics; 51 of them
+line was deleted during the build). The baseline runs emit all 115 declared metrics; 53 of them
 stay 0 in every baseline (fault and cancel counters, drops, dropped log entries, in-flight
 gauges at the end), listed by `TestEveryDeclaredMetricIsEmittedAndEveryEmittedOneDocumented`
 with `-v`. The collector's own counters move in `TestPublishSequenceLastCopyAndAdapterErrors`
@@ -194,7 +212,7 @@ with `-v`. The collector's own counters move in `TestPublishSequenceLastCopyAndA
 Switches in `internal/obs/csvflush/export_test.go` (test-only; `Config.plant` is unexported):
 `PlantDropLastBucket` (the last histogram of each flush loses its last bucket row) and
 `PlantStaleValue` (each metric row is written with the previous flush's value at the same
-position). `TestRoundTripCatchesPlantedBugs` (fixture) and
+position; the repair round fixed the plant, which used position 0 for every row). `TestRoundTripCatchesPlantedBugs` (fixture) and
 `TestRoundTripCatchesAPlantedBugInABaselineRun` (`direct-open-loop-overload`, seed 1) require
 the round trip to pass clean and fail with each plant. The DuckDB runner's planted wrong
 number is in `TestCSVAssertFailsClosed/planted-wrong-number`.
@@ -246,11 +264,93 @@ with every adapter attached and a 100 ms publish interval takes 1–4 s of wall 
   reported (the fold cannot tell them from tenants being folded).
 - The CSV adapter's tenant persistence writes the last value of a row its source stopped
   emitting, gauges included.
-- `RoundTrip` allows extra rows with a tenant label (persisted ones) and checks the last flush
-  only; earlier flushes are covered by byte identity and the SQL files.
+- `RoundTrip` allows an extra row with a tenant label only when the flush before has the same
+  row with the same value (a persisted row), and checks the last flush only; earlier flushes
+  are covered by byte identity and the SQL files. Its reader assumes lines end in `\n` (as the
+  writer writes them): it doubles `\r\n` before `encoding/csv` so a `\r` inside a quoted
+  field survives.
+- `Collector.Health` reflects the latest publish; a health rule applied to a published
+  snapshot sees the `obs` points one publish late (decision 14).
+- `obs.Merge` refuses an int64 overflow instead of saturating; the emitter's detail-off tenant
+  fold (`Collect`) still adds without an overflow check.
 - `csv-assert.sh` takes the scenario of a run from its path (`<root>/<scenario>/…`), not from
   `run.csv`.
 - No adapter recovers from a panic in another adapter.
+
+## Repair round (review 1 and the adversarial attacks, 2026-11-25)
+
+Every BLOCKER and MAJOR finding and every BROKEN attack was reproduced first (the regression
+test named below failed before the fix; for findings 5 and 9 the review's mutation M5/M7a was
+re-applied and is now caught). Commits on `work/c03-obs-spine`.
+
+Review 1:
+
+| Finding | Result |
+| --- | --- |
+| 1.1 BLOCKER csv-assert passes a root where one run is empty or lacks the metric | fixed `1c77af9`: `-- requires:` is checked per run (metric or histogram rows in each run's final flush) and `test/analysis/guard.sql` fails a run without metric rows; `simrun/csvassert_test.go: TestCSVAssertChecksEveryRunAndEveryField/one-of-two-runs-empty`, `/one-of-two-runs-lacks-the-metric`. The SQL files keep `FROM final GROUP BY run_id`: the runner now guarantees every run is in `final` before they run |
+| 1.2 BLOCKER csv-assert rejects quoted newlines (awk) | fixed `1c77af9`: the per-row schema check moved to DuckDB (`guard.sql`); `/quoted-newlines-in-the-fixture` |
+| 1.3 BLOCKER `-- requires:` rejects histogram metrics | fixed `1c77af9`: `final_hist` counts; `/histogram-requirement` |
+| 2 MAJOR `Merge` panics on a nil registry, accepts undeclared points and histograms | fixed `989f69a`; `obs/mergecheck_test.go: TestMergeWithoutARegistrySumsAndDoesNotPanic`, `TestMergeChecksEveryPointAndHistogramAgainstTheRegistry` |
+| 3 MAJOR the first flush's headers bypass `max_bytes` | fixed `78e6a60`; `csvflush/repair_test.go: TestByteCapCountsTheHeaders` |
+| 4 MAJOR `Close` decrements `csv_flush_errors` and `csv_rows_dropped` | fixed `78e6a60` (the drop stays counted; the re-write is one more flush); `csvflush_test.go: TestAsyncWriterNeverBlocksTheCaller` (5 errors after Close, every stat ≥ its value before Close) |
+| 5 MAJOR the `obs.detail` guard in `Emitter.Histogram` is untested | fixed `b4cbbb5`: `obs/collector_repair_test.go: TestDetailOffDropsHistogramsAtTheEmitter` (fails under M5) |
+| 6 MAJOR health: dead `slot.failed`, latched degradation, one-publish lag | fixed `b4cbbb5`: gauges `obs.adapter_failing{reason}` and `obs.emit_failing` carry the current state, `CollectorRule` reads them, `Collector.Health` evaluates a refreshed `obs` view; `TestCollectorHealthFollowsTheLatestPublishAndRecovers` (degraded right after a failing first publish, ok after recovery, for adapter and emit errors) |
+| 7 MINOR `RoundTrip` accepts a fabricated tenant row | fixed `6ab6f55`; `csvflush/roundtrip_test.go: TestRoundTripRejectsDuplicateAndFabricatedRows` |
+| 8 MINOR promtext checker accepts negative buckets | fixed `377893c`; `promtext_test.go: TestCheckerRejectsBadExposition` (two new cases) |
+| 9 MINOR headline conformance passes an adapter that drops headline values | fixed `c321c42`; `obstest/headline_test.go: TestHeadlineFidelityNeedsEveryHeadlineValue` (M7a now fails `logline`'s `TestConformance`) |
+| 10 MINOR plant index, unused `exported`, sort by instance only, NOTES wording | fixed: `78e6a60` (`prevVal[i]`; `exported` removed; snapshots of one flush sorted by (seq, instance), `TestRowsOfOneFlushAreOrderedBySeqThenInstance`); NOTES now say `TenantMax` 0 means 32 and "five checks" |
+
+Adversarial attacks (`agent_work/adversarial/c03-obs-spine/RESULTS.md`, 14 BROKEN):
+
+| Attack | Result |
+| --- | --- |
+| `TestAdv_2_PrometheusHistoryIndependence` | narrowed (claim 2, below); behaviour unchanged: eviction is history by design |
+| `TestAdv_3_CRLFLabelFidelity` | fixed `6ab6f55` (the reader keeps `\r` inside quoted fields); `TestCarriageReturnsInLabelsRoundTrip`; the attack holds |
+| `TestAdv_3_ZeroMetricWithNonTenantLabels` | fixed `b4cbbb5`: a counter or gauge without a tenant label and without a point is `ErrMissing` (unless `WithOpenLabels`); `TestEveryMetricWithoutATenantLabelIsEmittedAtEveryCollect`; the attack holds (Publish returns the error) |
+| `TestAdv_4_DuplicateScalarCorruption` | fixed `6ab6f55` (final flush rows must be strictly sorted); the attack holds |
+| `TestAdv_4_PhantomTenantCorruption` | fixed `6ab6f55` (an extra tenant row must equal the same row of the flush before); the attack holds |
+| `TestAdv_6_FirstFlushHeaderCap` | fixed `78e6a60`; the attack holds |
+| `TestAdv_7_MissingMetricInOneOfTwoRuns` | fixed `1c77af9`; the attack holds |
+| `TestAdv_7_NullNumericValue` | fixed `1c77af9` (`guard.sql`: empty required field); `/empty-value`, `/empty-bucket-count`; the attack holds |
+| `TestAdv_8_CounterGaugeFamilyCollision` | fixed `b4cbbb5`: `Registry.Declare` refuses a declaration whose Prometheus series names clash with another metric of the component (`TestRegistryRefusesExpositionNameClashes`); `377893c`: promtext skips a point whose kind differs from its declaration, so a snapshot cannot recreate the clash (`TestPointsOfTheWrongKindAreNotExported`). The attack test still FAILS, at its setup line `must(t, r.Declare(...))`: it asserts that the clashing declarations are accepted, which no claim says. Claim 8 is about the output for accepted declarations, and that now always parses |
+| `TestAdv_8_HistogramGaugeSeriesCollision` | fixed `b4cbbb5`, same as above; the attack test still FAILS at its setup `must(t, r.Declare(... wait_count ...))` for the same reason |
+| `TestAdv_9_SumOverflow` | fixed `989f69a` (`ErrMergeOverflow`); `TestMergeRefusesOverflow`; the attack holds |
+| `TestAdv_12_RuntimeDeclarationDocumentationGap` | narrowed (claim 12, below) |
+| `TestAdv_12_UndeclaredHistogramMerge` | fixed `989f69a`; the attack holds |
+| `TestAdv_12_UndeclaredSingletonMerge` | fixed `989f69a`; the attack holds |
+
+After the repair the adversarial package has 4 failing attacks of 36: the two narrowed ones and
+the two whose setup asserts what the fix forbids.
+
+Declined: none.
+
+## Narrowed claims
+
+For the orchestrator to accept or refuse.
+
+- **Claim 2 (determinism).** As written: "Every adapter output for a given instance snapshot
+  is deterministic, and equal inputs give byte-identical outputs." Narrowed: *every adapter's
+  output is a deterministic function of its configuration and the sequence of snapshots it
+  has exported so far; two adapters with equal configuration fed equal snapshot sequences give
+  byte-identical output. `jsonstats` and `logline` depend on the current snapshot only;
+  `promtext` (tenant slots, eviction after `EvictAfter` quiet publishes) and `csvflush`
+  (persisted rows, flush count) carry history by design.* `TestAdv_2_PrometheusHistoryIndependence`
+  exports one snapshot twice with `EvictAfter: 1`: the tenant is quiet (its counter did not
+  change) and is folded into `other` the second time, which is the eviction rule the brief
+  asks for. Evidence for the narrowed claim: `obstest.Conformance` "deterministic" (fresh
+  adapter per run), `TestScenarioFlush` and gate extra step 3 (equal seeds give equal
+  sequences and byte-identical files in one and in two processes).
+- **Claim 12 (declared and documented).** As written: "A metric cannot be exported without
+  being declared and documented in `docs/csv-schema.md`." Narrowed: *no metric can be exported
+  without being declared (the emitter and `Merge` refuse it); every metric of the sources the
+  product registers — the collector's own and those listed in `internal/obs/catalog.Registry()`
+  (`simsrc.All()` today) — is in the generated document, held by the catalog test and G8.
+  A source registered at runtime by code that does not add itself to the catalog is declared
+  but not documented.* `obs` cannot import the catalog (the catalog imports the mappings, which
+  import `obs`), so the collector cannot check documentation itself. Each later component
+  chunk adds its source to the catalog (`docs/knowledge/obs-spine.md`), and `simrun`'s
+  `TestEveryDeclaredMetricIsEmittedAndEveryEmittedOneDocumented` fails when a scenario run
+  exports a metric missing from the catalog.
 
 ## Gate result (build stage)
 
@@ -283,12 +383,13 @@ two attacks. `result.json` was not committed (builder rules).
   `race-packages.txt` instead), or add `csvflush` to their skip list. Every other check of
   G3, and every product package, passes.
 
-- **Size.** Product Go (non-test) added by this chunk: 3,949 lines, against the brief's ~1,400
+- **Size.** Product Go (non-test) added by this chunk: 4,170 lines after the repair round
+  (3,949 before it; the repair added 272 and removed 51), against the brief's ~1,400
   (up to 2×). The excess is test machinery that lives in non-test files because other packages
   use it: `obstest` conformance and golden helpers (374), the Prometheus grammar checker and
   decoder (420), the scenario harness `simrun` (185), and the catalog/document code (76).
-  Without those, about 2,900. Test files: 2,477 lines (60 test and benchmark functions); with
-  `obstest` and the checker counted as test code the two sides are about equal (3,050 / 3,270).
+  Without those, about 3,100. Test files: 3,135 lines after the repair round (2,477 before it);
+  with `obstest` and the checker counted as test code the two sides are about equal.
   Complete, so no split request.
 - **The flush is turned on outside `internal/sim/world`**: the brief allowed editing the
   scenario harness files of chunk 2, but `world` may not import an adapter (claim 1), so the
@@ -308,6 +409,7 @@ For `agent_work/INDEX.md` (the orchestrator adds them):
 | `scripts/gen-docs.sh` | Runs every `scripts/gen-docs.d/*.sh` (`--check` diffs against the committed documents) |
 | `scripts/gen-docs.d/c03-csv-schema.sh` | Generates `docs/csv-schema.md` from `internal/obs/catalog` |
 | `test/analysis/views.sql` | DuckDB views `metrics`, `hist`, `runs`, `final`, `final_hist` over lists of flushed files |
+| `test/analysis/guard.sql` | Schema version 1 row guard `csv-assert.sh` runs before every SQL file (versions, empty required fields, run ids, empty runs) |
 | `make csv-assert RUNS=<dir> [SQL=<files>]` | The runner through make |
 | `agent_work/chunks/c03-obs-spine/gate/extra.sh` | G10: DuckDB e2e and runner self-tests (required), canaries, cross-process byte identity, async writer under `-race` |
 
