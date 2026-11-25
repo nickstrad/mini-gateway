@@ -1,0 +1,43 @@
+ h_listen 
+----------
+        1
+(1 row)
+ h_prepare 
+-----------
+         1
+(1 row)
+ h_set 
+-------
+     1
+(1 row)
+ h_temp 
+--------
+      1
+(1 row)
+ h_cursor 
+----------
+        1
+(1 row)
+psql:/tmp/e8-hidden.sql:8: ERROR:  DISCARD ALL cannot be executed from a function
+CONTEXT:  SQL statement "DISCARD ALL"
+PL/pgSQL function h_discard() line 1 at EXECUTE
+ pg_listening_channels 
+-----------------------
+ hc
+(1 row)
+ name 
+------
+ hq
+(1 row)
+ work_mem 
+----------
+ 77MB
+(1 row)
+ count 
+-------
+     1
+(1 row)
+   name   | source  
+----------+---------
+ work_mem | session
+(1 row)

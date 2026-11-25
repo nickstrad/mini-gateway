@@ -1,0 +1,60 @@
+package main
+
+// Behaviour probes against the real scanner/parser (cgo build).
+import (
+	"fmt"
+
+	pg "github.com/pganalyze/pg_query_go/v6"
+)
+
+func main() {
+	probes := []string{
+		"SET search_path = x",
+		"SELECT set_config('search_path','h',false)",
+		"SELECT f()",
+		"SELECT E'ok'\n'\\' || set_config('search_path','h',false) --'",
+		"SELECT 'a\\' ; --' ; SET search_path = x",
+		"SELECT $$ ; SET x = 1 $$ /* ; SET y=2 /* nested */ ; */ ; LISTEN c",
+		"PREPARE p AS SELECT 1",
+		"LISTEN c",
+		"CREATE TEMP TABLE t(a int)",
+		"SELECT pg_advisory_lock(1)",
+		"DECLARE c CURSOR WITH HOLD FOR SELECT 1",
+		"SELECT 1; SET search_path = x",
+		"SELECT nextval('s')",
+		"WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d",
+		"SELECT * FROM t FOR UPDATE",
+		"SELECT now()",
+		"SELECT * FROM v",
+		"EXPLAIN ANALYZE DELETE FROM t",
+		"SELECT 1); SET search_path = x",
+		"SELECT 1 $1abc",
+	}
+	for _, q := range probes {
+		fmt.Printf("=== %q\n", q)
+		s, err := pg.SplitWithScanner(q, true)
+		fmt.Printf("  SplitWithScanner: %q err=%v\n", s, err)
+		s, err = pg.SplitWithParser(q, true)
+		fmt.Printf("  SplitWithParser : %q err=%v\n", s, err)
+		u, err := pg.IsUtilityStmt(q)
+		fmt.Printf("  IsUtilityStmt   : %v err=%v\n", u, err)
+		sum, err := pg.Summary(q, -1)
+		if err == nil {
+			fns := []string{}
+			for _, f := range sum.Functions {
+				fns = append(fns, f.Name)
+			}
+			fmt.Printf("  Summary         : types=%v functions=%v\n", sum.StatementTypes, fns)
+		}
+		sc, err := pg.Scan(q)
+		if err == nil {
+			toks := ""
+			for _, t := range sc.Tokens {
+				toks += fmt.Sprintf("%s[%d,%d) ", t.Token, t.Start, t.End)
+			}
+			fmt.Printf("  Scan tokens     : %s\n", toks)
+		} else {
+			fmt.Printf("  Scan err=%v\n", err)
+		}
+	}
+}

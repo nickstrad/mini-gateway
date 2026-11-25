@@ -1,0 +1,77 @@
+CREATE ROLE
+CREATE ROLE
+GRANT ROLE
+CREATE SEQUENCE
+You are now connected to database "postgres" as user "tenant_a".
+== before
+ current_user | session_user | placeholder 
+--------------+--------------+-------------
+ tenant_a     | tenant_a     | 
+(1 row)
+
+SET
+SET
+psql:/tmp/e1-discard-residue.sql:9: ERROR:  permission denied for sequence s
+psql:/tmp/e1-discard-residue.sql:10: ERROR:  access to library "auto_explain" is not allowed
+SET
+ pg_advisory_lock 
+------------------
+ 
+(1 row)
+
+ pg_advisory_xact_lock 
+-----------------------
+ 
+(1 row)
+
+CREATE TABLE
+INSERT 0 1
+PREPARE
+LISTEN
+BEGIN
+DECLARE CURSOR
+COMMIT
+  tempns   
+-----------
+ pg_temp_4
+(1 row)
+
+DISCARD ALL
+== after DISCARD ALL
+ current_user | session_user | placeholder | ae 
+--------------+--------------+-------------+----
+ tenant_a     | tenant_a     |             | 
+(1 row)
+
+ tempns_after 
+--------------
+ pg_temp_4
+(1 row)
+
+ prepared 
+----------
+        0
+(1 row)
+
+ cursors 
+---------
+       0
+(1 row)
+
+ pg_listening_channels 
+-----------------------
+(0 rows)
+
+ adv 
+-----
+   0
+(1 row)
+
+ name | setting | source 
+------+---------+--------
+(0 rows)
+
+ name | setting | unit | category | short_desc | extra_desc | context | vartype | source | min_val | max_val | enumvals | boot_val | reset_val | sourcefile | sourceline | pending_restart 
+------+---------+------+----------+------------+------------+---------+---------+--------+---------+---------+----------+----------+-----------+------------+------------+-----------------
+(0 rows)
+

@@ -1,0 +1,36 @@
+17:21:59 launch 04-pgpool2 try 1: LAUNCH c05-canvas-04-pgpool2: ok pid=1973526 seat=opus cwd=/root/scratch/c05-canvas
+17:22:14 launch 12-postgres-server try 1: LAUNCH c05-canvas-12-postgres-server: ok pid=1974257 seat=opus cwd=/root/scratch/c05-canvas
+17:22:29 launch 08-libpg-query try 1: LAUNCH c05-canvas-08-libpg-query: ok pid=1975009 seat=opus cwd=/root/scratch/c05-canvas
+17:22:44 launch 07-shardingsphere try 1: LAUNCH c05-canvas-07-shardingsphere: ok pid=1976008 seat=opus cwd=/root/scratch/c05-canvas
+17:22:59 launch 01-pgbouncer try 1: LAUNCH c05-canvas-01-pgbouncer: ok pid=1977020 seat=opus cwd=/root/scratch/c05-canvas
+17:26:59 done 01-pgbouncer
+17:27:15 launch 05-pgdog try 1: LAUNCH c05-canvas-05-pgdog: ok pid=1987648 seat=opus cwd=/root/scratch/c05-canvas
+17:28:55 done 04-pgpool2
+17:29:10 launch 09-distributed-dbs try 1: LAUNCH c05-canvas-09-distributed-dbs: ok pid=1991778 seat=opus cwd=/root/scratch/c05-canvas
+17:29:30 done 07-shardingsphere
+17:29:45 launch 10-mysql-world-and-routers try 1: LAUNCH c05-canvas-10-mysql-world-and-routers: ok pid=1993429 seat=opus cwd=/root/scratch/c05-canvas
+17:31:45 done 12-postgres-server
+17:32:00 launch 11-managed-and-caching-proxies try 1: LAUNCH c05-canvas-11-managed-and-caching-proxies: ok pid=1997910 seat=opus cwd=/root/scratch/c05-canvas
+17:33:41 done 05-pgdog
+17:33:56 launch 02-pgcat try 1: LAUNCH c05-canvas-02-pgcat: ok pid=2002927 seat=opus cwd=/root/scratch/c05-canvas
+17:34:56 done 08-libpg-query
+17:35:11 launch 03-odyssey-pgagroal try 1: LAUNCH c05-canvas-03-odyssey-pgagroal: ok pid=2005313 seat=opus cwd=/root/scratch/c05-canvas
+17:37:51 done 09-distributed-dbs
+17:38:06 launch 06-supavisor try 1: LAUNCH c05-canvas-06-supavisor: ok pid=2010650 seat=opus cwd=/root/scratch/c05-canvas
+17:38:26 done 02-pgcat
+17:40:47 done 10-mysql-world-and-routers
+17:41:07 done 11-managed-and-caching-proxies
+17:42:07 done 03-odyssey-pgagroal
+17:42:07 done 06-supavisor
+17:42:07 FINAL 07-shardingsphere ok
+17:42:07 FINAL 02-pgcat ok
+17:42:07 FINAL 01-pgbouncer ok
+17:42:07 FINAL 03-odyssey-pgagroal ok
+17:42:07 FINAL 10-mysql-world-and-routers ok
+17:42:07 FINAL 12-postgres-server ok
+17:42:07 FINAL 11-managed-and-caching-proxies ok
+17:42:07 FINAL 04-pgpool2 ok
+17:42:07 FINAL 05-pgdog ok
+17:42:07 FINAL 08-libpg-query ok
+17:42:07 FINAL 09-distributed-dbs ok
+17:42:07 FINAL 06-supavisor ok

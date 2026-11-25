@@ -1,0 +1,12 @@
+=== CREATE TEMP TABLE t(a int)
+{"version":170007,"stmts":[{"stmt":{"CreateStmt":{"relation":{"relname":"t","inh":true,"relpersistence":"t","location":18},"tableElts":[{"ColumnDef":{"colname":"a","typeName":{"names":[{"String":{"sval":"pg_catalog"}},{"String":{"sval":"int4"}}],"typemod":-1,"location":22},"is_local":true,"location":20}}],"oncommit":"ONCOMMIT_NOOP"}}}]} <nil>
+=== DECLARE c CURSOR WITH HOLD FOR SELECT 1
+{"version":170007,"stmts":[{"stmt":{"DeclareCursorStmt":{"portalname":"c","options":288,"query":{"SelectStmt":{"targetList":[{"ResTarget":{"val":{"A_Const":{"ival":{"ival":1},"location":38}},"location":38}}],"limitOption":"LIMIT_OPTION_DEFAULT","op":"SETOP_NONE"}}}}}]} <nil>
+=== SELECT * FROM t FOR UPDATE
+{"version":170007,"stmts":[{"stmt":{"SelectStmt":{"targetList":[{"ResTarget":{"val":{"ColumnRef":{"fields":[{"A_Star":{}}],"location":7}},"location":7}}],"fromClause":[{"RangeVar":{"relname":"t","inh":true,"relpersistence":"p","location":14}}],"limitOption":"LIMIT_OPTION_DEFAULT","lockingClause":[{"LockingClause":{"strength":"LCS_FORUPDATE","waitPolicy":"LockWaitBlock"}}],"op":"SETOP_NONE"}}}]} <nil>
+=== SELECT (t).f FROM t
+{"version":170007,"stmts":[{"stmt":{"SelectStmt":{"targetList":[{"ResTarget":{"val":{"A_Indirection":{"arg":{"ColumnRef":{"fields":[{"String":{"sval":"t"}}],"location":8}},"indirection":[{"String":{"sval":"f"}}]}},"location":7}}],"fromClause":[{"RangeVar":{"relname":"t","inh":true,"relpersistence":"p","location":18}}],"limitOption":"LIMIT_OPTION_DEFAULT","op":"SETOP_NONE"}}}]} <nil>
+=== SELECT pg_catalog.set_config('search_path','h',false)
+{"version":170007,"stmts":[{"stmt":{"SelectStmt":{"targetList":[{"ResTarget":{"val":{"FuncCall":{"funcname":[{"String":{"sval":"pg_catalog"}},{"String":{"sval":"set_config"}}],"args":[{"A_Const":{"sval":{"sval":"search_path"},"location":29}},{"A_Const":{"sval":{"sval":"h"},"location":43}},{"A_Const":{"boolval":{},"location":47}}],"funcformat":"COERCE_EXPLICIT_CALL","location":7}},"location":7}}],"limitOption":"LIMIT_OPTION_DEFAULT","op":"SETOP_NONE"}}}]} <nil>
+=== SET LOCAL search_path = x
+{"version":170007,"stmts":[{"stmt":{"VariableSetStmt":{"kind":"VAR_SET_VALUE","name":"search_path","args":[{"A_Const":{"sval":{"sval":"x"},"location":24}}],"is_local":true}}}]} <nil>

@@ -1,0 +1,26 @@
+goos: linux
+goarch: amd64
+pkg: example.com/pgqbench/wasmbench
+cpu: DO-Regular
+BenchmarkWasm/Scan/short   	       1	4235129998 ns/op	327611408 B/op	  344594 allocs/op
+BenchmarkWasm/ScanRawProtobuf/short         	   16047	     22982 ns/op	   11088 B/op	      10 allocs/op
+BenchmarkWasm/ParseJSON/short               	    6136	     64268 ns/op	   82616 B/op	      10 allocs/op
+BenchmarkWasm/ParseProtobufDecoded/short    	    1755	    218715 ns/op	   92376 B/op	      50 allocs/op
+BenchmarkWasm/ParseRawProtobuf/short        	    1790	    184044 ns/op	   90352 B/op	      10 allocs/op
+BenchmarkWasm/Fingerprint/short             	    1567	    220620 ns/op	  450696 B/op	      10 allocs/op
+BenchmarkWasm/Scan/medium                   	    3789	    108166 ns/op	   16496 B/op	      76 allocs/op
+BenchmarkWasm/ScanRawProtobuf/medium        	    4951	     79216 ns/op	   11648 B/op	      10 allocs/op
+BenchmarkWasm/ParseJSON/medium              	    2587	    158625 ns/op	   84344 B/op	      10 allocs/op
+BenchmarkWasm/ParseProtobufDecoded/medium   	     432	    880022 ns/op	   99328 B/op	     223 allocs/op
+BenchmarkWasm/ParseRawProtobuf/medium       	     484	    759603 ns/op	   90816 B/op	      10 allocs/op
+BenchmarkWasm/Fingerprint/medium            	     708	    571941 ns/op	  950408 B/op	      10 allocs/op
+BenchmarkWasm/Scan/2KB                      	     662	    563239 ns/op	   47280 B/op	     376 allocs/op
+BenchmarkWasm/ScanRawProtobuf/2KB           	     804	    437459 ns/op	   15104 B/op	      10 allocs/op
+BenchmarkWasm/ParseJSON/2KB                 	     670	    587432 ns/op	   92920 B/op	      10 allocs/op
+BenchmarkWasm/ParseProtobufDecoded/2KB      	     100	   3479977 ns/op	  138864 B/op	    1108 allocs/op
+BenchmarkWasm/ParseRawProtobuf/2KB          	     122	   2850086 ns/op	   94336 B/op	      10 allocs/op
+BenchmarkWasm/Fingerprint/2KB               	     327	   1017803 ns/op	  950408 B/op	      10 allocs/op
+BenchmarkWasmParallelShort                  	   12879	     33141 ns/op	   11088 B/op	      10 allocs/op
+PASS
+ok  	example.com/pgqbench/wasmbench	13.248s
+BenchmarkWasmParallelShort-4   	       1	4014676811 ns/op	326717560 B/op	  341981 allocs/op

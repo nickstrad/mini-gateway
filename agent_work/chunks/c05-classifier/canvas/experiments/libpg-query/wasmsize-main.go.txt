@@ -1,0 +1,10 @@
+package main
+
+import (
+	"fmt"
+	"os"
+
+	pg "github.com/wasilibs/go-pgquery"
+)
+
+func main() { r, err := pg.Fingerprint(os.Args[len(os.Args)-1]); fmt.Println(r, err) }

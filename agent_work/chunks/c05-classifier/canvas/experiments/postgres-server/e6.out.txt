@@ -1,0 +1,56 @@
+psql:/tmp/e6-volatility.sql:2: NOTICE:  relation "t" already exists, skipping
+CREATE TABLE
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+ liar_set 
+----------
+        1
+(1 row)
+ search_path 
+-------------
+ liar
+(1 row)
+ count 
+-------
+     1
+(1 row)
+psql:/tmp/e6-volatility.sql:9: ERROR:  function liar_write() does not exist
+LINE 1: SELECT liar_write();
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+psql:/tmp/e6-volatility.sql:10: ERROR:  function liar_utility() does not exist
+LINE 1: SELECT liar_utility();
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+psql:/tmp/e6-volatility.sql:11: ERROR:  function liar_random() does not exist
+LINE 1: SELECT liar_random() a, liar_random() b;
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ provolatile | count 
+-------------+-------
+ s           |   650
+ v           |   268
+ i           |  2401
+(3 rows)
+     proname      | provolatile | proparallel 
+------------------+-------------+-------------
+ current_setting  | s           | s
+ current_setting  | s           | s
+ nextval          | v           | u
+ now              | s           | s
+ pg_advisory_lock | v           | r
+ pg_advisory_lock | v           | r
+ pg_notify        | v           | r
+ random           | v           | r
+ random           | v           | r
+ random           | v           | r
+ random           | v           | r
+ set_config       | v           | u
+ txid_current     | s           | u
+(13 rows)
+psql:/tmp/e6-volatility.sql:14: ERROR:  no schema has been selected to create in
+psql:/tmp/e6-volatility.sql:15: ERROR:  relation "v" does not exist
+LINE 1: EXPLAIN (VERBOSE, FORMAT JSON) SELECT * FROM v;
+                                                     ^

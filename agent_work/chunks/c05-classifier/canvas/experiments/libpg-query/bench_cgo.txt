@@ -1,0 +1,30 @@
+goos: linux
+goarch: amd64
+pkg: example.com/pgqbench/cgobench
+cpu: DO-Regular
+BenchmarkCgo/Scan/short         	   35566	     12455 ns/op	     872 B/op	      15 allocs/op
+BenchmarkCgo/ScanRawProtobuf/short         	   58728	      6238 ns/op	     184 B/op	       3 allocs/op
+BenchmarkCgo/ParseJSON/short               	   36079	     10258 ns/op	     592 B/op	       2 allocs/op
+BenchmarkCgo/ParseProtobufDecoded/short    	    7750	     47225 ns/op	    2154 B/op	      42 allocs/op
+BenchmarkCgo/ParseRawProtobuf/short        	   12159	     27329 ns/op	     136 B/op	       2 allocs/op
+BenchmarkCgo/Fingerprint/short             	   33456	     10652 ns/op	      32 B/op	       2 allocs/op
+BenchmarkCgo/SplitWithScanner/short        	  122965	      3411 ns/op	      40 B/op	       2 allocs/op
+BenchmarkCgo/SplitWithParser/short         	   82964	      4043 ns/op	      40 B/op	       2 allocs/op
+BenchmarkCgo/Scan/medium                   	    5484	     60606 ns/op	    6152 B/op	      69 allocs/op
+BenchmarkCgo/ScanRawProtobuf/medium        	   10000	     30437 ns/op	    1304 B/op	       3 allocs/op
+BenchmarkCgo/ParseJSON/medium              	   10000	     40086 ns/op	    2320 B/op	       2 allocs/op
+BenchmarkCgo/ParseProtobufDecoded/medium   	    1525	    293033 ns/op	    9120 B/op	     215 allocs/op
+BenchmarkCgo/ParseRawProtobuf/medium       	    1614	    244218 ns/op	     600 B/op	       2 allocs/op
+BenchmarkCgo/Fingerprint/medium            	    7742	     51966 ns/op	      32 B/op	       2 allocs/op
+BenchmarkCgo/SplitWithScanner/medium       	   23126	     16309 ns/op	      40 B/op	       2 allocs/op
+BenchmarkCgo/SplitWithParser/medium        	   17163	     20302 ns/op	      40 B/op	       2 allocs/op
+BenchmarkCgo/Scan/2KB                      	    1129	    359264 ns/op	   40392 B/op	     369 allocs/op
+BenchmarkCgo/ScanRawProtobuf/2KB           	    2481	    197367 ns/op	    8216 B/op	       3 allocs/op
+BenchmarkCgo/ParseJSON/2KB                 	    2084	    247318 ns/op	   10896 B/op	       2 allocs/op
+BenchmarkCgo/ParseProtobufDecoded/2KB      	     339	   1229279 ns/op	   48648 B/op	    1100 allocs/op
+BenchmarkCgo/ParseRawProtobuf/2KB          	     441	    720548 ns/op	    4120 B/op	       2 allocs/op
+BenchmarkCgo/Fingerprint/2KB               	    2119	    200449 ns/op	      32 B/op	       2 allocs/op
+BenchmarkCgo/SplitWithScanner/2KB          	    5230	     61755 ns/op	      40 B/op	       2 allocs/op
+BenchmarkCgo/SplitWithParser/2KB           	    4717	     72384 ns/op	      40 B/op	       2 allocs/op
+PASS
+ok  	example.com/pgqbench/cgobench	11.167s

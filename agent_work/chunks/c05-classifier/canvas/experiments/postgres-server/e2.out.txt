@@ -1,0 +1,88 @@
+You are now connected to database "postgres" as user "tenant_a".
+ placeholder_null_fresh 
+------------------------
+ t
+(1 row)
+
+SET
+DISCARD ALL
+ placeholder_null_after | val 
+------------------------+-----
+ f                      | ''
+(1 row)
+
+ setseed 
+---------
+ 
+(1 row)
+
+  r_after_setseed   
+--------------------
+ 0.9851677175347999
+(1 row)
+
+ setseed 
+---------
+ 
+(1 row)
+
+DISCARD ALL
+ r_after_setseed_then_discard 
+------------------------------
+           0.9851677175347999
+(1 row)
+
+You are now connected to database "postgres" as user "postgres".
+LOAD
+SET
+ pg_replication_origin_create 
+------------------------------
+                            1
+(1 row)
+
+ pg_replication_origin_session_setup 
+-------------------------------------
+ 
+(1 row)
+
+CREATE SEQUENCE
+ nextval 
+---------
+       1
+(1 row)
+
+CREATE SEQUENCE
+ nextval 
+---------
+       1
+(1 row)
+
+SET
+DISCARD ALL
+ session_user | current_user 
+--------------+--------------
+ postgres     | postgres
+(1 row)
+
+ ae_after | ae_gucs_visible 
+----------+-----------------
+ -1       |              13
+(1 row)
+
+ origin_still_setup 
+--------------------
+ t
+(1 row)
+
+psql:/tmp/e2-discard-residue-su.sql:21: ERROR:  lastval is not yet defined in this session
+psql:/tmp/e2-discard-residue-su.sql:22: ERROR:  currval of sequence "s2" is not yet defined in this session
+ pg_replication_origin_session_reset 
+-------------------------------------
+ 
+(1 row)
+
+ pg_replication_origin_drop 
+----------------------------
+ 
+(1 row)
+

@@ -1,0 +1,117 @@
+=== "SET search_path = x"
+  SplitWithScanner: ["SET search_path = x"] err=<nil>
+  SplitWithParser : ["SET search_path = x"] err=<nil>
+  IsUtilityStmt   : [true] err=<nil>
+  Summary         : types=[VariableSetStmt] functions=[]
+  Scan tokens     : SET[0,3) IDENT[4,15) ASCII_61[16,17) IDENT[18,19) 
+=== "SELECT set_config('search_path','h',false)"
+  SplitWithScanner: ["SELECT set_config('search_path','h',false)"] err=<nil>
+  SplitWithParser : ["SELECT set_config('search_path','h',false)"] err=<nil>
+  IsUtilityStmt   : [false] err=<nil>
+  Summary         : types=[SelectStmt] functions=[set_config]
+  Scan tokens     : SELECT[0,6) IDENT[7,17) ASCII_40[17,18) SCONST[18,31) ASCII_44[31,32) SCONST[32,35) ASCII_44[35,36) FALSE_P[36,41) ASCII_41[41,42) 
+=== "SELECT f()"
+  SplitWithScanner: ["SELECT f()"] err=<nil>
+  SplitWithParser : ["SELECT f()"] err=<nil>
+  IsUtilityStmt   : [false] err=<nil>
+  Summary         : types=[SelectStmt] functions=[f]
+  Scan tokens     : SELECT[0,6) IDENT[7,8) ASCII_40[8,9) ASCII_41[9,10) 
+=== "SELECT E'ok'\n'\\' || set_config('search_path','h',false) --'"
+  SplitWithScanner: ["SELECT E'ok'\n'\\' || set_config('search_path','h',false) --'"] err=<nil>
+  SplitWithParser : [] err=syntax error at or near "','"
+  IsUtilityStmt   : [] err=syntax error at or near "','"
+  Scan tokens     : SELECT[0,6) SCONST[7,32) IDENT[32,43) SCONST[43,46) IDENT[46,47) SCONST[47,59) 
+=== "SELECT 'a\\' ; --' ; SET search_path = x"
+  SplitWithScanner: ["SELECT 'a\\'"] err=<nil>
+  SplitWithParser : ["SELECT 'a\\'"] err=<nil>
+  IsUtilityStmt   : [false] err=<nil>
+  Summary         : types=[SelectStmt] functions=[]
+  Scan tokens     : SELECT[0,6) SCONST[7,11) ASCII_59[12,13) SQL_COMMENT[14,39) 
+=== "SELECT $$ ; SET x = 1 $$ /* ; SET y=2 /* nested */ ; */ ; LISTEN c"
+  SplitWithScanner: ["SELECT $$ ; SET x = 1 $$ /* ; SET y=2 /* nested */ ; */" "LISTEN c"] err=<nil>
+  SplitWithParser : ["SELECT $$ ; SET x = 1 $$ /* ; SET y=2 /* nested */ ; */" "LISTEN c"] err=<nil>
+  IsUtilityStmt   : [false true] err=<nil>
+  Summary         : types=[SelectStmt ListenStmt] functions=[]
+  Scan tokens     : SELECT[0,6) SCONST[7,24) C_COMMENT[25,55) ASCII_59[56,57) LISTEN[58,64) IDENT[65,66) 
+=== "PREPARE p AS SELECT 1"
+  SplitWithScanner: ["PREPARE p AS SELECT 1"] err=<nil>
+  SplitWithParser : ["PREPARE p AS SELECT 1"] err=<nil>
+  IsUtilityStmt   : [true] err=<nil>
+  Summary         : types=[PrepareStmt SelectStmt] functions=[]
+  Scan tokens     : PREPARE[0,7) IDENT[8,9) AS[10,12) SELECT[13,19) ICONST[20,21) 
+=== "LISTEN c"
+  SplitWithScanner: ["LISTEN c"] err=<nil>
+  SplitWithParser : ["LISTEN c"] err=<nil>
+  IsUtilityStmt   : [true] err=<nil>
+  Summary         : types=[ListenStmt] functions=[]
+  Scan tokens     : LISTEN[0,6) IDENT[7,8) 
+=== "CREATE TEMP TABLE t(a int)"
+  SplitWithScanner: ["CREATE TEMP TABLE t(a int)"] err=<nil>
+  SplitWithParser : ["CREATE TEMP TABLE t(a int)"] err=<nil>
+  IsUtilityStmt   : [true] err=<nil>
+  Summary         : types=[CreateStmt] functions=[]
+  Scan tokens     : CREATE[0,6) TEMP[7,11) TABLE[12,17) IDENT[18,19) ASCII_40[19,20) IDENT[20,21) INT_P[22,25) ASCII_41[25,26) 
+=== "SELECT pg_advisory_lock(1)"
+  SplitWithScanner: ["SELECT pg_advisory_lock(1)"] err=<nil>
+  SplitWithParser : ["SELECT pg_advisory_lock(1)"] err=<nil>
+  IsUtilityStmt   : [false] err=<nil>
+  Summary         : types=[SelectStmt] functions=[pg_advisory_lock]
+  Scan tokens     : SELECT[0,6) IDENT[7,23) ASCII_40[23,24) ICONST[24,25) ASCII_41[25,26) 
+=== "DECLARE c CURSOR WITH HOLD FOR SELECT 1"
+  SplitWithScanner: ["DECLARE c CURSOR WITH HOLD FOR SELECT 1"] err=<nil>
+  SplitWithParser : ["DECLARE c CURSOR WITH HOLD FOR SELECT 1"] err=<nil>
+  IsUtilityStmt   : [true] err=<nil>
+  Summary         : types=[DeclareCursorStmt] functions=[]
+  Scan tokens     : DECLARE[0,7) IDENT[8,9) CURSOR[10,16) WITH[17,21) HOLD[22,26) FOR[27,30) SELECT[31,37) ICONST[38,39) 
+=== "SELECT 1; SET search_path = x"
+  SplitWithScanner: ["SELECT 1" "SET search_path = x"] err=<nil>
+  SplitWithParser : ["SELECT 1" "SET search_path = x"] err=<nil>
+  IsUtilityStmt   : [false true] err=<nil>
+  Summary         : types=[SelectStmt VariableSetStmt] functions=[]
+  Scan tokens     : SELECT[0,6) ICONST[7,8) ASCII_59[8,9) SET[10,13) IDENT[14,25) ASCII_61[26,27) IDENT[28,29) 
+=== "SELECT nextval('s')"
+  SplitWithScanner: ["SELECT nextval('s')"] err=<nil>
+  SplitWithParser : ["SELECT nextval('s')"] err=<nil>
+  IsUtilityStmt   : [false] err=<nil>
+  Summary         : types=[SelectStmt] functions=[nextval]
+  Scan tokens     : SELECT[0,6) IDENT[7,14) ASCII_40[14,15) SCONST[15,18) ASCII_41[18,19) 
+=== "WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d"
+  SplitWithScanner: ["WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d"] err=<nil>
+  SplitWithParser : ["WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d"] err=<nil>
+  IsUtilityStmt   : [false] err=<nil>
+  Summary         : types=[SelectStmt DeleteStmt] functions=[]
+  Scan tokens     : WITH[0,4) IDENT[5,6) AS[7,9) ASCII_40[10,11) DELETE_P[11,17) FROM[18,22) IDENT[23,24) RETURNING[25,34) ASCII_42[35,36) ASCII_41[36,37) SELECT[38,44) ASCII_42[45,46) FROM[47,51) IDENT[52,53) 
+=== "SELECT * FROM t FOR UPDATE"
+  SplitWithScanner: ["SELECT * FROM t FOR UPDATE"] err=<nil>
+  SplitWithParser : ["SELECT * FROM t FOR UPDATE"] err=<nil>
+  IsUtilityStmt   : [false] err=<nil>
+  Summary         : types=[SelectStmt] functions=[]
+  Scan tokens     : SELECT[0,6) ASCII_42[7,8) FROM[9,13) IDENT[14,15) FOR[16,19) UPDATE[20,26) 
+=== "SELECT now()"
+  SplitWithScanner: ["SELECT now()"] err=<nil>
+  SplitWithParser : ["SELECT now()"] err=<nil>
+  IsUtilityStmt   : [false] err=<nil>
+  Summary         : types=[SelectStmt] functions=[now]
+  Scan tokens     : SELECT[0,6) IDENT[7,10) ASCII_40[10,11) ASCII_41[11,12) 
+=== "SELECT * FROM v"
+  SplitWithScanner: ["SELECT * FROM v"] err=<nil>
+  SplitWithParser : ["SELECT * FROM v"] err=<nil>
+  IsUtilityStmt   : [false] err=<nil>
+  Summary         : types=[SelectStmt] functions=[]
+  Scan tokens     : SELECT[0,6) ASCII_42[7,8) FROM[9,13) IDENT[14,15) 
+=== "EXPLAIN ANALYZE DELETE FROM t"
+  SplitWithScanner: ["EXPLAIN ANALYZE DELETE FROM t"] err=<nil>
+  SplitWithParser : ["EXPLAIN ANALYZE DELETE FROM t"] err=<nil>
+  IsUtilityStmt   : [true] err=<nil>
+  Summary         : types=[ExplainStmt DeleteStmt] functions=[]
+  Scan tokens     : EXPLAIN[0,7) ANALYZE[8,15) DELETE_P[16,22) FROM[23,27) IDENT[28,29) 
+=== "SELECT 1); SET search_path = x"
+  SplitWithScanner: [] err=<nil>
+  SplitWithParser : [] err=syntax error at or near ")"
+  IsUtilityStmt   : [] err=syntax error at or near ")"
+  Scan tokens     : SELECT[0,6) ICONST[7,8) ASCII_41[8,9) ASCII_59[9,10) SET[11,14) IDENT[15,26) ASCII_61[27,28) IDENT[29,30) 
+=== "SELECT 1 $1abc"
+  SplitWithScanner: ["SELECT 1 $1abc"] err=<nil>
+  SplitWithParser : [] err=syntax error at or near "$1"
+  IsUtilityStmt   : [] err=syntax error at or near "$1"
+  Scan tokens     : SELECT[0,6) ICONST[7,8) PARAM[9,11) IDENT[11,14) 

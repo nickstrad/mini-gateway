@@ -1,0 +1,56 @@
+>>> SELECT 1; SET search_path = x; SET LOCAL work_mem = '8MB'
+   CommandComplete SELECT 1
+   CommandComplete SET
+   CommandComplete SET
+   ReadyForQuery I
+>>> SELECT set_config('search_path','h',false)
+   CommandComplete SELECT 1
+   ReadyForQuery I
+>>> SELECT 1 INTO TEMP tt; CREATE TEMP TABLE tt2 AS SELECT 1; CREATE TEMP TABLE tt3(x int); CREATE TEMP SEQUENCE sq
+   CommandComplete SELECT 1
+   CommandComplete SELECT 1
+   CommandComplete CREATE TABLE
+   CommandComplete CREATE SEQUENCE
+   ReadyForQuery I
+>>> PREPARE p AS SELECT 1; LISTEN c; NOTIFY c; SELECT pg_advisory_lock(1)
+   CommandComplete PREPARE
+   CommandComplete LISTEN
+   CommandComplete NOTIFY
+   CommandComplete SELECT 1
+   NotificationResponse
+   ReadyForQuery I
+>>> BEGIN; DECLARE cc CURSOR WITH HOLD FOR SELECT 1; COMMIT
+   CommandComplete BEGIN
+   CommandComplete DECLARE CURSOR
+   CommandComplete COMMIT
+   ReadyForQuery I
+>>> DO $$BEGIN PERFORM set_config('search_path','d',false); END$$
+   CommandComplete DO
+   ReadyForQuery I
+>>> SELECT E'ok'\n'\' || set_config('search_path','h',false) --'
+   Error 42601 syntax error at or near "','"
+   ReadyForQuery I
+>>> SET ROLE pg_monitor; RESET ROLE; SET SESSION AUTHORIZATION tenant_a; RESET SESSION AUTHORIZATION
+   CommandComplete SET
+   CommandComplete RESET
+   CommandComplete SET
+   CommandComplete RESET
+   ReadyForQuery I
+>>> SET application_name='x'; SET default_transaction_read_only=on; SET TimeZone='UTC'; DISCARD ALL
+   CommandComplete SET
+   CommandComplete SET
+   CommandComplete SET
+   Error 25001 DISCARD ALL cannot run inside a transaction block
+   ReadyForQuery I
+>>> BEGIN; SELECT 1
+   CommandComplete BEGIN
+   CommandComplete SELECT 1
+   ReadyForQuery T
+>>> BEGIN; SELECT 1/0
+   CommandComplete BEGIN
+   Error 22012 division by zero
+   ReadyForQuery E
+>>> EXPLAIN ANALYZE SELECT 1; CALL pg_catalog.pg_sleep(0)
+   CommandComplete EXPLAIN
+   Error 42809 pg_catalog.pg_sleep(integer) is not a procedure
+   ReadyForQuery I

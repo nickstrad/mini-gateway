@@ -1,0 +1,28 @@
+CREATE TABLE
+CREATE SEQUENCE
+CREATE FUNCTION
+BEGIN
+INSERT 0 1
+ nextval 
+---------
+       1
+(1 row)
+DECLARE CURSOR
+ f_set2 
+--------
+      1
+(1 row)
+ pg_notify 
+-----------
+ 
+(1 row)
+psql:/tmp/e4-readonly2.sql:10: ERROR:  cannot execute lo_create() in a read-only transaction
+psql:/tmp/e4-readonly2.sql:11: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK
+   search_path   
+-----------------
+ "$user", public
+(1 row)
+ name 
+------
+(0 rows)

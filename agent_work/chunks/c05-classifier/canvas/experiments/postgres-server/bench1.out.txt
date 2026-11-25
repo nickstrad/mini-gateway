@@ -1,0 +1,12 @@
+== q-select1
+latency average = 0.056 ms
+tps = 17798.294423 (without initial connection time)
+== q-discard
+latency average = 0.044 ms
+tps = 22758.020263 (without initial connection time)
+== q-select1-discard
+latency average = 0.099 ms
+tps = 10085.109301 (without initial connection time)
+== dirty-check
+latency average = 3.236 ms
+tps = 309.014594 (without initial connection time)

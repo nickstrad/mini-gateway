@@ -1,0 +1,15 @@
+package main
+
+import (
+	"fmt"
+	"os"
+
+	pg "github.com/pganalyze/pg_query_go/v6"
+)
+
+func main() {
+	for _, q := range os.Args[1:] {
+		j, err := pg.ParseToJSON(q)
+		fmt.Printf("=== %s\n%s %v\n", q, j, err)
+	}
+}

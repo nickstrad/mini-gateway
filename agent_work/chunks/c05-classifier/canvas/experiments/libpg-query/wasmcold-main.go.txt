@@ -1,0 +1,50 @@
+package main
+
+// Measures go-pgquery cold start (runtime compile + root instantiation),
+// per-instance cost (first call on N new goroutines in parallel), and RSS.
+import (
+	"fmt"
+	"os"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/wasilibs/go-pgquery/parser"
+)
+
+func rss() string {
+	b, _ := os.ReadFile("/proc/self/status")
+	for _, l := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(l, "VmRSS") || strings.HasPrefix(l, "VmHWM") {
+			fmt.Print(l, "  ")
+		}
+	}
+	return ""
+}
+
+func main() {
+	q := "SELECT v FROM kv WHERE k = 'a'"
+	fmt.Print("start: ", rss(), "\n")
+	t := time.Now()
+	parser.ScanToProtobuf(q)
+	fmt.Printf("first call (compile+instantiate root+1 instance): %v\n", time.Since(t))
+	fmt.Print("after first: ", rss(), "\n")
+	t = time.Now()
+	parser.ScanToProtobuf(q)
+	fmt.Printf("second call (pooled instance): %v\n", time.Since(t))
+	for _, n := range []int{4, 16, 64} {
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		t = time.Now()
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func() { defer wg.Done(); <-start; for j := 0; j < 20; j++ { parser.ScanToProtobuf(q) } }()
+		}
+		close(start)
+		wg.Wait()
+		runtime.GC()
+		fmt.Printf("%d goroutines x20 calls: %v  ", n, time.Since(t))
+		fmt.Print(rss(), "\n")
+	}
+}

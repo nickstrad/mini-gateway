@@ -1,0 +1,91 @@
+DROP TABLE
+psql:/tmp/e3-readonly.sql:2: NOTICE:  table "t" does not exist, skipping
+CREATE TABLE
+INSERT 0 2
+CREATE FUNCTION
+CREATE FUNCTION
+== RO-1: what is allowed in BEGIN READ ONLY
+BEGIN
+SET
+ set_config 
+------------
+ v
+(1 row)
+PREPARE
+LISTEN
+NOTIFY
+ pg_advisory_lock 
+------------------
+ 
+(1 row)
+psql:/tmp/e3-readonly.sql:13: ERROR:  cannot execute CREATE TABLE in a read-only transaction
+psql:/tmp/e3-readonly.sql:14: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+psql:/tmp/e3-readonly.sql:15: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+psql:/tmp/e3-readonly.sql:15: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+psql:/tmp/e3-readonly.sql:16: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+psql:/tmp/e3-readonly.sql:17: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK
+== RO-2: refused
+BEGIN
+psql:/tmp/e3-readonly.sql:20: ERROR:  cannot execute SELECT FOR UPDATE in a read-only transaction
+ROLLBACK
+BEGIN
+psql:/tmp/e3-readonly.sql:21: ERROR:  cannot execute SELECT in a read-only transaction
+ROLLBACK
+BEGIN
+psql:/tmp/e3-readonly.sql:22: ERROR:  cannot execute DELETE in a read-only transaction
+ROLLBACK
+BEGIN
+psql:/tmp/e3-readonly.sql:23: ERROR:  cannot execute CREATE SEQUENCE in a read-only transaction
+psql:/tmp/e3-readonly.sql:23: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK
+BEGIN
+ROLLBACK
+BEGIN
+psql:/tmp/e3-readonly.sql:24: ERROR:  cannot execute nextval() in a read-only transaction
+psql:/tmp/e3-readonly.sql:25: ERROR:  cannot execute CREATE TABLE in a read-only transaction
+ROLLBACK
+== RO-3: flip back to read-write
+BEGIN
+SET
+DELETE 0
+ROLLBACK
+BEGIN
+ ?column? 
+----------
+        1
+(1 row)
+psql:/tmp/e3-readonly.sql:28: ERROR:  transaction read-write mode must be set before any query
+ROLLBACK
+BEGIN
+psql:/tmp/e3-readonly.sql:29: ERROR:  transaction read-write mode must be set before any query
+CONTEXT:  SQL statement "SET TRANSACTION READ WRITE"
+PL/pgSQL function f_rw() line 1 at SQL statement
+ROLLBACK
+BEGIN
+ ?column? 
+----------
+        1
+(1 row)
+
+WARNING:  there is no transaction in progress
+COMMIT
+INSERT 0 1
+COMMIT
+ sevens 
+--------
+      1
+(1 row)
+
+BEGIN
+SET
+INSERT 0 1
+COMMIT
+ eights 
+--------
+      1
+(1 row)
+
+SET
+SET
+INSERT 0 1

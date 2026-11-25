@@ -1,0 +1,13 @@
+BenchmarkCgo/SplitWithScanner/short           	  115174	      3422 ns/op	      40 B/op	       2 allocs/op
+BenchmarkCgo/SplitWithScanner/short-4         	  128269	      2999 ns/op	      40 B/op	       2 allocs/op
+BenchmarkCgoParallelShort     	   72406	      5799 ns/op	     184 B/op	       3 allocs/op
+BenchmarkCgoParallelShort-4   	  232408	      1714 ns/op	     184 B/op	       3 allocs/op
+BenchmarkCgo/Scan/short   	   33164	     10568 ns/op	     872 B/op	      15 allocs/op
+BenchmarkCgo/ScanRawProtobuf/short         	   65092	      5565 ns/op	     184 B/op	       3 allocs/op
+BenchmarkCgo/SplitWithScanner/short        	  135586	      3377 ns/op	      40 B/op	       2 allocs/op
+BenchmarkCgo/Scan/medium                   	    7022	     57166 ns/op	    6152 B/op	      69 allocs/op
+BenchmarkCgo/ScanRawProtobuf/medium        	   12340	     29357 ns/op	    1304 B/op	       3 allocs/op
+BenchmarkCgo/SplitWithScanner/medium       	   32016	     11075 ns/op	      40 B/op	       2 allocs/op
+BenchmarkCgo/Scan/2KB                      	    1138	    405647 ns/op	   40392 B/op	     369 allocs/op
+BenchmarkCgo/ScanRawProtobuf/2KB           	    1948	    195694 ns/op	    8216 B/op	       3 allocs/op
+BenchmarkCgo/SplitWithScanner/2KB          	    6939	     53571 ns/op	      40 B/op	       2 allocs/op

@@ -1,0 +1,39 @@
+REVOKE
+REVOKE
+REVOKE
+You are now connected to database "postgres" as user "tenant_a".
+psql:/tmp/e5-privs.sql:6: ERROR:  permission denied for function set_config
+SET
+psql:/tmp/e5-privs.sql:8: ERROR:  permission denied for function pg_advisory_lock
+ pg_advisory_lock 
+------------------
+ 
+(1 row)
+psql:/tmp/e5-privs.sql:10: ERROR:  permission denied to create temporary tables in database "postgres"
+LINE 1: CREATE TEMP TABLE x(i int);
+                          ^
+SET
+PREPARE
+LISTEN
+BEGIN
+DECLARE CURSOR
+COMMIT
+psql:/tmp/e5-privs.sql:14: ERROR:  permission denied for function set_config
+   search_path   
+-----------------
+ pg_temp, public
+(1 row)
+You are now connected to database "postgres" as user "postgres".
+     proname      |        proacl         
+------------------+-----------------------
+ pg_advisory_lock | {postgres=X/postgres}
+ set_config       | {postgres=X/postgres}
+ pg_advisory_lock | 
+(3 rows)
+psql:/tmp/e5-privs.sql:18: ERROR:  column "classid" does not exist
+LINE 1: SELECT classid::regclass, objoid::regprocedure, privtype FRO...
+               ^
+HINT:  Perhaps you meant to reference the column "pg_init_privs.classoid".
+GRANT
+GRANT
+GRANT

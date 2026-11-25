@@ -1,0 +1,87 @@
+package cgobench
+
+import (
+	"testing"
+
+	pg "github.com/pganalyze/pg_query_go/v6"
+	"github.com/pganalyze/pg_query_go/v6/parser"
+)
+
+var sink any
+
+var cases = []struct{ name, q string }{{"short", Short}, {"medium", Medium}, {"2KB", Long}}
+
+func BenchmarkCgo(b *testing.B) {
+	for _, c := range cases {
+		q := c.q
+		b.Run("Scan/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, err := pg.Scan(q)
+				if err != nil {
+					b.Fatal(err)
+				}
+				sink = r
+			}
+		})
+		b.Run("ScanRawProtobuf/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, _ := parser.ScanToProtobuf(q)
+				sink = r
+			}
+		})
+		b.Run("ParseJSON/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, _ := pg.ParseToJSON(q)
+				sink = r
+			}
+		})
+		b.Run("ParseProtobufDecoded/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, _ := pg.Parse(q)
+				sink = r
+			}
+		})
+		b.Run("ParseRawProtobuf/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, _ := parser.ParseToProtobuf(q)
+				sink = r
+			}
+		})
+		b.Run("Fingerprint/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, _ := pg.Fingerprint(q)
+				sink = r
+			}
+		})
+		b.Run("SplitWithScanner/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, _ := pg.SplitWithScanner(q, false)
+				sink = r
+			}
+		})
+		b.Run("SplitWithParser/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, _ := pg.SplitWithParser(q, false)
+				sink = r
+			}
+		})
+	}
+}
+
+func BenchmarkCgoParallelShort(b *testing.B) {
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			r, _ := parser.ScanToProtobuf(Short)
+			sink = r
+		}
+	})
+}

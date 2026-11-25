@@ -1,0 +1,14 @@
+BenchmarkWasm/Scan/short       	   10000	     31357 ns/op	   11776 B/op	      22 allocs/op
+BenchmarkWasm/Scan/short-4     	   10000	     31183 ns/op	   11776 B/op	      22 allocs/op
+BenchmarkWasm/ScanRawProtobuf/short           	   15742	     22106 ns/op	   11088 B/op	      10 allocs/op
+BenchmarkWasm/ScanRawProtobuf/short-4         	   15898	     20265 ns/op	   11088 B/op	      10 allocs/op
+BenchmarkWasm/Scan/medium                     	    3547	    108997 ns/op	   16496 B/op	      76 allocs/op
+BenchmarkWasm/Scan/medium-4                   	    3304	    108757 ns/op	   16496 B/op	      76 allocs/op
+BenchmarkWasm/ScanRawProtobuf/medium          	    4172	     83374 ns/op	   11648 B/op	      10 allocs/op
+BenchmarkWasm/ScanRawProtobuf/medium-4        	    4086	     77502 ns/op	   11648 B/op	      10 allocs/op
+BenchmarkWasm/Scan/2KB                        	     645	    617712 ns/op	   47280 B/op	     376 allocs/op
+BenchmarkWasm/Scan/2KB-4                      	     638	    608468 ns/op	   47280 B/op	     376 allocs/op
+BenchmarkWasm/ScanRawProtobuf/2KB             	     835	    407584 ns/op	   15104 B/op	      10 allocs/op
+BenchmarkWasm/ScanRawProtobuf/2KB-4           	     780	    452211 ns/op	   15104 B/op	      10 allocs/op
+BenchmarkWasmParallelShort     	   16340	     21455 ns/op	   11088 B/op	      10 allocs/op
+BenchmarkWasmParallelShort-4   	   33242	     11620 ns/op	   11088 B/op	      10 allocs/op

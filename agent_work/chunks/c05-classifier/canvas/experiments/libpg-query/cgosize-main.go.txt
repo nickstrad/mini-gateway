@@ -1,0 +1,10 @@
+package main
+
+import (
+	"fmt"
+	"os"
+
+	pg "github.com/pganalyze/pg_query_go/v6"
+)
+
+func main() { r, err := pg.SplitWithScanner(os.Args[len(os.Args)-1], true); fmt.Println(r, err) }

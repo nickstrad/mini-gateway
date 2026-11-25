@@ -1,0 +1,77 @@
+package wasmbench
+
+import (
+	"testing"
+
+	pg "github.com/wasilibs/go-pgquery"
+	"github.com/wasilibs/go-pgquery/parser"
+)
+
+var sink any
+
+var cases = []struct{ name, q string }{{"short", Short}, {"medium", Medium}, {"2KB", Long}}
+
+func BenchmarkWasm(b *testing.B) {
+	parser.ScanToProtobuf(Short) // warm-up: module compile happens once per process
+	b.ResetTimer()
+	for _, c := range cases {
+		q := c.q
+		b.Run("Scan/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, err := pg.Scan(q)
+				if err != nil {
+					b.Fatal(err)
+				}
+				sink = r
+			}
+		})
+		b.Run("ScanRawProtobuf/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, _ := parser.ScanToProtobuf(q)
+				sink = r
+			}
+		})
+		b.Run("ParseJSON/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, _ := pg.ParseToJSON(q)
+				sink = r
+			}
+		})
+		b.Run("ParseProtobufDecoded/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, _ := pg.Parse(q)
+				sink = r
+			}
+		})
+		b.Run("ParseRawProtobuf/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, _ := parser.ParseToProtobuf(q)
+				sink = r
+			}
+		})
+		b.Run("Fingerprint/"+c.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for range b.N {
+				r, _ := pg.Fingerprint(q)
+				sink = r
+			}
+		})
+	}
+}
+
+func BenchmarkWasmParallelShort(b *testing.B) {
+	parser.ScanToProtobuf(Short) // warm-up: module compile happens once per process
+	b.ResetTimer()
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			r, _ := parser.ScanToProtobuf(Short)
+			sink = r
+		}
+	})
+}
