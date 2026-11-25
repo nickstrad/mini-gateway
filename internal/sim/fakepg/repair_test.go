@@ -1,6 +1,7 @@
 package fakepg_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim"
 	"github.com/nickstrad/mini-gateway/internal/sim/fakepg"
 	"github.com/nickstrad/mini-gateway/internal/sim/workload"
+	simworld "github.com/nickstrad/mini-gateway/internal/sim/world"
 	"github.com/nickstrad/mini-gateway/internal/testclient"
 )
 
@@ -284,4 +286,103 @@ func TestTerminateDuringABackPressuredReplyKeepsTheFraming(t *testing.T) {
 		t.Fatalf("after a terminate under back pressure: ...%s", tail)
 	}
 	w.done(p)
+}
+
+func requireExactWriteLog(t *testing.T, w *world) {
+	t.Helper()
+	if err := simworld.CheckWrites(w.srv.Config().Rows, w.srv.Rows(), w.srv.StatementLog(), w.srv.TransactionLog(), w.srv.WriteLog()); err != nil {
+		t.Fatalf("%v", err)
+	}
+}
+
+func requireRows(t *testing.T, w *world, want string) {
+	t.Helper()
+	if got := fmt.Sprintf("%v", w.srv.Rows()); got != want {
+		t.Fatalf("rows %s, want %s", got, want)
+	}
+}
+
+func TestCommitThatPassesMaxRowsMidwayIsRolledBack(t *testing.T) {
+	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: []fakepg.Row{{Key: "k1", Value: "v1"}}})
+	a, b := w.client(), w.client()
+	w.exchange(a, "BEGIN", "INSERT INTO kv VALUES ('k2', 'v2')", "DELETE FROM kv WHERE k = 'k1'")
+	w.exchange(b, "INSERT INTO kv VALUES ('k3', 'v3')")
+	if got := w.exchange(a, "COMMIT"); got != "E:53100 ZI" {
+		t.Fatalf("commit: %s, want E:53100 ZI", got)
+	}
+	requireRows(t, w, "[{k1 v1} {k3 v3}]")
+	requireExactWriteLog(t, w)
+	if s := w.srv.Snapshot(); s.TxCommitted != 0 || s.TxRolledBack != 1 || s.WritesApplied != 1 {
+		t.Fatalf("%+v", s)
+	}
+	w.done(a, b)
+}
+
+func TestCommitWhoseRecreatedRowPassesMaxRowsIsRolledBack(t *testing.T) {
+	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: []fakepg.Row{{Key: "k1", Value: "v1"}, {Key: "k2", Value: "v2"}}})
+	a, b := w.client(), w.client()
+	w.exchange(a, "BEGIN", "UPDATE kv SET v = 'v1b' WHERE k = 'k1'", "DELETE FROM kv WHERE k = 'k2'")
+	w.exchange(b, "DELETE FROM kv WHERE k = 'k1'", "INSERT INTO kv VALUES ('k3', 'v3')")
+	if got := w.exchange(a, "COMMIT"); got != "E:53100 ZI" {
+		t.Fatalf("commit: %s, want E:53100 ZI", got)
+	}
+	requireRows(t, w, "[{k2 v2} {k3 v3}]")
+	requireExactWriteLog(t, w)
+	w.done(a, b)
+}
+
+func TestCommitInsertThenDeleteOfOneKeyAtAFullTableIsRolledBack(t *testing.T) {
+	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: []fakepg.Row{{Key: "k1", Value: "v1"}}})
+	a, b := w.client(), w.client()
+	w.exchange(a, "BEGIN", "INSERT INTO kv VALUES ('k2', 'v2')", "DELETE FROM kv WHERE k = 'k2'")
+	w.exchange(b, "INSERT INTO kv VALUES ('k3', 'v3')")
+	if got := w.exchange(a, "COMMIT"); got != "E:53100 ZI" {
+		t.Fatalf("commit: %s, want E:53100 ZI", got)
+	}
+	requireRows(t, w, "[{k1 v1} {k3 v3}]")
+	requireExactWriteLog(t, w)
+	w.done(a, b)
+}
+
+func TestImplicitCommitThatPassesMaxRowsMidwayIsRolledBack(t *testing.T) {
+	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: []fakepg.Row{{Key: "k1", Value: "v1"}}, Service: fakepg.Service{Fixed: 50 * time.Millisecond}})
+	a, b := w.client(), w.client()
+	from := len(a.Events())
+	a.Query("INSERT INTO kv VALUES ('k2', 'v2'); DELETE FROM kv WHERE k = 'k1'")
+	w.run(10 * time.Millisecond)
+	b.Query("INSERT INTO kv VALUES ('k3', 'v3')")
+	w.run(time.Second)
+	if got := a.TraceFrom(from); got != "C:INSERT 0 1 C:DELETE 1 E:53100 ZI" {
+		t.Fatalf("implicit transaction: %s", got)
+	}
+	requireRows(t, w, "[{k1 v1} {k3 v3}]")
+	requireExactWriteLog(t, w)
+	w.done(a, b)
+}
+
+func TestCommitThatDeletesFirstStillCommitsAtAFullTable(t *testing.T) {
+	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: []fakepg.Row{{Key: "k1", Value: "v1"}}})
+	a, b := w.client(), w.client()
+	w.exchange(a, "BEGIN", "DELETE FROM kv WHERE k = 'k1'", "INSERT INTO kv VALUES ('k2', 'v2')")
+	w.exchange(b, "INSERT INTO kv VALUES ('k3', 'v3')")
+	if got := w.exchange(a, "COMMIT"); got != "C:COMMIT ZI" {
+		t.Fatalf("commit: %s, want C:COMMIT ZI", got)
+	}
+	requireRows(t, w, "[{k2 v2} {k3 v3}]")
+	requireExactWriteLog(t, w)
+	w.done(a, b)
+}
+
+func TestInsertThenDeleteOfOneKeyCommits(t *testing.T) {
+	w := newWorld(t, fakepg.Config{MaxRows: 2, Rows: []fakepg.Row{{Key: "k1", Value: "v1"}}})
+	a := w.client()
+	if got := w.exchange(a, "BEGIN", "INSERT INTO kv VALUES ('k2', 'v2')", "DELETE FROM kv WHERE k = 'k2'", "COMMIT"); got != "C:BEGIN ZT C:INSERT 0 1 ZT C:DELETE 1 ZT C:COMMIT ZI" {
+		t.Fatalf("exchange: %s", got)
+	}
+	requireRows(t, w, "[{k1 v1}]")
+	if n := len(w.srv.WriteLog()); n != 2 {
+		t.Fatalf("write log %d records, want 2: %v", n, w.srv.WriteLog())
+	}
+	requireExactWriteLog(t, w)
+	w.done(a)
 }

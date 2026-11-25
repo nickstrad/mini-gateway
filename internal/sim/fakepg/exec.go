@@ -439,8 +439,9 @@ func (b *backend) rowsWithPending() int {
 	return n
 }
 
-func (srv *Server) rowsAfter(writes []pendingWrite) int {
+func (srv *Server) peakRowsAfter(writes []pendingWrite) int {
 	n := len(srv.table)
+	peak := n
 	present := map[string]bool{}
 	for _, w := range writes {
 		was, known := present[w.key]
@@ -455,8 +456,11 @@ func (srv *Server) rowsAfter(writes []pendingWrite) int {
 			n--
 		}
 		present[w.key] = now
+		if n > peak {
+			peak = n
+		}
 	}
-	return n
+	return peak
 }
 
 func (srv *Server) apply(b *backend, txID int64, w pendingWrite) {
@@ -488,7 +492,7 @@ func (srv *Server) apply(b *backend, txID int64, w pendingWrite) {
 
 func (b *backend) commit() *pgError {
 	tx := b.tx
-	if !tx.failed && b.srv.rowsAfter(tx.writes) > b.srv.cfg.MaxRows {
+	if !tx.failed && b.srv.peakRowsAfter(tx.writes) > b.srv.cfg.MaxRows {
 		b.rollback()
 		return &errTableFull
 	}
