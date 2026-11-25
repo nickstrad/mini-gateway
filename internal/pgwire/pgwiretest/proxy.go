@@ -147,27 +147,28 @@ const (
 )
 
 type session struct {
-	p       *Proxy
-	id      int64
-	phase   phase
-	cend    *simnet.End
-	client  *pgwire.ClientSession
-	hello   []byte
-	tlsWait bool
-	hsTimer sim.Timer
-	ddl     sim.Timer
-	held    []byte
-	early   []byte
-	bend    *simnet.End
-	backend *pgwire.BackendSession
-	bTLS    bool
-	bReply  []byte
-	conn    sim.Timer
-	front   *pgwire.FrontendTracker
-	reply   *pgwire.CycleTracker
-	cout    []byte
-	bout    []byte
-	closing bool
+	p          *Proxy
+	id         int64
+	phase      phase
+	cend       *simnet.End
+	client     *pgwire.ClientSession
+	hello      []byte
+	afterHello []byte
+	tlsWait    bool
+	hsTimer    sim.Timer
+	ddl        sim.Timer
+	held       []byte
+	early      []byte
+	bend       *simnet.End
+	backend    *pgwire.BackendSession
+	bTLS       bool
+	bReply     []byte
+	conn       sim.Timer
+	front      *pgwire.FrontendTracker
+	reply      *pgwire.CycleTracker
+	cout       []byte
+	bout       []byte
+	closing    bool
 }
 
 func (p *Proxy) accept(e *simnet.End) {
@@ -218,7 +219,7 @@ func (ss *session) onBackend(_ *simnet.End, ev simnet.Event) {
 }
 
 func (ss *session) readClient() {
-	for ss.phase != phaseClosed && !ss.closing && len(ss.bout) < maxPending {
+	for ss.phase != phaseClosed && !ss.closing && len(ss.bout) < maxPending && !ss.helloHeld() {
 		n, err := ss.cend.Read(ss.p.buf[:])
 		if n > 0 {
 			ss.fromClient(ss.p.buf[:n])
@@ -250,10 +251,16 @@ func (ss *session) fromClient(b []byte) {
 	}
 }
 
+func (ss *session) helloHeld() bool { return ss.tlsWait && len(ss.hello) == simtls.HelloLen }
+
 func (ss *session) takeHello(b []byte) []byte {
 	k := min(simtls.HelloLen-len(ss.hello), len(b))
 	ss.hello = append(ss.hello, b[:k]...)
-	if len(ss.hello) < simtls.HelloLen || ss.hsTimer.Pending() {
+	if len(ss.hello) < simtls.HelloLen {
+		return nil
+	}
+	if ss.hsTimer.Pending() {
+		ss.afterHello = append(ss.afterHello, b[k:]...)
 		return nil
 	}
 	if !simtls.ValidClientHello(ss.hello) {
@@ -264,7 +271,8 @@ func (ss *session) takeHello(b []byte) []byte {
 		return nil
 	}
 	ss.hsTimer = ss.p.s.After(ss.p.cfg.Handshake, ss.handshakeDone)
-	return b[k:]
+	ss.afterHello = append(ss.afterHello, b[k:]...)
+	return nil
 }
 
 func simVersion(v pgwire.TLSVersion) byte {
@@ -282,6 +290,9 @@ func (ss *session) handshakeDone() {
 	ss.hello = nil
 	ss.writeClient(simtls.AppendServerReply(nil, simtls.ReplyOK, simVersion(ss.p.cfg.TLSVersion)))
 	ss.clientActs(ss.client.HandshakeDone(nil, pgwire.HandshakeResult{Outcome: pgwire.HandshakeCompleted, Version: ss.p.cfg.TLSVersion}))
+	held := ss.afterHello
+	ss.afterHello = nil
+	ss.fromClient(held)
 	ss.readClient()
 }
 
