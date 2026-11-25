@@ -517,6 +517,7 @@ func TestAdv_9_ConstantRandomSingleIssuer(t *testing.T) {
 	}
 }
 func TestAdv_9_IndependentIssuerCollision(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 9 narrowed — proxy-issued key data is unique among the sessions of one issuer; two issuers fed the same random stream issue the same keys (each proxy instance has one issuer seeded from the system's random source). See agent_work/chunks/c04-wire-sessions/ADVERSARIAL.md.")
 	mark(t)
 	a := p.NewKeyIssuer(constantRandom(7))
 	b := p.NewKeyIssuer(constantRandom(7))
