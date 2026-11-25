@@ -279,13 +279,30 @@ func TestBadProtocolVersion(t *testing.T) {
 	binary.BigEndian.PutUint32(b[4:], 2<<16)
 	r := requireEveryChunking(t, cfgFor(t, ClientTLSOff), []clientStep{{in: b}})
 	requireClose(t, r, ReasonProtocolVersion)
-	msgs, _ := splitTyped(writesOf(r))
-	if typesOf(writesOf(r)) != "E:FATAL:0A000" || !strings.Contains(string(msgs[0].body), "unsupported frontend protocol 2.0: server supports 3.0 to 3.0") {
-		t.Fatalf("reply %q", msgs[0].body)
+	if got := string(writesOf(r)); got != "EFATAL:  unsupported frontend protocol 2.0: server supports 3.0 to 3.0\n\x00" {
+		t.Fatalf("legacy reply %q", got)
 	}
-	binary.BigEndian.PutUint32(b[4:], 3<<16|2)
+	binary.BigEndian.PutUint32(b[4:], 4<<16)
 	r = requireEveryChunking(t, cfgFor(t, ClientTLSOff), []clientStep{{in: b}})
 	requireClose(t, r, ReasonProtocolVersion)
+	msgs, _ := splitTyped(writesOf(r))
+	if typesOf(writesOf(r)) != "E:FATAL:0A000" || !strings.Contains(string(msgs[0].body), "unsupported frontend protocol 4.0: server supports 3.0 to 3.0") {
+		t.Fatalf("reply %q", msgs[0].body)
+	}
+}
+
+func TestNewerMinorVersionIsNegotiatedDown(t *testing.T) {
+	steps := talk(t, cfgFor(t, ClientTLSOff)(), clientPlan{user: "alice", password: passwordOf("alice")})
+	b := startupBytes("alice", testDatabase, []Param{{"_pq_.foo", "x"}})
+	binary.BigEndian.PutUint32(b[4:], 3<<16|2)
+	steps[0].in = b
+	r := requireEveryChunking(t, cfgFor(t, ClientTLSOff), steps)
+	requireReady(t, r)
+	w := writesOf(r)
+	want := AppendNegotiateProtocolVersion(nil, ProtocolVersion30, []string{"_pq_.foo"})
+	if !bytes.HasPrefix(w, want) || typesOf(w[len(want):]) != readyShape {
+		t.Fatalf("reply %x", w)
+	}
 }
 
 func TestStartupParameters(t *testing.T) {
@@ -293,7 +310,7 @@ func TestStartupParameters(t *testing.T) {
 		extra: []Param{{"application_name", "psql"}, {"client_encoding", "utf8"}}})
 	requireReady(t, requireEveryChunking(t, cfgFor(t, ClientTLSOff), ok))
 	for _, p := range []Param{{"client_encoding", "LATIN1"}, {"search_path", "x"}, {"replication", "true"},
-		{"options", "-c work_mem=1GB"}, {"_pq_.foo", "1"}} {
+		{"options", "-c work_mem=1GB"}} {
 		steps := []clientStep{{in: startupBytes("alice", testDatabase, []Param{p})}}
 		r := requireEveryChunking(t, cfgFor(t, ClientTLSOff), steps)
 		requireClose(t, r, ReasonParamRefused)

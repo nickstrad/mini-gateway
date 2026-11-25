@@ -79,9 +79,19 @@ func (s *ClientSession) startup(acts []Action, p startupPacket) []Action {
 		s.st.PlaintextRefused++
 		return s.fatal(acts, CodeInvalidAuthorization, "TLS is required for this connection: SSL off", ReasonPlaintextRefused)
 	}
-	if p.version != ProtocolVersion30 {
-		return s.fatal(acts, CodeFeatureNotSupported, "unsupported frontend protocol "+strconv.Itoa(int(p.version>>16))+"."+
-			strconv.Itoa(int(p.version&0xffff))+": server supports 3.0 to 3.0", ReasonProtocolVersion)
+	major, minor := p.version>>16, p.version&0xffff
+	text := "unsupported frontend protocol " + strconv.Itoa(int(major)) + "." + strconv.Itoa(int(minor)) + ": server supports 3.0 to 3.0"
+	switch {
+	case major < ProtocolVersion30>>16:
+		acts = s.write(acts, AppendLegacyFatal(nil, text), 1)
+		return s.close(acts, Action{Reason: ReasonProtocolVersion, Code: CodeFeatureNotSupported})
+	case major > ProtocolVersion30>>16:
+		return s.fatal(acts, CodeFeatureNotSupported, text, ReasonProtocolVersion)
+	}
+	var negotiate []byte
+	p.params, negotiate = splitProtocolOptions(p.params, minor)
+	if negotiate != nil {
+		acts = s.write(acts, negotiate, 1)
 	}
 	user, _ := LookupParam(p.params, ParamUser)
 	if user == "" {
@@ -118,7 +128,7 @@ func (s *ClientSession) refusedParam(params []Param) (string, bool) {
 		switch {
 		case p.Name == ParamUser || p.Name == ParamDatabase || p.Name == ParamApplicationName:
 			continue
-		case p.Name == paramReplication || p.Name == paramOptions || strings.HasPrefix(p.Name, protocolParamPfx):
+		case p.Name == paramReplication || p.Name == paramOptions:
 			return p.Name, false
 		}
 		want, ok := LookupParam(s.cfg.SessionSettings, p.Name)
@@ -127,4 +137,20 @@ func (s *ClientSession) refusedParam(params []Param) (string, bool) {
 		}
 	}
 	return "", true
+}
+
+func splitProtocolOptions(params []Param, minor uint32) ([]Param, []byte) {
+	var kept []Param
+	var unknown []string
+	for _, p := range params {
+		if strings.HasPrefix(p.Name, protocolParamPfx) {
+			unknown = append(unknown, p.Name)
+			continue
+		}
+		kept = append(kept, p)
+	}
+	if minor == 0 && len(unknown) == 0 {
+		return kept, nil
+	}
+	return kept, AppendNegotiateProtocolVersion(nil, ProtocolVersion30, unknown)
 }

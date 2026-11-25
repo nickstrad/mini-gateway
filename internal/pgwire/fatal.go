@@ -1,5 +1,7 @@
 package pgwire
 
+import "encoding/binary"
+
 const (
 	fieldSeverity            byte = 'S'
 	fieldSeverityUnlocalized byte = 'V'
@@ -28,6 +30,21 @@ func AppendErrorResponse(dst []byte, severity, code, message string) []byte {
 	dst = append(dst, fieldMessage)
 	dst = appendCString(dst, message)
 	dst = append(dst, 0)
+	return finishMessage(dst, at)
+}
+
+func AppendLegacyFatal(dst []byte, message string) []byte {
+	dst = append(dst, MsgErrorResponse)
+	return appendCString(dst, SeverityFatal+":  "+message+"\n")
+}
+
+func AppendNegotiateProtocolVersion(dst []byte, newest uint32, unrecognized []string) []byte {
+	dst, at := beginMessage(dst, MsgNegotiateProtocol)
+	dst = binary.BigEndian.AppendUint32(dst, newest)
+	dst = binary.BigEndian.AppendUint32(dst, uint32(len(unrecognized)))
+	for _, u := range unrecognized {
+		dst = appendCString(dst, u)
+	}
 	return finishMessage(dst, at)
 }
 

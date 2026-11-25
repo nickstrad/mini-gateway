@@ -112,7 +112,7 @@ func parseStartupPacket(body []byte) startupPacket {
 		return startupPacket{kind: startupCancel, key: k}
 	}
 	p := startupPacket{kind: startupNormal, version: code}
-	if code != ProtocolVersion30 {
+	if code>>16 != ProtocolVersion30>>16 {
 		return p
 	}
 	params, ok := parseStartupParams(rest)
@@ -152,3 +152,5 @@ func parseStartupParams(b []byte) ([]Param, bool) {
 		b = rest2
 	}
 }
+
+func ParseStartupParams(b []byte) ([]Param, bool) { return parseStartupParams(b) }
