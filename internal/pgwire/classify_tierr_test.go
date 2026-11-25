@@ -349,6 +349,35 @@ func clsTierRCustomSettingIsSession(addr string) error {
 	return nil
 }
 
+func clsTierRLexingSettingHidesSet(addr string) error {
+	p, err := clsDialPG(addr, clsTierRDB)
+	if err != nil {
+		return err
+	}
+	defer p.close()
+	enable := "SET LOCAL standard_conforming_strings = off"
+	hidden := `SELECT '\' ; SELECT ' ; SET search_path = hidden ; --'`
+	if u := ClassifyQuery([]byte(enable), true); u.Class != work.ClassReject {
+		return fmt.Errorf("%q is not rejected", enable)
+	}
+	if u := ClassifyQuery([]byte(hidden), true); u.Class == work.ClassReject {
+		return fmt.Errorf("the hidden SET is visible to the lexer; the canary no longer shows the hazard")
+	}
+	for _, q := range []string{"BEGIN", enable, hidden, "COMMIT"} {
+		if _, err := p.must(q); err != nil {
+			return err
+		}
+	}
+	got, err := p.value("SHOW search_path")
+	if err != nil {
+		return err
+	}
+	if got != "hidden" {
+		return fmt.Errorf("search_path %q: the lexing hazard behind rejecting SET LOCAL standard_conforming_strings did not show", got)
+	}
+	return nil
+}
+
 func clsTierROracleCanaries(t *testing.T, addr string, admin *clsPG) {
 	t.Helper()
 	for _, q := range []string{
@@ -372,6 +401,9 @@ func clsTierROracleCanaries(t *testing.T, addr string, admin *clsPG) {
 		}
 	}
 	if err := clsTierRCustomSettingIsSession(addr); err != nil {
+		t.Error(err)
+	}
+	if err := clsTierRLexingSettingHidesSet(addr); err != nil {
 		t.Error(err)
 	}
 	for _, q := range []string{

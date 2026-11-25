@@ -390,6 +390,29 @@ R:session-set	SET "local".x = 5
 R:session-set	SET local = 1
 R:session-set	SET local TO 1
 R:session-set	SET LOCAL
+R:session-set	SET LOCAL standard_conforming_strings = off
+R:session-set	set local Standard_Conforming_Strings to off
+R:session-set	SET LOCAL "STANDARD_CONFORMING_STRINGS" TO off
+R:session-set	SET LOCAL U&"standard\005fconforming\005fstrings" TO off
+R:session-set	SET LOCAL client_encoding = 'SJIS'
+R:session-set	SET LOCAL NAMES 'SJIS'
+R:session-set	SET TRANSACTION NAMES 'SJIS'
+R:session-set	BEGIN; SET LOCAL standard_conforming_strings = off; SELECT 1
+R:session-set	ALTER ROLE CURRENT_USER SET standard_conforming_strings = off
+R:session-set	ALTER DATABASE postgres SET client_encoding = 'SJIS'
+R:session-set	ALTER SYSTEM SET standard_conforming_strings = off
+R:session-set	ALTER ROLE CURRENT_USER RESET client_encoding
+R:set-config	SELECT set_config('standard_conforming_strings', 'off', true)
+R:set-config	SELECT set_config('STANDARD_CONFORMING_STRINGS', 'off', true)
+R:set-config	SELECT set_config('client_encoding', 'SJIS', true)
+R:set-config	SELECT set_config('standard_' || 'conforming_strings', 'off', true)
+R:set-config	SELECT set_config($$search_path$$, 'app', true)
+R:set-config	SELECT set_config(E'search_path', 'app', true)
+R:set-config	SELECT set_config(lower('SEARCH_PATH'), 'app', true)
+F ro co tx:none	SELECT 'standard_conforming_strings'
+F ro tx:none	SHOW standard_conforming_strings
+F ro tx:none	SHOW client_encoding
+F ro tx:none	SELECT current_setting('client_encoding')
 R:session-set	UPDATE pg_settings SET setting = 'x' WHERE name = 'application_name'
 R:session-set	update pg_catalog.pg_settings set setting = 'x' where name = 'search_path'
 R:session-set	UPDATE "pg_settings" SET setting = 'x' WHERE name = 'search_path'

@@ -425,7 +425,7 @@ func (m *clsMsg) leadReject(s clsSpan) work.RejectReason {
 }
 
 func (m *clsMsg) transactionScopedSet(i int) bool {
-	if !m.isAny(i, []string{"local", "transaction", "constraints"}) {
+	if !m.isAny(i, []string{"local", "transaction", "constraints"}) || m.is(i+1, "names") {
 		return false
 	}
 	next := m.toks[min(i+1, len(m.toks)-1)]
@@ -469,6 +469,9 @@ func (m *clsMsg) tokenReject(s clsSpan, i int) work.RejectReason {
 	if string(name) == "pg_settings" && m.spanHas(s, "update") {
 		return work.RejectSessionSet
 	}
+	if clsInList(rejLexingSettings, clsLowerASCII(name)) && (m.spanHas(s, "set") || m.spanHas(s, "reset")) {
+		return work.RejectSessionSet
+	}
 	if next >= s.hi || !m.isPunct(next, '(') {
 		return work.RejectNone
 	}
@@ -492,10 +495,26 @@ func (m *clsMsg) spanHas(s clsSpan, kw string) bool {
 
 func (m *clsMsg) setConfigLocal(open int) bool {
 	p := m.parens[open]
-	if p.match < 0 || p.comma2 < 0 {
+	if p.match < 0 || p.comma2 < 0 || p.comma1 != open+2 {
+		return false
+	}
+	lit := m.toks[open+1]
+	if lit.Kind != TokenString || m.src[lit.Start] != '\'' {
+		return false
+	}
+	setting := clsLowerASCII(lexUnquote(m.src[lit.Start+1:lit.End-1], '\''))
+	if clsInList(rejLexingSettings, setting) {
 		return false
 	}
 	return p.comma2+2 == p.match && m.is(p.comma2+1, "true")
+}
+
+func clsLowerASCII(b []byte) []byte {
+	out := make([]byte, len(b))
+	for i, c := range b {
+		out[i] = clsFold(c)
+	}
+	return out
 }
 
 func (m *clsMsg) txEffect(stmts []clsSpan) work.TxEffect {
