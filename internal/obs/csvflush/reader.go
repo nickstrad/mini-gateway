@@ -1,6 +1,7 @@
 package csvflush
 
 import (
+	"bytes"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -44,12 +45,11 @@ type Run struct {
 }
 
 func readCSV(path string, header []string) ([][]string, error) {
-	f, err := os.Open(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	r := csv.NewReader(f)
+	r := csv.NewReader(bytes.NewReader(keepCarriageReturns(raw)))
 	r.FieldsPerRecord = len(header)
 	recs, err := r.ReadAll()
 	if err != nil {
@@ -64,6 +64,10 @@ func readCSV(path string, header []string) ([][]string, error) {
 		}
 	}
 	return recs[1:], nil
+}
+
+func keepCarriageReturns(b []byte) []byte {
+	return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\r\r\n"))
 }
 
 func ints(path string, row int, fields ...string) ([]int64, error) {
@@ -187,13 +191,51 @@ func RoundTrip(runDir string, final ...obs.InstanceSnapshot) error {
 			errs = append(errs, fmt.Errorf("%w: instance %q: last flush_seq %d, final snapshot %d", ErrMismatch, want.Instance, last, want.Seq))
 			continue
 		}
+		if err := run.checkOrder(want.Instance, want.Seq); err != nil {
+			errs = append(errs, err)
+			continue
+		}
 		got := run.Snapshot(want.Instance, want.Seq)
-		errs = append(errs, comparePoints(want, got), compareHists(want, got))
+		var prev *obs.InstanceSnapshot
+		if len(seqs) > 1 {
+			p := run.Snapshot(want.Instance, seqs[len(seqs)-2])
+			prev = &p
+		}
+		errs = append(errs, comparePoints(want, got, prev), compareHists(want, got, prev))
 	}
 	if run.Run.Flushes != int64(len(run.FlushSeqs(firstInstance(final)))) && len(final) > 0 {
 		errs = append(errs, fmt.Errorf("%w: run.csv says %d flushes, metrics.csv has %d", ErrMismatch, run.Run.Flushes, len(run.FlushSeqs(firstInstance(final)))))
 	}
 	return errors.Join(errs...)
+}
+
+func (r *Run) checkOrder(instance string, seq int64) error {
+	var prev *MetricRow
+	for i := range r.Metrics {
+		m := &r.Metrics[i]
+		if m.Instance != instance || m.FlushSeq != seq {
+			continue
+		}
+		if prev != nil && obs.ComparePoint(prev.Point, m.Point) >= 0 {
+			return fmt.Errorf("%w: instance %q flush %d: metric row %s.%s %+v is a duplicate or out of order", ErrMismatch, instance, seq, m.Point.Component, m.Point.Metric, m.Point.Labels)
+		}
+		prev = m
+	}
+	var prevH *HistRow
+	for i := range r.Hists {
+		h := &r.Hists[i]
+		if h.Instance != instance || h.FlushSeq != seq {
+			continue
+		}
+		if prevH != nil {
+			c := obs.CompareHist(prevH.Point, h.Point)
+			if c > 0 || c == 0 && (prevH.Point.Unit != h.Point.Unit || prevH.Bucket.Lo >= h.Bucket.Lo) {
+				return fmt.Errorf("%w: instance %q flush %d: bucket row of %s.%s %+v is a duplicate or out of order", ErrMismatch, instance, seq, h.Point.Component, h.Point.Metric, h.Point.Labels)
+			}
+		}
+		prevH = h
+	}
+	return nil
 }
 
 func firstInstance(s []obs.InstanceSnapshot) string {
@@ -203,7 +245,23 @@ func firstInstance(s []obs.InstanceSnapshot) string {
 	return s[0].Instance
 }
 
-func comparePoints(want, got obs.InstanceSnapshot) error {
+func persistedPoint(g obs.Point, prev *obs.InstanceSnapshot) bool {
+	if g.Labels.Tenant == "" || prev == nil {
+		return false
+	}
+	p, ok := prev.Point(g.Component, g.Metric, g.Labels)
+	return ok && p == g
+}
+
+func persistedHist(g obs.HistPoint, prev *obs.InstanceSnapshot) bool {
+	if g.Labels.Tenant == "" || prev == nil {
+		return false
+	}
+	p, ok := prev.Hist(g.Component, g.Metric, g.Labels)
+	return ok && p.Unit == g.Unit && slices.Equal(p.Buckets, g.Buckets)
+}
+
+func comparePoints(want, got obs.InstanceSnapshot, prev *obs.InstanceSnapshot) error {
 	var errs []error
 	for _, p := range want.Points {
 		g, ok := got.Point(p.Component, p.Metric, p.Labels)
@@ -215,14 +273,14 @@ func comparePoints(want, got obs.InstanceSnapshot) error {
 		}
 	}
 	for _, g := range got.Points {
-		if _, ok := want.Point(g.Component, g.Metric, g.Labels); !ok && g.Labels.Tenant == "" {
-			errs = append(errs, fmt.Errorf("%w: %s.%s %+v in the file only", ErrMismatch, g.Component, g.Metric, g.Labels))
+		if _, ok := want.Point(g.Component, g.Metric, g.Labels); !ok && !persistedPoint(g, prev) {
+			errs = append(errs, fmt.Errorf("%w: %s.%s %+v in the file only, and not the same row of the flush before", ErrMismatch, g.Component, g.Metric, g.Labels))
 		}
 	}
 	return errors.Join(errs...)
 }
 
-func compareHists(want, got obs.InstanceSnapshot) error {
+func compareHists(want, got obs.InstanceSnapshot, prev *obs.InstanceSnapshot) error {
 	var errs []error
 	for _, h := range want.Hists {
 		g, ok := got.Hist(h.Component, h.Metric, h.Labels)
@@ -237,8 +295,8 @@ func compareHists(want, got obs.InstanceSnapshot) error {
 		}
 	}
 	for _, g := range got.Hists {
-		if _, ok := want.Hist(g.Component, g.Metric, g.Labels); !ok && g.Labels.Tenant == "" {
-			errs = append(errs, fmt.Errorf("%w: histogram %s.%s %+v in the file only", ErrMismatch, g.Component, g.Metric, g.Labels))
+		if _, ok := want.Hist(g.Component, g.Metric, g.Labels); !ok && !persistedHist(g, prev) {
+			errs = append(errs, fmt.Errorf("%w: histogram %s.%s %+v in the file only, and not the same rows of the flush before", ErrMismatch, g.Component, g.Metric, g.Labels))
 		}
 	}
 	return errors.Join(errs...)
