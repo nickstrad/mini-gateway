@@ -1,6 +1,7 @@
 package simrun_test
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,6 +76,7 @@ func baselineRuns(t *testing.T) string {
 				return
 			}
 		}
+		baselineErr = wireRuns(dir)
 	})
 	if baselineErr != nil {
 		t.Fatal(baselineErr)
@@ -127,7 +129,7 @@ func TestCSVAssertBaselineCountsFromFlushedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	if !strings.Contains(out, "5 SQL files run, 0 failures") || !strings.Contains(out, "v1.5.") {
+	if want := fmt.Sprintf("%d SQL files run, 0 failures", analysisFiles(t)); !strings.Contains(out, want) || !strings.Contains(out, "v1.5.") {
 		t.Fatalf("unexpected output\n%s", out)
 	}
 }

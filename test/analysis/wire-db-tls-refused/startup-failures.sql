@@ -1,26 +1,42 @@
--- Chunk 4 wire scenario wire-db-tls-refused: startup failures by reason equal the startup faults injected by kind
--- Schema: PLAN.md section 7.7, version 1. Run by scripts/csv-assert.sh in the run directory.
--- Returns the rows that violate the claim; zero rows is a pass.
-SELECT 'schema version ' || schema_version AS violation
-FROM read_csv('metrics.csv') WHERE schema_version <> 1
+-- requires: wire.client_startups_failed wire.database_startups_failed fakepg.faults workload.startup_tls_faults
+-- claim: wire-db-tls-refused: startup failures by reason in the wire snapshot equal the startup faults injected by kind.
+-- Injected: fakepg.tls_answered{N} -> wire.database_startups_failed{reason=tls-refused}.
+-- Every run: each injected count is at least 1 and equals the failures of its reason, no other failure of
+-- these metrics is non-zero, and no fault of another kind was injected.
+SELECT run_id || ': schema_version ' || schema_version AS violation FROM runs WHERE schema_version <> 1
 UNION ALL
-SELECT 'no wire rows: the counters did not move' AS violation
-WHERE NOT EXISTS (SELECT 1 FROM read_csv('metrics.csv') WHERE component = 'wire' AND metric = 'client_startups_begun' AND value > 0)
-UNION ALL
-(WITH final AS (
-    SELECT * FROM read_csv('metrics.csv')
-    WHERE flush_seq = (SELECT max(flush_seq) FROM read_csv('metrics.csv'))
-),
-expected(component, metric, reason, value) AS (
+(WITH injection(component, metric, outcome, reason, failure_metric, failure_reason, planted) AS (
     VALUES
-        ('wire', 'database_startups_failed', 'tls-refused', 1)
+        ('fakepg', 'tls_answered', 'N', '', 'database_startups_failed', 'tls-refused', NULL)
 ),
-actual AS (
-    SELECT component, metric, reason, sum(value) AS value FROM final
+injected AS (
+    SELECT r.run_id, i.failure_metric, i.failure_reason,
+           coalesce(i.planted, (SELECT sum(f.value) FROM final f WHERE f.run_id = r.run_id AND f.component = i.component
+                                AND f.metric = i.metric AND f.outcome = i.outcome AND f.reason = i.reason), 0) AS value
+    FROM runs r CROSS JOIN injection i
+),
+failed AS (
+    SELECT run_id, metric AS failure_metric, reason AS failure_reason, sum(value) AS value FROM final
     WHERE component = 'wire' AND metric IN ('client_startups_failed', 'database_startups_failed') AND value <> 0
-    GROUP BY component, metric, reason
+    GROUP BY run_id, metric, reason
 )
-SELECT 'metric ' || coalesce(e.metric, a.metric) || ' reason ' || coalesce(e.reason, a.reason)
-       || ': expected ' || coalesce(e.value, 0) || ', flushed ' || coalesce(a.value, 0) AS violation
-FROM expected e FULL OUTER JOIN actual a ON e.metric = a.metric AND e.reason = a.reason
-WHERE coalesce(e.value, 0) <> coalesce(a.value, 0));
+SELECT coalesce(i.run_id, f.run_id) || ': wire.' || coalesce(i.failure_metric, f.failure_metric) || ' reason '
+       || coalesce(i.failure_reason, f.failure_reason) || ': injected ' || coalesce(i.value, 0) || ', failed ' || coalesce(f.value, 0)
+FROM injected i FULL OUTER JOIN failed f
+  ON i.run_id = f.run_id AND i.failure_metric = f.failure_metric AND i.failure_reason = f.failure_reason
+WHERE coalesce(i.value, 0) <> coalesce(f.value, 0) OR (i.run_id IS NOT NULL AND i.value < 1))
+UNION ALL
+(WITH injection(component, metric, outcome, reason, failure_metric, failure_reason, planted) AS (
+    VALUES
+        ('fakepg', 'tls_answered', 'N', '', 'database_startups_failed', 'tls-refused', NULL)
+)
+SELECT run_id || ': ' || component || '.' || metric || ' ' || outcome || reason || ' = ' || sum(value) || ', a fault this scenario does not inject'
+FROM final x
+WHERE value <> 0 AND (
+    (component = 'fakepg' AND metric = 'faults')
+    OR (component = 'fakepg' AND metric = 'handshakes' AND reason <> 'completed')
+    OR (component = 'fakepg' AND metric = 'tls_answered' AND outcome = 'N')
+    OR (component = 'workload' AND metric = 'startup_tls_faults' AND reason <> 'none'))
+  AND NOT EXISTS (SELECT 1 FROM injection i WHERE i.component = x.component AND i.metric = x.metric
+                  AND i.outcome = x.outcome AND i.reason = x.reason)
+GROUP BY run_id, component, metric, outcome, reason);

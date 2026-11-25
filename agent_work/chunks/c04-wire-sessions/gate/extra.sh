@@ -1,9 +1,9 @@
 #!/bin/bash
 # Chunk 4 extra check (G10).
-# 1. The CSV-flush assertions of the wire scenarios: every scenario is run (seed 1), its final
-#    wire, workload and fakepg numbers are written as metrics.csv (PLAN.md section 7.7,
-#    schema version 1), and test/analysis/<scenario>/*.sql are run on it with DuckDB; each
-#    must return zero rows, and must return rows when a wrong number is planted.
+# 1. The CSV-flush assertions of the wire scenarios: every scenario is run (seed 1) through the
+#    collector and the CSV adapter (internal/obs/simrun.Wire), test/analysis/<scenario>/*.sql
+#    are run on the flushed files with scripts/csv-assert.sh; each must return zero rows, and
+#    the runner must exit non-zero when a wrong number is planted in the final flush.
 # 2. The planted-bug canary: with the "no bytes between S and the handshake result" rule
 #    switched off, the smuggled-bytes scenario must fail its assertion.
 # 3. Cross-process replay: the wire scenarios on seed 42 in two separate test processes give
@@ -15,7 +15,7 @@ cd "$root" || exit 2
 command -v go >/dev/null 2>&1 || PATH="/usr/local/go/bin:$PATH"
 command -v duckdb >/dev/null 2>&1 || PATH="/root/.local/bin:$PATH"
 command -v duckdb >/dev/null 2>&1 || { echo "duckdb is not installed"; exit 1; }
-MG_DUCKDB=1 go test -count=1 -run '^TestWireAnalysisSQL$' ./internal/pgwire || { echo "SQL assertions failed"; exit 1; }
+MG_REQUIRE_DUCKDB=1 go test -count=1 -run '^(TestWireSQLCatchesPlantedNumbers|TestCSVAssertBaselineCountsFromFlushedFiles)$' ./internal/obs/simrun || { echo "SQL assertions failed"; exit 1; }
 go test -count=1 -run '^TestPlantedEarlyBytesBugFailsTheSmuggleScenario$' ./internal/pgwire || { echo "canary failed"; exit 1; }
 tmp=$(mktemp -d /tmp/c04-extra.XXXXXX) || exit 2
 trap 'rm -rf "$tmp"' EXIT

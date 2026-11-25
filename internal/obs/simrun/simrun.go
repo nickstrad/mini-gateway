@@ -13,9 +13,9 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 	"github.com/nickstrad/mini-gateway/internal/obs/csvflush"
 	"github.com/nickstrad/mini-gateway/internal/obs/jsonstats"
-	"github.com/nickstrad/mini-gateway/internal/obs/logline"
 	"github.com/nickstrad/mini-gateway/internal/obs/promtext"
 	"github.com/nickstrad/mini-gateway/internal/obs/simsrc"
+	"github.com/nickstrad/mini-gateway/internal/pgwire/pgwiretest/wireworld"
 	"github.com/nickstrad/mini-gateway/internal/sim"
 	"github.com/nickstrad/mini-gateway/internal/sim/workload"
 	"github.com/nickstrad/mini-gateway/internal/sim/world"
@@ -43,6 +43,7 @@ type Options struct {
 	DetailOff bool
 	CSV       func(*csvflush.Config)
 	Prom      promtext.Config
+	Replay    string
 }
 
 // Run captures the world result, collector, final snapshot, CSV directory, and
@@ -59,6 +60,7 @@ type Run struct {
 	Log       bytes.Buffer
 	Publishes int64
 	PublishAt []sim.Time
+	Wire      wireworld.Result
 }
 
 // RunID formats the schema v1 simulator run identifier "<scenario>/<seed>/<arm>".
@@ -135,32 +137,13 @@ func Scenario(sc world.Scenario, seed int64, opt Options) (*Run, error) {
 	if opt.Dir == "" {
 		return nil, errors.New("simrun: no CSV directory")
 	}
-	run := &Run{RunID: RunID(sc.Name, seed, opt.Arm)}
-	run.Collector = obs.NewCollector(obs.Config{Instance: Instance, Build: Build, ConfigFingerprint: ConfigFingerprint(sc, seed), Detail: !opt.DetailOff})
-	d := &driver{SimDriver: &world.SimDriver{Seed: seed, Scenario: sc.Name}, run: run, opt: opt}
-	cfg := csvflush.Config{Dir: opt.Dir, Strict: true, Clock: func() int64 {
-		if d.S == nil {
-			return 0
-		}
-		return int64(d.S.Now())
-	}, Run: csvflush.RunInfo{RunID: run.RunID, Scenario: sc.Name, Tier: csvflush.TierSim, Seed: seed, Arm: opt.Arm,
-		Instances: 1, Build: Build, ConfigFingerprint: ConfigFingerprint(sc, seed)}}
-	if opt.CSV != nil {
-		opt.CSV(&cfg)
-	}
-	w, err := csvflush.New(cfg)
+	d := &driver{SimDriver: &world.SimDriver{Seed: seed, Scenario: sc.Name}, opt: opt}
+	run, err := newRun(sc.Name, seed, ConfigFingerprint(sc, seed), opt, d.now)
 	if err != nil {
 		return nil, err
 	}
-	run.CSV, run.RunDir = w, w.RunDir()
-	run.JSON = jsonstats.New(nil)
-	run.Prom = promtext.New(run.Collector.Registry(), nil, opt.Prom)
-	lines := logline.New(run.Collector.Registry(), &run.Log)
-	for _, a := range []obs.Adapter{w, run.JSON, run.Prom, lines} {
-		if err := run.Collector.Attach(a); err != nil {
-			return nil, err
-		}
-	}
+	d.run = run
+	w := run.CSV
 	setup := sc.Setup(seed)
 	res := &world.Result{Scenario: sc.Name, Seed: seed}
 	res.Err = world.Drive(d, setup, sc.Duration)
