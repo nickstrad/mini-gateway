@@ -226,7 +226,9 @@ SQL files are written to the 7.7 schema under `test/analysis/<scenario>/`
 `verify`. `client_analysis_test.go: TestWireAnalysisSQL` (run by the gate extra with
 `MG_DUCKDB=1`) writes each scenario's final numbers as `metrics.csv` with the proposed metric
 names, runs both files with DuckDB (zero rows required) and plants a wrong number (rows
-required). The orchestrator wires the real flush at integration.
+required). Superseded at integration: the scenarios now flush through chunk 3's collector and
+the files run over the real flushed files (section "Integration with chunk 3");
+`TestWireAnalysisSQL` is gone.
 
 ## Observability
 
@@ -351,6 +353,108 @@ prints one failure, attack 9, which stays failing by design: it asserts the unsc
   external tests (`package pgwire_test`) or move them; `tools/lint-rules/det-packages.txt`
   also conflicts (both chunks appended lines; keep both).
 
+## Integration with chunk 3
+
+Done on 2026-11-25 after the rebase onto chunk 3 (brief
+`/root/briefs/zgateway-p2-c04-integrate.md`). Wiring only; no product behaviour changed.
+
+**What was added**
+
+| Piece | Where |
+| --- | --- |
+| Mapping `WireSnapshot` -> metric points (component `wire`), `Metrics()`, `Source(func() WireSnapshot)` | `internal/obs/wiresrc/wiresrc.go`; test `wiresrc_test.go: TestMappingMovesEveryMetricAndExportsEveryField` (reflection fills every field: every field reaches an exported value, every metric moves), `TestZeroSnapshotEmitsEveryLabelValue` |
+| Chunk 4's simulator counters, which chunk 3's mapping did not know: `fakepg.AuthSnapshot` and `workload.TenantSnapshot.Startup` | `internal/obs/simsrc/simsrc.go` (`FakeAuthMetrics`, `MapFakeAuth`, `mapStartup`; `Fake(srv)` now emits both fakepg snapshots); `simsrc_test.go: TestMappingsMoveEveryMetric` covers them (it failed on `Startup.*` after the rebase) |
+| Catalog | `internal/obs/catalog/catalog.go` declares `wiresrc.Metrics()`; `docs/csv-schema.md` regenerated (`scripts/gen-docs.sh`) |
+| Wire scenario world, importable | `internal/pgwire/pgwiretest/wireworld/` (moved out of `client_sim_test.go`: `Scenario`, `Expect`, `Build`, `World.Run`, `Run`, `Result`, `Scenario.Verify` - the exact Go assertions, unchanged - and `Scenarios()`). The planted-bug hook is now `Scenario.Client func(*pgwire.ClientConfig)`; the canary sets it to `pgwire.PlantEarlyBytes` |
+| Flush harness | `internal/obs/simrun/wire.go: Wire(sc, seed, opts)`: builds the world, registers sim, simnet, fakepg, workload and wire sources, attaches all four adapters, publishes at t=0, every `WireInterval` (5 s virtual) and at the scenario's deadline-check instant (`Scenario.CheckAt`), then once at the end, and closes the CSV writer. Run id `<scenario>/<seed>/base`, the layout the SQL files expect. `simrun.Scenario` and `Wire` share `newRun` (adapter setup, unchanged behaviour) |
+| Flush test, the baseline way | `internal/obs/simrun/wire_test.go: TestScenarioWireFlush`: every wire scenario on the pinned seeds (1, 42), run directory under `$RUN_DIR` when set; `Verify` (exact Go assertions), `Run.Check()` (CSV round trip, JSON, Prometheus grammar, log lines), a second run of the same seed with byte-identical files and adapter output and the same trace digest, and exported values equal to the snapshot |
+| SQL over flushed files | `test/analysis/wire-*/{startup-failures,tls-requests,handshake-failures}.sql` (19 scenarios x 3) |
+| SQL in `go test` and the gate | `simrun/csvassert_test.go`: the shared baseline root now also holds every wire scenario at seed 1, so `TestCSVAssertBaselineCountsFromFlushedFiles` runs all 62 SQL files (root mode) and `TestEveryDeclaredMetricIsEmittedAndEveryEmittedOneDocumented` sees the wire metrics. `simrun/wiresql_test.go: TestWireSQLCatchesPlantedNumbers` (see below). G4's sweep runs `TestScenarioWireFlush` under `$RUN_DIR/sweep`, so G7 (`csv-assert.sh` root mode over the sweep) runs the wire files |
+| Removed | `client_analysis_test.go: TestWireAnalysisSQL` and its hand-written `metrics.csv` (superseded by the real flush) |
+| Lint rules | `tools/lint-rules/imports.txt`: `internal/obs/wiresrc` joins the mapping packages that may not import an adapter, `simrun` or `catalog`, and adapters may not import it; `simrun/imports_test.go` checks it too. `tools/lint-rules/det-packages.txt`: `internal/obs/wiresrc`, `internal/pgwire/pgwiretest/wireworld` |
+| Gate extra | `gate/extra.sh` step 1 now runs `TestWireSQLCatchesPlantedNumbers` and `TestCSVAssertBaselineCountsFromFlushedFiles` with `MG_REQUIRE_DUCKDB=1` |
+
+**Import rule.** `internal/pgwire` imports nothing new; its tests cannot import `simrun`
+(importlint reads test files and `internal/pgwire/...` may not import `simrun`), which is why
+the flush tests live in `internal/obs/simrun` and the scenario table moved to `wireworld`
+(a harness package under `pgwiretest`, imports no adapter). `importlint` is green.
+
+**Label decision.** The side is in the metric name (`client_...`, `database_...`), not in
+`mode`: `mode` is already taken by the request kind and the TLS version, and the two sides
+have different failure vocabularies (client reasons vs database error classes). Labels:
+`reason` for every by-cause counter (startup failure reason or class, handshake result,
+auth cause, violation), `outcome` for answers (`S`, `N`, `none`), `mode` for the request
+kind (`tls`, `gss`, `cancel`), the TLS version (`1.2`, `1.3`, `other`) and the ready status
+(`I`, `T`, `E`). Every known label value is emitted, zero included (the enum's `none` slot
+too, which `Check` requires to stay 0). No tenant label: the wire snapshot is not per tenant.
+
+**Metric names** (component `wire`, all counters unless marked):
+client: `client_startups_begun`, `client_startups_completed`, `client_startups_failed{reason}`,
+`client_in_startup` (gauge), `client_in_startup_peak` (high-water), `client_prestartup_requests{mode,outcome}`,
+`client_tls_completed{mode}`, `client_tls_failed{reason}`, `client_plaintext_refused`,
+`client_auth_failures{reason}`, `client_cancel_requests`, `client_cancel_after_tls`, `client_terminated`,
+`client_queries_seen`, `client_extended_refused`, `client_messages_in`, `client_messages_out`,
+`client_bytes_in`, `client_bytes_out`, `client_violations{reason}`, `client_oversized`;
+database: `database_startups_begun`, `database_startups_completed`, `database_startups_failed{reason}`,
+`database_in_startup` (gauge), `database_in_startup_peak` (high-water), `database_tls_requests`,
+`database_tls_answers{outcome}`, `database_tls_completed{mode}`, `database_tls_failed{reason}`,
+`database_auth_failures{reason}`, `database_server_fatals`, `database_replies`, `database_ready{mode}`,
+`database_errors`, `database_fatal_errors`, `database_parameter_status`, `database_notices`,
+`database_notifications`, `database_end_without_marker`, `database_unknown_pass_through`, and the
+six side counters with the `database_` prefix.
+New simulator metrics: `fakepg.tls_answered{outcome}`, `gss_refused`, `handshakes_started`,
+`handshakes{reason: completed, failed, stall, bad-certificate}`, `bad_hellos`, `scram_started`,
+`scram_ok`, `scram_failed`, `channel_binding_refused`, `tls_changes`; `workload.startup_tls_requests{tenant}`,
+`startup_tls_answered{tenant,outcome}`, `startup_handshakes{tenant,outcome: ok, failed}`,
+`startup_tls_faults{tenant,reason: fault kind}`, `startup_scram_started{tenant}`,
+`startup_scram{tenant,outcome: ok, failed}`.
+
+**The SQL files** (each starts with `-- requires:`, checks `schema_version`, groups by
+`run_id` so it holds over many runs, returns zero rows on a correct run):
+
+- `startup-failures.sql` - startup failures by reason in the wire snapshot = startup faults
+  injected by kind. Each file lists its injection: the flushed fault counter (`fakepg.faults`
+  `pg.<kind>`, `workload.startup_tls_faults` `<kind>`, `fakepg.handshakes` `<result>`, or
+  `fakepg.tls_answered` `N` for the refused TLS request) and the `wire.client_startups_failed`
+  / `database_startups_failed` reason it must produce. Every run: the injected count is at
+  least 1 and equals the failures of that reason, no other reason is non-zero, and no fault of
+  another kind was injected. Three client scenarios have no fault counter (the injection is the
+  fault tenant's configuration: plaintext while TLS is required, wrong password, unknown user):
+  their count is the planted 1, written in the file.
+- `tls-requests.sql` - TLS requests by kind and answer = requests sent: the proxy's
+  `client_prestartup_requests{mode=tls}` answered S or N = the workload's
+  `startup_tls_requests` (at least 1), per answer = the workload's `startup_tls_answered`, no
+  `gss` or `cancel` request counted; database side: `database_tls_answers` per answer =
+  `fakepg.tls_answered`, and the sum = the fake's answers.
+- `handshake-failures.sql` - handshake failures = handshake faults injected: `client_tls_failed`
+  / `database_tls_failed` by result equal the injected handshake fault (`bad-hello` ->
+  `failed`, `stall-after-request` -> client `deadline`, `bad-certificate` ->
+  `failed-verification`, fake handshake `stall` -> database `deadline`), nothing else failed,
+  no other handshake fault was injected; and completed handshakes match on both sides
+  (`client_tls_completed` = workload `startup_handshakes{ok}`, `database_tls_completed` =
+  `fakepg.handshakes{completed}`).
+
+**Each can fail** - `wiresql_test.go: TestWireSQLCatchesPlantedNumbers`, per scenario on the
+flushed seed-1 run: one copy with three wrong numbers planted in the final flush (+1
+`client_startups_failed{deadline}`, +7 `startup_tls_requests` of `tenant0`, +1
+`client_tls_failed{failed}`) must make `csv-assert.sh` exit non-zero naming all three files
+with violating rows (and not for a missing metric or a DuckDB error); a second copy with the
+expected startup failure set to 0 must make `startup-failures.sql` fail. The correct runs pass
+in `TestCSVAssertBaselineCountsFromFlushedFiles`.
+
+**Decisions.** (1) Flush on the pinned seeds, as chunk 3's `TestScenarioFlush` does; the
+seed sweep `TestScenarioWireStartup` keeps running the world without the collector (same as
+chunk 2's `TestScenario`). (2) `WireInterval` is 5 s of virtual time (the baseline default is
+100 ms): a wire run lasts 30 s virtual and at 100 ms a run directory was 13 MB and made the
+SQL tests take minutes; the extra flush at the deadline-check instant keeps the at-check
+numbers in the files. (3) The SQL files are generated text but committed as data; the
+generator was a scratch script and is not kept.
+
+**Cost.** `go test ./internal/obs/simrun` takes about 2 minutes with DuckDB on vm-1 (it was
+about 25 s): `TestCSVAssertBaselineCountsFromFlushedFiles` ~55 s (62 files, each runner call
+starts DuckDB once per required metric), `TestWireSQLCatchesPlantedNumbers` parallel,
+`TestScenarioWireFlush` ~12 s.
+
 ## Simulator changes (additive; the kernel API is untouched)
 
 | File | Change |
@@ -381,7 +485,7 @@ DST_SEEDS=200 go test -run '^TestScenarioWire' ./internal/pgwire          # the 
 go test ./internal/pgwire -run '^TestScenarioWireStartup$/^wire-client-smuggle$/^seed=7$' -seed=7 -count=1
 go test -run '^$' -fuzz '^FuzzClientSession$' -fuzztime 60s ./internal/pgwire   # also FuzzFramer, FuzzBackendSession, FuzzCycle
 go test -run TestGoldenBytes -update ./internal/pgwire                     # after checking a reply change
-MG_DUCKDB=1 go test -run TestWireAnalysisSQL ./internal/pgwire
+MG_REQUIRE_DUCKDB=1 go test -run 'TestWireSQL|TestCSVAssertBaseline|TestScenarioWireFlush' ./internal/obs/simrun
 RUN_DIR=/tmp/tr scripts/tier-r.sh                                          # MG_TIER_R_UPDATE=1 rewrites both recordings
 agent_work/chunks/c04-wire-sessions/gate/extra.sh
 scripts/gate.sh c04-wire-sessions
