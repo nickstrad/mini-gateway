@@ -1,6 +1,7 @@
 package fakepg_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -12,11 +13,23 @@ import (
 )
 
 type world struct {
-	t   testing.TB
-	s   *sim.Sim
-	n   *simnet.Net
-	srv *fakepg.Server
-	ps  []*workload.Probe
+	t    testing.TB
+	soft bool
+	err  error
+	s    *sim.Sim
+	n    *simnet.Net
+	srv  *fakepg.Server
+	ps   []*workload.Probe
+}
+
+func (w *world) failf(format string, args ...any) {
+	w.t.Helper()
+	if !w.soft {
+		w.t.Fatalf(format, args...)
+	}
+	if w.err == nil {
+		w.err = fmt.Errorf(format, args...)
+	}
 }
 
 func (w *world) closeAll() {
@@ -48,7 +61,7 @@ func (w *world) client() *workload.Probe {
 	p.Startup("app", "app")
 	w.run(time.Millisecond)
 	if !strings.HasSuffix(p.Trace(), "ZI") {
-		w.t.Fatalf("startup did not finish: %s", p.Trace())
+		w.failf("startup did not finish: %s", p.Trace())
 	}
 	return p
 }
@@ -56,17 +69,17 @@ func (w *world) client() *workload.Probe {
 func (w *world) run(d time.Duration) {
 	w.t.Helper()
 	if err := w.s.RunFor(d); err != nil {
-		w.t.Fatal(err)
+		w.failf("%v", err)
 	}
 }
 
 func (w *world) quiet() {
 	w.t.Helper()
 	if err := w.s.RunUntilQuiet(); err != nil {
-		w.t.Fatal(err)
+		w.failf("%v", err)
 	}
 	if err := w.s.CheckQuiesce(); err != nil {
-		w.t.Fatal(err)
+		w.failf("%v", err)
 	}
 }
 

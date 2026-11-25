@@ -449,6 +449,9 @@ func (srv *Server) applyNewConnFaults(b *backend) {
 func (srv *Server) clearFault(f sim.Fault) bool {
 	fs := &srv.faults
 	kind := sim.FaultKind(f.Arg1)
+	if kind != 0 && kind == srv.cfg.plant.skipClear {
+		return true
+	}
 	switch kind {
 	case FaultRefuse:
 		srv.netFault(simnet.FaultClear, srv.l.Index(), int64(simnet.FaultRefuse), 0)

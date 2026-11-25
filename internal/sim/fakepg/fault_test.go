@@ -1,6 +1,7 @@
 package fakepg_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -13,12 +14,14 @@ import (
 )
 
 type faultCase struct {
-	name   string
-	kind   sim.FaultKind
-	noClr  bool
-	cfg    fakepg.Config
-	steps  func(w *world, f func(target, a1, a2 int64)) string
-	expect string
+	name      string
+	kind      sim.FaultKind
+	noClr     bool
+	cfg       fakepg.Config
+	steps     func(w *world, f func(target, a1, a2 int64)) string
+	expect    string
+	after     func(w *world) string
+	afterWant string
 }
 
 func (w *world) inject(kind sim.FaultKind) func(target, a1, a2 int64) {
@@ -86,15 +89,14 @@ func faultCases() []faultCase {
 			return out + " | aborted " + itoa(int(w.srv.Snapshot().StatementsAborted))
 		}},
 		{name: "silent-after-query-one-target", kind: fakepg.FaultSilentQuery, expect: "connected R ZI / connected R ZI T D C:SELECT 1 ZI", steps: func(w *world, f func(int64, int64, int64)) string {
-			a, b := w.client(), w.client()
+			a, b, c := w.client(), w.client(), w.client()
 			f(id(a), 0, 0)
+			f(id(c), 0, 0)
 			a.Query("SELECT 1")
 			b.Query("SELECT 1")
 			w.run(time.Second)
-			a.Close()
-			b.Close()
 			return compact(a.Trace()) + " / " + compact(b.Trace())
-		}},
+		}, after: func(w *world) string { return w.exchange(w.ps[2], "SELECT 1") }, afterWant: "T D C:SELECT 1 ZI"},
 		{name: "connect-stall", kind: fakepg.FaultConnectStall, expect: "", steps: func(w *world, f func(int64, int64, int64)) string {
 			f(0, 0, 0)
 			p := w.dial()
@@ -113,7 +115,7 @@ func faultCases() []faultCase {
 				return "slow"
 			}
 			return "fast " + p.Trace()
-		}},
+		}, after: func(w *world) string { return replySpeed(w, w.client(), "SELECT 1", 150*time.Millisecond) }, afterWant: "fast"},
 		{name: "slow-trickle", kind: fakepg.FaultTrickle, expect: "spaced 10ms", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
 			f(0, 0, int64(10*time.Millisecond))
@@ -136,7 +138,27 @@ func faultCases() []faultCase {
 				}
 			}
 			return "spaced 10ms"
-		}},
+		}, after: func(w *world) string {
+			p := w.client()
+			from := len(p.Events())
+			p.Query(rowsQuery(5))
+			w.run(time.Second)
+			var first, last sim.Time
+			n := 0
+			for _, e := range p.Events()[from:] {
+				if e.Kind == workload.EventMessage && e.Msg.Type == testclient.MsgDataRow {
+					if n == 0 {
+						first = e.At
+					}
+					last = e.At
+					n++
+				}
+			}
+			if n == 5 && first == last {
+				return "together"
+			}
+			return "rows " + itoa(n) + " over " + time.Duration(last-first).String()
+		}, afterWant: "together"},
 		{name: "fragment-to-one-byte", kind: fakepg.FaultFragment, expect: "T D C:SELECT 1 ZI one-byte pieces", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
 			f(0, 0, 1)
@@ -150,7 +172,7 @@ func faultCases() []faultCase {
 				out += " one-byte pieces"
 			}
 			return out
-		}},
+		}, after: func(w *world) string { return pieces(w, w.ps[0]) + " / " + pieces(w, w.client()) }, afterWant: "whole / whole"},
 		{name: "reset-now", kind: fakepg.FaultReset, noClr: true, expect: "reset", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
 			from := len(p.Events())
@@ -168,15 +190,23 @@ func faultCases() []faultCase {
 		}},
 		{name: "reset-during-reply", kind: fakepg.FaultReset, expect: "T D reset", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
-			f(id(p), int64(fakepg.PointDuring), 0)
+			f(0, int64(fakepg.PointDuring), 0)
 			from := len(p.Events())
 			p.Query(rowsQuery(3))
 			w.run(100 * time.Millisecond)
 			return p.TraceFrom(from)
 		}},
-		{name: "reset-after-reply", kind: fakepg.FaultReset, expect: "T D C:SELECT 1 ZI reset", steps: func(w *world, f func(int64, int64, int64)) string {
+		{name: "reset-after-reply-one-target", kind: fakepg.FaultReset, noClr: true, expect: "T D C:SELECT 1 ZI reset", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
 			f(id(p), int64(fakepg.PointAfter), 0)
+			from := len(p.Events())
+			p.Query("SELECT 1")
+			w.run(time.Second)
+			return p.TraceFrom(from)
+		}},
+		{name: "reset-after-reply", kind: fakepg.FaultReset, expect: "T D C:SELECT 1 ZI reset", steps: func(w *world, f func(int64, int64, int64)) string {
+			p := w.client()
+			f(0, int64(fakepg.PointAfter), 0)
 			from := len(p.Events())
 			p.Query("SELECT 1")
 			w.run(time.Second)
@@ -191,7 +221,15 @@ func faultCases() []faultCase {
 			p.Query("BEGIN")
 			w.run(time.Second)
 			return strings.ReplaceAll(p.TraceFrom(from), "T D ", "") + " | lost " + itoa(int(w.srv.Snapshot().TxLost))
-		}},
+		}, after: func(w *world) string {
+			p := w.client()
+			from := len(p.Events())
+			p.Query("BEGIN")
+			w.run(time.Second)
+			p.Query("COMMIT")
+			w.run(time.Second)
+			return p.TraceFrom(from)
+		}, afterWant: "C:BEGIN ZT C:COMMIT ZI"},
 		{name: "garbage-short-length", kind: fakepg.FaultGarbage, expect: "T protocol-error", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
 			f(0, fakepg.GarbageShortLength, 0)
@@ -200,7 +238,7 @@ func faultCases() []faultCase {
 			w.run(100 * time.Millisecond)
 			return p.TraceFrom(from)
 		}},
-		{name: "garbage-huge-length", kind: fakepg.FaultGarbage, expect: "T protocol-error", steps: func(w *world, f func(int64, int64, int64)) string {
+		{name: "garbage-huge-length-one-target", kind: fakepg.FaultGarbage, noClr: true, expect: "T protocol-error", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
 			f(id(p), fakepg.GarbageHugeLength, 0)
 			from := len(p.Events())
@@ -250,7 +288,11 @@ func faultCases() []faultCase {
 				}
 			}
 			return "rows " + itoa(n) + " bytes " + itoa(size)
-		}},
+		}, after: func(w *world) string {
+			p := w.client()
+			w.exchange(p, "SELECT v FROM kv WHERE k = 'a'")
+			return strings.Join(lastRows(p.Messages()), ",")
+		}, afterWant: "1"},
 		{name: "unexpected-state-open-transaction", kind: fakepg.FaultDirtyState, noClr: true, expect: "T D C:SELECT 1 ZT", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
 			f(id(p), fakepg.DirtyOpenTx, 0)
@@ -299,7 +341,17 @@ func faultCases() []faultCase {
 			q.Close()
 			return out + " | after clear " + p.TraceFrom(from)
 		}},
-		{name: "restarted-cold", kind: fakepg.FaultRestart, expect: "reset / connected E:57P03 eof / rows 1 / ZI", steps: func(w *world, f func(int64, int64, int64)) string {
+		{name: "restarted-until-clear", kind: fakepg.FaultRestart, expect: "reset / connected E:57P03 eof", steps: func(w *world, f func(int64, int64, int64)) string {
+			a := w.client()
+			fa := len(a.Events())
+			f(0, 0, 0)
+			w.run(time.Second)
+			early := w.dial()
+			early.Startup("app", "")
+			w.run(time.Millisecond)
+			return a.TraceFrom(fa) + " / " + early.Trace()
+		}},
+		{name: "restarted-cold", kind: fakepg.FaultRestart, noClr: true, expect: "reset / connected E:57P03 eof / rows 1 / ZI", steps: func(w *world, f func(int64, int64, int64)) string {
 			a := w.client()
 			w.exchange(a, "INSERT INTO kv VALUES ('a', '1')")
 			fa := len(a.Events())
@@ -322,7 +374,13 @@ func faultCases() []faultCase {
 			w.run(time.Millisecond)
 			a.Close()
 			return p.Trace()
-		}},
+		}, after: func(w *world) string {
+			a, b := w.dial(), w.dial()
+			a.Startup("app", "")
+			b.Startup("app", "")
+			w.run(time.Millisecond)
+			return a.TraceFrom(len(a.Events())-1) + " " + b.TraceFrom(len(b.Events())-1)
+		}, afterWant: "ZI ZI"},
 		{name: "latency-at-timeout-boundary", kind: fakepg.FaultBoundary, expect: "250.1ms", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
 			f(0, 0, int64(250*time.Millisecond))
@@ -345,11 +403,8 @@ func faultCases() []faultCase {
 			if elapsed(b, fb, at) < 100*time.Millisecond {
 				out += " fast"
 			}
-			w.clear(fakepg.FaultSlowConn, id(a))
-			a.Close()
-			b.Close()
 			return out
-		}},
+		}, after: func(w *world) string { return replySpeed(w, w.ps[0], "SELECT 1", 100*time.Millisecond) }, afterWant: "fast"},
 		{name: "half-open", kind: fakepg.FaultHalfOpen, noClr: true, expect: " | open 0 | half-open 1", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
 			f(id(p), 0, 0)
@@ -371,12 +426,16 @@ func faultCases() []faultCase {
 		}},
 		{name: "stall-window", kind: fakepg.FaultStallWindow, expect: "160.1ms", steps: func(w *world, f func(int64, int64, int64)) string {
 			p := w.client()
-			f(0, int64(200*time.Millisecond), int64(150*time.Millisecond))
+			f(0, int64(time.Hour), int64(150*time.Millisecond))
 			from, at := len(p.Events()), w.s.Now()
 			p.Query("SELECT 1")
 			w.run(time.Second)
 			return elapsed(p, from, at).String()
-		}},
+		}, after: func(w *world) string { return replySpeed(w, w.client(), "SELECT 1", 150*time.Millisecond) }, afterWant: "fast"},
+		{name: "latency-at-timeout-boundary-recovers", kind: fakepg.FaultBoundary, expect: "slow", steps: func(w *world, f func(int64, int64, int64)) string {
+			f(0, 0, int64(time.Hour))
+			return replySpeed(w, w.client(), "SELECT 1", time.Second)
+		}, after: func(w *world) string { return replySpeed(w, w.client(), "SELECT 1", time.Second) }, afterWant: "fast"},
 	}
 }
 
@@ -392,41 +451,112 @@ func compact(tr string) string {
 	return strings.Join(out, " ")
 }
 
+func replySpeed(w *world, p *workload.Probe, q string, limit time.Duration) string {
+	from, at := len(p.Events()), w.s.Now()
+	p.Query(q)
+	w.run(2 * limit)
+	if d := elapsed(p, from, at); d >= 0 && d < limit {
+		return "fast"
+	}
+	return "slow"
+}
+
+func pieces(w *world, p *workload.Probe) string {
+	before := w.n.Snapshot().Down
+	w.exchange(p, "SELECT 1")
+	after := w.n.Snapshot().Down
+	if after.Written == before.Written {
+		return "nothing written"
+	}
+	if after.Chunks-before.Chunks < after.Written-before.Written {
+		return "whole"
+	}
+	return "one-byte pieces"
+}
+
+func runFaultCase(t *testing.T, fc faultCase, skipClear bool) error {
+	cfg := fc.cfg
+	if cfg.Service.Fixed == 0 {
+		cfg.Service.Fixed = 10 * time.Millisecond
+	}
+	if skipClear {
+		fakepg.PlantSkipClear(&cfg, fc.kind)
+	}
+	w := newWorld(t, cfg)
+	w.soft = true
+	traced := 0
+	w.s.SetTraceTap(func(r sim.Record) {
+		if r.Kind == sim.KindFault && r.A == int64(fc.kind) {
+			traced++
+		}
+	})
+	fail := func(format string, args ...any) error {
+		w.closeAll()
+		return fmt.Errorf(format, args...)
+	}
+	got := fc.steps(w, w.inject(fc.kind))
+	if got != fc.expect {
+		return fail("observed %q, want %q", got, fc.expect)
+	}
+	if n := w.srv.Snapshot().Fault(fc.kind); n == 0 || traced == 0 {
+		return fail("fault counter %d, trace records %d", n, traced)
+	}
+	if !fc.noClr {
+		w.clear(fc.kind, 0)
+		if w.srv.Snapshot().Faults.Cleared == 0 {
+			return fail("clear not counted")
+		}
+	}
+	w.run(time.Second)
+	if fc.after != nil {
+		if got := fc.after(w); got != fc.afterWant {
+			return fail("after the clear, the fault's own effect: %q, want %q", got, fc.afterWant)
+		}
+	}
+	p := w.client()
+	if got := w.exchange(p, "SELECT 1"); got != "T D C:SELECT 1 ZI" {
+		return fail("after the fault, a fresh exchange: %s", got)
+	}
+	w.closeAll()
+	w.quiet()
+	return w.err
+}
+
 func TestEachDatabaseFault(t *testing.T) {
 	for _, fc := range faultCases() {
 		t.Run(fc.name, func(t *testing.T) {
-			cfg := fc.cfg
-			if cfg.Service.Fixed == 0 {
-				cfg.Service.Fixed = 10 * time.Millisecond
+			if err := runFaultCase(t, fc, false); err != nil {
+				t.Fatal(err)
 			}
-			w := newWorld(t, cfg)
-			traced := 0
-			w.s.SetTraceTap(func(r sim.Record) {
-				if r.Kind == sim.KindFault && r.A == int64(fc.kind) {
-					traced++
-				}
-			})
-			got := fc.steps(w, w.inject(fc.kind))
-			if got != fc.expect {
-				t.Fatalf("observed %q, want %q", got, fc.expect)
-			}
-			if n := w.srv.Snapshot().Fault(fc.kind); n == 0 || traced == 0 {
-				t.Fatalf("fault counter %d, trace records %d", n, traced)
-			}
-			if !fc.noClr {
-				w.clear(fc.kind, 0)
-				if w.srv.Snapshot().Faults.Cleared == 0 {
-					t.Fatal("clear not counted")
-				}
-			}
-			w.run(time.Second)
-			p := w.client()
-			if got := w.exchange(p, "SELECT 1"); got != "T D C:SELECT 1 ZI" {
-				t.Fatalf("after the fault, a fresh exchange: %s", got)
-			}
-			w.closeAll()
-			w.quiet()
 		})
+	}
+}
+
+var oneShotKinds = map[sim.FaultKind]bool{fakepg.FaultTerminate: true, fakepg.FaultDirtyState: true, fakepg.FaultParamStatus: true,
+	fakepg.FaultKill: true, fakepg.FaultHalfOpen: true, fakepg.FaultClear: true}
+
+func TestEveryClearPathIsChecked(t *testing.T) {
+	checked := map[sim.FaultKind]bool{}
+	for _, fc := range faultCases() {
+		if fc.noClr {
+			continue
+		}
+		if oneShotKinds[fc.kind] {
+			t.Fatalf("%s: a one-shot kind has a clear case", fc.name)
+		}
+		t.Run(fc.name, func(t *testing.T) {
+			if err := runFaultCase(t, fc, true); err == nil {
+				t.Fatalf("with the clear of %s disabled, the case still passes", fakepg.FaultName(fc.kind))
+			} else {
+				t.Logf("caught: %v", err)
+			}
+		})
+		checked[fc.kind] = true
+	}
+	for _, k := range fakepg.FaultKinds() {
+		if !oneShotKinds[k] && !checked[k] {
+			t.Errorf("%s has a clear path that no case checks", fakepg.FaultName(k))
+		}
 	}
 }
 
