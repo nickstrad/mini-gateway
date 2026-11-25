@@ -452,3 +452,24 @@ func TestRunIDValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func BenchmarkFlushFixture(b *testing.B) {
+	s, _ := obstest.FixtureSnapshot(b)
+	for _, async := range []bool{false, true} {
+		name := "sync"
+		if async {
+			name = "async"
+		}
+		b.Run(name, func(b *testing.B) {
+			cfg := config(b.TempDir())
+			cfg.Async, cfg.Strict, cfg.QueueCap = async, false, csvflush.MaxQueueCap
+			w := newWriter(b, cfg)
+			b.ReportAllocs()
+			for b.Loop() {
+				_ = w.Export(s)
+			}
+			b.StopTimer()
+			_ = w.Close()
+		})
+	}
+}

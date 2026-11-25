@@ -209,7 +209,7 @@ func (w *Writer) Flush(snaps ...obs.InstanceSnapshot) error {
 			j.rows += int64(len(h.Buckets))
 		}
 	}
-	slices.SortStableFunc(j.snaps, func(a, b obs.InstanceSnapshot) int { return strings.Compare(a.Instance, b.Instance) })
+	slices.SortFunc(j.snaps, func(a, b obs.InstanceSnapshot) int { return strings.Compare(a.Instance, b.Instance) })
 	w.exported++
 	w.last = j
 	w.lastDropped = false
@@ -376,8 +376,8 @@ func (w *Writer) persist(s obs.InstanceSnapshot) ([]obs.Point, []obs.HistPoint) 
 			points = append(points, r.point)
 		}
 	}
-	slices.SortStableFunc(points, obs.ComparePoint)
-	slices.SortStableFunc(hists, obs.CompareHist)
+	slices.SortFunc(points, obs.ComparePoint)
+	slices.SortFunc(hists, obs.CompareHist)
 	return points, hists
 }
 

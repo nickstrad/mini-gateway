@@ -81,10 +81,10 @@ func (s InstanceSnapshot) Clone() InstanceSnapshot {
 }
 
 func (s *InstanceSnapshot) Sort() {
-	slices.SortStableFunc(s.Points, ComparePoint)
-	slices.SortStableFunc(s.Hists, CompareHist)
+	slices.SortFunc(s.Points, ComparePoint)
+	slices.SortFunc(s.Hists, CompareHist)
 	for i := range s.Hists {
-		slices.SortStableFunc(s.Hists[i].Buckets, compareBucket)
+		slices.SortFunc(s.Hists[i].Buckets, compareBucket)
 	}
 }
 

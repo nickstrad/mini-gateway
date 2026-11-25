@@ -90,8 +90,8 @@ func (e *Emitter) Histogram(name string, l Labels, h HistogramSnapshot) {
 }
 
 func (e *Emitter) finish() {
-	slices.SortStableFunc(e.points, ComparePoint)
-	slices.SortStableFunc(e.hists, CompareHist)
+	slices.SortFunc(e.points, ComparePoint)
+	slices.SortFunc(e.hists, CompareHist)
 	e.points = e.combinePoints(e.points)
 	for i := 1; i < len(e.hists); i++ {
 		if CompareHist(e.hists[i-1], e.hists[i]) == 0 {
