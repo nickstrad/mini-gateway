@@ -24,4 +24,7 @@ LEFT JOIN (SELECT run_id, sum(value) AS n FROM final
 LEFT JOIN (SELECT run_id, sum(value) AS n FROM final
            WHERE component = 'classifier' AND metric = 'rejects' GROUP BY run_id) rej USING (run_id)
 WHERE r.scenario = 'classifier-reject-only'
-  AND (cls.n IS NULL OR rej.n IS NULL OR cls.n <> rej.n);
+  AND (cls.n IS NULL OR rej.n IS NULL OR cls.n <> rej.n)
+UNION ALL
+SELECT NULL, 'no run of classifier-reject-only', 0, 1
+WHERE NOT EXISTS (SELECT 1 FROM runs WHERE scenario = 'classifier-reject-only');

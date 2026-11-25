@@ -293,8 +293,15 @@ func clsRejectStatements(rng *rand.Rand) []string {
 	return out
 }
 
+func (sc clsScenario) name() string {
+	if sc.followUps {
+		return "classifier-reject-list"
+	}
+	return "classifier-reject-only"
+}
+
 func clsRunScenario(seed int64, sc clsScenario) (*sim.Sim, *clsOutcome) {
-	s := sim.New(sim.Config{Seed: seed, Scenario: "classifier-reject-list"})
+	s := sim.New(sim.Config{Seed: seed, Scenario: sc.name()})
 	n := simnet.New(s)
 	o := &clsOutcome{allowed: map[string]bool{"SELECT 1": true, "SHOW search_path": true}}
 	srv, err := fakepg.New(n, fakepg.Config{})
