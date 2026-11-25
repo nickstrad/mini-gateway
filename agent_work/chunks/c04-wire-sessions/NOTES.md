@@ -14,7 +14,7 @@ starting from `work/c02-sim-world` at `c80f08d`. Durable facts for later builder
 | Client-facing session machine | `client.go` (states, SCRAM exchange, success), `prestartup.go` (the exchange before startup, startup packet checks), `client_tenants.go` (tenant table, `KeyIssuer`), `params.go` (parameters, startup packet parser) |
 | Database-facing session machine | `backend.go` |
 | SCRAM-SHA-256 as pure functions | `scram.go` (verifier, derivation, nonce, GS2 rule), `scram_server.go`, `scram_client.go` |
-| Query-cycle tracker (database replies) and the client query-phase tracker | `cycle.go` (`ReplyTracker`, `FrontendTracker`) |
+| Query-cycle tracker (database replies) and the client query-phase tracker | `cycle.go` (`CycleTracker`, `FrontendTracker`) |
 | Wire snapshot | `snapshot_wire.go` (`WireStats`, `WireSnapshot`, `Check`) |
 | Startup-only proxy harness and the fidelity runner | `internal/pgwire/pgwiretest/` (`proxy.go`, `fidelity.go`, `fidelity_sim.go`) |
 | Simulated TLS handshake | `internal/sim/simtls/` (new simulator package) |
@@ -39,7 +39,7 @@ determinism-checked package. `go.mod` is unchanged.
 - A machine consumes bytes only while it is in startup. `consumed < len(b)` means the machine
   is ready (the rest is query-phase input for the trackers) or closed (the rest is surplus,
   e.g. the smuggled bytes after an accepted `SSLRequest`). `TestReceiveAfterReadyConsumesNothing`.
-- Trackers: `ReplyTracker.QuerySent()` opens a cycle, `Receive` returns `CycleEvent`s (one
+- Trackers: `CycleTracker.QuerySent()` (`NewCycleTracker`; `NewReplyTracker` is a one-line alias kept only because the adversary's evidence tests call it) opens a cycle, `Receive` returns `CycleEvent`s (one
   per message: type, body length, stream offset of the end, `Known`, `InCycle`; semantic kind
   for `Z`, `E`, `S`, `N`, `A`), `PeerClosed` reports the end of stream (with or without the
   marker). `FrontendTracker.Receive` returns `FrontQuery{Body}`, `FrontTerminate`,
@@ -81,8 +81,11 @@ determinism-checked package. `go.mod` is unchanged.
    The unknown-user reply is the wrong-password reply with the other user name: same
    messages, same lengths (when the names have the same length), same SQLSTATE; the mock
    verifier's salt is derived from the user name and `MockSecret` (stable per name, like
-   Postgres's mock salt) and its iteration count is `MockIterations` (set it to the count the
-   real verifiers use, or an attacker can tell them apart by `i=`).
+   Postgres's mock salt). Its iteration count is `MockIterations` when set; left at 0 it is the
+   tenant table's most common iteration count, and the mock salt has the table's most common
+   salt length (`TenantTable.mockShape`; empty table: 4096 and 16 bytes). With a uniform table
+   the challenge (`s=` length, `i=`) is the same for known and unknown users; see "Narrowed
+   claims" for a mixed table.
 2. **Allowed startup parameters** are `ClientConfig.SessionSettings` (default
    `client_encoding=UTF8`), compared by name case-insensitively and value case-insensitively.
    `user`, `database` and `application_name` are always accepted (`application_name` is
@@ -105,6 +108,10 @@ determinism-checked package. `go.mod` is unchanged.
    `SCRAM-SHA-256` in the list), `too-many-connections` (`53300`), `server-fatal` (any other
    `ErrorResponse` during startup, SQLSTATE kept in `Action.Code`), `protocol-violation`,
    `deadline`, `connection-lost` (EOF or reset before ready).
+   A handshake-result event ends startup by its outcome: failed, failed-verification or an
+   out-of-range outcome → `tls-failed`; deadline → `deadline`; violation → `protocol-violation`
+   (violation kind `bad-handshake`), on both sides, the same as the separate `Deadline` event.
+   An out-of-range TLS version counts as `other`. A ready session ignores every startup event.
    **Client side reasons:** `client-closed`, `deadline`, `protocol-violation`, `tls-failed`,
    `plaintext-refused`, `protocol-version`, `parameter-refused`, `no-user`, `auth-failed`,
    `unknown-database`, `cancel-request`.
@@ -150,20 +157,20 @@ determinism-checked package. `go.mod` is unchanged.
 | # | Claim | Tests (file: function) |
 | --- | --- | --- |
 | 1 | Any fragmentation gives the same events and actions | `client_test.go`: every test via `requireEveryChunking` (whole, one byte, split at every boundary of every step, consumed counts equal); `backend_test.go` via `requireBackendEveryChunking`; `cycle_test.go: TestCycleTrackerProbeShapes`, `TestCycleTrackerSurprises`, `TestFrontendTrackerRecognisesQueriesTerminateAndExtended`; fuzz `FuzzFramer`, `FuzzClientSession`, `FuzzBackendSession`, `FuzzCycle` (whole vs fuzzer split vs one byte); scenarios `wire-one-byte`, `wire-one-byte-plain` |
-| 2 | No panic, no loop, bounded memory; oversized refused from the header | `frame_test.go: TestFramerRefusesFromTheHeaderAlone`, `TestFramerTakesOnlyWhatItNeeds`; `client_test.go: TestOversizedLengthIsRefusedFromTheHeader`; `cycle_test.go: TestCycleTrackerStreamsManyRowsWithoutBuffering` (200,000 rows, buffer ≤ 1 KiB), `TestCycleTrackerSurprises`; the four fuzz targets (buffer bounds, no progress-less loop, conservation) |
+| 2 | No panic, no loop, bounded memory; oversized refused from the header | `frame_test.go: TestFramerRefusesFromTheHeaderAlone`, `TestFramerTakesOnlyWhatItNeeds`; `client_test.go: TestOversizedLengthIsRefusedFromTheHeader`; `cycle_test.go: TestCycleTrackerStreamsManyRowsWithoutBuffering` (200,000 rows, body buffer exactly 0 while rows stream), `TestCycleTrackerPassesARowLargerThanItsMessageLimit` (4 KiB row through a 128-byte limit), `TestCycleTrackerSurprises`; `scram_bound_test.go: TestScramFunctionsRefuseMessagesAboveTheBound`, `TestClientRejectsAnOversizedSCRAMMessageInsideTheFrame`; `client_events_test.go`, `backend_events_test.go` (out-of-range handshake outcomes and versions); the four fuzz targets (buffer bounds, no progress-less loop, conservation) |
 | 3 | Nothing between an accepted `SSLRequest` and the handshake result is interpreted; exactly 8 bytes; at most one upgrade | `client_test.go: TestBytesSentEarlyAfterAnAcceptedTLSRequest` (consumed = 8, every chunking, later delivery too), `TestSecondTLSRequestAfterTheUpgradeIsAViolation`; `backend_test.go: TestBackendGarbageSilenceAndEOF` (bytes after the server's `S`); scenarios `wire-client-smuggle`, `wire-client-second-request`; canary below |
 | 4 | require: no plaintext startup; off: `N` and plaintext works; allow: both | `client_test.go: TestPlaintextStartupRefusedWhenRequired`, `TestTLSRequestAnsweredNWhenOff`, `TestPlaintextClientLogsInWithSCRAM` (off, allow), `TestDefaultStyleClientUpgradesWhenAllowedOrRequired`, `TestGSSThenTLSRequest`; scenario `wire-client-plaintext-refused`; tier R `TestTierRScramServerAcceptedByPsql` (9 psql cases over the three modes) |
-| 5 | SCRAM server: only the password holder; no `-PLUS`; `n,,`/`y,,` with the right `c=`; `p=` refused; unknown user = wrong password; no password in the table | `scram_test.go: TestScramRFC7677ServerSide`, `TestScramClientAgainstServer` (15 cases), `TestVerifierHoldsNoPassword`, `TestScramServerRejectsAnotherMechanism`; `client_test.go: TestWrongPasswordAndUnknownUserLookAlike`, `TestUnknownUserWithTheRightProofForAnotherVerifierFails`, `TestGS2HeadersThroughTheMachine`, `TestOnlySCRAMSHA256IsOffered`; tier R psql cases (libpq's `y,,` over TLS accepted; wrong password and unknown user give the same text) |
+| 5 | SCRAM server: only the password holder; no `-PLUS`; `n,,`/`y,,` with the right `c=`; `p=` refused; unknown user = wrong password; no password in the table | `scram_test.go: TestScramRFC7677ServerSide`, `TestScramClientAgainstServer` (15 cases), `TestVerifierHoldsNoPassword`, `TestScramServerRejectsAnotherMechanism`; `client_test.go: TestWrongPasswordAndUnknownUserLookAlike`, `TestUnknownUserWithTheRightProofForAnotherVerifierFails`, `TestGS2HeadersThroughTheMachine`, `TestOnlySCRAMSHA256IsOffered`; tier R psql cases (libpq's `y,,` over TLS accepted; wrong password and unknown user give the same text); `client_mock_test.go: TestMockChallengeTakesTheTableShapeByDefault` (uniform table, default mock: same `s=` length and `i=`) |
 | 6 | SCRAM client: wrong server signature rejected; `SCRAM-SHA-256` chosen when `-PLUS` is offered | `scram_test.go: TestScramRFC7677ClientSide`, `TestScramClientAgainstServer` (tampered signature, nonce, `e=`); `backend_test.go: TestBackendChoosesSCRAMWhenPlusIsOfferedAndPicksTheGS2Header`, `TestBackendFailureClasses` (tampered signature, server skips its signature); tier R `TestTierRScramClientLogsInToPostgres` (over TLS with `-PLUS` offered) |
-| 7 | Every startup failure ends in its class and reply within the deadline, counted under exactly one reason | `client_test.go` (`requireClose` checks the one reason and conservation in every failure test), `backend_test.go: TestBackendFailureClasses` (17 cases), `TestBackendGarbageSilenceAndEOF`; `snapshot_wire_test.go`; scenarios `wire-client-*`, `wire-db-*` (`verify`: the exact failure map, checked again at fault time + deadline + 50 ms on the virtual clock) |
+| 7 | Every startup failure ends in its class and reply within the deadline, counted under exactly one reason | `client_test.go` (`requireClose` checks the one reason and conservation in every failure test), `backend_test.go: TestBackendFailureClasses` (17 cases), `TestBackendGarbageSilenceAndEOF`; `snapshot_wire_test.go`; scenarios `wire-client-*`, `wire-db-*` (`verify`: the exact failure map, checked again at fault time + deadline + 50 ms on the virtual clock); `client_events_test.go: TestHandshakeResultOutcomesAreClassifiedOnTheClientSide`, `backend_events_test.go: TestHandshakeResultOutcomesAreClassifiedOnTheDatabaseSide`, `TestReadyBackendSessionIgnoresStartupEvents` |
 | 8 | Cycle tracker: status byte and end of reply for every probe shape, no buffering of a reply, unknown types passed through, unsolicited `ParameterStatus` reported | `cycle_test.go: TestCycleTrackerProbeShapes` (single result, two result sets, error then ready, error in a transaction → `E`, `FATAL` then end, unsolicited `S`, unknown type, notice and notification), `TestCycleTrackerFatalEndsTheStreamWithoutAMarker`, `TestCycleTrackerStreamsManyRowsWithoutBuffering`, `TestCycleTrackerReportsUnsolicitedMessagesOutsideACycle`; the harness relays every scenario's queries through both trackers |
-| 9 | Proxy key data unique per session, unrelated to the backend's | `client_test.go: TestProxyKeysAreUniqueAndFromTheIssuer` (2,000 issues, distinct per seed); `KeyIssuer` takes nothing from the backend; tier R backend key comes from Postgres separately |
+| 9 | Proxy key data unique per session of one `KeyIssuer` (see "Narrowed claims"), unrelated to the backend's | `client_test.go: TestProxyKeysAreUniqueAndFromTheIssuer` (2,000 issues, distinct per seed); `KeyIssuer` takes nothing from the backend; tier R backend key comes from Postgres separately |
 | 10 | Deterministic and sans-I/O | G1 detlint on `internal/pgwire`, `internal/pgwire/pgwiretest`, `internal/sim/simtls` (no `crypto/tls`, `net`, `time.Now`, goroutines; one allow line for the SCRAM imports); `TestScenarioWireStartup` (two runs per seed, identical digests and snapshots); gate extra (two processes, identical digests) |
-| 11 | The fake's startup conversation, TLS answers included, matches Postgres 17 | `pgwiretest/fidelity_test.go: TestTierRStartupFidelity` (12 steps live against Postgres 17.11, writes the recording), `TestStartupFidelityAgainstRecordedPostgres17` (CI), `TestKnownDifferencesAreTheRecordedOnes`; chunk 2's `TestTierRFidelity` still identical |
+| 11 | The fake's startup conversation, TLS answers included, matches Postgres 17 | `pgwiretest/fidelity_test.go: TestTierRStartupFidelity` (12 steps live against Postgres 17.11, writes the recording), `TestStartupFidelityAgainstRecordedPostgres17` (CI), `TestKnownDifferencesAreTheRecordedOnes`; chunk 2's `TestTierRFidelity` still identical; `pgwiretest/fidelity_sim_test.go: TestFakeRefusesARepeatedEncryptionRequestAsPostgresDoes` (repeated `SSLRequest` / GSS request; live evidence: the adversary's `oracle-repeat-ssl.json`, Postgres 17.11) |
 
 ## Planted-bug canary
 
-`ClientConfig.plantEarlyBytes` (unexported; set only by `export_test.go: PlantEarlyBytes`)
+`ClientConfig.plantEarlyBytes` (unexported; set only by `client_export_test.go: PlantEarlyBytes`)
 switches off the "no bytes between `S` and the handshake result" rule: the machine then
 reads the surplus as if it had arrived over TLS (the CVE-2021-23214 behaviour).
 `client_canary_test.go: TestPlantedEarlyBytesBugFailsTheSmuggleScenario` requires
@@ -180,6 +187,18 @@ fault time + deadline + 50 ms virtual), tenant0 and tenant1 all OK, quiesce, the
 conservation, non-zero startups, queries, bytes and replies, TLS requests answered by the
 proxy = sent by the workload (by answer), database TLS answers = the fake's answers. Each seed
 runs twice (`simtest.RequireDeterministic`, REPLAY line) with identical snapshots.
+
+**Seeds (repair round).** The pinned seeds (`internal/pgwire/testdata/seeds.txt`: 1, 2, 3, 7,
+42), the default run (no `DST_SEEDS`: seeds 1–3) and a single `-seed`/`DST_SEED` run the full
+matrix (every scenario on every seed). Under `DST_SEEDS` (the G4 sweep) each further seed runs
+only the scenarios with index i where (seed + i) mod 4 = 0 (`wireSeeds`, `wireSweepStride`):
+every scenario still gets a quarter of the sweep seeds (50 of 200) on top of the pinned ones,
+and every seed runs four or five scenarios. Per-run setup was not the cost: a profile shows
+about 70% in the run itself, a third of it chunk 2's per-step simulator invariants (fake and
+workload conservation), which this chunk does not own. `client_sim_test.go:
+TestWireSweepKeepsTheFullMatrixOnPinnedSeeds` holds the rule. At 20 seeds the wire scenarios
+went from 11.0 s to about 6 s (pinned seeds dominate at that size); at 200 seeds the number
+of wire runs drops from about 3,800 to about 1,050.
 
 | Scenario | Fault | Expected |
 | --- | --- | --- |
@@ -256,6 +275,11 @@ conservation as a sim invariant. Fake: `Server.AuthSnapshot()`; workload:
   login as `connection-lost` on the database side.
 - Proxy-issued process ids are sequential from a random base (no randomness between
   consecutive sessions); the secret is random.
+- The fake's repeated-request rule follows Postgres 17's `ProcessStartupPacket` (`ssl_done`,
+  `gss_done`): a refused `SSLRequest` clears `gss_done` and a refused GSS request clears
+  `ssl_done`, so alternating refused requests keep getting `N`. The repeated `SSLRequest` case
+  is checked live (the adversary's oracle); the GSS cases are not, because the `postgres:17`
+  image answers `G`.
 
 ## Deviations
 
@@ -270,17 +294,76 @@ conservation as a sim invariant. Fake: `Server.AuthSnapshot()`; workload:
   snapshot), the harness and fidelity runner 999, `simtls` 73, simulator additions about 600;
   tests about 3,400 lines. Within the brief's "may reach twice" for the package itself.
 
+## Repair round
+
+Review 1 (`REVIEW-1.md`) and the adversary's results (`agent_work/adversarial/c04-wire-sessions/RESULTS.md`).
+Every item was reproduced first (the review's mutation M10 and repro calls, the seven failing
+attacks); each regression test below was run against the code before its fix and failed.
+
+| Item | Outcome |
+| --- | --- |
+| Review 1 (MAJOR): cycle tracker test blind to buffered rows | fixed `836dc4e`: `TestCycleTrackerStreamsManyRowsWithoutBuffering` now requires a body buffer of 0 while rows stream; new `TestCycleTrackerPassesARowLargerThanItsMessageLimit`. With `SkipBodies` removed (M10) both fail |
+| Review 2 (MAJOR): `ReplyTracker` in chunk 5's prefix; `fuzz_test.go`, `export_test.go` outside chunk 4's globs | fixed `ebe532b`: `CycleTracker`/`NewCycleTracker`, `frame_fuzz_test.go`, `client_export_test.go`. `NewReplyTracker` stays as a one-line alias because the adversary's tests (not editable) call it; it does not begin with a reserved prefix. Checked by a scratch merge with `work/c05-classifier`: no identifier collisions (see "Integration notes") |
+| Review 3 (MAJOR): `BackendSession.Deadline`/`PeerClosed` close a ready session | fixed `22effbd`: `fail` returns unless in startup; `backend_events_test.go: TestReadyBackendSessionIgnoresStartupEvents` (Receive, Deadline, PeerClosed, HandshakeDone after ready; counters unchanged) |
+| Review 4 (MINOR): SCRAM state kept after failure | fixed `22effbd`: `close`/`fail` drop it; `TestClientSessionDropsSCRAMStateWhenItCloses`, `TestBackendSessionDropsSCRAMStateWhenItFails` |
+| Review 5 (MINOR): handshake deadline/violation classified as tls-failed; unchecked enum indexing | fixed `22effbd` (see decision 6); `TestHandshakeResultOutcomesAreClassifiedOnTheClientSide`, `...OnTheDatabaseSide`, `TestHandshakeResultWithAnUnknownVersionCountsAsOther` |
+| Review 6 (MINOR): harness drops bytes coalesced with the ClientHello | fixed `c673f16`: held (at most one read; the harness stops reading until the handshake completes) and fed after it; `pgwiretest/proxy_test.go: TestProxyKeepsBytesCoalescedWithTheClientHello` |
+| Review 7 (MINOR): unused `midMessage`, `ReasonTerminate` | fixed `22effbd`: both removed |
+| Review checklist remark: harness `ss.early` unbounded during the database connect | declined: test harness only (chunk 6 builds the real relay with its own bounds); the simulated clients send nothing before `ReadyForQuery` |
+| Attack 2 `InvalidHandshakeEnums` | fixed `22effbd`: out-of-range outcome → failed, version → other; tests as review 5 (outcome 200, version 250) |
+| Attack 2 `ScramMessageBound` | fixed `130a5a8`: `ScramServer.First`/`Final`, `ScramClient.Final`/`Verify` refuse input above `MaxScramMessage` (malformed); `scram_bound_test.go: TestScramFunctionsRefuseMessagesAboveTheBound` |
+| Attack 2 `WireSCRAMBound` | fixed `130a5a8`: the session closes with `auth-failed` / `08P01 malformed SCRAM message`; `TestClientRejectsAnOversizedSCRAMMessageInsideTheFrame` |
+| Attack 5 `UnknownUserIterationOracle` | fixed `bd5a768` for the default configuration (mock takes the table's most common iteration count and salt length); `client_mock_test.go: TestMockChallengeTakesTheTableShapeByDefault`. Narrowed for mixed tables (below) |
+| Attack 7 `HandshakeDeadlineClassification` | fixed `22effbd`; tests as review 5 |
+| Attack 9 `IndependentIssuerCollision` | narrowed (below); behaviour unchanged. The test is consistent with the claim as the brief worded it, so it is not disputed |
+| Attack 11 `RepeatedSSLAfterRefusal` | fixed `21aef01` in the fake; `pgwiretest/fidelity_sim_test.go: TestFakeRefusesARepeatedEncryptionRequestAsPostgresDoes` |
+| Brief item 6: sweep time | `058e2ad`: rotating scenario subset per sweep seed, full matrix on pinned seeds (see "Seeds" under the end-to-end scenarios) |
+
+34 of the 35 attacks pass after the repair (`go test ./agent_work/adversarial/c04-wire-sessions/...`
+prints one failure, attack 9, which stays failing by design: it asserts the unscoped wording).
+
+## Narrowed claims
+
+- **Claim 9** — Proxy-issued key data is unique per session **among the sessions of one
+  `KeyIssuer`** (one per proxy instance): process ids do not repeat within 2^31 − 1 issues
+  and are never 0; nothing is taken from the backend's key. Two independent issuers share no
+  state: their keys differ only as far as their random sources differ (31-bit process-id
+  base, 32-bit secret), and two issuers fed the same random stream issue the same keys.
+  Postgres scopes cancel keys the same way (one postmaster). Chunk 7/13 must keep one issuer
+  per proxy process and seed it from `crypto/rand`.
+- **Claim 5, "unknown user and wrong password are indistinguishable in the reply"** — holds
+  for every reply byte shape (message types, SQLSTATE `28P01`, the FATAL text with the user
+  name, lengths when the names have equal length) and for the SCRAM challenge **when every
+  verifier in the tenant table has the same iteration count and salt length** (the default
+  mock then takes them; an explicit `MockIterations` overrides the count). In a table that
+  mixes shapes, a user whose verifier differs from the table's most common shape can be told
+  from an unknown user by `i=` or the `s=` length, as with Postgres's mock (which uses
+  `scram_sha_256_iterations`). Timing is not part of the claim.
+
+## Integration notes
+
+- A scratch merge of this branch with `work/c05-classifier` (not committed) builds and vets
+  cleanly except for one thing: chunk 5's `internal/pgwire/classify_e2e_test.go` and
+  `classify_obs_test.go` are in-package tests (`package pgwire`) that import
+  `internal/sim/fakepg`, and this chunk's `fakepg` imports `internal/pgwire` (the brief
+  requires the fake to share the SCRAM functions), so `go test ./internal/pgwire` fails with
+  "import cycle not allowed in test". The fix at integration is to make those two files
+  external tests (`package pgwire_test`) or move them; `tools/lint-rules/det-packages.txt`
+  also conflicts (both chunks appended lines; keep both).
+
 ## Simulator changes (additive; the kernel API is untouched)
 
 | File | Change |
 | --- | --- |
 | `internal/sim/simtls/` | new package: simulated handshake tokens |
 | `internal/sim/fakepg/auth.go` | new: `AuthMode` (`AuthTrust` default, `AuthSCRAM`), `Verifiers`, `TLSConfig` (`Answer`, `Handshake`, `Outcome`, `Version`), `SetTLS`, `AuthSnapshot`, the simulated handshake, the SCRAM server (shared `pgwire` functions; offers `-PLUS` over TLS like Postgres; refuses `y,,` over TLS with `28000`), mock exchange for unknown users, the database check after authentication, protocol-version answers |
+| `internal/sim/fakepg/auth.go`, `backend.go` (repair round) | `sslDone`/`gssDone` on the connection and `answerGSS`: a repeated encryption request gets `FATAL 0A000 unsupported frontend protocol 1234.5679` (`.5680` for GSS) as in Postgres 17 |
 | `internal/sim/fakepg/backend.go` | +~30 lines: three fields, hooks in `readMessage` (hello, handshake wait), `dispatch` (SASL messages), `startup` (SSL answer, GSS counter, SCRAM branch, protocol answers), `finalize` (cancel the handshake timer) |
 | `internal/sim/fakepg/config.go`, `server.go`, `frame.go`, `proto.go` | 3 config fields; auth state and its init; `Framer.TakeRaw`; `startupPacket.unknown/negotiate` and the 3.x decode |
 | `internal/sim/fakepg/snapshot_test.go` | the protocol-refusal case now sends 4.0 (3.2 is negotiated now, as in Postgres) |
 | `internal/sim/workload/startup.go` | new: `Tenant.Password`, `Tenant.TLS` (off, prefer, require), `Tenant.TLSFault` (stall after request, bad hello, plaintext after request, second request), the SCRAM client, `StartupCounters` |
 | `internal/sim/workload/client.go`, `config.go`, `snapshot.go` | hooks: `beginStartup` on connect, `onTLSAnswer`/`onAuth` in `onMessage`, the hello read in `readAll`; 3 tenant fields; `TenantSnapshot.Startup` (summed into the total) |
+| `internal/sim/workload/startup_test.go` (repair round) | `client-second-request` against the fake now expects the fake's refusal (no second `N`) |
 | `internal/sim/workload/snapshot_test.go` | `Startup.*` exempt from chunk 2's busy-world counters check (its world has no TLS or SCRAM); `startup_test.go: TestStartupCountersMove` covers them |
 | `internal/testclient/msg.go` | `Msg.Data`: the authentication message's payload |
 | `scripts/tier-r.sh` | third container (`-scram`) and its two environment variables |
@@ -294,7 +377,7 @@ recording was rewritten by `MG_TIER_R_UPDATE=1` with identical content).
 ```
 PATH=/usr/local/go/bin:$PATH
 go test ./internal/pgwire/... ./internal/sim/... ./internal/testclient
-DST_SEEDS=200 go test -run '^TestScenarioWire' ./internal/pgwire          # the sweep part (about 3 min)
+DST_SEEDS=200 go test -run '^TestScenarioWire' ./internal/pgwire          # the sweep part (rotating subset per seed)
 go test ./internal/pgwire -run '^TestScenarioWireStartup$/^wire-client-smuggle$/^seed=7$' -seed=7 -count=1
 go test -run '^$' -fuzz '^FuzzClientSession$' -fuzztime 60s ./internal/pgwire   # also FuzzFramer, FuzzBackendSession, FuzzCycle
 go test -run TestGoldenBytes -update ./internal/pgwire                     # after checking a reply change
