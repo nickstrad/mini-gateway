@@ -1,6 +1,7 @@
 package workload_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -62,3 +63,5 @@ func TestSmoke(t *testing.T) {
 		t.Fatalf("%+v", s.Total)
 	}
 }
+
+func sprint(v any) string { return fmt.Sprintf("%+v", v) }

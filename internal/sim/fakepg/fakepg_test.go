@@ -55,12 +55,14 @@ func TestEncryptionRequestsAnsweredN(t *testing.T) {
 	w.done(p)
 }
 
-func TestTransactionStatusTable(t *testing.T) {
-	cases := []struct {
-		name string
-		msgs [][]string
-		want []string
-	}{
+type statusCase struct {
+	name string
+	msgs [][]string
+	want []string
+}
+
+func statusCases() []statusCase {
+	return []statusCase{
 		{"B1 begin and select in one message", [][]string{{"BEGIN; SELECT 1"}}, []string{"C:BEGIN T D C:SELECT 1 ZT"}},
 		{"B2 error inside a transaction then rollback", [][]string{{"BEGIN"}, {"SELECT 1/0"}, {"ROLLBACK"}},
 			[]string{"C:BEGIN ZT", "E:22012 ZE", "C:ROLLBACK ZI"}},
@@ -84,19 +86,40 @@ func TestTransactionStatusTable(t *testing.T) {
 		{"unknown statement", [][]string{{"FROBNICATE"}}, []string{"E:42601 ZI"}},
 		{"discard all inside a transaction fails", [][]string{{"BEGIN"}, {"DISCARD ALL"}, {"ROLLBACK"}}, []string{"C:BEGIN ZT", "E:25001 ZE", "C:ROLLBACK ZI"}},
 	}
-	for _, tc := range cases {
+}
+
+func runStatusCase(t *testing.T, cfg fakepg.Config, tc statusCase) []string {
+	w := newWorld(t, cfg)
+	p := w.client()
+	var got []string
+	for _, m := range tc.msgs {
+		got = append(got, w.exchange(p, m...))
+	}
+	w.done(p)
+	return got
+}
+
+func TestTransactionStatusTable(t *testing.T) {
+	for _, tc := range statusCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			w := newWorld(t, fakepg.Config{})
-			p := w.client()
-			var got []string
-			for _, m := range tc.msgs {
-				got = append(got, w.exchange(p, m...))
-			}
-			if !slices.Equal(got, tc.want) {
+			if got := runStatusCase(t, fakepg.Config{}, tc); !slices.Equal(got, tc.want) {
 				t.Fatalf("got  %q\nwant %q", got, tc.want)
 			}
-			w.done(p)
 		})
+	}
+}
+
+func TestPlantedBugIdleInTransactionIsCaughtByTheStatusTable(t *testing.T) {
+	cfg := fakepg.Config{}
+	fakepg.PlantIdleInTx(&cfg)
+	caught := 0
+	for _, tc := range statusCases() {
+		if got := runStatusCase(t, cfg, tc); !slices.Equal(got, tc.want) {
+			caught++
+		}
+	}
+	if caught == 0 {
+		t.Fatal("the transaction status table did not catch a fake that reports I inside a transaction")
 	}
 }
 

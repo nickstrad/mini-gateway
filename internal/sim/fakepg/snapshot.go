@@ -1,6 +1,8 @@
 package fakepg
 
 import (
+	"errors"
+
 	"github.com/nickstrad/mini-gateway/internal/obs"
 	"github.com/nickstrad/mini-gateway/internal/sim"
 )
@@ -102,4 +104,16 @@ func (s Snapshot) Fault(k sim.FaultKind) int64 {
 		return 0
 	}
 	return s.Faults.ByKind[k-FaultRefuse]
+}
+
+func (s Snapshot) Check() error {
+	return errors.Join(
+		obs.Conserve(obs.T("accepted", s.ConnsAccepted), obs.T("open", s.ConnsOpen.Value), obs.T("closed", s.ConnsClosed)),
+		obs.Conserve(obs.T("statements started", s.StatementsStarted), obs.T("finished", s.StatementsFinished),
+			obs.T("in service", s.InService.Value), obs.T("waiting", s.Waiting.Value), obs.T("aborted", s.StatementsAborted)),
+		obs.Conserve(obs.T("transactions begun", s.TxBegun), obs.T("committed", s.TxCommitted),
+			obs.T("rolled back", s.TxRolledBack), obs.T("lost", s.TxLost), obs.T("open", s.TxOpen)),
+		obs.Conserve(obs.T("cancels received", s.CancelsReceived), obs.T("applied", s.CancelsApplied),
+			obs.T("idle", s.CancelsIdle), obs.T("no match", s.CancelsNoMatch)),
+	)
 }
