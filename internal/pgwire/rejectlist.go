@@ -10,7 +10,7 @@ type RejectRule struct {
 }
 
 var RejectRules = []RejectRule{
-	{work.RejectSessionSet, "Session `SET` (every form except `SET LOCAL`, `SET TRANSACTION`, `SET CONSTRAINTS`; includes `SET SESSION ...`, `SET SESSION CHARACTERISTICS AS TRANSACTION ...`, `SET ROLE`, `SET SESSION AUTHORIZATION`, `SET TIME ZONE`, `SET NAMES`, `SET SCHEMA`)", "The setting outlives the transaction and would follow the pooled connection to the next client.", "SET search_path = app"},
+	{work.RejectSessionSet, "Session `SET` (every form except `SET LOCAL`, `SET TRANSACTION`, `SET CONSTRAINTS`; includes `SET SESSION ...`, `SET SESSION CHARACTERISTICS AS TRANSACTION ...`, `SET ROLE`, `SET SESSION AUTHORIZATION`, `SET TIME ZONE`, `SET NAMES`, `SET SCHEMA`, a custom setting whose first part is `local`, `transaction` or `constraints` such as `SET local.x = 1`), and `UPDATE pg_settings ...` in any statement that names `pg_settings` and contains `UPDATE`", "The setting outlives the transaction and would follow the pooled connection to the next client.", "SET search_path = app"},
 	{work.RejectReset, "`RESET name`, `RESET ALL`", "Changes session settings that outlive the transaction.", "RESET statement_timeout"},
 	{work.RejectPrepare, "`PREPARE name AS ...`", "A prepared statement lives on the connection, not in the transaction.", "PREPARE q AS SELECT 1"},
 	{work.RejectExecute, "`EXECUTE name` (also after `EXPLAIN` and in `CREATE TABLE ... AS EXECUTE`)", "Needs a prepared statement from an earlier exchange, which may be on another connection.", "EXECUTE q"},

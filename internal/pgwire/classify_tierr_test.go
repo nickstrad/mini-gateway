@@ -43,6 +43,15 @@ const clsTierRChecksum = `SELECT md5(concat_ws('|',
  (SELECT count(*)::text FROM pg_largeobject_metadata),
  (SELECT count(*)::text FROM pg_prepared_xacts)))`
 
+const clsTierRSessionState = `SELECT md5(concat_ws('|',
+ (SELECT string_agg(name || '=' || setting, ',' ORDER BY name) FROM pg_settings WHERE source = 'session' AND setting IS DISTINCT FROM reset_val),
+ (SELECT count(*)::text FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid()),
+ (SELECT count(*)::text FROM pg_prepared_statements),
+ (SELECT count(*)::text FROM pg_cursors),
+ (SELECT count(*)::text FROM pg_listening_channels()),
+ (SELECT count(*)::text FROM pg_class WHERE relnamespace = pg_my_temp_schema()),
+ current_user, session_user))`
+
 type clsPG struct {
 	c    net.Conn
 	sess testclient.Session
@@ -192,12 +201,16 @@ func TestTierRClassifierDifferential(t *testing.T) {
 	admin := clsTierRSetup(t, addr)
 	defer admin.close()
 	clsTierROracleCanaries(t, addr, admin)
-	var readOnly, closed, skipped int
+	var readOnly, closed, skipped, session int
 	for _, c := range clsLoadCorpus(t) {
 		u := ClassifyQuery([]byte(c.text), false)
 		if u.Class == work.ClassReject || c.noexec {
 			skipped++
 			continue
+		}
+		session++
+		if err := clsTierRSessionUnchangedErr(addr, admin, c); err != nil {
+			t.Errorf("line %d %q: %v", c.line, c.text, err)
 		}
 		if u.MayLeaveOpen() == work.No {
 			closed++
@@ -211,7 +224,7 @@ func TestTierRClassifierDifferential(t *testing.T) {
 	if readOnly < 100 || closed < 200 {
 		t.Fatalf("too few statements exercised: %d read-only, %d transaction-free", readOnly, closed)
 	}
-	t.Logf("tier R: classifier differential: %d statements marked \"leaves no transaction open\" left status I; %d read-only-provable statements left the tables unchanged and ran inside BEGIN READ ONLY; %d not run (rejected or noexec)", closed, readOnly, skipped)
+	t.Logf("tier R: classifier differential: %d forwarded statements left the session state unchanged; %d statements marked \"leaves no transaction open\" left status I; %d read-only-provable statements left the tables unchanged and ran inside BEGIN READ ONLY; %d not run (rejected or noexec)", session, closed, readOnly, skipped)
 }
 
 func clsTierRLeavesIdle(t *testing.T, addr string, admin *clsPG, c clsCase) {
@@ -280,8 +293,87 @@ func clsTierRReadOnlyErr(addr string, admin *clsPG, c clsCase) error {
 	return nil
 }
 
+func clsTierRSessionUnchangedErr(addr string, admin *clsPG, c clsCase) error {
+	if _, err := clsTierRResetErr(admin); err != nil {
+		return err
+	}
+	p, err := clsDialPG(addr, clsTierRDB)
+	if err != nil {
+		return err
+	}
+	defer p.close()
+	before, err := p.value(clsTierRSessionState)
+	if err != nil {
+		return err
+	}
+	msgs, err := p.run(c.text)
+	if err != nil {
+		return err
+	}
+	if clsLastStatus(msgs) != 'I' {
+		if _, err := p.run("ROLLBACK"); err != nil {
+			return err
+		}
+	}
+	after, err := p.value(clsTierRSessionState)
+	if err != nil {
+		return err
+	}
+	if after != before {
+		return errors.New("classified forwardable, but it changed the session state on Postgres")
+	}
+	return nil
+}
+
+func clsTierRCustomSettingIsSession(addr string) error {
+	p, err := clsDialPG(addr, clsTierRDB)
+	if err != nil {
+		return err
+	}
+	defer p.close()
+	for _, q := range []string{"SET local.x = 1", "SET transaction.y = 2", "SET constraints.z = 3"} {
+		if u := ClassifyQuery([]byte(q), false); u.Class != work.ClassReject || u.Reason != work.RejectSessionSet {
+			return fmt.Errorf("%q is not rejected as a session SET", q)
+		}
+		if _, err := p.must(q); err != nil {
+			return err
+		}
+	}
+	got, err := p.value("SELECT concat_ws(',', current_setting('local.x', true), current_setting('transaction.y', true), current_setting('constraints.z', true))")
+	if err != nil {
+		return err
+	}
+	if got != "1,2,3" {
+		return fmt.Errorf("custom settings after SET local.x and friends: %q, want 1,2,3 (they are session settings)", got)
+	}
+	return nil
+}
+
 func clsTierROracleCanaries(t *testing.T, addr string, admin *clsPG) {
 	t.Helper()
+	for _, q := range []string{
+		"SET search_path = app",
+		"SELECT set_config('search_path', 'app', false)",
+		"SELECT pg_advisory_lock(1)",
+		"SELECT U&\"pg!005fadvisory!005flock\" UESCAPE '!' (1)",
+		"PREPARE q AS SELECT 1",
+		"LISTEN jobs",
+		"CREATE TEMP TABLE tt (a int)",
+		"CREATE TABLE pg_temp.tt (a int)",
+		"DECLARE c CURSOR WITH HOLD FOR SELECT 1",
+		"SET ROLE pg_monitor",
+		"UPDATE pg_settings SET setting = 'app' WHERE name = 'search_path'",
+	} {
+		if clsTierRSessionUnchangedErr(addr, admin, clsCase{text: q}) == nil {
+			t.Errorf("oracle canary: the session-state oracle does not see %q", q)
+		}
+		if u := ClassifyQuery([]byte(q), false); u.Class != work.ClassReject {
+			t.Errorf("oracle canary %q is not rejected", q)
+		}
+	}
+	if err := clsTierRCustomSettingIsSession(addr); err != nil {
+		t.Error(err)
+	}
 	for _, q := range []string{
 		"SELECT nextval('s')",
 		"WITH d AS (DELETE FROM kv WHERE k = 'a' RETURNING *) SELECT * FROM d",

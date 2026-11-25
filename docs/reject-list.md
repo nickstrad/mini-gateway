@@ -8,7 +8,7 @@ A rejected statement is answered with `ERROR 0A000` (error row `unsupported-feat
 
 | Reason | Feature | Why | Example |
 | --- | --- | --- | --- |
-| `session-set` | Session `SET` (every form except `SET LOCAL`, `SET TRANSACTION`, `SET CONSTRAINTS`; includes `SET SESSION ...`, `SET SESSION CHARACTERISTICS AS TRANSACTION ...`, `SET ROLE`, `SET SESSION AUTHORIZATION`, `SET TIME ZONE`, `SET NAMES`, `SET SCHEMA`) | The setting outlives the transaction and would follow the pooled connection to the next client. | `SET search_path = app` |
+| `session-set` | Session `SET` (every form except `SET LOCAL`, `SET TRANSACTION`, `SET CONSTRAINTS`; includes `SET SESSION ...`, `SET SESSION CHARACTERISTICS AS TRANSACTION ...`, `SET ROLE`, `SET SESSION AUTHORIZATION`, `SET TIME ZONE`, `SET NAMES`, `SET SCHEMA`, a custom setting whose first part is `local`, `transaction` or `constraints` such as `SET local.x = 1`), and `UPDATE pg_settings ...` in any statement that names `pg_settings` and contains `UPDATE` | The setting outlives the transaction and would follow the pooled connection to the next client. | `SET search_path = app` |
 | `reset` | `RESET name`, `RESET ALL` | Changes session settings that outlive the transaction. | `RESET statement_timeout` |
 | `prepare` | `PREPARE name AS ...` | A prepared statement lives on the connection, not in the transaction. | `PREPARE q AS SELECT 1` |
 | `execute` | `EXECUTE name` (also after `EXPLAIN` and in `CREATE TABLE ... AS EXECUTE`) | Needs a prepared statement from an earlier exchange, which may be on another connection. | `EXECUTE q` |

@@ -379,6 +379,24 @@ R:session-set	SELECT 'x'; SET search_path = 'a;b'
 R:session-set bad	SET search_path = app; SELECT 'unterminated
 R:session-set bad	SET search_path = app; SELECT 1 \ 2
 R:session-set	SET LOCAL x = 1; SET y = 2
+R:session-set	SET local.x = 1
+R:session-set	SET LOCAL.x = 1
+R:session-set	SET local . x = 1
+R:session-set	SET /* c */ local /* d */ . x = 1
+R:session-set	SET transaction.y = 2
+R:session-set	SET constraints.z = 3
+R:session-set	SET session.q = 1
+R:session-set	SET "local".x = 5
+R:session-set	SET local = 1
+R:session-set	SET local TO 1
+R:session-set	SET LOCAL
+R:session-set	UPDATE pg_settings SET setting = 'x' WHERE name = 'application_name'
+R:session-set	update pg_catalog.pg_settings set setting = 'x' where name = 'search_path'
+R:session-set	UPDATE "pg_settings" SET setting = 'x' WHERE name = 'search_path'
+R:session-set	WITH u AS (UPDATE pg_settings SET setting = 'x' WHERE name = 'search_path' RETURNING 1) SELECT * FROM u
+F ro co tx:none	SELECT name, setting FROM pg_settings WHERE name = 'search_path'
+F tx:none	SET LOCAL local.w = 4
+F tx:none	SET LOCAL transaction_isolation = 'serializable'
 R:reset	RESET search_path
 R:reset	RESET ALL
 R:reset	reset all

@@ -391,7 +391,7 @@ func (m *clsMsg) leadReject(s clsSpan) work.RejectReason {
 	i := m.lead(s)
 	switch {
 	case m.is(i, "set"):
-		if m.isAny(i+1, []string{"local", "transaction", "constraints"}) || m.plant {
+		if m.plant || m.transactionScopedSet(i+1) {
 			return work.RejectNone
 		}
 		return work.RejectSessionSet
@@ -424,6 +424,20 @@ func (m *clsMsg) leadReject(s clsSpan) work.RejectReason {
 	return work.RejectNone
 }
 
+func (m *clsMsg) transactionScopedSet(i int) bool {
+	if !m.isAny(i, []string{"local", "transaction", "constraints"}) {
+		return false
+	}
+	next := m.toks[min(i+1, len(m.toks)-1)]
+	switch {
+	case i+1 >= len(m.toks), m.isPunct(i+1, '.'), m.isPunct(i+1, ';'), m.is(i+1, "to"):
+		return false
+	case next.Kind == TokenOperator && string(m.src[next.Start:next.End]) == "=":
+		return false
+	}
+	return true
+}
+
 func (m *clsMsg) declareReject(i, hi int) work.RejectReason {
 	for ; i < hi && !m.is(i, "for"); i++ {
 		if m.is(i, "with") && m.is(i+1, "hold") {
@@ -452,6 +466,9 @@ func (m *clsMsg) tokenReject(s clsSpan, i int) work.RejectReason {
 	if string(name) == "pg_temp" || bytes.HasPrefix(name, []byte("pg_temp_")) {
 		return work.RejectTempObject
 	}
+	if string(name) == "pg_settings" && m.spanHas(s, "update") {
+		return work.RejectSessionSet
+	}
 	if next >= s.hi || !m.isPunct(next, '(') {
 		return work.RejectNone
 	}
@@ -462,6 +479,15 @@ func (m *clsMsg) tokenReject(s clsSpan, i int) work.RejectReason {
 		return work.RejectSetConfig
 	}
 	return work.RejectNone
+}
+
+func (m *clsMsg) spanHas(s clsSpan, kw string) bool {
+	for i := s.lo; i < s.hi; i++ {
+		if m.is(i, kw) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *clsMsg) setConfigLocal(open int) bool {
