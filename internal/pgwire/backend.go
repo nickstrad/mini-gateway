@@ -91,9 +91,11 @@ func (s *BackendSession) ServerCode() string { return s.serverCode }
 func (s *BackendSession) Params() []Param    { return s.params }
 func (s *BackendSession) Key() BackendKey    { return s.key }
 func (s *BackendSession) OverTLS() bool      { return s.overTLS }
-func (s *BackendSession) Authenticating() bool { return s.state >= bsSASLContinue && s.state <= bsAuthOK }
-func (s *BackendSession) AwaitingTLS() bool  { return s.state == bsTLSWait }
-func (s *BackendSession) inStartup() bool    { return s.state != bsReady && s.state != bsClosed }
+func (s *BackendSession) Authenticating() bool {
+	return s.state >= bsSASLContinue && s.state <= bsAuthOK
+}
+func (s *BackendSession) AwaitingTLS() bool { return s.state == bsTLSWait }
+func (s *BackendSession) inStartup() bool   { return s.state != bsReady && s.state != bsClosed }
 
 func (s *BackendSession) write(acts []Action, data []byte, messages int64) []Action {
 	s.st.BytesOut += int64(len(data))
