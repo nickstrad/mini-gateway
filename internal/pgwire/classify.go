@@ -97,10 +97,10 @@ type clsParen struct {
 }
 
 type clsMsg struct {
-	src    []byte
-	toks   []Token
-	parens []clsParen
-	bad    bool
+	src     []byte
+	toks    []Token
+	parens  []clsParen
+	bad     bool
 	hinted  bool
 	plant   bool
 	scratch [clsNameMax]byte
