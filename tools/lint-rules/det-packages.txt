@@ -25,3 +25,4 @@ internal/obs/simsrc
 internal/obs/catalog
 internal/pgwire
 internal/sim/simtls
+internal/pgwire/pgwiretest

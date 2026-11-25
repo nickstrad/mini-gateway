@@ -1,6 +1,7 @@
 package pgwire_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -38,5 +39,23 @@ func TestEveryWireScenarioHasItsAnalysisFiles(t *testing.T) {
 		for _, f := range []string{"startup-failures.sql", "tls-requests.sql"} {
 			requireAnalysisFile(t, sc.name, f)
 		}
+	}
+}
+
+func TestWireDigests(t *testing.T) {
+	path := os.Getenv("MG_WIRE_DIGESTS")
+	if path == "" {
+		t.Skip("set MG_WIRE_DIGESTS to a file (the gate extra does)")
+	}
+	var lines []string
+	for _, sc := range wireScenarios() {
+		r := runWire(t, 42, sc, "")
+		if err := sc.verify(r); err != nil {
+			t.Fatal(err)
+		}
+		lines = append(lines, sc.name+" "+r.w.s.Digests().String())
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
