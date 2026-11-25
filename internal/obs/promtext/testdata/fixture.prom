@@ -184,6 +184,9 @@ mg_obs_csv_rows_dropped_total{component="obs"} 0
 # HELP mg_obs_emit_errors_total Publishes whose sources emitted an undeclared, mistyped, duplicate or missing metric.
 # TYPE mg_obs_emit_errors_total counter
 mg_obs_emit_errors_total{component="obs"} 0
+# HELP mg_obs_emit_failing 1 when the latest publish had metric errors, else 0.
+# TYPE mg_obs_emit_failing gauge
+mg_obs_emit_failing{component="obs"} 0
 # HELP mg_obs_prom_tenants_tracked Tenants that hold a tenant label value in the Prometheus text adapter.
 # TYPE mg_obs_prom_tenants_tracked gauge
 mg_obs_prom_tenants_tracked{component="obs"} 0

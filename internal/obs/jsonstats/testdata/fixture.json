@@ -756,6 +756,16 @@
   },
   {
    "component": "obs",
+   "metric": "emit_failing",
+   "kind": "gauge",
+   "tenant": "",
+   "outcome": "",
+   "reason": "",
+   "mode": "",
+   "value": 0
+  },
+  {
+   "component": "obs",
    "metric": "prom_tenants_tracked",
    "kind": "gauge",
    "tenant": "",

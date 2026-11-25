@@ -72,6 +72,7 @@ line",,,,0
 1,fixture/1/base,0,1000000,inst-1,admission,wait_clamped_low,counter,{brace},,,,0
 1,fixture/1/base,0,1000000,inst-1,admission,wait_clamped_low,counter,ünïcödé,,,,0
 1,fixture/1/base,0,1000000,inst-1,admission,zero,counter,,,,,0
+1,fixture/1/base,0,1000000,inst-1,obs,adapter_failing,gauge,,,csv,,0
 1,fixture/1/base,0,1000000,inst-1,obs,adapters,gauge,,,,,1
 1,fixture/1/base,0,1000000,inst-1,obs,csv_bytes_written,gauge,,,,,0
 1,fixture/1/base,0,1000000,inst-1,obs,csv_flush_errors,counter,,,,,0
@@ -79,6 +80,7 @@ line",,,,0
 1,fixture/1/base,0,1000000,inst-1,obs,csv_queue_depth,gauge,,,,,0
 1,fixture/1/base,0,1000000,inst-1,obs,csv_rows_dropped,counter,,,,,0
 1,fixture/1/base,0,1000000,inst-1,obs,emit_errors,counter,,,,,0
+1,fixture/1/base,0,1000000,inst-1,obs,emit_failing,gauge,,,,,0
 1,fixture/1/base,0,1000000,inst-1,obs,export_errors,counter,,,csv,,0
 1,fixture/1/base,0,1000000,inst-1,obs,prom_tenants_tracked,gauge,,,,,0
 1,fixture/1/base,0,1000000,inst-1,obs,publishes,counter,,,,,1
@@ -156,13 +158,15 @@ line",,,,0
 1,fixture/1/base,1,2000000,inst-1,admission,wait_clamped_low,counter,{brace},,,,0
 1,fixture/1/base,1,2000000,inst-1,admission,wait_clamped_low,counter,ünïcödé,,,,0
 1,fixture/1/base,1,2000000,inst-1,admission,zero,counter,,,,,0
+1,fixture/1/base,1,2000000,inst-1,obs,adapter_failing,gauge,,,csv,,0
 1,fixture/1/base,1,2000000,inst-1,obs,adapters,gauge,,,,,1
-1,fixture/1/base,1,2000000,inst-1,obs,csv_bytes_written,gauge,,,,,10908
+1,fixture/1/base,1,2000000,inst-1,obs,csv_bytes_written,gauge,,,,,11040
 1,fixture/1/base,1,2000000,inst-1,obs,csv_flush_errors,counter,,,,,0
 1,fixture/1/base,1,2000000,inst-1,obs,csv_flushes,counter,,,,,1
 1,fixture/1/base,1,2000000,inst-1,obs,csv_queue_depth,gauge,,,,,0
 1,fixture/1/base,1,2000000,inst-1,obs,csv_rows_dropped,counter,,,,,0
 1,fixture/1/base,1,2000000,inst-1,obs,emit_errors,counter,,,,,0
+1,fixture/1/base,1,2000000,inst-1,obs,emit_failing,gauge,,,,,0
 1,fixture/1/base,1,2000000,inst-1,obs,export_errors,counter,,,csv,,0
 1,fixture/1/base,1,2000000,inst-1,obs,prom_tenants_tracked,gauge,,,,,0
 1,fixture/1/base,1,2000000,inst-1,obs,publishes,counter,,,,,2

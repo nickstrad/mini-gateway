@@ -143,14 +143,15 @@ const (
 )
 
 type MetricDesc struct {
-	Component string
-	Name      string
-	Kind      Kind
-	Labels    LabelSet
-	Unit      Unit
-	Merge     MergeRule
-	Headline  bool
-	Help      string
+	Component  string
+	Name       string
+	Kind       Kind
+	Labels     LabelSet
+	Unit       Unit
+	Merge      MergeRule
+	Headline   bool
+	OpenLabels bool
+	Help       string
 }
 
 func CounterDesc(name string, labels LabelSet, help string) MetricDesc {
@@ -171,6 +172,11 @@ func HistogramDesc(name string, labels LabelSet, unit Unit, help string) MetricD
 
 func (d MetricDesc) WithUnit(u Unit) MetricDesc {
 	d.Unit = u
+	return d
+}
+
+func (d MetricDesc) WithOpenLabels() MetricDesc {
+	d.OpenLabels = true
 	return d
 }
 
@@ -226,6 +232,8 @@ func (d MetricDesc) validate() error {
 		return fmt.Errorf("%w: %s.%s: a counter merges by sum", ErrBadDesc, d.Component, d.Name)
 	case d.Kind == KindHistogram && d.Merge != MergeSum:
 		return fmt.Errorf("%w: %s.%s: a histogram merges by bucket", ErrBadDesc, d.Component, d.Name)
+	case d.OpenLabels && (d.Labels == 0 || d.Labels.Has(LabelTenant)):
+		return fmt.Errorf("%w: %s.%s: open label values need a label other than tenant", ErrBadDesc, d.Component, d.Name)
 	case d.Headline && (d.Kind == KindHistogram || d.Labels.Has(LabelTenant)):
 		return fmt.Errorf("%w: %s.%s: a headline metric is a counter or gauge without a tenant label", ErrBadDesc, d.Component, d.Name)
 	}
@@ -254,10 +262,38 @@ func (r *Registry) Declare(component string, descs ...MetricDesc) error {
 			if found {
 				return fmt.Errorf("%w: %s.%s declared twice", ErrBadDesc, x.Component, x.Name)
 			}
+			if y, clash := r.exposureClash(x); clash {
+				return fmt.Errorf("%w: %s.%s and %s.%s would export the same series name", ErrBadDesc, x.Component, x.Name, y.Component, y.Name)
+			}
 			r.descs = slices.Insert(r.descs, i, x)
 		}
 	}
 	return nil
+}
+
+func exposedNames(d MetricDesc) []string {
+	switch d.Kind {
+	case KindCounter:
+		return []string{d.Name + "_total"}
+	case KindHistogram:
+		return []string{d.Name, d.Name + "_bucket", d.Name + "_count", d.Name + "_sum"}
+	}
+	return []string{d.Name}
+}
+
+func (r *Registry) exposureClash(d MetricDesc) (MetricDesc, bool) {
+	mine := exposedNames(d)
+	for _, y := range r.descs {
+		if y.Component != d.Component {
+			continue
+		}
+		for _, n := range exposedNames(y) {
+			if slices.Contains(mine, n) {
+				return y, true
+			}
+		}
+	}
+	return MetricDesc{}, false
 }
 
 func (r *Registry) Lookup(component, name string) (MetricDesc, bool) {

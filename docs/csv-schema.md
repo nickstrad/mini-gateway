@@ -64,7 +64,7 @@ One run is one directory `<obs.csv.dir>/<run_id>/` with three files. Simulator r
 
 ## Metric registry
 
-Every metric a component may export. Kind `histogram` rows go to `histograms.csv`; the others to `metrics.csv`. Merge is how values from several instances combine: `sum`, or `max` for high-water marks; histograms merge by bucket.
+Every metric a component may export. Kind `histogram` rows go to `histograms.csv`; the others to `metrics.csv`. Merge is how values from several instances combine: `sum`, or `max` for high-water marks; histograms merge by bucket. A counter or gauge without a tenant label has at least one row in every flush (one row, also when 0, when it has no labels), unless its labels are marked open.
 
 | Component | Metric | Kind | Labels | Unit | Merge | Help |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -108,6 +108,7 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `fakepg` | `write_log_dropped` | counter | — | count | sum | Write log entries not kept. |
 | `fakepg` | `write_log_len` | gauge | — | count | sum | Entries held in the write log. |
 | `fakepg` | `writes_applied` | counter | — | count | sum | Writes applied to the table. |
+| `obs` | `adapter_failing` | gauge | reason (open: no row until a value exists) | count | sum | 1 while the adapter's latest export failed, else 0; reason is the adapter name. |
 | `obs` | `adapters` | gauge | — | count | sum | Adapters attached to the collector. |
 | `obs` | `csv_bytes_written` | gauge | — | bytes | sum | Bytes written to the CSV run directory. |
 | `obs` | `csv_flush_errors` | counter | — | count | sum | CSV flushes not written: size cap reached, write error or full queue. |
@@ -115,7 +116,8 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `obs` | `csv_queue_depth` | gauge | — | count | sum | Flushes waiting in the CSV writer queue (real-process mode). |
 | `obs` | `csv_rows_dropped` | counter | — | count | sum | CSV rows not written because their flush was not written. |
 | `obs` | `emit_errors` | counter | — | count | sum | Publishes whose sources emitted an undeclared, mistyped, duplicate or missing metric. |
-| `obs` | `export_errors` | counter | reason | count | sum | Exports an adapter failed; reason is the adapter name. Never propagated to the collector. |
+| `obs` | `emit_failing` | gauge | — | count | sum | 1 when the latest publish had metric errors, else 0. |
+| `obs` | `export_errors` | counter | reason (open: no row until a value exists) | count | sum | Exports an adapter failed; reason is the adapter name, one row per attached adapter. Never propagated to the collector. |
 | `obs` | `prom_tenants_tracked` | gauge | — | count | sum | Tenants that hold a tenant label value in the Prometheus text adapter. |
 | `obs` | `publishes` | counter | — | count | sum | Snapshots published by the collector, this one included. |
 | `obs` | `sources` | gauge | — | count | sum | Sources registered with the collector. |

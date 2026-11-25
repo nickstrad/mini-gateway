@@ -63,14 +63,19 @@ func Markdown() ([]byte, error) {
 	columns(&b, csvflush.RunFile, csvflush.RunColumns())
 	b.WriteString("## Metric registry\n\n")
 	b.WriteString("Every metric a component may export. Kind `histogram` rows go to `histograms.csv`; the others to `metrics.csv`. ")
-	b.WriteString("Merge is how values from several instances combine: `sum`, or `max` for high-water marks; histograms merge by bucket.\n\n")
+	b.WriteString("Merge is how values from several instances combine: `sum`, or `max` for high-water marks; histograms merge by bucket. ")
+	b.WriteString("A counter or gauge without a tenant label has at least one row in every flush (one row, also when 0, when it has no labels), unless its labels are marked open.\n\n")
 	b.WriteString("| Component | Metric | Kind | Labels | Unit | Merge | Help |\n| --- | --- | --- | --- | --- | --- | --- |\n")
 	for _, d := range reg.All() {
 		merge := d.Merge.String()
 		if d.Kind == obs.KindHistogram {
 			merge = "by bucket"
 		}
-		fmt.Fprintf(&b, "| `%s` | `%s` | %s | %s | %s | %s | %s |\n", d.Component, d.Name, d.Kind, labels(d.Labels), d.Unit, merge, cell(d.Help))
+		ls := labels(d.Labels)
+		if d.OpenLabels {
+			ls += " (open: no row until a value exists)"
+		}
+		fmt.Fprintf(&b, "| `%s` | `%s` | %s | %s | %s | %s | %s |\n", d.Component, d.Name, d.Kind, ls, d.Unit, merge, cell(d.Help))
 	}
 	return b.Bytes(), nil
 }

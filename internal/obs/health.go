@@ -92,17 +92,18 @@ func CollectorRule() Rule {
 		if s.Value(ComponentObs, MetricPublishes, Labels{}) == 0 {
 			return StateDegraded, "nothing published yet"
 		}
-		if n := s.Value(ComponentObs, MetricEmitErrors, Labels{}); n > 0 {
-			return StateDegraded, strconv.FormatInt(n, 10) + " publishes had metric errors"
+		if s.Value(ComponentObs, MetricEmitFailing, Labels{}) > 0 {
+			n := s.Value(ComponentObs, MetricEmitErrors, Labels{})
+			return StateDegraded, "the latest publish had metric errors (" + strconv.FormatInt(n, 10) + " publishes in all)"
 		}
 		failing := []string(nil)
 		for _, p := range s.Points {
-			if p.Component == ComponentObs && p.Metric == MetricExportErrors && p.Value > 0 {
+			if p.Component == ComponentObs && p.Metric == MetricAdapterFailing && p.Value > 0 {
 				failing = append(failing, p.Labels.Reason)
 			}
 		}
 		if len(failing) > 0 {
-			return StateDegraded, "adapter export errors: " + strings.Join(failing, ",")
+			return StateDegraded, "adapter export failing: " + strings.Join(failing, ",")
 		}
 		return StateOK, "publishing"
 	}}
@@ -113,7 +114,7 @@ func (c *Collector) Health(t *HealthTable) Health {
 		var empty InstanceSnapshot
 		return t.Evaluate(empty)
 	}
-	return t.Evaluate(c.last)
+	return t.Evaluate(c.selfView())
 }
 
 func (h Health) AppendJSON(b []byte) []byte {

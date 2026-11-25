@@ -271,14 +271,15 @@ func (c *Collector) Collect() (InstanceSnapshot, error) {
 
 func (e *Emitter) requireUnlabelled(component string) {
 	for _, d := range e.reg.descs {
-		if d.Component != component || d.Labels != 0 || d.Kind == KindHistogram {
+		if d.Component != component || d.Labels.Has(LabelTenant) || d.OpenLabels || d.Kind == KindHistogram {
 			continue
 		}
 		if strings.HasSuffix(d.Name, ClampedLowSuffix) || strings.HasSuffix(d.Name, ClampedHighSuffix) {
 			continue
 		}
-		if _, found := slices.BinarySearchFunc(e.points, Point{Component: component, Metric: d.Name}, ComparePoint); !found {
-			e.fail(fmt.Errorf("%w: %s.%s has no labels and must be emitted at every collect", ErrMissing, component, d.Name))
+		i, _ := slices.BinarySearchFunc(e.points, Point{Component: component, Metric: d.Name}, ComparePoint)
+		if i == len(e.points) || e.points[i].Metric != d.Name {
+			e.fail(fmt.Errorf("%w: %s.%s has no tenant label and must be emitted at every collect", ErrMissing, component, d.Name))
 		}
 	}
 }
