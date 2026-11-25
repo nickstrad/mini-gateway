@@ -1,0 +1,15 @@
+17.11 (Debian 17.11-1.pgdg13+2)
+=== RUN   TestAdv_1_EmptyInsideTransaction
+    adv_test.go:124: seed=81173 REPLAY: go test -count=1 -run '^TestAdv_1_EmptyInsideTransaction$' ./agent_work/adversarial/c02-sim-world
+    adv_test.go:124: tier R query="BEGIN; /*only*/ ; SELECT 'semicolon;inside'; COMMIT" postgres=CTDCCZI fake=CTDCCZI
+--- PASS: TestAdv_1_EmptyInsideTransaction (0.01s)
+=== RUN   TestAdv_1_ErrorAfterCommitBoundary
+    adv_test.go:127: seed=81173 REPLAY: go test -count=1 -run '^TestAdv_1_ErrorAfterCommitBoundary$' ./agent_work/adversarial/c02-sim-world
+    adv_test.go:127: tier R query="BEGIN; SELECT 81; COMMIT; SELECT 7 / 0" postgres=CTDCCEZI fake=CTDCCEZI
+--- PASS: TestAdv_1_ErrorAfterCommitBoundary (0.01s)
+=== RUN   TestAdv_1_RollbackThenBegin
+    adv_test.go:130: seed=81173 REPLAY: go test -count=1 -run '^TestAdv_1_RollbackThenBegin$' ./agent_work/adversarial/c02-sim-world
+    adv_test.go:130: tier R query="BEGIN; ROLLBACK; BEGIN; SELECT 19" postgres=CCCTDCZT fake=CCCTDCZT
+--- PASS: TestAdv_1_RollbackThenBegin (0.01s)
+PASS
+ok  	github.com/nickstrad/mini-gateway/agent_work/adversarial/c02-sim-world	0.033s
