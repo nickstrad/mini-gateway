@@ -1,10 +1,6 @@
 package pgwire
 
-import (
-	"errors"
-
-	"github.com/jackc/pgx/v5/pgproto3"
-)
+import "errors"
 
 const ReplyDetailPrefix = "mini-gateway error row: "
 
@@ -72,31 +68,27 @@ func (b *ReplyBuilder) Build(dst []byte, id ErrRowID, status byte) ([]byte, Repl
 	case ErrorRowErrorUntilSync:
 		return out, ReplyAction{End: ReplyEndSync}, nil
 	}
-	out, err = (&pgproto3.ReadyForQuery{TxStatus: status}).Encode(out)
-	if err != nil {
-		b.snap.Failed++
-		return dst, ReplyAction{}, err
-	}
+	out = AppendReadyForQuery(out, status)
 	return out, ReplyAction{End: ReplyEndReady, Close: row.Conn == ErrorRowConnClosedWhenIdle && status == 'I'}, nil
 }
 
 func rplEncodeError(dst []byte, row ErrorRow) ([]byte, error) {
 	sev := row.Severity()
-	msg := pgproto3.ErrorResponse{
-		Severity:            sev,
-		SeverityUnlocalized: sev,
-		Code:                row.Code,
-		Message:             row.Message,
-		Detail:              ReplyDetailPrefix + row.ID,
+	out, at := beginMessage(dst, MsgErrorResponse)
+	for _, f := range []struct {
+		code  byte
+		value string
+	}{{'S', sev}, {'V', sev}, {'C', row.Code}, {'M', row.Message}, {'D', ReplyDetailPrefix + row.ID}} {
+		out = appendCString(append(out, f.code), f.value)
 	}
-	return msg.Encode(dst)
+	return finishMessage(append(out, 0), at), nil
 }
 
 func ReplyReady(dst []byte, status byte) ([]byte, error) {
 	if !ReplyValidStatus(status) {
 		return dst, ReplyErrBadStatus
 	}
-	return (&pgproto3.ReadyForQuery{TxStatus: status}).Encode(dst)
+	return AppendReadyForQuery(dst, status), nil
 }
 
 type SyncDiscardStep uint8
