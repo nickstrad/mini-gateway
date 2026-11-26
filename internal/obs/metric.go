@@ -311,6 +311,15 @@ func compareDesc(a, b MetricDesc) int {
 // include their clamp counters and rejecting duplicates or Prometheus series
 // name clashes within the same component.
 func (r *Registry) Declare(component string, descs ...MetricDesc) error {
+	staged := Registry{descs: slices.Clone(r.descs)}
+	if err := staged.declare(component, descs); err != nil {
+		return err
+	}
+	r.descs = staged.descs
+	return nil
+}
+
+func (r *Registry) declare(component string, descs []MetricDesc) error {
 	for _, d := range descs {
 		d.Component = component
 		for _, x := range d.expand() {

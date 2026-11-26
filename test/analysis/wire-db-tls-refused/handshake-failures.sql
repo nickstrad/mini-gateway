@@ -1,4 +1,4 @@
--- requires: wire.client_tls_failed wire.database_tls_failed fakepg.handshakes workload.startup_tls_faults
+-- requires: wire.client_tls_failed wire.database_tls_failed fakepg.handshakes workload.startup_tls_faults wire.client_tls_completed wire.database_tls_completed workload.startup_handshakes
 -- claim: wire-db-tls-refused: TLS handshake failures by result in the wire snapshot equal the handshake faults injected, and completed handshakes match on both sides.
 -- Injected: none.
 -- Every run: each injected count is at least 1 and equals the failures of its reason, no other failure of

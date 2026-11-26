@@ -1,4 +1,4 @@
--- requires: wire.client_startups_failed wire.database_startups_failed fakepg.faults workload.startup_tls_faults
+-- requires: wire.client_startups_failed wire.database_startups_failed fakepg.faults workload.startup_tls_faults fakepg.handshakes fakepg.tls_answered
 -- claim: wire-one-byte: startup failures by reason in the wire snapshot equal the startup faults injected by kind.
 -- Injected: none.
 -- Every run: each injected count is at least 1 and equals the failures of its reason, no other failure of

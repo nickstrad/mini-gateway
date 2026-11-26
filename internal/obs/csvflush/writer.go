@@ -456,6 +456,7 @@ func (w *Writer) Close() error {
 	if !w.stopped.Load() {
 		if oerr := w.open(); oerr != nil {
 			w.stopped.Store(true)
+			w.flushErrors.Add(1)
 			err = oerr
 		}
 	}

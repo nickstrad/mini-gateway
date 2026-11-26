@@ -39,7 +39,7 @@ type TenantTable struct {
 }
 
 // NewTenantTable validates tenants and builds a lookup table, precomputing the
-// modal iteration count and salt length used by default mock challenges.
+// iteration count and salt length shared by every tenant for default mock challenges.
 func NewTenantTable(tenants []Tenant) (*TenantTable, error) {
 	if len(tenants) > MaxTenants {
 		return nil, fmt.Errorf("%w: %d tenants, the limit is %d", ErrTenants, len(tenants), MaxTenants)
@@ -55,25 +55,26 @@ func NewTenantTable(tenants []Tenant) (*TenantTable, error) {
 		if tn.Verifier.Iterations < MinScramIterations || tn.Verifier.Iterations > MaxScramIterations || len(tn.Verifier.Salt) == 0 {
 			return nil, fmt.Errorf("%w: user %q has no usable verifier", ErrTenants, tn.User)
 		}
+		if len(tn.Verifier.Salt) > maxMockSaltLen {
+			return nil, fmt.Errorf("%w: user %q has a salt of %d bytes, the limit is %d", ErrTenants, tn.User, len(tn.Verifier.Salt), maxMockSaltLen)
+		}
+		if len(t.list) > 0 {
+			first := t.list[0]
+			if tn.Verifier.Iterations != first.Verifier.Iterations {
+				return nil, fmt.Errorf("%w: user %q has %d SCRAM iterations but %q has %d; a table uses one iteration count", ErrTenants, tn.User, tn.Verifier.Iterations, first.User, first.Verifier.Iterations)
+			}
+			if len(tn.Verifier.Salt) != len(first.Verifier.Salt) {
+				return nil, fmt.Errorf("%w: user %q has a salt of %d bytes but %q has %d; a table uses one salt length", ErrTenants, tn.User, len(tn.Verifier.Salt), first.User, len(first.Verifier.Salt))
+			}
+		}
 		t.byUser[tn.User] = len(t.list)
 		t.list = append(t.list, tn)
 	}
-	t.commonIters = mostCommon(t.list, func(tn Tenant) int { return tn.Verifier.Iterations })
-	t.commonSaltLen = mostCommon(t.list, func(tn Tenant) int { return len(tn.Verifier.Salt) })
-	return t, nil
-}
-
-func mostCommon(list []Tenant, key func(Tenant) int) int {
-	counts := make(map[int]int)
-	best, bestCount := 0, 0
-	for _, tn := range list {
-		k := key(tn)
-		counts[k]++
-		if counts[k] > bestCount {
-			best, bestCount = k, counts[k]
-		}
+	if len(t.list) > 0 {
+		t.commonIters = t.list[0].Verifier.Iterations
+		t.commonSaltLen = len(t.list[0].Verifier.Salt)
 	}
-	return best
+	return t, nil
 }
 
 func (t *TenantTable) mockShape() (iterations, saltLen int) {

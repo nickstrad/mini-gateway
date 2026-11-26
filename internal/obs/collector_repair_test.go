@@ -172,3 +172,56 @@ func TestOpenLabelsAreOptionalAndNeedANonTenantLabel(t *testing.T) {
 		t.Fatalf("an open-labelled metric with no value yet is an error: %v", err)
 	}
 }
+
+func TestDeclareIsAllOrNothing(t *testing.T) {
+	refused := [][]MetricDesc{
+		{CounterDesc("a", 0, "A."), HistogramDesc("h", 0, UnitNs, "H."), CounterDesc("a", 0, "A again.")},
+		{CounterDesc("a", 0, "A."), GaugeDesc("b", 0, ""), CounterDesc("c", 0, "C.")},
+		{CounterDesc("a", 0, "A."), GaugeDesc("a_total", 0, "G.")},
+	}
+	for i, descs := range refused {
+		var reg Registry
+		if err := reg.Declare(ComponentPool, descs...); !errors.Is(err, ErrBadDesc) {
+			t.Fatalf("case %d declared: %v", i, err)
+		}
+		if reg.Len() != 0 {
+			t.Fatalf("case %d: a refused Declare left %d descriptors registered", i, reg.Len())
+		}
+		if _, ok := reg.Lookup(ComponentPool, "a"); ok {
+			t.Fatalf("case %d: a refused Declare left pool.a registered", i)
+		}
+	}
+	var reg Registry
+	if err := reg.Declare(ComponentPool, CounterDesc("kept", 0, "K.")); err != nil {
+		t.Fatal(err)
+	}
+	before := reg.Len()
+	if err := reg.Declare(ComponentPool, CounterDesc("fresh", 0, "F."), CounterDesc("kept", 0, "K.")); !errors.Is(err, ErrBadDesc) {
+		t.Fatalf("want ErrBadDesc, got %v", err)
+	}
+	if reg.Len() != before {
+		t.Fatalf("a refused Declare changed the registry from %d to %d descriptors", before, reg.Len())
+	}
+	if err := reg.Declare(ComponentPool, CounterDesc("fresh", 0, "F.")); err != nil {
+		t.Fatalf("a name from a refused Declare must stay free: %v", err)
+	}
+}
+
+func TestSelfViewDoesNotShareHistogramsWithTheLastSnapshot(t *testing.T) {
+	s := newSynth()
+	c := synthCollector(t, "i1", s, true)
+	s.apply(synthEvent{tenant: "a", outcome: "ok", value: 5000})
+	if _, err := c.Publish(); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.last.Hists) == 0 || len(c.last.Hists[0].Buckets) == 0 {
+		t.Fatal("the fixture has no histogram to share")
+	}
+	want := c.last.Clone()
+	view := c.selfView()
+	view.Hists[0].Buckets[0].Count = -99
+	view.Hists[0].Metric = "mutated"
+	if !Equal(c.last, want) {
+		t.Fatal("mutating the self view changed the last published snapshot")
+	}
+}
