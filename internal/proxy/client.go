@@ -214,15 +214,14 @@ func (e *Engine) pump(c *client) {
 			e.front(c, ev)
 		}
 	}
+	if !c.cur.mid() {
+		e.t.cancel(&c.midT)
+	}
 	if c.phase != cpIdle && c.phase != cpHeld {
 		return
 	}
-	if c.cur.mid() {
-		if c.midT == nil {
-			e.t.arm(&c.midT, e.after(e.cfg.Timeouts.ClientMidMessage), tClientMid, c, nil)
-		}
-	} else {
-		e.t.cancel(&c.midT)
+	if c.cur.mid() && c.midT == nil {
+		e.t.arm(&c.midT, e.after(e.cfg.Timeouts.ClientMidMessage), tClientMid, c, nil)
 	}
 	if !e.busy(c) && c.out == 0 && len(c.inbuf) == 0 {
 		e.resume(c)
@@ -365,7 +364,9 @@ func (e *Engine) clientTimer(t *timer) {
 		}
 	case tClientMid:
 		c.midT = nil
-		e.clientViolation(c)
+		if c.cur.mid() {
+			e.clientViolation(c)
+		}
 	case tClientWrite:
 		c.writeT = nil
 		e.snap.ClientsDropped++
