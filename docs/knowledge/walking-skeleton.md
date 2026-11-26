@@ -17,6 +17,17 @@ Facts a later builder (chunks 6a–13) needs before touching `internal/proxy`,
   at most the read already in progress may be posted, and **a reader must not post a second
   chunk until the engine has taken the first** (the shell's per-connection credit). Without
   that a whole mailbox of data can pass a pause (found by the tier R slow-reader test).
+- Write reports (rule G8, repair round of 2026-11-26): post every `EvDBWrote` of a database
+  connection before its `EvDBClosed`; when a write stopped with bytes not accepted (error
+  after fewer bytes than given, or queued writes dropped at the close), post
+  `EvDBWriteRefused` before `EvDBClosed`. The engine says "reached: No" only on that
+  explicit refusal at or before the request's first byte; silence is "may have reached".
+  The shell's database reader waits for its writer to exit before posting the close.
+- Deadline rule: time passes before the event. `Step(now, ev)` fires every timer due at or
+  before `now` first, so anything arriving at the exact instant of its deadline is late.
+  Tests at equality live in `internal/proxy/deadline_test.go`.
+- Bytes left in the same read after the `ReadyForQuery` that ends a lease or a reset are
+  unread bytes: the connection is closed, never reset or lent with them.
 - A FIN from a paused client is seen only when the proxy next reads (after its reply), as
   Postgres itself sees it; a reset (RST) is seen at once. Write a "vanish" test with a reset.
 - Stage seams (`seams.go`), called in the PLAN.md 10.1 order: `Classifier`, draining input,

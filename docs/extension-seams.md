@@ -9,7 +9,7 @@ supply.
 | Seam | Where | What crosses it | Held by |
 | --- | --- | --- | --- |
 | Work vocabulary | `internal/work` | `work.Unit` (tenant, class reject / start a lease / continue a lease, `SafeRead`, `Shareable`, share key), `work.Outcome`, `work.Refusal`, `work.Tri` | importlint: the cores (`internal/pool`, `internal/admission`, `internal/coalesce`, `internal/retry`, `internal/work`) import neither `internal/pgwire` nor `pgproto3` |
-| Backend transport | `internal/proxy` events and actions (`api.go`) | a byte stream per database connection: `ActDBOpen`, `EvDBOpened`, `EvDBDialFailed`, `EvDBData`, `ActDBWrite`, `EvDBWrote`, `ActDBClose`, `EvDBClosed`, `ActDBPause`/`ActDBResume`, `ActDBStartTLS`/`EvDBTLS` | two implementations run the same scenarios: simnet in `internal/proxy/proxysim` (tier S) and TCP/TLS in `internal/shell` (tier R) |
+| Backend transport | `internal/proxy` events and actions (`api.go`) | a byte stream per database connection: `ActDBOpen`, `EvDBOpened`, `EvDBDialFailed`, `EvDBData`, `ActDBWrite`, `EvDBWrote`, `EvDBWriteRefused` (posted before `EvDBClosed` when a write stopped with bytes not accepted), `ActDBClose`, `EvDBClosed`, `ActDBPause`/`ActDBResume`, `ActDBStartTLS`/`EvDBTLS` | two implementations run the same scenarios: simnet in `internal/proxy/proxysim` (tier S) and TCP/TLS in `internal/shell` (tier R) |
 | Wire boundary | `internal/pgwire` | bytes in, work units and outcomes out; replies built from the error table | importlint: only `internal/pgwire`, the fake Postgres and the test clients import `pgproto3` |
 
 ## Stage seams inside the engine (`internal/proxy/seams.go`)
