@@ -79,6 +79,27 @@ Contract for the scripts when they are built (their headers repeat it): the gate
 and `scripts/gen-docs.sh --check`. Exit 0 is green; anything else is red. A first line
 `NOTE: text` in a script's output becomes the note of its row in `result.json`.
 
+## G5: fuzz rates and seed sweeps (CR-1, 2026-11-26)
+
+- `scripts/fuzz.sh` prints, after all targets, a table: package, target, executions,
+  executions per second, class. The rate is the executions of Go's last
+  `fuzz: elapsed: <d>, execs: <N> (<M>/sec)` line divided by its elapsed seconds (Go's own
+  `M` covers only the last interval and is often 0 on the final line).
+- A target is simulation-level when `go list -deps -test ./<pkg>` lists `internal/sim`
+  (the package itself counts). Simulation-level and below `FUZZ_RATE_FLOOR` (default 100
+  per second) is class `seed-sweep`: reported, not failed, and not fuzzing in any claim.
+- A target without a readable rate is red (class `unreadable`). This happens when the
+  target never gets past Go's baseline coverage pass in the time budget (a large cached
+  corpus on a slow target), or when the go tool fuzzes nothing (a `//go:build` line that
+  excludes the file).
+- The gate writes the table to `gate/G5-fuzz.tsv` (gitignored) and records
+  `fuzz_targets`, `fuzz_seed_sweeps` and `fuzz_rate_floor` in `result.json` (counts are
+  `null` when G5 did not run). A `FUZZ_RATE_FLOOR` under 100 never counts for landing.
+  `FUZZ_GO` is a test seam of `fuzz.sh` (`scripts/fuzz_test.go`); the gate unsets it.
+- Canaries: `g5-unreadable-rate` (red) and `g5-seed-sweep-reported` (green control). The
+  older `g5-built-with-marker` cannot be caught any more: chunk 1 deleted the `fuzz`
+  marker, so no stage the gate runs has a marker left.
+
 ## When a result counts for landing
 
 `counts_for_landing` is true only when: every check ran (no `GATE_ONLY`); `overall` is

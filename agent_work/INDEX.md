@@ -142,3 +142,13 @@ Notes: `chunks/c05-classifier/NOTES.md` (the first build's are under `chunks/c05
 | `adversarial/c05-classifier-neon/` | Neon's independent attacks on the same claims. Run: `go test -count=1 ./agent_work/adversarial/c05-classifier-neon/...`; real server: `./run-tier-r.sh` | Neon (separate from the reviewer) | 33 held / 5 broken, then 35 pass / 3 settled |
 | `chunks/c05-classifier/RECONCILIATION.md` | The two passes and review 1 reconciled into 11 decisions for the repair round | Fable | Nothing dropped; three Astra-only and three Neon-only findings judged real |
 | `chunks/c05-classifier/ADVERSARIAL.md`, `ARBITRATION-1.md` | The adversarial record after repair; Astra's arbitration after the second review FAIL | Fable; Astra | Arbitration PASS after a one-line fix (`f914f7c`) |
+
+## Change request CR-1 — shrinker value lowering and the fuzz rules (Opus, 2026-11-26)
+
+Record: `chunks/cr01-shrink-fuzz-rules/` (change request, brief, notes, two reviews, adversarial record).
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../scripts/fuzz.sh` (changed) | Now prints and, with `FUZZ_REPORT`, writes a rate table; classes each target `fuzz` or `seed-sweep` by `FUZZ_RATE_FLOOR` (100/s); fails closed without a readable rate. Test: `go test ./scripts/` | Opus | 12 targets; the rate is read from the last progress line only (attack fixed) |
+| `../docs/knowledge/shrunk-scenarios.md` | How to turn a failing fault schedule into a committed scenario file | Opus | Used by `internal/sim/simtoy`'s planted bug |
+| `adversarial/cr01-shrink-fuzz-rules/` | Astra's 24 attacks on the seven claims; `ADV_LONG=1 ./long-fuzz.sh` for the long fuzz campaign. Report assembled by the orchestrator (Astra's run was cut twice) | Astra; report by Fable | 22 held / 2 broken, then 23 pass / 1 settled; found the 13-second `FuzzWorldSchedule` input |

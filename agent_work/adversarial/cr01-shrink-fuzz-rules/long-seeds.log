@@ -1,0 +1,5 @@
+=== RUN   TestAdv_2_LongSeedCampaign
+    adv_test.go:455: seed=726031
+--- PASS: TestAdv_2_LongSeedCampaign (0.34s)
+PASS
+ok  	github.com/nickstrad/mini-gateway/agent_work/adversarial/cr01-shrink-fuzz-rules	0.349s
