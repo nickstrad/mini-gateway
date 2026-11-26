@@ -133,3 +133,12 @@ Notes: `chunks/c05-classifier/NOTES.md` (the first build's are under `chunks/c05
 | `../test/oracles/dirty-check.sql` | Shipped session-cleanliness oracle (prepared statements, cursors, listens, own advisory locks, session-sourced settings, temp relations, role change); compare before and after. Copied from the canvas experiment; chunk 6 reuses it | Opus | Catches every session-change canary in `TestTierRSafeShapeDifferential` |
 | `chunks/c05-classifier/gate/extra.sh` | Gate G10 for chunk 5: both reject-list scenarios (pinned seeds + 20) in two processes with equal digests, the planted `SET` and alphabet canaries, the classifier SQL files with DuckDB required | Opus | 42 scenario runs replayed with identical digests; both canaries caught; SQL files catch planted numbers |
 | `chunks/c05-classifier/parked/ADVERSARIAL-RESULTS.md` | The first adversary's results on the first build (its harness was hoisted into the shipped suite and deleted) | Astra (adversary) | History: 29 held, 3 broken against the first build |
+
+### Chunk 5 rework — verification record (two adversarial passes, Nick's ruling of 2026-11-26)
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `adversarial/c05-classifier/` | Astra's attacks on the 11 claims. Run: `go test -count=1 ./agent_work/adversarial/c05-classifier/...` (starts its own Postgres 17 container) | Astra | 31 held / 5 broken, then 32 pass / 4 settled |
+| `adversarial/c05-classifier-neon/` | Neon's independent attacks on the same claims. Run: `go test -count=1 ./agent_work/adversarial/c05-classifier-neon/...`; real server: `./run-tier-r.sh` | Neon (separate from the reviewer) | 33 held / 5 broken, then 35 pass / 3 settled |
+| `chunks/c05-classifier/RECONCILIATION.md` | The two passes and review 1 reconciled into 11 decisions for the repair round | Fable | Nothing dropped; three Astra-only and three Neon-only findings judged real |
+| `chunks/c05-classifier/ADVERSARIAL.md`, `ARBITRATION-1.md` | The adversarial record after repair; Astra's arbitration after the second review FAIL | Fable; Astra | Arbitration PASS after a one-line fix (`f914f7c`) |
