@@ -195,3 +195,40 @@ func TestLexOperatorTrailingSignFollowsPostgres(t *testing.T) {
 		}
 	}
 }
+
+func TestClassifierTempWordsRejectOnlyWhereATemporaryObjectIsMade(t *testing.T) {
+	clsWantRejected(t, work.RejectTempObject,
+		"CREATE TEMP TABLE t (a int)",
+		"CREATE TEMPORARY TABLE t (a int)",
+		"CREATE LOCAL TEMP TABLE t (a int)",
+		"CREATE GLOBAL TEMPORARY TABLE t (a int)",
+		"create global temp sequence s",
+		"CREATE TEMP VIEW v AS SELECT 1",
+		"CREATE OR REPLACE TEMP VIEW v AS SELECT 1",
+		"CREATE OR REPLACE TEMPORARY VIEW v AS SELECT 1",
+		"CREATE OR REPLACE LOCAL TEMP VIEW v AS SELECT 1",
+		"CREATE /* c */ OR /* c */ REPLACE /* c */ GLOBAL /* c */ TEMPORARY VIEW v AS SELECT 1",
+		"SELECT 1 INTO TEMP t",
+		"SELECT 1 INTO TEMPORARY TABLE t",
+		"SELECT 1 INTO LOCAL TEMP t",
+		"SELECT 1 INTO GLOBAL TEMPORARY TABLE t",
+		"SELECT 1; CREATE TEMP TABLE t (a int)",
+		"EXPLAIN ANALYZE CREATE TEMP TABLE t AS SELECT 1",
+	)
+	for _, q := range []string{
+		"SELECT a FROM local temp",
+		"SELECT a FROM global temporary",
+		"SELECT a FROM replace temp",
+		"SELECT a FROM local temporary",
+		"SELECT local temp FROM t",
+		"SELECT a FROM t global temp",
+		"SELECT replace temporary FROM t",
+		"INSERT INTO temp VALUES (1)",
+	} {
+		for _, inTx := range []bool{false, true} {
+			if u := ClassifyQuery([]byte(q), inTx); u.Class == work.ClassReject {
+				t.Errorf("%q (in tx %v): %s, want forwarded: no temporary object is made", q, inTx, clsDescribe(u))
+			}
+		}
+	}
+}

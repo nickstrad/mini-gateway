@@ -402,10 +402,7 @@ func (m *clsMsg) declareReject(i, hi int) work.RejectReason {
 
 func (m *clsMsg) tokenReject(s clsSpan, w clsSpanWords, i int) work.RejectReason {
 	switch {
-	case i > s.lo && m.isAny(i, []string{"temp", "temporary"}) && m.isAny(i-1, []string{"create", "global", "local", "into", "replace"}):
-		if m.is(i-1, "into") && m.isAny(i-2, []string{"insert", "merge"}) {
-			return work.RejectNone
-		}
+	case i > s.lo && m.isAny(i, []string{"temp", "temporary"}) && m.makesTemp(s, i):
 		return work.RejectTempObject
 	case i > s.lo && m.is(i, "execute") && m.is(i-1, "as"):
 		return work.RejectExecute
@@ -437,6 +434,22 @@ func (m *clsMsg) tokenReject(s clsSpan, w clsSpanWords, i int) work.RejectReason
 		return work.RejectTempObject
 	}
 	return work.RejectNone
+}
+
+func (m *clsMsg) makesTemp(s clsSpan, i int) bool {
+	j := i - 1
+	if j > s.lo && m.isAny(j, []string{"global", "local"}) {
+		j--
+	}
+	switch {
+	case m.is(j, "create"):
+		return true
+	case m.is(j, "replace"):
+		return j > s.lo && m.is(j-1, "or")
+	case m.is(j, "into"):
+		return !m.isAny(j-1, []string{"insert", "merge"})
+	}
+	return false
 }
 
 func (m *clsMsg) localPathMayNameTemp(i, hi int) bool {
