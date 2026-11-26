@@ -445,7 +445,7 @@ func (m *clsMsg) makesTemp(s clsSpan, i int) bool {
 	case m.is(j, "create"):
 		return true
 	case m.is(j, "replace"):
-		return j > s.lo && m.is(j-1, "or")
+		return j >= s.lo+2 && m.is(j-1, "or") && m.is(j-2, "create")
 	case m.is(j, "into"):
 		return !m.isAny(j-1, []string{"insert", "merge"})
 	}

@@ -207,6 +207,9 @@ func TestClassifierTempWordsRejectOnlyWhereATemporaryObjectIsMade(t *testing.T) 
 		"CREATE OR REPLACE TEMP VIEW v AS SELECT 1",
 		"CREATE OR REPLACE TEMPORARY VIEW v AS SELECT 1",
 		"CREATE OR REPLACE LOCAL TEMP VIEW v AS SELECT 1",
+		"CREATE OR REPLACE LOCAL TEMPORARY VIEW v AS SELECT 1",
+		"CREATE OR REPLACE GLOBAL TEMP VIEW v AS SELECT 1",
+		"CREATE OR REPLACE GLOBAL TEMPORARY VIEW v AS SELECT 1",
 		"CREATE /* c */ OR /* c */ REPLACE /* c */ GLOBAL /* c */ TEMPORARY VIEW v AS SELECT 1",
 		"SELECT 1 INTO TEMP t",
 		"SELECT 1 INTO TEMPORARY TABLE t",
@@ -216,6 +219,8 @@ func TestClassifierTempWordsRejectOnlyWhereATemporaryObjectIsMade(t *testing.T) 
 		"EXPLAIN ANALYZE CREATE TEMP TABLE t AS SELECT 1",
 	)
 	for _, q := range []string{
+		"SELECT true OR replace temp FROM t",
+		"SELECT true OR replace temporary FROM t",
 		"SELECT a FROM local temp",
 		"SELECT a FROM global temporary",
 		"SELECT a FROM replace temp",
