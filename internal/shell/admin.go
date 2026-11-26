@@ -47,7 +47,7 @@ func (s *Shell) wireObs() error {
 	if o.CSVDir != "" {
 		w, err := csvflush.New(csvflush.Config{Dir: o.CSVDir, MaxBytes: o.CSVMaxBytes, Async: true,
 			Clock: func() int64 { return time.Now().UnixNano() },
-			Run: csvflush.RunInfo{RunID: o.Instance + "/" + strconv.FormatInt(s.base.Unix(), 10), Tier: csvflush.TierReal,
+			Run: csvflush.RunInfo{RunID: runID(o, s.base), Scenario: scenarioOf(o), Tier: csvflush.TierReal,
 				Instances: 1, Build: o.Build, ConfigFingerprint: o.ConfigFingerprint}})
 		if err != nil {
 			return err
@@ -177,4 +177,15 @@ func reply(w http.ResponseWriter, code int, contentType string, body []byte) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(code)
 	_, _ = w.Write(body)
+}
+
+func scenarioOf(o ObsConfig) string {
+	if o.CSVScenario != "" {
+		return o.CSVScenario
+	}
+	return "real"
+}
+
+func runID(o ObsConfig, base time.Time) string {
+	return scenarioOf(o) + "/" + o.Instance + "/" + strconv.FormatInt(base.UnixNano(), 10)
 }

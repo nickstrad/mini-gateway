@@ -60,6 +60,7 @@ type ObsConfig struct {
 	Detail            bool
 	CSVDir            string
 	CSVMaxBytes       int64
+	CSVScenario       string
 }
 
 type Config struct {

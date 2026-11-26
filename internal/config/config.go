@@ -154,6 +154,7 @@ type Obs struct {
 type CSV struct {
 	Dir      string `json:"dir"`
 	MaxBytes int64  `json:"max_bytes"`
+	Scenario string `json:"scenario"`
 }
 
 type Fleet struct {

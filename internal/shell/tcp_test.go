@@ -228,7 +228,7 @@ func TestRunStopsOnCancelAndFlushesTheCSVFiles(t *testing.T) {
 		t.Fatal("Run did not stop")
 	}
 	run := s.CSVRunDir()
-	if !strings.HasPrefix(run, filepath.Join(dir, "gw-test")+string(filepath.Separator)) {
+	if !strings.HasPrefix(run, filepath.Join(dir, "real", "gw-test")+string(filepath.Separator)) {
 		t.Fatalf("run dir %q", run)
 	}
 	for _, f := range []string{csvflush.MetricsFile, csvflush.RunFile} {

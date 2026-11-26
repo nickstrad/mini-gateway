@@ -176,7 +176,7 @@ func shellConfig(f *config.File, engine *proxy.Engine, ln, admin net.Listener) s
 		Timeouts:        f.ProxyTimeouts(),
 		PublishInterval: f.PublishInterval(),
 		Obs: shell.ObsConfig{Instance: f.Instance, Build: build(), ConfigFingerprint: f.Fingerprint(), Detail: f.Obs.Detail,
-			CSVDir: f.Obs.CSV.Dir, CSVMaxBytes: f.Obs.CSV.MaxBytes},
+			CSVDir: f.Obs.CSV.Dir, CSVMaxBytes: f.Obs.CSV.MaxBytes, CSVScenario: f.Obs.CSV.Scenario},
 		Sources: func(c *obs.Collector, sh func() proxy.ShellSnapshot) error {
 			return enginesrc.Register(c, engine, sh)
 		},
