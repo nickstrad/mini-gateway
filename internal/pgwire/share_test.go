@@ -657,3 +657,12 @@ func FuzzSafeShape(f *testing.F) {
 		_ = shareFits(q, true)
 	})
 }
+
+func TestSafeShapeAllocatesNothing(t *testing.T) {
+	for _, q := range append(append([]string{}, shrFitting...), "SELECT 'now'", "SELECT nextval('s')", strings.Repeat("a", ShareMaxLen+1)) {
+		b := []byte(q)
+		if n := testing.AllocsPerRun(20, func() { ShareFits(b) }); n != 0 {
+			t.Errorf("%q: ShareFits allocated %v times", q, n)
+		}
+	}
+}

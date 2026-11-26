@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
@@ -484,4 +485,39 @@ func FuzzClassify(f *testing.F) {
 			clsCheckConservative(t, q, ClassifyQuery(q, false))
 		}
 	})
+}
+
+const clsTimeGrowthLimit = 96
+
+func clsFastest(q []byte) time.Duration {
+	best := time.Duration(1<<63 - 1)
+	for k := 0; k < 3; k++ {
+		start := time.Now()
+		ClassifyQuery(q, false)
+		ShareFits(q)
+		LexAll(q)
+		if d := time.Since(start); d < best {
+			best = d
+		}
+	}
+	return best
+}
+
+func TestClassifierTimeGrowsLinearly(t *testing.T) {
+	if testing.Short() {
+		t.Skip("timing test")
+	}
+	for _, unit := range []string{"(", "a ", ";", "'x'", "set_config(1,2,", `U&"a" `, "SELECT abs(t.a) FROM t; ", "'a'\n", "-- c\n"} {
+		small := []byte(strings.Repeat(unit, (1<<16)/len(unit)))
+		large := []byte(strings.Repeat(unit, (1<<20)/len(unit)))
+		a, b := clsFastest(small), clsFastest(large)
+		if a < time.Microsecond {
+			a = time.Microsecond
+		}
+		ratio := int64(b / a)
+		t.Logf("%q: 64 KiB %v, 1 MiB %v, ratio %d", unit, a, b, ratio)
+		if ratio > clsTimeGrowthLimit {
+			t.Errorf("%q: 16 times the input took %d times as long (%v against %v); want at most %d", unit, ratio, b, a, clsTimeGrowthLimit)
+		}
+	}
 }
