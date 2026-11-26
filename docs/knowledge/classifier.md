@@ -75,11 +75,30 @@ and the wide function allow-list behind them; `AllowList`/`AllowLookup`;
   `pg_stat_activity` included), a user-defined operator behind `=`/`<`/`>`, a user function
   that shadows an allow-listed name by argument type, a foreign table or a table with rules
   can hide a side effect or a per-call result. `coalesce: off` and `hinted` exist for that.
+- So can a **row-level security policy** on an ordinary table: the policy expression runs
+  for every read and may call `set_config`. No reader of query text can see it. Databases
+  with policies need `coalesce: off` or `hinted`.
+- What repeats for a safe-shape text is its rows **as a multiset**. On a table past
+  `min_parallel_table_scan_size` (8 MB by default) Postgres 17 plans `Gather` over a
+  parallel scan: row order without `ORDER BY`, `string_agg`/`array_agg` without `ORDER BY`
+  and `sum`/`avg` over `double precision` can differ between two valid runs. Oracles
+  compare re-runs as sorted rows (`shrRowMultiset`), on exact types only.
+- **Linear work, always.** The classifier runs on every `Query` before any length cap:
+  never search a whole statement, or rescan the rest of a token run, once per token. The
+  lexer scans an operator run once (`lexOpRun`) and cuts every operator from that scan;
+  the classifier reads a statement's `update`/`set`/`reset` words once (`spanWords`).
+  `TestLexOperatorRunsGrowLinearly` and `TestClassifierSpanKeywordChecksGrowLinearly` hold
+  this.
+- `ReplyBuilder` counts `ByRow`/`Total` only for replies it built; a refused build
+  (pass-through row, bad status, bad row) counts in `Failed` alone.
 - Postgres joins string literals continued across a newline (whitespace and `--` comments
   with at least one newline between the closing and the next opening `'`; block comments
   do not count), and an `E'…'` string keeps its escape mode across the join. The lexer now
   does the same (`lexContinuation`); a `search_path` or `set_config` name given as a
   continued string is treated as unreadable.
+- `temp`/`temporary` refuse only where a temporary object is made: after `CREATE`,
+  `CREATE OR REPLACE` or `INTO` (not `INSERT`/`MERGE INTO`), with an optional
+  `GLOBAL`/`LOCAL` between. `SELECT a FROM local temp` is a read.
 - The classifier still rejects some spellings people do not expect: `SET local.x = 1`,
   `UPDATE pg_settings SET …`, any `pg_temp` reference, `set_config(…, 'true')`,
   `set_config` with a setting name that is not one plain `'…'` literal, `SET LOCAL
