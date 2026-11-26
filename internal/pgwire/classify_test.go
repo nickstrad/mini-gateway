@@ -503,6 +503,30 @@ func clsFastest(q []byte) time.Duration {
 	return best
 }
 
+func TestLexOperatorRunsGrowLinearly(t *testing.T) {
+	clsCheckLinearShapes(t, []string{"+", "-", "+-", "*+", "=-", "<+-", "+ ", "1+"})
+}
+
+func clsCheckLinearShapes(t *testing.T, units []string) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("timing test")
+	}
+	for _, unit := range units {
+		small := []byte("SELECT " + strings.Repeat(unit, (1<<12)/len(unit)))
+		large := []byte("SELECT " + strings.Repeat(unit, (1<<16)/len(unit)))
+		a, b := clsFastest(small), clsFastest(large)
+		if a < time.Microsecond {
+			a = time.Microsecond
+		}
+		ratio := int64(b / a)
+		t.Logf("%q: 4 KiB %v, 64 KiB %v, ratio %d", unit, a, b, ratio)
+		if ratio > clsTimeGrowthLimit {
+			t.Errorf("%q: 16 times the input took %d times as long (%v against %v); want at most %d", unit, ratio, b, a, clsTimeGrowthLimit)
+		}
+	}
+}
+
 func TestClassifierTimeGrowsLinearly(t *testing.T) {
 	if testing.Short() {
 		t.Skip("timing test")

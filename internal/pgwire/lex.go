@@ -43,6 +43,14 @@ func (t Token) Text(src []byte) []byte { return src[t.Start:t.End] }
 type Lexer struct {
 	src []byte
 	pos int
+	run lexOpRun
+}
+
+type lexOpRun struct {
+	start    int
+	end      int
+	lastKeep int
+	signFrom int
 }
 
 func LexerFor(src []byte) Lexer { return Lexer{src: src} }
@@ -333,31 +341,39 @@ func lexHasPrefix(b, p []byte) bool {
 }
 
 func (l *Lexer) operator() {
-	start := l.pos
-	for l.more(0) && lexIsOpChar(l.src[l.pos]) {
-		c := l.src[l.pos]
-		if (c == '-' && l.peek(1) == '-') || (c == '/' && l.peek(1) == '*') {
-			break
-		}
-		l.pos++
+	if l.pos < l.run.start || l.pos >= l.run.end {
+		l.run = l.scanOpRun()
 	}
-	l.pos = start + lexOperatorLen(l.src[start:l.pos])
+	l.pos = l.run.cut(l.pos)
 }
 
-func lexOperatorLen(op []byte) int {
-	n := len(op)
-	if n < 2 || !lexIsSign(op[n-1]) {
-		return n
+func (l *Lexer) scanOpRun() lexOpRun {
+	r := lexOpRun{start: l.pos, end: l.pos, lastKeep: -1}
+	for r.end < len(l.src) && lexIsOpChar(l.src[r.end]) {
+		c := l.src[r.end]
+		if r.end+1 < len(l.src) && ((c == '-' && l.src[r.end+1] == '-') || (c == '/' && l.src[r.end+1] == '*')) {
+			break
+		}
+		r.end++
 	}
-	for _, c := range op[:n-1] {
-		if lexKeepsTrailingSign(c) {
-			return n
+	for k := r.start; k < r.end-1; k++ {
+		if lexKeepsTrailingSign(l.src[k]) {
+			r.lastKeep = k
 		}
 	}
-	for n > 1 && lexIsSign(op[n-1]) {
-		n--
+	r.signFrom = r.end
+	for r.signFrom > r.start && lexIsSign(l.src[r.signFrom-1]) {
+		r.signFrom--
 	}
-	return n
+	return r
+}
+
+func (r lexOpRun) cut(from int) int {
+	switch {
+	case r.end-from < 2, r.signFrom == r.end, r.lastKeep >= from:
+		return r.end
+	}
+	return max(r.signFrom, from+1)
 }
 
 func lexIsSign(c byte) bool { return c == '+' || c == '-' }
