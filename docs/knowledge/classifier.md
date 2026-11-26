@@ -98,7 +98,9 @@ and the wide function allow-list behind them; `AllowList`/`AllowLookup`;
   continued string is treated as unreadable.
 - `temp`/`temporary` refuse only where a temporary object is made: after `CREATE`,
   `CREATE OR REPLACE` or `INTO` (not `INSERT`/`MERGE INTO`), with an optional
-  `GLOBAL`/`LOCAL` between. `SELECT a FROM local temp` is a read.
+  `GLOBAL`/`LOCAL` between. The `OR REPLACE` branch requires the preceding `CREATE`.
+  `SELECT a FROM local temp` and `SELECT true OR replace temp FROM t` are reads;
+  `temporary` is also a valid output alias in the latter.
 - The classifier still rejects some spellings people do not expect: `SET local.x = 1`,
   `UPDATE pg_settings SET …`, any `pg_temp` reference, `set_config(…, 'true')`,
   `set_config` with a setting name that is not one plain `'…'` literal, `SET LOCAL
