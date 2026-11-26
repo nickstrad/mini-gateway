@@ -156,7 +156,25 @@ Rates: from the gate run below (`gate/G5-fuzz.tsv`, 20 s per target, vm-1, the o
 builder's work running at the same time). Simulation-level = the test package depends on
 `internal/sim` (`go list -deps -test`).
 
-RATES_TABLE
+| Target | Package | Sim-level | How the simulator seed is chosen | Execs in 20 s | Execs/s | Class |
+| --- | --- | --- | --- | --- | --- | --- |
+| `FuzzScheduleFromBytes` | internal/sim | yes (itself) | no simulator run (decoder only) | 623,668 | 31,183 | fuzz |
+| `FuzzParseSchedule` (new) | internal/sim | yes (itself) | no simulator run (text parser) | 573,928 | 27,329 | fuzz |
+| `FuzzToySchedule` | internal/sim/simtoy | yes | fixed: `Config{Seed: 1}` in `runDecoded` | 18,345 | 873 | fuzz |
+| `FuzzWorldSchedule` | internal/sim/world | yes | fixed: `runSchedule(1, ...)` | 2,704 | 128 | fuzz |
+| `FuzzServerInput` | internal/sim/fakepg | yes | fixed: `sim.Config{Seed: 1}` in `newWorld` | 275,709 | 13,785 | fuzz |
+| `FuzzFramer` | internal/sim/fakepg | yes | no simulator run (framer only) | 570,357 | 28,517 | fuzz |
+| `FuzzMatch` | internal/sim/fakepg | yes | no simulator run (matcher only) | 464,855 | 23,242 | fuzz |
+| `FuzzFramer` | internal/pgwire | yes (test deps) | no simulator run | 256,732 | 12,836 | fuzz |
+| `FuzzClientSession` | internal/pgwire | yes (test deps) | fixed: `rand.NewPCG(1, 99)` via `testClientConfig(..., 1)` | 60,733 | 2,892 | fuzz |
+| `FuzzBackendSession` | internal/pgwire | yes (test deps) | fixed: `rand.NewPCG(1, 5)` via `testBackendConfig(..., 1)` | 190,187 | 9,509 | fuzz |
+| `FuzzCycle` | internal/pgwire | yes (test deps) | no random source | 205,013 | 10,250 | fuzz |
+| `FuzzSession` | internal/testclient | no | no random source | 555,076 | 27,753 | fuzz |
+
+`FuzzWorldSchedule` is close to the floor (128/s here, 231/s in an earlier run on a quieter
+machine); under load it may be classed a seed sweep, which the gate reports and does not
+fail. The pgwire targets were only read and measured (that package belongs to the chunk 5
+rework).
 
 No target needed a fix; no corpus file changed.
 
@@ -165,7 +183,16 @@ No target needed a fix; no corpus file changed.
 - **`g5-built-with-marker` canary is stale (pre-existing).** Chunk 1 deleted the `fuzz`
   marker, so that canary (expects G5 red with "delete the marker") can no longer be
   caught. Left as is; noted in `docs/knowledge/foundation-gates.md`. The two new canaries
-  were CANARY_RUN_RESULT.
+  were run with
+  `CANARY_KEEP=1 CANARY_ONLY=g5-unreadable-rate,g5-seed-sweep-reported scripts/gate-canaries.sh`:
+  clean copy green and counting, **2 of 2 caught** (1,023 s). An earlier identical run
+  stopped before the canaries because the clean copy's G5 was red: one fuzz target failed
+  (every target had a rate; `FuzzWorldSchedule` was a seed sweep at 67/s and
+  `FuzzToySchedule` at 120/s, so the machine was heavily loaded). The harness deletes its
+  copy, so the failing target and any crasher input were lost; the failure was not
+  reproduced by a 20 s `fuzz.sh` run in the worktree nor by the second canary run. Treat it
+  as an open flake for the reviewer: a fuzz target that fails only under load (a
+  candidate is a wall-clock-free target hitting a step budget, but this is unconfirmed).
 - **"Halving, then stepping"** is one bisection whose last probe is the step (above).
 - The call bound for non-monotone predicates is exact but very loose (factor `1 + P`).
 
@@ -203,4 +230,8 @@ CANARY_ONLY=g5-unreadable-rate,g5-seed-sweep-reported scripts/gate-canaries.sh
 
 ## Gate
 
-GATE_RESULT
+`scripts/gate.sh cr01-shrink-fuzz-rules` at the build stage on the clean commit 3fb773d
+(code complete; only this NOTES.md was committed after it): exit 0, `overall: pass`,
+`counts_for_landing: true`, 981 s, `fuzz_targets: 12`, `fuzz_seed_sweeps: 0`,
+`fuzz_rate_floor: 100`. Every check passed (G3 unit 176 s, G4 sweep 332 s, G5 256 s, G6
+tier R 40 s, G7 131 s); G10 skip-none. The generated `result.json` was deleted, not committed.
