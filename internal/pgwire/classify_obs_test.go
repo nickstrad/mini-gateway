@@ -6,6 +6,9 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// TestClassifierSnapshotCountersMoveAndConserve proves that every produced
+// class, reason, and flag moves over the corpus, conservation holds, and Check
+// catches planted inconsistencies.
 func TestClassifierSnapshotCountersMoveAndConserve(t *testing.T) {
 	var c Classifier
 	if err := c.Snapshot().Check(); err != nil {

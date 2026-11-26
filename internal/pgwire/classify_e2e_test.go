@@ -28,14 +28,21 @@ func clsScenarioTest(t *testing.T, sc clsworld.Scenario) {
 	})
 }
 
+// TestScenarioClassifierRejectList proves over seeded sweeps that mixed
+// reject-list and follow-up runs replay deterministically and keep fakepg clean.
 func TestScenarioClassifierRejectList(t *testing.T) {
 	clsScenarioTest(t, clsworld.RejectList())
 }
 
+// TestScenarioClassifierRejectOnly proves over seeded sweeps that reject-only
+// runs replay deterministically and send zero statements to fakepg.
 func TestScenarioClassifierRejectOnly(t *testing.T) {
 	clsScenarioTest(t, clsworld.RejectOnly())
 }
 
+// TestClassifierPlantedSetForwardableIsCaught is the canary proving that
+// making session SET forwardable breaks the reject-list scenario with both a
+// leaked statement and changed session state.
 func TestClassifierPlantedSetForwardableIsCaught(t *testing.T) {
 	for _, seed := range []int64{1, 2, 3} {
 		if err := clsworld.Run(seed, clsworld.RejectList(), "").Verify(); err != nil {
@@ -54,6 +61,8 @@ func TestClassifierPlantedSetForwardableIsCaught(t *testing.T) {
 	}
 }
 
+// TestClassifierRejectOnlyReachesNothing proves that every sent reject-only
+// query is refused locally and fakepg starts zero statements.
 func TestClassifierRejectOnlyReachesNothing(t *testing.T) {
 	r := clsworld.Run(1, clsworld.RejectOnly(), "")
 	if err := r.Verify(); err != nil {

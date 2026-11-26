@@ -57,14 +57,21 @@ func atkForwardedOpaque(t *testing.T, qs ...string) {
 	}
 }
 
+// TestClassifierRejectsUnicodeAndQuotedAdvisoryLockNames proves that Unicode-
+// escaped, custom-UESCAPE, and quoted session advisory-lock calls are refused.
 func TestClassifierRejectsUnicodeAndQuotedAdvisoryLockNames(t *testing.T) {
 	atkReject(t, `SELECT U&"pg_advisory_\006cock"(91)`, `SELECT pg_catalog.U&"pg_try_advisory_!006cock" UESCAPE '!' (92)`, `SELECT "pg_advisory_unlock_all"/* ; */()`)
 }
 
+// TestClassifierRejectsTheWholeMessageForOneRejectedStatement proves that one
+// rejected statement anywhere in a multi-statement Query refuses the whole message.
 func TestClassifierRejectsTheWholeMessageForOneRejectedStatement(t *testing.T) {
 	atkReject(t, `SELECT ';'; RESET/*x*/ALL; SELECT 51`, `VALUES (7); CREATE LOCAL TEMPORARY TABLE adv_hidden(a int)`, `SELECT $adv$; LISTEN false_alarm$adv$; LISTEN "actual"`)
 }
 
+// TestClassifierEscapeContinuationFollowsPostgres proves that escape-string
+// continuations agree with Postgres 17 (forwarding single strings and refusing
+// a session SET hidden behind a continuation).
 func TestClassifierEscapeContinuationFollowsPostgres(t *testing.T) {
 	for _, c := range []struct {
 		q          string
@@ -81,26 +88,38 @@ func TestClassifierEscapeContinuationFollowsPostgres(t *testing.T) {
 	atkReject(t, "SELECT E'ok'\n'\\' ; SELECT ' ; SET application_name = 'adv_escape' ; --'")
 }
 
+// TestClassifierNeverSharesUnknownCallsInGrammarPositions proves that unlisted
+// calls in LATERAL, WITH, and CASE expressions are never SafeRead or Shareable.
 func TestClassifierNeverSharesUnknownCallsInGrammarPositions(t *testing.T) {
 	atkNeverShared(t, `SELECT * FROM LATERAL unknown_adversary(8) AS x`, `WITH z(a) AS (VALUES (8)) SELECT unknown_adversary(a) FROM z`, `SELECT CASE WHEN true THEN unknown_adversary(8) ELSE 0 END`)
 }
 
+// TestClassifierNeverSharesNestedWritesAndLocks proves that nested MERGE,
+// FOR KEY SHARE, and advisory-lock calls are never SafeRead or Shareable.
 func TestClassifierNeverSharesNestedWritesAndLocks(t *testing.T) {
 	atkNeverShared(t, `WITH x AS (MERGE INTO dst USING src ON false WHEN NOT MATCHED THEN INSERT VALUES (1) RETURNING *) SELECT * FROM x`, `SELECT * FROM (SELECT * FROM pg_class FOR KEY SHARE) AS x`, `SELECT * FROM (SELECT pg_advisory_xact_lock(97)) AS x`)
 }
 
+// TestClassifierNeverSharesTimeDependentLiterals proves that 'now' and 'today'
+// literals in casts or comparisons are never SafeRead or Shareable.
 func TestClassifierNeverSharesTimeDependentLiterals(t *testing.T) {
 	atkNeverShared(t, `SELECT 'now'::timestamp`, `SELECT CAST('today' AS date)`, `SELECT 'now'::timestamptz`, `SELECT a FROM t WHERE ts < 'now'`, `SELECT a FROM t WHERE d = 'TODAY'`)
 }
 
+// TestClassifierForwardsTruncatedMessagesAsOpaque proves that unclosed dollar,
+// escape, or quoted literals forward as Opaque and are never shared.
 func TestClassifierForwardsTruncatedMessagesAsOpaque(t *testing.T) {
 	atkForwardedOpaque(t, `SELECT /* mg:share */ $abc$unclosed`, `SELECT E'backslash\`, `SELECT "unfinished`)
 }
 
+// TestClassifierForwardsBadBytesBetweenStatementsAsOpaque proves that bad bytes
+// between statements forward as Opaque and are never shared.
 func TestClassifierForwardsBadBytesBetweenStatementsAsOpaque(t *testing.T) {
 	atkForwardedOpaque(t, "SELECT 82;\x00SELECT 83", "SELECT 82;\x01SELECT 83", "SELECT 82;\\SELECT 83")
 }
 
+// TestClassifierRejectWinsOverUntokenisable proves that a reject-list feature
+// in the readable prefix of an untokenisable message is still refused and Opaque.
 func TestClassifierRejectWinsOverUntokenisable(t *testing.T) {
 	for _, q := range []string{`DISCARD ALL; SELECT 'unfinished`, `LISTEN adv; /* unfinished`, `RESET ALL; SELECT $tag$unfinished`} {
 		u := p.ClassifyQuery([]byte(q), false)
@@ -135,14 +154,20 @@ func atkInvariantPadding(t *testing.T, words []string) {
 	}
 }
 
+// TestClassifierPaddingInvariantTransactionControl proves that transaction-
+// control classification is invariant under seeded comments, whitespace, and case.
 func TestClassifierPaddingInvariantTransactionControl(t *testing.T) {
 	atkInvariantPadding(t, []string{"begin", "work", ";", "select", "19", ";", "rollback", "work", "and", "no", "chain"})
 }
 
+// TestClassifierPaddingInvariantLockingClause proves that FOR NO KEY UPDATE
+// classification is invariant under seeded comments, whitespace, and case.
 func TestClassifierPaddingInvariantLockingClause(t *testing.T) {
 	atkInvariantPadding(t, []string{"select", "*", "from", "pg_class", "for", "no", "key", "update"})
 }
 
+// TestClassifierPaddingInvariantQualifiedLockFunction proves that qualified
+// session advisory-lock refusal is invariant under seeded comments and case.
 func TestClassifierPaddingInvariantQualifiedLockFunction(t *testing.T) {
 	atkInvariantPadding(t, []string{"select", "pg_catalog", ".", "pg_advisory_lock", "(", "991", ")"})
 }
@@ -165,6 +190,8 @@ func atkExerciseBytes(t *testing.T, b []byte) {
 	p.ShareFits(b)
 }
 
+// TestClassifierEveryBytePairNeverPanicsAndCoversTheInput proves that all
+// 65,536 two-byte inputs lex without gaps and never panic in classify or share.
 func TestClassifierEveryBytePairNeverPanicsAndCoversTheInput(t *testing.T) {
 	for a := 0; a < 256; a++ {
 		for b := 0; b < 256; b++ {
@@ -173,6 +200,8 @@ func TestClassifierEveryBytePairNeverPanicsAndCoversTheInput(t *testing.T) {
 	}
 }
 
+// TestClassifierSeededHostileBytesNeverPanic proves across seeded random byte
+// strings that LexAll, ClassifyQuery, and ShareFits never panic or drop bytes.
 func TestClassifierSeededHostileBytesNeverPanic(t *testing.T) {
 	count := 3000
 	if os.Getenv("ADV_LONG") == "1" {
@@ -186,6 +215,8 @@ func TestClassifierSeededHostileBytesNeverPanic(t *testing.T) {
 	}
 }
 
+// TestClassifierAllocationStaysUnderTheCeiling proves that hostile nested
+// parens, quoted identifiers, and nested comments stay under the memory ceiling.
 func TestClassifierAllocationStaysUnderTheCeiling(t *testing.T) {
 	for _, q := range []string{strings.Repeat("();", 1<<16), `SELECT "` + strings.Repeat(`a""`, 1<<16) + `"`, strings.Repeat("/*", 1<<16) + strings.Repeat("*/", 1<<16)} {
 		runtime.GC()
@@ -218,6 +249,9 @@ func atkFrames(t *testing.T, b []byte) [][]byte {
 	return out
 }
 
+// TestReplyEveryRowWithPrefixAndStatusIsWellFormed proves every ErrorRows entry
+// preserves caller prefix bytes, emits exact wire fields and end markers, and
+// counts only successful builds.
 func TestReplyEveryRowWithPrefixAndStatusIsWellFormed(t *testing.T) {
 	var builder p.ReplyBuilder
 	var count int64
@@ -276,6 +310,8 @@ func TestReplyEveryRowWithPrefixAndStatusIsWellFormed(t *testing.T) {
 	}
 }
 
+// TestReplyInvalidInputsDoNotPoisonReuse proves that 256 failed Build calls
+// leave ReplyBuilder usable and accurate for subsequent valid builds.
 func TestReplyInvalidInputsDoNotPoisonReuse(t *testing.T) {
 	var b p.ReplyBuilder
 	for i := 0; i < 256; i++ {
@@ -290,6 +326,8 @@ func TestReplyInvalidInputsDoNotPoisonReuse(t *testing.T) {
 	}
 }
 
+// TestSyncDiscardDropsEveryByteUntilSyncAndRecovers proves that every message
+// byte except 'S' and 'X' is dropped during discard mode and 'S' restores pass-through.
 func TestSyncDiscardDropsEveryByteUntilSyncAndRecovers(t *testing.T) {
 	for n := 0; n < 256; n++ {
 		if n == 'S' || n == 'X' {
@@ -312,6 +350,8 @@ func TestSyncDiscardDropsEveryByteUntilSyncAndRecovers(t *testing.T) {
 	}
 }
 
+// TestContractGeneratorsTrackTableMutation proves that mutating ErrorRows,
+// RejectRules, ShareAllowList, or ShareStopWords changes the generated Markdown.
 func TestContractGeneratorsTrackTableMutation(t *testing.T) {
 	old := p.ErrorRows[0]
 	defer func() { p.ErrorRows[0] = old }()
@@ -340,6 +380,8 @@ func TestContractGeneratorsTrackTableMutation(t *testing.T) {
 	}
 }
 
+// TestClassifierOutputIsExpressedInWorkTypesOnly proves by reflection that
+// work.Unit, work.Outcome, and their transitive field types live solely in work.
 func TestClassifierOutputIsExpressedInWorkTypesOnly(t *testing.T) {
 	var f func([]byte, bool) work.Unit = p.ClassifyQuery
 	_ = f
@@ -366,6 +408,8 @@ func TestClassifierOutputIsExpressedInWorkTypesOnly(t *testing.T) {
 	walk(reflect.TypeOf(work.Outcome{}))
 }
 
+// TestClassifierShareKeyIsACopyAndScoped proves that ShareKey clones the raw
+// bytes and isolates tenants under ScopeTenant while sharing under ScopeGlobal.
 func TestClassifierShareKeyIsACopyAndScoped(t *testing.T) {
 	for _, scope := range []work.KeyScope{work.ScopeGlobal, work.ScopeTenant} {
 		c := p.Classifier{Config: p.ClassifierConfig{KeyScope: scope}}
@@ -388,6 +432,8 @@ func TestClassifierShareKeyIsACopyAndScoped(t *testing.T) {
 	}
 }
 
+// TestClassifierUnaryOperatorBoundaryMatchesWhitespaceForm proves that "71+-3"
+// and "71+ -3" classify identically per PostgreSQL's trailing-sign operator rule.
 func TestClassifierUnaryOperatorBoundaryMatchesWhitespaceForm(t *testing.T) {
 	a, b := "SELECT 71+-3", "SELECT 71+ -3"
 	x, y := p.ClassifyQuery([]byte(a), false), p.ClassifyQuery([]byte(b), false)
@@ -468,14 +514,20 @@ func atkFakeFilter(t *testing.T, qs []string) {
 	}
 }
 
+// TestClassifierMultiStatementRejectNeverReachesTheFake proves (with ablation)
+// that multi-statement queries containing a reject-list statement never reach fakepg.
 func TestClassifierMultiStatementRejectNeverReachesTheFake(t *testing.T) {
 	atkFakeFilter(t, []string{"SELECT 41; SET application_name = 'adv'", "SELECT 42; LISTEN adv", "SELECT 43; DISCARD PLANS"})
 }
 
+// TestClassifierNestedFunctionRejectNeverReachesTheFake proves (with ablation)
+// that nested advisory-lock and session set_config calls never reach fakepg.
 func TestClassifierNestedFunctionRejectNeverReachesTheFake(t *testing.T) {
 	atkFakeFilter(t, []string{"SELECT coalesce(pg_try_advisory_lock(818), false)", "SELECT (SELECT set_config('application_name','adv',false))"})
 }
 
+// TestClassifierSetHiddenBehindAnEscapeContinuationNeverReachesTheFake proves
+// (with ablation) that a SET hidden behind an E'...' newline continuation never reaches fakepg.
 func TestClassifierSetHiddenBehindAnEscapeContinuationNeverReachesTheFake(t *testing.T) {
 	atkFakeFilter(t, []string{"SELECT E'ok'\n'\\' ; SELECT ' ; SET application_name = 'adv_escape' ; --'"})
 }

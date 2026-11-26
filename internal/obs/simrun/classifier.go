@@ -11,8 +11,13 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/world"
 )
 
+// ClassifierFingerprint returns the deterministic config fingerprint recorded
+// in run.csv for a classifier scenario.
 func ClassifierFingerprint(sc clsworld.Scenario) string { return sc.Name + "-classifier" }
 
+// Classifier runs a clsworld scenario on seed, registers sim, simnet, fakepg,
+// classifier, and wire observability sources, and flushes all four adapters at
+// t=0, every opt.Interval (default 100 ms virtual), and at run end.
 func Classifier(sc clsworld.Scenario, seed int64, opt Options) (*Run, error) {
 	if opt.Interval <= 0 {
 		opt.Interval = DefaultInterval

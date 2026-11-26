@@ -140,6 +140,9 @@ func clsCheckNeverProved(t *testing.T, q string, seen map[string]bool) {
 	}
 }
 
+// TestClassifierSpellingsNeverProveUnlistedCalls proves across thousands of
+// generated spellings, qualifiers, and attribute calls that unlisted functions
+// never become SafeRead or Shareable.
 func TestClassifierSpellingsNeverProveUnlistedCalls(t *testing.T) {
 	rng := rand.New(rand.NewPCG(clsSpellSeed, 1))
 	seen := map[string]bool{}
@@ -169,6 +172,8 @@ func TestClassifierSpellingsNeverProveUnlistedCalls(t *testing.T) {
 	t.Logf("%d distinct generated statements calling unlisted functions; none proved", len(seen))
 }
 
+// TestClassifierSpellingsNeverCoalesceNonCoalescableCalls proves that per-call
+// functions, temporal types, and relative-time literals never fit SafeRead.
 func TestClassifierSpellingsNeverCoalesceNonCoalescableCalls(t *testing.T) {
 	rng := rand.New(rand.NewPCG(clsSpellSeed, 2))
 	n := 0
@@ -277,6 +282,9 @@ func clsSpellRules() []clsSpellRule {
 	}
 }
 
+// TestClassifierSpellingsAlwaysRejectTheRejectList proves that generated
+// case-, comment-, and multi-statement-wrapped spellings of every courtesy
+// reject rule are refused under their exact reason.
 func TestClassifierSpellingsAlwaysRejectTheRejectList(t *testing.T) {
 	rng := rand.New(rand.NewPCG(clsSpellSeed, 3))
 	wraps := []string{"%s", "BEGIN; %s; COMMIT", "SELECT 1; %s", "%s; SELECT 1", "%s;"}

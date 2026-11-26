@@ -15,6 +15,9 @@ import (
 
 const rplGoldenFile = "testdata/reply-golden.txt"
 
+// TestErrorRowsAreWellFormed proves every ErrorRows entry has a unique ID and
+// counter key, valid SQLSTATE, consistent severity/close rules, and the five
+// private pre-forward codes 53M01..53M05.
 func TestErrorRowsAreWellFormed(t *testing.T) {
 	ids := map[string]bool{}
 	keys := map[string]bool{}
@@ -78,6 +81,8 @@ func rplValidSQLState(c string) bool {
 	return true
 }
 
+// TestErrRowForEveryRefusal proves every non-none work.Refusal maps to an
+// ErrorRowError row and RefusalNone does not map.
 func TestErrRowForEveryRefusal(t *testing.T) {
 	for r := work.RefusalShed; r < work.NumRefusals; r++ {
 		id, ok := ErrRowFor(r)
@@ -119,6 +124,8 @@ func rplBuildAll(t *testing.T) []string {
 	return lines
 }
 
+// TestReplyGoldenBytes proves the exact wire bytes of every message-bearing
+// ErrorRows entry match testdata/reply-golden.txt across valid status bytes.
 func TestReplyGoldenBytes(t *testing.T) {
 	got := rplBuildAll(t)
 	if os.Getenv("MG_UPDATE_GOLDEN") == "1" {
@@ -158,6 +165,8 @@ func rplHandShed(status byte) []byte {
 	return append(out, 'Z', 0, 0, 0, 5, status)
 }
 
+// TestReplyBytesMatchAHandEncoding proves ReplyBuilder's wire encoding for
+// ErrRowShed matches an independent byte-by-byte encoding.
 func TestReplyBytesMatchAHandEncoding(t *testing.T) {
 	var b ReplyBuilder
 	for _, st := range []byte("ITE") {
@@ -193,6 +202,9 @@ func rplSplit(t *testing.T, b []byte) []rplMsg {
 	return out
 }
 
+// TestReplyEveryRowIsWellFormedWithTheRightMarker proves every ErrorRows entry
+// decodes via pgproto3, carries the right end marker and close action, and
+// conserves ReplyBuilder counters across all status bytes.
 func TestReplyEveryRowIsWellFormedWithTheRightMarker(t *testing.T) {
 	var b ReplyBuilder
 	for id := ErrRowID(0); id < ErrRowCount; id++ {
@@ -265,6 +277,8 @@ func TestReplyEveryRowIsWellFormedWithTheRightMarker(t *testing.T) {
 	}
 }
 
+// TestReplyRefusesBadInput proves invalid row IDs, invalid status bytes, and
+// pass-through rows return errors, leave dst untouched, and count only in Failed.
 func TestReplyRefusesBadInput(t *testing.T) {
 	var b ReplyBuilder
 	if _, _, err := b.Build(nil, ErrRowCount, 'I'); err != ReplyErrBadRow {
@@ -296,6 +310,8 @@ func TestReplyRefusesBadInput(t *testing.T) {
 	}
 }
 
+// TestSyncDiscardRule proves SyncDiscard's state transitions and counters
+// across extended-protocol sequences, standalone Sync/FunctionCall, and Terminate.
 func TestSyncDiscardRule(t *testing.T) {
 	cases := []struct {
 		in   string
@@ -330,6 +346,8 @@ func TestSyncDiscardRule(t *testing.T) {
 	}
 }
 
+// TestSyncDiscardRepliesEndWithReadyAfterSync proves an extended-protocol
+// batch produces one ErrorResponse followed by one ReadyForQuery on Sync.
 func TestSyncDiscardRepliesEndWithReadyAfterSync(t *testing.T) {
 	var b ReplyBuilder
 	var s SyncDiscard

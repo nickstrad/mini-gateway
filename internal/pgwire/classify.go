@@ -7,23 +7,35 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// Memory ceiling parameters for one ClassifyQuery call (bytes per input byte
+// plus fixed overhead), verified by TestClassifierMemoryIsBounded.
 const (
 	ClassifMemoryFactor   = 80
 	ClassifMemoryConstant = 64 << 10
 )
 
+// ClassifErrConservation is returned by ClassifierSnapshot.Check when the
+// snapshot's counters violate a conservation invariant.
 var ClassifErrConservation = errors.New("pgwire: classifier counters do not add up")
 
+// ClassifierConfig configures a Classifier instance.
 type ClassifierConfig struct {
-	KeyScope            work.KeyScope
+	// KeyScope selects global or per-tenant share keys for Shareable and
+	// Hinted units.
+	KeyScope work.KeyScope
+	// plantSetForwardable is a test-only canary switch exposed through
+	// classify_export_test.go so the e2e suite proves it catches leaked SETs.
 	plantSetForwardable bool
 }
 
+// Classifier classifies Postgres simple Query texts into work.Unit values and
+// maintains fixed-size cumulative counters. The zero value is ready to use.
 type Classifier struct {
 	Config ClassifierConfig
 	snap   ClassifierSnapshot
 }
 
+// ClassifierSnapshot is a value copy of Classifier's counters.
 type ClassifierSnapshot struct {
 	Classified int64
 	ByClass    [work.NumClasses]int64
@@ -36,8 +48,12 @@ type ClassifierSnapshot struct {
 	Statements int64
 }
 
+// Snapshot returns a copy of the classifier's cumulative counters.
 func (c *Classifier) Snapshot() ClassifierSnapshot { return c.snap }
 
+// Classify classifies one Query payload (without its trailing NUL) for tenant
+// given inTx (true when the client's last ReadyForQuery status was 'T' or 'E'),
+// populates an owned ShareKey when eligible, and updates counters.
 func (c *Classifier) Classify(tenant work.TenantID, text []byte, inTx bool) work.Unit {
 	u := clsRun(text, inTx, c.Config.plantSetForwardable)
 	u.Tenant = tenant
@@ -75,6 +91,8 @@ func clsCount(b bool) int64 {
 	return 0
 }
 
+// ClassifyQuery classifies one Query payload without tenant attribution, share
+// keys, or counter updates.
 func ClassifyQuery(text []byte, inTx bool) work.Unit {
 	return clsRun(text, inTx, false)
 }
@@ -102,6 +120,8 @@ func clsRun(text []byte, inTx, plant bool) work.Unit {
 	if inTx {
 		u.Class = work.ClassContinueLease
 	}
+	// SafeRead and Hinted are computed directly from raw bytes so a lexer
+	// defect can never widen sharing or downgrade 08007 to 08006.
 	u.Hinted = bytes.HasPrefix(text, []byte(ShareHint))
 	u.Opaque = m.bad
 	u.SafeRead = ShareFits(text)
@@ -120,8 +140,11 @@ func clsRun(text []byte, inTx, plant bool) work.Unit {
 
 type clsSpan struct{ lo, hi int }
 
+// PostgreSQL truncates identifiers to NAMEDATALEN - 1 (63) bytes.
 const clsNameMax = 63
 
+// lex counts significant tokens before allocating m.toks so a large input
+// avoids slice-doubling overhead and stays under ClassifMemoryFactor.
 func (m *clsMsg) lex() {
 	n := 0
 	l := LexerFor(m.src)
@@ -436,6 +459,9 @@ func (m *clsMsg) tokenReject(s clsSpan, w clsSpanWords, i int) work.RejectReason
 	return work.RejectNone
 }
 
+// makesTemp reports whether a "temp" or "temporary" token at i introduces a
+// temporary object (CREATE, CREATE OR REPLACE, or SELECT ... INTO, with
+// optional GLOBAL/LOCAL) rather than acting as an ordinary table or column alias.
 func (m *clsMsg) makesTemp(s clsSpan, i int) bool {
 	j := i - 1
 	if j > s.lo && m.isAny(j, []string{"global", "local"}) {
@@ -561,6 +587,8 @@ type clsSpanWords struct {
 	setOrReset bool
 }
 
+// spanWords scans a statement span once for UPDATE, SET, and RESET so
+// tokenReject checks pg_settings and lexing settings in O(1) per token.
 func (m *clsMsg) spanWords(s clsSpan) clsSpanWords {
 	var w clsSpanWords
 	for i := s.lo; i < s.hi; i++ {

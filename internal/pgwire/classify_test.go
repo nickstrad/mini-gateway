@@ -108,6 +108,9 @@ func clsDescribe(u work.Unit) string {
 	return fmt.Sprintf("class=%s reason=%s safe-read=%v shareable=%v hint=%v opaque=%v stmts=%d key=%v", u.Class, u.Reason, u.SafeRead, u.Shareable, u.Hinted, u.Opaque, u.Statements, u.HasKey)
 }
 
+// TestClassifierCorpus proves every corpus record matches its expected class,
+// reject reason, safe-read, shareable, hint, and opaque flags, and that no
+// entry the first build refused to coalesce fits the safe shape.
 func TestClassifierCorpus(t *testing.T) {
 	cases := clsLoadCorpus(t)
 	if len(cases) < 300 {
@@ -149,6 +152,8 @@ func TestClassifierCorpus(t *testing.T) {
 	t.Logf("corpus: %d records, %d fit the safe shape; %d of the first build's %d coalescable records still fit", len(cases), fits, stillFit, wasCo)
 }
 
+// TestClassifierGeneratedStatements proves exact classification on long,
+// deeply nested, multi-statement, invalid UTF-8, and NUL-bearing queries.
 func TestClassifierGeneratedStatements(t *testing.T) {
 	long := "SELECT " + strings.Repeat("abs(1) + ", 50000) + "1"
 	cases := []struct {
@@ -182,6 +187,8 @@ func TestClassifierGeneratedStatements(t *testing.T) {
 	}
 }
 
+// TestClassifierEmptyMessages proves empty, semicolon-only, and comment-only
+// messages forward with zero statements and are never safe-read or opaque.
 func TestClassifierEmptyMessages(t *testing.T) {
 	for _, q := range []string{"", ";", " ; ; ", "-- x", "/* x */", "/* a */;/* b */"} {
 		u := ClassifyQuery([]byte(q), false)
@@ -191,6 +198,9 @@ func TestClassifierEmptyMessages(t *testing.T) {
 	}
 }
 
+// TestClassifierShareKeyAndScope proves that ShareKey copies raw query bytes,
+// respects global vs tenant scope, requires exact ShareHint, and is suppressed
+// inside transactions or on rejected messages.
 func TestClassifierShareKeyAndScope(t *testing.T) {
 	var c Classifier
 	q := []byte("SELECT v FROM kv WHERE k = 'a'")
@@ -297,6 +307,9 @@ func clsPad(src []byte, rng *rand.Rand) []byte {
 	return out
 }
 
+// TestClassifierPaddingAndCaseProperty proves across seeded corpora that
+// courtesy fields are invariant under whitespace, comments, and keyword case,
+// and that single-space and case padding never breaks a SafeRead fit.
 func TestClassifierPaddingAndCaseProperty(t *testing.T) {
 	cases := clsLoadCorpus(t)
 	for seed := uint64(1); seed <= clsPadSeeds; seed++ {
@@ -357,6 +370,9 @@ func clsMutate(rng *rand.Rand, src []byte) []byte {
 	return b
 }
 
+// TestClassifierConservativeWhenUntokenisable proves that untokenisable
+// mutants are marked Opaque, never SafeRead or Shareable, and forwarded unless
+// a reject-list feature was read.
 func TestClassifierConservativeWhenUntokenisable(t *testing.T) {
 	cases := clsLoadCorpus(t)
 	bad := 0
@@ -387,6 +403,8 @@ func clsCheckConservative(t testing.TB, q []byte, u work.Unit) {
 	}
 }
 
+// TestClassifierInvariantsOverMutants proves all cross-field Unit invariants
+// and snapshot conservation across mutated corpus inputs.
 func TestClassifierInvariantsOverMutants(t *testing.T) {
 	cases := clsLoadCorpus(t)
 	for seed := uint64(1); seed <= 10; seed++ {
@@ -434,6 +452,8 @@ func clsCheckInvariants(t testing.TB, q []byte) {
 	}
 }
 
+// TestClassifierMemoryIsBounded proves that per-classification heap allocation
+// stays below ClassifMemoryFactor*len(q) + ClassifMemoryConstant up to 1 MiB.
 func TestClassifierMemoryIsBounded(t *testing.T) {
 	shapes := []struct {
 		name string
@@ -475,6 +495,8 @@ func TestClassifierMemoryIsBounded(t *testing.T) {
 	t.Logf("worst measured allocation per input byte at 1 MiB: %d (bound %d per byte + %d)", worst, ClassifMemoryFactor, ClassifMemoryConstant)
 }
 
+// FuzzClassify proves that ClassifyQuery never panics and upholds every Unit
+// and conservative-on-opaque invariant on arbitrary bytes.
 func FuzzClassify(f *testing.F) {
 	for _, c := range clsLoadCorpus(f) {
 		f.Add([]byte(c.text))
@@ -503,10 +525,15 @@ func clsFastest(q []byte) time.Duration {
 	return best
 }
 
+// TestLexOperatorRunsGrowLinearly proves that repeated operator-run shapes
+// lex and classify in linear time (16x input <= 96x time).
 func TestLexOperatorRunsGrowLinearly(t *testing.T) {
 	clsCheckLinearShapes(t, []string{"+", "-", "+-", "*+", "=-", "<+-", "+ ", "1+"})
 }
 
+// TestClassifierSpanKeywordChecksGrowLinearly proves that repeated setting
+// identifiers (pg_settings, client_encoding, standard_conforming_strings)
+// classify in linear time without quadratic span rescans.
 func TestClassifierSpanKeywordChecksGrowLinearly(t *testing.T) {
 	clsCheckLinearShapes(t, []string{"pg_settings ", "standard_conforming_strings ", "client_encoding ", `"pg_settings" `, "pg_settings, ", "SELECT pg_settings "})
 }
@@ -531,6 +558,8 @@ func clsCheckLinearShapes(t *testing.T, units []string) {
 	}
 }
 
+// TestClassifierTimeGrowsLinearly proves that nine adversarial token shapes
+// scale linearly from 64 KiB to 1 MiB (16x input <= 96x time).
 func TestClassifierTimeGrowsLinearly(t *testing.T) {
 	if testing.Short() {
 		t.Skip("timing test")

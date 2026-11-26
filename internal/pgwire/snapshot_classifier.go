@@ -2,6 +2,10 @@ package pgwire
 
 import "github.com/nickstrad/mini-gateway/internal/work"
 
+// Check verifies conservation invariants on a classifier snapshot: total
+// classified equals the sum across classes, rejects equal the sum across
+// reasons, shareable never exceeds safe-read, and share keys never exceed
+// shareable plus hinted.
 func (s ClassifierSnapshot) Check() error {
 	var sum, reasons int64
 	for _, v := range s.ByClass {

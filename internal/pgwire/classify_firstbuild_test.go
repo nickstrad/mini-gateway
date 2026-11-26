@@ -1,3 +1,6 @@
+// First-build classifier tables retained solely as negative test inputs so the
+// reworked safe-shape and spelling tests keep proving that everything the first
+// build refused to coalesce still never fits.
 package pgwire
 
 type clsFirstAllowEntry struct {

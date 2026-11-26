@@ -47,6 +47,8 @@ func collect(t *testing.T, s clssrc.Snapshot) obs.InstanceSnapshot {
 	return snap
 }
 
+// TestMappingMovesEveryMetricAndExportsEveryField proves that every declared
+// classifier metric moves and no Snapshot counter field is dropped by Map.
 func TestMappingMovesEveryMetricAndExportsEveryField(t *testing.T) {
 	var s clssrc.Snapshot
 	f := &filler{paths: map[int64]string{}}
@@ -81,6 +83,8 @@ func TestMappingMovesEveryMetricAndExportsEveryField(t *testing.T) {
 	}
 }
 
+// TestZeroSnapshotEmitsEveryLabelValue proves that an empty snapshot still
+// emits every class, reject-reason, and error-row label slot.
 func TestZeroSnapshotEmitsEveryLabelValue(t *testing.T) {
 	snap := collect(t, clssrc.Snapshot{})
 	count := func(metric string) int {
@@ -99,6 +103,8 @@ func TestZeroSnapshotEmitsEveryLabelValue(t *testing.T) {
 	}
 }
 
+// TestReplyMetricsCoverEveryRow proves that building every error-contract row
+// exports exact per-row counts, total built replies, and refused-build failures.
 func TestReplyMetricsCoverEveryRow(t *testing.T) {
 	var b pgwire.ReplyBuilder
 	var built, failed int64
@@ -128,6 +134,8 @@ func TestReplyMetricsCoverEveryRow(t *testing.T) {
 	}
 }
 
+// TestClassifierCountsReachTheExport proves that live Classifier.Classify
+// counts flow unchanged through clssrc into the collected snapshot.
 func TestClassifierCountsReachTheExport(t *testing.T) {
 	var c pgwire.Classifier
 	for _, q := range []string{"SELECT 1", "SET search_path = x", "SELECT 'open", "/* mg:share */ SELECT now()"} {

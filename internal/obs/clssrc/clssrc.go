@@ -1,3 +1,6 @@
+// Package clssrc declares component "classifier" metrics and maps classifier,
+// reply-builder, and extended-protocol discard snapshots into obs.Emitter
+// without letting internal/pgwire depend on any adapter or catalog package.
 package clssrc
 
 import (
@@ -6,6 +9,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// Snapshot bundles the three fixed-size pgwire snapshots exported under
+// component "classifier".
 type Snapshot struct {
 	Classifier pgwire.ClassifierSnapshot
 	Replies    pgwire.ReplySnapshot
@@ -14,6 +19,9 @@ type Snapshot struct {
 
 var none = obs.Labels{}
 
+// Metrics returns the 15 counter descriptors declared for component
+// "classifier". The total reply counter is named "replies_built" rather than
+// "replies_total" to avoid colliding with the Prometheus name of "replies".
 func Metrics() []obs.MetricDesc {
 	return []obs.MetricDesc{
 		obs.CounterDesc("statements", 0, "Query messages classified.").AsHeadline(),
@@ -34,10 +42,13 @@ func Metrics() []obs.MetricDesc {
 	}
 }
 
+// Source wraps snapshot as an obs.Source registered under obs.ComponentClassifier.
 func Source(snapshot func() Snapshot) obs.Source {
 	return obs.NewSource(obs.ComponentClassifier, Metrics(), snapshot, Map)
 }
 
+// Map emits every counter and every enum label slot (including zero rows) from
+// s into e.
 func Map(s Snapshot, e *obs.Emitter) {
 	c := s.Classifier
 	e.Counter("statements", none, c.Classified)

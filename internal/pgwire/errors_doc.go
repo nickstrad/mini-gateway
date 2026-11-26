@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+// ErrorRowsMarkdown renders docs/error-contract.md directly from ErrorRows so
+// the published error contract cannot drift from the wire builders.
 func ErrorRowsMarkdown() string {
 	var b strings.Builder
 	b.WriteString("# Error contract\n\n")

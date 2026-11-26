@@ -49,6 +49,8 @@ func clsWantForwardedReadOnly(t *testing.T, co bool, qs ...string) {
 	}
 }
 
+// TestClassifierSchemaQualifiedKeywordNamesAreCalls proves that schema-qualified
+// calls using keyword names (such as public.select()) never fit SafeRead.
 func TestClassifierSchemaQualifiedKeywordNamesAreCalls(t *testing.T) {
 	for _, w := range clsFirstNonCallWords {
 		clsWantNotReadOnly(t,
@@ -62,6 +64,8 @@ func TestClassifierSchemaQualifiedKeywordNamesAreCalls(t *testing.T) {
 	clsWantForwardedReadOnly(t, true, "SELECT pg_catalog.count(*) FROM kv", "SELECT b::varchar(10) FROM t", "SELECT CAST(a AS numeric(10, 2)) FROM t")
 }
 
+// TestClassifierAttributeCallAfterExpressionFrom proves that Postgres attribute-
+// notation function calls (t.f) after expression-level FROM never fit SafeRead.
 func TestClassifierAttributeCallAfterExpressionFrom(t *testing.T) {
 	clsWantNotReadOnly(t,
 		"SELECT a IS DISTINCT FROM t.evil_write FROM t",
@@ -88,6 +92,9 @@ func TestClassifierAttributeCallAfterExpressionFrom(t *testing.T) {
 	)
 }
 
+// TestClassifierSearchPathStringNamingTempSchema proves that transaction-local
+// search_path or SCHEMA values naming pg_temp (or unreadable forms) reject as
+// temp-object, while plain non-temp search paths forward.
 func TestClassifierSearchPathStringNamingTempSchema(t *testing.T) {
 	clsWantRejected(t, work.RejectTempObject,
 		"SET LOCAL search_path = 'pg_temp'",
@@ -132,6 +139,8 @@ func TestClassifierSearchPathStringNamingTempSchema(t *testing.T) {
 	}
 }
 
+// TestClassifierExplainQuotedAnalyzeOption proves that EXPLAIN statements
+// (including quoted or Unicode-escaped ANALYZE options) never fit SafeRead.
 func TestClassifierExplainQuotedAnalyzeOption(t *testing.T) {
 	clsWantNotReadOnly(t,
 		`EXPLAIN ("analyze") SELECT 1`,
@@ -145,6 +154,9 @@ func TestClassifierExplainQuotedAnalyzeOption(t *testing.T) {
 	clsWantForwardedReadOnly(t, false, `EXPLAIN (verbose) SELECT 1`, `EXPLAIN ("verbose") SELECT 1`, `EXPLAIN (costs off) SELECT 1`)
 }
 
+// TestClassifierTimeDependentLiteralsAreNotCoalescable proves that relative
+// time literals ('now', 'today', 'tomorrow', 'yesterday') in any cast or
+// expression form are never SafeRead or Shareable.
 func TestClassifierTimeDependentLiteralsAreNotCoalescable(t *testing.T) {
 	clsWantNotCoalescable(t,
 		`SELECT 'now'::timestamp`,
@@ -170,6 +182,8 @@ func TestClassifierTimeDependentLiteralsAreNotCoalescable(t *testing.T) {
 	clsWantForwardedReadOnly(t, true, `SELECT 'abc'`, `SELECT lower('Abc')`, `SELECT date_trunc('day', make_date(2020, 1, 2))`)
 }
 
+// TestLexOperatorTrailingSignFollowsPostgres proves that operator tokens drop
+// trailing '+'/'-' unless a keep-sign character precedes them, matching Postgres.
 func TestLexOperatorTrailingSignFollowsPostgres(t *testing.T) {
 	cases := []struct{ src, want string }{
 		{"71+-3", "number:71 operator:+ operator:- number:3"},
@@ -196,6 +210,9 @@ func TestLexOperatorTrailingSignFollowsPostgres(t *testing.T) {
 	}
 }
 
+// TestClassifierTempWordsRejectOnlyWhereATemporaryObjectIsMade proves that
+// temp/temporary reject after CREATE, CREATE OR REPLACE, or SELECT INTO (with
+// optional LOCAL/GLOBAL) and forward when used as ordinary table or column names.
 func TestClassifierTempWordsRejectOnlyWhereATemporaryObjectIsMade(t *testing.T) {
 	clsWantRejected(t, work.RejectTempObject,
 		"CREATE TEMP TABLE t (a int)",

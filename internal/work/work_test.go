@@ -12,6 +12,8 @@ import (
 	"testing"
 )
 
+// TestWorkImportsOnlyTheStandardLibrary proves that internal/work imports only
+// standard-library packages and never mentions protocol packages in production code.
 func TestWorkImportsOnlyTheStandardLibrary(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	if err != nil || len(files) == 0 {
@@ -43,6 +45,8 @@ func TestWorkImportsOnlyTheStandardLibrary(t *testing.T) {
 	}
 }
 
+// TestNamesCoverEveryValue proves that every enum value has a unique label and
+// out-of-range values format as "invalid".
 func TestNamesCoverEveryValue(t *testing.T) {
 	seen := map[string]bool{}
 	for c := ClassNone; c < NumClasses; c++ {
@@ -72,12 +76,15 @@ func TestNamesCoverEveryValue(t *testing.T) {
 	}
 }
 
+// TestClassForwards proves that only the two lease classes forward to the database.
 func TestClassForwards(t *testing.T) {
 	if !ClassStartLease.Forwards() || !ClassContinueLease.Forwards() || ClassReject.Forwards() || ClassAnswerLocally.Forwards() {
 		t.Error("Forwards is wrong")
 	}
 }
 
+// TestShareKeyEqual proves that ShareKey equality compares both tenant scope
+// and exact query bytes.
 func TestShareKeyEqual(t *testing.T) {
 	a := ShareKey{Tenant: "t", Text: []byte("SELECT 1")}
 	if !a.Equal(ShareKey{Tenant: "t", Text: []byte("SELECT 1")}) || a.Equal(ShareKey{Text: []byte("SELECT 1")}) || a.Equal(ShareKey{Tenant: "t", Text: []byte("SELECT  1")}) {
@@ -85,6 +92,8 @@ func TestShareKeyEqual(t *testing.T) {
 	}
 }
 
+// TestWorkImportClosureIsTheStandardLibrary proves via go list -deps that the
+// transitive dependency closure of internal/work contains only the standard library.
 func TestWorkImportClosureIsTheStandardLibrary(t *testing.T) {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("the go command is not on PATH")

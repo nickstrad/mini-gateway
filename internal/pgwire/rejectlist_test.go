@@ -9,6 +9,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// TestRejectRulesExamplesClassifyAsDocumented proves that every RejectRules
+// example classifies under its listed reason and every allowed form forwards.
 func TestRejectRulesExamplesClassifyAsDocumented(t *testing.T) {
 	seen := map[work.RejectReason]bool{}
 	for _, r := range RejectRules {
@@ -36,6 +38,8 @@ func TestRejectRulesExamplesClassifyAsDocumented(t *testing.T) {
 	}
 }
 
+// TestShareAllowListIsSortedAndExcludesPerCallFunctions proves that
+// ShareAllowList is strictly sorted and contains no session, write, or per-call function.
 func TestShareAllowListIsSortedAndExcludesPerCallFunctions(t *testing.T) {
 	for i := 1; i < len(ShareAllowList); i++ {
 		if ShareAllowList[i-1] >= ShareAllowList[i] {
@@ -71,6 +75,8 @@ func rejDocs() map[string]string {
 	}
 }
 
+// TestClassifierWriteContractDocs regenerates docs/error-contract.md,
+// docs/reject-list.md, and docs/safe-shape.md when MG_GEN_DOCS_DIR is set.
 func TestClassifierWriteContractDocs(t *testing.T) {
 	dir := os.Getenv(rejDocsEnv)
 	if dir == "" {
@@ -83,6 +89,8 @@ func TestClassifierWriteContractDocs(t *testing.T) {
 	}
 }
 
+// TestClassifierContractDocsMatchTheCode proves that the committed error,
+// reject-list, and safe-shape Markdown files match the code generators verbatim.
 func TestClassifierContractDocsMatchTheCode(t *testing.T) {
 	for name, body := range rejDocs() {
 		got, err := os.ReadFile(filepath.Join("..", "..", "docs", name))

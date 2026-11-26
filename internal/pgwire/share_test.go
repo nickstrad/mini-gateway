@@ -115,6 +115,8 @@ var shrNotFitting = []struct {
 	{"6 paren: set_config", "SELECT set_config('a', 'b', false)"},
 }
 
+// TestSafeShapeTable proves that every fitting example passes both ShareFits
+// and the independent reference checker, and every single-rule violation fails both.
 func TestSafeShapeTable(t *testing.T) {
 	for _, q := range shrFitting {
 		if !ShareFits([]byte(q)) {
@@ -134,6 +136,9 @@ func TestSafeShapeTable(t *testing.T) {
 	}
 }
 
+// TestSafeShapeEveryStopWordAndUnlistedCallBreaksAFit proves that every stop
+// word outside a string breaks a fit, every allow-listed call fits while near
+// misses fail, and the tables are disjoint and sorted.
 func TestSafeShapeEveryStopWordAndUnlistedCallBreaksAFit(t *testing.T) {
 	for _, w := range ShareStopWords {
 		for _, q := range []string{"SELECT " + w, "SELECT a FROM t WHERE " + strings.ToUpper(w) + " = 1", "SELECT 'x', " + w + " FROM t"} {
@@ -192,12 +197,17 @@ func shrInsertOutsideAlphabet(t *testing.T, fits func([]byte) bool) int {
 	return misses
 }
 
+// TestSafeShapePropertyAnyByteOutsideTheAlphabetBreaksAFit proves that
+// inserting any byte outside the safe alphabet at any position of a fitting
+// query causes ShareFits to return false.
 func TestSafeShapePropertyAnyByteOutsideTheAlphabetBreaksAFit(t *testing.T) {
 	if n := shrInsertOutsideAlphabet(t, ShareFits); n != 0 {
 		t.Fatalf("%d texts with a byte outside the alphabet fit", n)
 	}
 }
 
+// TestSafeShapeCanaryWithoutTheAlphabetCheckThePropertyFails is the canary
+// proving that skipping the alphabet check causes the alphabet property to fail.
 func TestSafeShapeCanaryWithoutTheAlphabetCheckThePropertyFails(t *testing.T) {
 	n := shrInsertOutsideAlphabet(t, func(b []byte) bool { return shareFits(b, true) })
 	if n == 0 {
@@ -361,6 +371,8 @@ func shrGenerate(seed uint64, n int) []string {
 	return out
 }
 
+// TestSafeShapePropertyGrammarTextsFit proves that 5,000 queries generated
+// from a safe-shape SQL grammar fit ShareFits and lex as one clean statement.
 func TestSafeShapePropertyGrammarTextsFit(t *testing.T) {
 	texts := shrGenerate(shrSeed, shrGrammarTexts)
 	for _, q := range texts {
@@ -399,6 +411,9 @@ func shrRandomText(rng *rand.Rand) []byte {
 	return b
 }
 
+// TestSafeShapePropertyFitsAgreesWithTheReferenceChecker proves over 200,000
+// seeded random texts that ShareFits matches the independent reference checker
+// and every fitting text lexes as one clean statement.
 func TestSafeShapePropertyFitsAgreesWithTheReferenceChecker(t *testing.T) {
 	rng := rand.New(rand.NewPCG(shrSeed, 0xc))
 	fits := 0
@@ -586,6 +601,9 @@ func shrDeclaredIn(t *testing.T, file string) map[string]bool {
 	return out
 }
 
+// TestSafeShapeRecogniserReferencesNothingFromTheLexerOrClassifier proves via
+// go/ast that share.go has zero imports and references no identifier declared
+// outside share.go itself.
 func TestSafeShapeRecogniserReferencesNothingFromTheLexerOrClassifier(t *testing.T) {
 	forbidden := map[string]string{}
 	for _, f := range []string{"lex.go", "classify.go", "rejectlist.go"} {
@@ -636,6 +654,8 @@ func TestSafeShapeRecogniserReferencesNothingFromTheLexerOrClassifier(t *testing
 	})
 }
 
+// FuzzSafeShape proves that ShareFits never panics, always matches the
+// reference checker, and whenever it returns true the lexer reads one clean statement.
 func FuzzSafeShape(f *testing.F) {
 	for _, q := range shrFitting {
 		f.Add([]byte(q))
@@ -658,6 +678,8 @@ func FuzzSafeShape(f *testing.F) {
 	})
 }
 
+// TestSafeShapeAllocatesNothing proves that ShareFits performs zero heap
+// allocations on fitting, non-fitting, and over-length inputs.
 func TestSafeShapeAllocatesNothing(t *testing.T) {
 	for _, q := range append(append([]string{}, shrFitting...), "SELECT 'now'", "SELECT nextval('s')", strings.Repeat("a", ShareMaxLen+1)) {
 		b := []byte(q)

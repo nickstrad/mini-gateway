@@ -1,26 +1,44 @@
 package pgwire
 
+// TokenKind classifies a lexical span emitted by Lexer.
 type TokenKind uint8
 
 const (
+	// TokenSpace is a run of ASCII whitespace characters.
 	TokenSpace TokenKind = iota + 1
+	// TokenLineComment is a "--" comment extending to the next newline or EOF.
 	TokenLineComment
+	// TokenBlockComment is a balanced nested "/* ... */" comment.
 	TokenBlockComment
+	// TokenWord is an unquoted SQL identifier or keyword.
 	TokenWord
+	// TokenQuotedIdent is a double-quoted identifier ("...").
 	TokenQuotedIdent
+	// TokenUnicodeIdent is a Unicode-escaped identifier (U&"...").
 	TokenUnicodeIdent
+	// TokenString is a single-quoted string literal ('...', E'...', N'...',
+	// B'...', X'...', or U&'...'), including newline continuations.
 	TokenString
+	// TokenDollarString is a dollar-quoted string literal ($tag$...$tag$).
 	TokenDollarString
+	// TokenNumber is a numeric literal (decimal, scientific, or Postgres 16+ radix).
 	TokenNumber
+	// TokenParam is a positional parameter ($1, $2, ...).
 	TokenParam
+	// TokenOperator is a Postgres operator token after trailing-sign splitting.
 	TokenOperator
+	// TokenPunct is a single punctuation byte: ( ) [ ] , ; : .
 	TokenPunct
+	// TokenBad marks an unclosed literal/comment or unrecognized byte; its
+	// presence sets Unit.Opaque on the classified message.
 	TokenBad
+	// TokenKindCount is the sentinel count of TokenKind values.
 	TokenKindCount
 )
 
 var lexKindNames = [TokenKindCount]string{"?", "space", "line-comment", "block-comment", "word", "quoted-ident", "unicode-ident", "string", "dollar-string", "number", "param", "operator", "punct", "bad"}
 
+// String returns the human-readable name for the token kind.
 func (k TokenKind) String() string {
 	if k < TokenKindCount {
 		return lexKindNames[k]
@@ -28,24 +46,33 @@ func (k TokenKind) String() string {
 	return "?"
 }
 
+// Significant reports whether the token is meaningful SQL rather than
+// whitespace or a comment.
 func (k TokenKind) Significant() bool {
 	return k != TokenSpace && k != TokenLineComment && k != TokenBlockComment
 }
 
+// Token is a half-open byte range [Start, End) in the source slice.
 type Token struct {
 	Kind  TokenKind
 	Start int
 	End   int
 }
 
+// Text returns the raw slice of src covered by this token.
 func (t Token) Text(src []byte) []byte { return src[t.Start:t.End] }
 
+// Lexer is a single-pass PostgreSQL SQL scanner used by the courtesy reject
+// classifier. It assumes standard_conforming_strings = on and never panics on
+// arbitrary bytes.
 type Lexer struct {
 	src []byte
 	pos int
 	run lexOpRun
 }
 
+// lexOpRun caches one scanned operator run so repeated trailing '+'/'-' cuts
+// stay O(1) per operator instead of rescanning the suffix quadratically.
 type lexOpRun struct {
 	start    int
 	end      int
@@ -53,8 +80,11 @@ type lexOpRun struct {
 	signFrom int
 }
 
+// LexerFor returns a Lexer positioned at the start of src.
 func LexerFor(src []byte) Lexer { return Lexer{src: src} }
 
+// LexAll scans src into contiguous tokens covering every byte and reports
+// whether the scan was clean (no TokenBad encountered).
 func LexAll(src []byte) ([]Token, bool) {
 	l := LexerFor(src)
 	out := make([]Token, 0, lexEstimate(len(src)))
@@ -78,6 +108,8 @@ func lexEstimate(n int) int {
 	return n + 1
 }
 
+// Next returns the next token and true, or (Token{}, false) at EOF. It always
+// advances pos by at least one byte so malformed input cannot stall the loop.
 func (l *Lexer) Next() (Token, bool) {
 	if l.pos >= len(l.src) {
 		return Token{}, false
@@ -236,6 +268,10 @@ func (l *Lexer) quoted(q byte, backslash bool, kind TokenKind) TokenKind {
 	return TokenBad
 }
 
+// lexContinuation matches PostgreSQL's rule joining adjacent single-quoted
+// string literals separated by whitespace and "--" comments containing at
+// least one '\n' or '\r'. Block comments do not join strings. Escape mode
+// (e.g. E'...') is preserved across the continuation.
 func lexContinuation(src []byte, i int) (int, bool) {
 	newline := false
 	for i < len(src) {
@@ -347,6 +383,9 @@ func (l *Lexer) operator() {
 	l.pos = l.run.cut(l.pos)
 }
 
+// scanOpRun scans one maximal operator run (stopping before "--" or "/*") and
+// records the last character that keeps trailing '+'/'-' (PostgreSQL's rule
+// that splits "71+-3" into "+", "-" while keeping "@-" whole).
 func (l *Lexer) scanOpRun() lexOpRun {
 	r := lexOpRun{start: l.pos, end: l.pos, lastKeep: -1}
 	for r.end < len(l.src) && lexIsOpChar(l.src[r.end]) {

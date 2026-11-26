@@ -2,6 +2,8 @@ package pgwire
 
 import "github.com/nickstrad/mini-gateway/internal/work"
 
+// RejectRule documents one courtesy reject-list entry and supplies the example
+// classified by TestRejectRulesExamplesClassifyAsDocumented.
 type RejectRule struct {
 	Reason  work.RejectReason
 	Feature string
@@ -9,6 +11,8 @@ type RejectRule struct {
 	Example string
 }
 
+// RejectRules is the table from which docs/reject-list.md is generated.
+// Session safety rests on the post-lease reset (PLAN.md D8), not on this list.
 var RejectRules = []RejectRule{
 	{work.RejectSessionSet, "Session `SET` (every form except `SET LOCAL`, `SET TRANSACTION`, `SET CONSTRAINTS`; includes `SET SESSION ...`, `SET SESSION CHARACTERISTICS AS TRANSACTION ...`, `SET ROLE`, `SET SESSION AUTHORIZATION`, `SET TIME ZONE`, `SET NAMES`, `SET SCHEMA`, a custom setting whose first part is `local`, `transaction` or `constraints` such as `SET local.x = 1`, and `SET LOCAL NAMES`); `UPDATE pg_settings ...` in any statement that names `pg_settings` and contains `UPDATE`; and any statement containing `SET` or `RESET` that names `standard_conforming_strings` or `client_encoding`, `SET LOCAL` included, because both change how Postgres lexes the statements that follow", "The setting outlives the transaction and would follow the pooled connection to the next client.", "SET search_path = app"},
 	{work.RejectReset, "`RESET name`, `RESET ALL`", "Changes session settings that outlive the transaction.", "RESET statement_timeout"},
@@ -28,12 +32,16 @@ var RejectRules = []RejectRule{
 	{work.RejectExtendedProtocol, "Every extended-protocol message (`Parse`, `Bind`, `Describe`, `Execute`, `Close`, `Flush`, `Sync`) and `FunctionCall`", "v1 speaks the simple-query subset only; messages are discarded until `Sync`.", "(a Parse message)"},
 }
 
+// RejectAllowedForm documents a transaction-scoped SQL form that the courtesy
+// reject list deliberately forwards.
 type RejectAllowedForm struct {
 	Form    string
 	Why     string
 	Example string
 }
 
+// RejectAllowedForms lists the documented transaction-scoped forms rendered in
+// docs/reject-list.md and tested against ClassifyQuery.
 var RejectAllowedForms = []RejectAllowedForm{
 	{"`SET LOCAL ...`", "Lasts until the end of the current transaction.", "SET LOCAL statement_timeout = '5s'"},
 	{"`SET TRANSACTION ...`", "Applies to the current transaction only.", "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"},
@@ -45,11 +53,14 @@ var RejectAllowedForms = []RejectAllowedForm{
 	{"`LOCK TABLE`", "Released at the end of the transaction.", "LOCK TABLE kv IN SHARE MODE"},
 }
 
+// Session-scoped advisory-lock functions checked by tokenReject.
 var rejSessionAdvisory = []string{
 	"pg_advisory_lock", "pg_advisory_lock_shared", "pg_try_advisory_lock", "pg_try_advisory_lock_shared",
 	"pg_advisory_unlock", "pg_advisory_unlock_shared", "pg_advisory_unlock_all",
 }
 
+// Settings that alter PostgreSQL's own lexing of subsequent statements even
+// when changed with SET LOCAL inside a transaction.
 var rejLexingSettings = []string{"standard_conforming_strings", "client_encoding"}
 
 const (

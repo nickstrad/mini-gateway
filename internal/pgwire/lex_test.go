@@ -18,6 +18,8 @@ func lexKinds(src string) (string, bool) {
 	return strings.Join(parts, " "), clean
 }
 
+// TestLexTokenKinds proves that LexAll classifies every supported SQL token
+// kind and flags unclosed or illegal inputs as TokenBad.
 func TestLexTokenKinds(t *testing.T) {
 	cases := []struct {
 		src   string
@@ -68,6 +70,8 @@ func TestLexTokenKinds(t *testing.T) {
 	}
 }
 
+// TestLexUnicodeDecode proves that Unicode identifier escapes decode valid
+// 4- and 6-digit code points and reject invalid escapes, surrogates, and NUL.
 func TestLexUnicodeDecode(t *testing.T) {
 	cases := []struct {
 		in   string
@@ -137,12 +141,16 @@ func lexCheckSpans(t testing.TB, src []byte) {
 	}
 }
 
+// TestLexSpansCoverTheCorpus proves that LexAll partitions every corpus entry
+// into contiguous non-empty spans that round-trip to the exact input bytes.
 func TestLexSpansCoverTheCorpus(t *testing.T) {
 	for _, c := range clsLoadCorpus(t) {
 		lexCheckSpans(t, []byte(c.text))
 	}
 }
 
+// FuzzLex proves that LexAll never panics and always produces an exact span
+// partition matching the operator-splitting reference on arbitrary bytes.
 func FuzzLex(f *testing.F) {
 	for _, c := range clsLoadCorpus(f) {
 		f.Add([]byte(c.text))
@@ -176,6 +184,8 @@ func lexRefOperatorEnd(src []byte, start int) int {
 	return start + n
 }
 
+// TestLexOperatorRunsMatchTheOneRunAtATimeRule proves over 50,000 random
+// operator strings that the O(1) lexOpRun cache matches the per-token reference.
 func TestLexOperatorRunsMatchTheOneRunAtATimeRule(t *testing.T) {
 	const alphabet = "+-*/<>=~!@#%^&|`?+-+- a1(;'"
 	r := rand.New(rand.NewPCG(0xC05, 0x0B))

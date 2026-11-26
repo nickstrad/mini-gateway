@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+// SafeShapeMarkdown renders docs/safe-shape.md directly from the constants and
+// tables in share.go so the published rules cannot drift from the recogniser.
 func SafeShapeMarkdown() string {
 	var b strings.Builder
 	b.WriteString("# The safe shape\n\n")

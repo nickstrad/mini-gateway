@@ -47,6 +47,8 @@ func corpusTexts(t *testing.T) []string {
 	return out
 }
 
+// TestClassifierSafeReadCorpusLeavesTheFakeUnchanged proves that running every
+// SafeRead entry from the corpus against fakepg applies zero writes.
 func TestClassifierSafeReadCorpusLeavesTheFakeUnchanged(t *testing.T) {
 	s := sim.New(sim.Config{Seed: 1, Scenario: t.Name()})
 	n := simnet.New(s)

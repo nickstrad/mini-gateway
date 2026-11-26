@@ -50,18 +50,19 @@ type Options struct {
 // Run captures the world result, collector, final snapshot, CSV directory, and
 // outputs of all four attached adapters after Scenario completes.
 type Run struct {
-	Result     *world.Result
-	Collector  *obs.Collector
-	Final      obs.InstanceSnapshot
-	RunDir     string
-	RunID      string
-	CSV        *csvflush.Writer
-	JSON       *jsonstats.Adapter
-	Prom       *promtext.Adapter
-	Log        bytes.Buffer
-	Publishes  int64
-	PublishAt  []sim.Time
-	Wire       wireworld.Result
+	Result    *world.Result
+	Collector *obs.Collector
+	Final     obs.InstanceSnapshot
+	RunDir    string
+	RunID     string
+	CSV       *csvflush.Writer
+	JSON      *jsonstats.Adapter
+	Prom      *promtext.Adapter
+	Log       bytes.Buffer
+	Publishes int64
+	PublishAt []sim.Time
+	Wire      wireworld.Result
+	// Classifier holds the completed clsworld result when Run came from Classifier.
 	Classifier clsworld.Result
 }
 

@@ -1,3 +1,11 @@
+// Package clsworld defines the simulated end-to-end reject-list scenarios
+// (classifier-reject-list and classifier-reject-only), a minimal gateway built
+// on Chunk 4's framer and Chunk 5's classifier/reply builders, and exact
+// result verification.
+//
+// It lives in an importable harness package so both internal/pgwire's seed
+// sweeps and internal/obs/simrun's CSV-flush tests share one world definition
+// without violating importlint.
 package clsworld
 
 import (
@@ -17,33 +25,56 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// Fixed topology, buffer, and workload constants for the classifier scenarios.
 const (
-	Addr           = "gw"
-	ReadSize       = 4096
-	MaxBuffer      = 1 << 20
-	MaxMessage     = 1 << 20
-	Step           = 5 * time.Millisecond
-	Tenant         = "t1"
-	MaxClients     = 3
+	// Addr is the simulated network address on which Gateway listens.
+	Addr = "gw"
+	// ReadSize is the per-connection socket read chunk size.
+	ReadSize = 4096
+	// MaxBuffer bounds per-direction relay queues inside Gateway.
+	MaxBuffer = 1 << 20
+	// MaxMessage bounds client and backend frames accepted by Gateway.
+	MaxMessage = 1 << 20
+	// Step is the virtual-time spacing between scheduled client sends.
+	Step = 5 * time.Millisecond
+	// Tenant is the fixed tenant ID attributed to simulated probe queries.
+	Tenant = "t1"
+	// MaxClients caps the seeded client count per scenario run.
+	MaxClients = 3
+	// NameRejectList names the mixed scenario (rejects interleaved with SELECT 1 and SHOW search_path).
 	NameRejectList = "classifier-reject-list"
+	// NameRejectOnly names the pure-rejection scenario where zero statements reach fakepg.
 	NameRejectOnly = "classifier-reject-only"
-	FollowUp       = "SELECT 1"
-	ShowPath       = "SHOW search_path"
-	CleanPath      = `"$user", public`
+	// FollowUp is the permitted read sent after each refused query in NameRejectList.
+	FollowUp = "SELECT 1"
+	// ShowPath reads search_path before and after rejects to verify session state stayed clean.
+	ShowPath = "SHOW search_path"
+	// CleanPath is the expected untouched search_path returned by fakepg.
+	CleanPath = `"$user", public`
 )
 
+// Scenario selects a classifier scenario and an optional ClassifierConfig
+// mutator (used by the planted-SET canary).
 type Scenario struct {
 	Name       string
 	FollowUps  bool
 	Classifier func(*pgwire.ClassifierConfig)
 }
 
+// RejectList returns the mixed reject-list scenario with permitted follow-up
+// queries and before/after search_path checks.
 func RejectList() Scenario { return Scenario{Name: NameRejectList, FollowUps: true} }
 
+// RejectOnly returns the reject-only scenario in which every client query must
+// be refused locally so fakepg starts zero statements.
 func RejectOnly() Scenario { return Scenario{Name: NameRejectOnly} }
 
+// Scenarios returns all classifier scenarios in deterministic order.
 func Scenarios() []Scenario { return []Scenario{RejectList(), RejectOnly()} }
 
+// Gateway is a test-only simnet relay that frames client messages with
+// pgwire.FrontendTracker, refuses rejected queries and extended-protocol
+// messages locally, and forwards allowed queries to fakepg.
 type Gateway struct {
 	n          *simnet.Net
 	backend    string
@@ -74,6 +105,8 @@ type conn struct {
 	tenant  work.TenantID
 }
 
+// NewGateway listens on Addr over n and relays each accepted client connection
+// to backend through cfg.
 func NewGateway(n *simnet.Net, backend string, cfg pgwire.ClassifierConfig) (*Gateway, error) {
 	gw := &Gateway{n: n, backend: backend}
 	gw.Classifier.Config = cfg
@@ -91,6 +124,8 @@ func NewGateway(n *simnet.Net, backend string, cfg pgwire.ClassifierConfig) (*Ga
 
 func (gw *Gateway) fail(err error) { gw.Errs = append(gw.Errs, err) }
 
+// SyncSnapshot sums SyncDiscard counters across every client connection the
+// gateway accepted.
 func (gw *Gateway) SyncSnapshot() pgwire.SyncDiscardSnapshot {
 	var s pgwire.SyncDiscardSnapshot
 	for _, c := range gw.conns {
@@ -284,6 +319,8 @@ func (c *conn) flush() {
 	}
 }
 
+// World holds the wired simulator, fake Postgres, gateway, probes, and send
+// plan for one classifier scenario run.
 type World struct {
 	Sim      *sim.Sim
 	Net      *simnet.Net
@@ -294,6 +331,8 @@ type World struct {
 	Plan     Plan
 }
 
+// Plan records the seeded client count, shuffled reject statements, and exact
+// message counts scheduled by Build for verification after Run.
 type Plan struct {
 	Clients     int
 	Statements  []string
@@ -302,6 +341,8 @@ type Plan struct {
 	Parses      int64
 }
 
+// RejectStatements builds the shuffled sequence of plain and padded reject-list
+// examples plus session-SET probes sent by each client.
 func RejectStatements(rng *rand.Rand) []string {
 	var out []string
 	for _, r := range pgwire.RejectRules {
@@ -333,6 +374,8 @@ func mutateCase(rng *rand.Rand, b []byte) {
 	}
 }
 
+// Pad inserts seeded whitespace and comments around tokens of src and
+// randomizes unquoted keyword ASCII case without altering literal content.
 func Pad(src string, rng *rand.Rand) string {
 	toks, _ := pgwire.LexAll([]byte(src))
 	var out []byte
@@ -355,6 +398,9 @@ func Pad(src string, rng *rand.Rand) string {
 	return string(out)
 }
 
+// Build constructs a deterministic classifier scenario world for seed and sc
+// without running it yet, so callers such as simrun.Classifier can attach
+// observability sources before execution.
 func Build(seed int64, sc Scenario, replay string) (*World, error) {
 	s := sim.New(sim.Config{Seed: seed, Scenario: sc.Name})
 	s.SetReplay(replay)
@@ -444,6 +490,8 @@ func (w *World) showPaths() {
 	}
 }
 
+// Result captures all snapshots, client traces, search_path readings, and
+// errors collected at the end of a scenario run.
 type Result struct {
 	World      *World
 	Plan       Plan
@@ -459,6 +507,7 @@ type Result struct {
 	Err        error
 }
 
+// Run executes the scheduled world until quiescence and returns its Result.
 func (w *World) Run() Result {
 	r := Result{World: w}
 	r.Err = w.Sim.RunUntilQuiet()
@@ -482,6 +531,7 @@ func (w *World) Run() Result {
 	return r
 }
 
+// Run builds and runs sc on seed in one step.
 func Run(seed int64, sc Scenario, replay string) Result {
 	w, err := Build(seed, sc, replay)
 	if err != nil {
@@ -490,6 +540,8 @@ func Run(seed int64, sc Scenario, replay string) Result {
 	return w.Run()
 }
 
+// Verify checks conservation, zero leaked rejects, exact wire traces, and
+// untouched session state for a completed scenario Result.
 func (r Result) Verify() error {
 	var errs []error
 	add := func(format string, args ...any) { errs = append(errs, fmt.Errorf(format, args...)) }
@@ -551,6 +603,8 @@ func (r Result) Verify() error {
 	return errors.Join(errs...)
 }
 
+// WantTrace constructs the exact post-startup message trace expected for each
+// probe client in sc under plan p.
 func WantTrace(sc Scenario, p Plan) string {
 	var parts []string
 	if sc.FollowUps {

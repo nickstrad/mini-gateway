@@ -182,6 +182,10 @@ func shrTierRTexts(t *testing.T) (corpus, generated []string) {
 	return corpus, generated
 }
 
+// TestTierRSafeShapeDifferential proves against live Postgres 17 (plain tables
+// without row-level security) that safe-shape corpus, generated, and parallel-
+// plan texts give the same outcome in BEGIN READ ONLY, leave watched tables
+// and session state clean (via dirty-check.sql), and repeat as row multisets.
 func TestTierRSafeShapeDifferential(t *testing.T) {
 	if os.Getenv(clsTierREnv) != "1" {
 		t.Skip("tier R: set MG_TIER_R=1 (scripts/tier-r.sh starts Postgres 17 and does this)")

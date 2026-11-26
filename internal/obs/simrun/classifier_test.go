@@ -32,6 +32,9 @@ func classifierRuns(dir string) error {
 	return nil
 }
 
+// TestScenarioClassifierFlush proves that both classifier scenarios pass
+// Verify and Check, flush byte-identical files and adapter output for one seed,
+// and export counts matching their snapshots.
 func TestScenarioClassifierFlush(t *testing.T) {
 	for _, sc := range clsworld.Scenarios() {
 		t.Run(sc.Name, func(t *testing.T) {
@@ -111,6 +114,8 @@ func classifierSQLFiles(t *testing.T, scenario string) []string {
 	return out
 }
 
+// TestClassifierSQLFilesAreTheOnesInTheTree proves that every classifier SQL
+// assertion file in test/analysis/ is covered by the planted-number test.
 func TestClassifierSQLFilesAreTheOnesInTheTree(t *testing.T) {
 	for _, sc := range clsworld.Scenarios() {
 		m, err := filepath.Glob(filepath.Join(repoRoot(t), "test", "analysis", sc.Name, "*.sql"))
@@ -121,6 +126,8 @@ func TestClassifierSQLFilesAreTheOnesInTheTree(t *testing.T) {
 	}
 }
 
+// TestClassifierSQLCatchesPlantedNumbers proves that each classifier SQL file
+// fails with violating rows when a required CSV metric is perturbed.
 func TestClassifierSQLCatchesPlantedNumbers(t *testing.T) {
 	requireDuckDB(t)
 	baselineRuns(t)
@@ -157,6 +164,8 @@ func TestClassifierSQLCatchesPlantedNumbers(t *testing.T) {
 	}
 }
 
+// TestClassifierRunsUseTheScenarioRunIDs proves that run.csv records the
+// canonical "<scenario>/<seed>/base" run ID and passes DuckDB assertions.
 func TestClassifierRunsUseTheScenarioRunIDs(t *testing.T) {
 	root := baselineRuns(t)
 	for _, sc := range clsworld.Scenarios() {

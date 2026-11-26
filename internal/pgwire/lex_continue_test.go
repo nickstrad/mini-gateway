@@ -6,6 +6,9 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// TestLexStringContinuesAcrossANewline proves that the lexer joins single-quoted
+// literals across newlines and line comments (preserving E'...' escapes) while
+// refusing to join across spaces, block comments, dollar strings, or quotes.
 func TestLexStringContinuesAcrossANewline(t *testing.T) {
 	cases := []struct{ src, want string }{
 		{"'a'\n'b'", "string:'a'\n'b'"},
@@ -42,6 +45,9 @@ func TestLexStringContinuesAcrossANewline(t *testing.T) {
 	}
 }
 
+// TestClassifierRejectsWhatHidesBehindAStringContinuation proves that session
+// features hidden behind continued escape strings or split setting names are
+// refused and that temporal range/array/continuation reads are never shared.
 func TestClassifierRejectsWhatHidesBehindAStringContinuation(t *testing.T) {
 	for _, c := range []struct {
 		q string

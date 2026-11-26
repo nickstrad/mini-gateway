@@ -1,13 +1,30 @@
 package pgwire
 
+// Bounds and markers for the safe-shape recogniser.
+//
+// This file intentionally imports nothing and references no identifier from
+// lex.go, classify.go, or rejectlist.go (enforced structurally by an AST test)
+// so a lexer bug can never widen SafeRead or Shareable.
 const (
+	// ShareMaxLen caps the raw byte length of a Query that can fit the safe shape.
 	ShareMaxLen = 4096
-	ShareHint   = "/* mg:share */"
-	ShareLead   = "select"
+	// ShareHint is the exact leading byte prefix reported as Unit.Hinted.
+	// Because it contains '/' and '*', a hinted text never fits the safe shape.
+	ShareHint = "/* mg:share */"
+	// ShareLead is the sole allowed leading keyword of a safe-shape Query.
+	ShareLead = "select"
 )
 
+// Punctuation permitted in the safe-shape alphabet; dots, semicolons, comments,
+// quotes other than single quote, backslashes, and dollar signs are excluded so
+// multi-statement text, attribute-notation calls (t.f), and complex quoting
+// rules cannot appear.
 const shareAlphabetPunct = "_,*=<>()' "
 
+// ShareStopWords lists words forbidden anywhere outside strings in a safe-shape
+// query: clauses that write or lock, non-SELECT statement leads, and the
+// paren-free per-call/per-session SQL-value functions ported from PostgreSQL's
+// gram.y func_expr_common_subexpr production.
 var ShareStopWords = []string{
 	"into", "for", "with", "tablesample",
 	"insert", "update", "delete", "merge", "truncate", "create", "alter", "drop", "grant",
@@ -21,12 +38,21 @@ var ShareStopWords = []string{
 	"current_schema",
 }
 
+// ShareParenKeywords lists SQL keywords that may precede '(' without being a
+// function call. Every word here is a reserved (R) or column-name (C) keyword
+// in PostgreSQL 17, so no unqualified function call can share its name;
+// unreserved/type keywords such as by, join, like, and is are intentionally
+// excluded.
 var ShareParenKeywords = []string{
 	"select", "from", "where", "and", "or", "not", "in", "on", "exists", "any", "all", "some",
 	"when", "then", "else", "having", "union", "intersect", "except", "as", "limit", "offset",
 	"distinct", "between", "case",
 }
 
+// ShareAllowList is the sorted list of built-in function names permitted before
+// '(' in a safe-shape query. Functions with side effects, per-call or
+// per-session results, locale/timezone formatting, or window/SRF syntax are
+// excluded.
 var ShareAllowList = []string{
 	"abs", "ascii", "avg", "bit_and", "bit_length", "bit_or", "bool_and", "bool_or", "btrim",
 	"cbrt", "ceil", "ceiling", "char_length", "character_length", "chr", "coalesce", "concat",
@@ -38,10 +64,18 @@ var ShareAllowList = []string{
 	"trunc", "upper",
 }
 
+// ShareTimeWords lists PostgreSQL's relative-time input words. Any string
+// literal containing one as an ASCII case-insensitive substring fails the safe
+// shape so typed literals like date 'today' are never shared.
 var ShareTimeWords = []string{"now", "today", "tomorrow", "yesterday"}
 
+// ShareFits reports whether raw Query bytes fit the safe shape for SafeRead
+// and automatic coalescing. It allocates nothing and scans at most ShareMaxLen
+// bytes without invoking the SQL lexer or reject classifier.
 func ShareFits(text []byte) bool { return shareFits(text, false) }
 
+// shareFits implements ShareFits with a test-only switch that bypasses the
+// alphabet check for the property canary; production callers always pass false.
 func shareFits(text []byte, skipAlphabet bool) bool {
 	if len(text) == 0 || len(text) > ShareMaxLen {
 		return false
@@ -104,6 +138,10 @@ func shareInList(list []string, b []byte) bool {
 	return false
 }
 
+// shareStringsOK verifies balanced single quotes, rejects prefixed quotes such
+// as E'...' or B'...', and checks each closed string span for relative-time
+// words. Because none of ShareTimeWords contains a quote, scanning the raw
+// span including any doubled ” is identical to scanning the unescaped text.
 func shareStringsOK(text []byte) bool {
 	in := false
 	start := 0
@@ -144,6 +182,8 @@ func shareContainsFold(b []byte, w string) bool {
 	return false
 }
 
+// shareLeadsWithSelect enforces the strict reading of rule 6: only spaces may
+// precede the opening "select" word, so "(SELECT 1)" and "'a' SELECT" fail.
 func shareLeadsWithSelect(text []byte) bool {
 	i := 0
 	for i < len(text) && text[i] == ' ' {

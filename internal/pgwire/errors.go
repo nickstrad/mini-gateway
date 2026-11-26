@@ -2,42 +2,82 @@ package pgwire
 
 import "github.com/nickstrad/mini-gateway/internal/work"
 
+// ErrRowID indexes the fixed error-contract table ErrorRows. New rows must be
+// appended before ErrRowCount so existing row indices stay stable.
 type ErrRowID uint8
 
 const (
+	// ErrRowShed is returned when the admission queue sheds or rejects a query.
 	ErrRowShed ErrRowID = iota
+	// ErrRowRateGate is returned when the per-tenant rate gate refuses a query.
 	ErrRowRateGate
+	// ErrRowBreakerOpen is returned when the database circuit breaker is open.
 	ErrRowBreakerOpen
+	// ErrRowCoalesceCap is returned when a coalescer waiter or reply cap hits.
 	ErrRowCoalesceCap
+	// ErrRowDraining is returned while the proxy instance is draining.
 	ErrRowDraining
+	// ErrRowUnsupportedFeature is returned for statements on the reject list.
 	ErrRowUnsupportedFeature
+	// ErrRowUnsupportedExtended is returned for extended-protocol and
+	// function-call messages before discarding until Sync.
 	ErrRowUnsupportedExtended
+	// ErrRowCancelledQueued is returned when a client cancels a queued query.
 	ErrRowCancelledQueued
+	// ErrRowLostAfterRead is returned when the database connection fails after
+	// a SafeRead query was sent outside a transaction (SQLSTATE 08006).
 	ErrRowLostAfterRead
+	// ErrRowLostAfterWrite is returned when the database connection fails after
+	// any other query or COMMIT was sent (SQLSTATE 08007).
 	ErrRowLostAfterWrite
+	// ErrRowLostInTransaction is returned when the database connection fails
+	// between statements of an open transaction.
 	ErrRowLostInTransaction
+	// ErrRowIdleInTransaction is returned when an idle transaction times out.
 	ErrRowIdleInTransaction
+	// ErrRowTLSRequired is returned for plaintext startup when TLS is required.
 	ErrRowTLSRequired
+	// ErrRowTLSHandshake records a failed or timed-out TLS handshake (close
+	// without sending a Postgres message).
 	ErrRowTLSHandshake
+	// ErrRowStartupParameter is returned for unsupported startup parameters.
 	ErrRowStartupParameter
+	// ErrRowAuthFailed is returned for failed authentication or unknown tenant.
 	ErrRowAuthFailed
+	// ErrRowTooManyClients is returned when the client or startup cap is full.
 	ErrRowTooManyClients
+	// ErrRowProtocolViolation is returned for malformed messages or mid-message
+	// read deadlines.
 	ErrRowProtocolViolation
+	// ErrRowPartialReply records a backend failure after part of the reply was
+	// already written to the client (close without sending a Postgres message).
 	ErrRowPartialReply
+	// ErrRowPassThrough accounts for Postgres's own ErrorResponse relayed
+	// unchanged; ReplyBuilder refuses to synthesize a message for it.
 	ErrRowPassThrough
+	// ErrRowCount is the sentinel count of rows in ErrorRows.
 	ErrRowCount
 )
 
+// ErrorRowReply specifies what wire reply and end marker a row produces.
 type ErrorRowReply uint8
 
 const (
+	// ErrorRowError sends ErrorResponse (ERROR) followed by ReadyForQuery.
 	ErrorRowError ErrorRowReply = iota + 1
+	// ErrorRowFatal sends ErrorResponse (FATAL) with no ReadyForQuery and
+	// closes the client connection.
 	ErrorRowFatal
+	// ErrorRowErrorUntilSync sends ErrorResponse (ERROR) and defers
+	// ReadyForQuery until the client's Sync arrives.
 	ErrorRowErrorUntilSync
+	// ErrorRowCloseOnly closes the client connection without writing bytes.
 	ErrorRowCloseOnly
+	// ErrorRowPassThrough relays Postgres's own error unchanged.
 	ErrorRowPassThrough
 )
 
+// String returns the human-readable wire-reply description for docs/error-contract.md.
 func (r ErrorRowReply) String() string {
 	switch r {
 	case ErrorRowError:
@@ -54,15 +94,21 @@ func (r ErrorRowReply) String() string {
 	return "?"
 }
 
+// ErrorRowConn describes the client connection state after a row's reply.
 type ErrorRowConn uint8
 
 const (
+	// ErrorRowConnUsable leaves the client connection open and usable.
 	ErrorRowConnUsable ErrorRowConn = iota + 1
+	// ErrorRowConnClosedWhenIdle closes the connection once it is idle ('I').
 	ErrorRowConnClosedWhenIdle
+	// ErrorRowConnClosed closes the client connection immediately.
 	ErrorRowConnClosed
+	// ErrorRowConnAsPostgres leaves connection fate to Postgres's own reply.
 	ErrorRowConnAsPostgres
 )
 
+// String returns the connection-fate description for docs/error-contract.md.
 func (c ErrorRowConn) String() string {
 	switch c {
 	case ErrorRowConnUsable:
@@ -77,6 +123,7 @@ func (c ErrorRowConn) String() string {
 	return "?"
 }
 
+// ErrorRow is one entry in the proxy's wire error contract.
 type ErrorRow struct {
 	ID           string
 	Situation    string
@@ -91,6 +138,7 @@ type ErrorRow struct {
 	Chunk        int
 }
 
+// Severity returns "ERROR", "FATAL", or "" for rows that build no message.
 func (r ErrorRow) Severity() string {
 	switch r.Reply {
 	case ErrorRowError, ErrorRowErrorUntilSync:
@@ -101,10 +149,13 @@ func (r ErrorRow) Severity() string {
 	return ""
 }
 
+// HasMessage reports whether ReplyBuilder encodes an ErrorResponse for this row.
 func (r ErrorRow) HasMessage() bool { return r.Severity() != "" }
 
+// CounterKey returns the documented counter key ("reply_<id>") for the row.
 func (r ErrorRow) CounterKey() string { return "reply_" + r.ID }
 
+// Row returns the ErrorRow for id, or the zero ErrorRow if id is out of range.
 func (id ErrRowID) Row() ErrorRow {
 	if id < ErrRowCount {
 		return ErrorRows[id]
@@ -112,6 +163,10 @@ func (id ErrRowID) Row() ErrorRow {
 	return ErrorRow{}
 }
 
+// ErrorRows is the single source of truth for every proxy-made error reply and
+// for the generated docs/error-contract.md table. Private SQLSTATE codes
+// 53M01..53M05 sit inside standard class 53 (insufficient resources) and are
+// reserved for pre-forward refusals.
 var ErrorRows = [ErrRowCount]ErrorRow{
 	ErrRowShed: {"shed", "Shed by the queue rule, or the queue is full", ErrorRowError, "53M01",
 		"mini-gateway: request shed by the admission queue", work.No, work.No, "yes, after backing off", ErrorRowConnUsable, work.RefusalShed, 8},
@@ -155,6 +210,9 @@ var ErrorRows = [ErrRowCount]ErrorRow{
 		"", work.Yes, work.Unknown, "as Postgres says", ErrorRowConnAsPostgres, work.RefusalNone, 6},
 }
 
+// ErrRowFor maps a core pre-forward refusal to its ErrorRowError entry.
+// RefusalUnsupported maps to ErrRowUnsupportedFeature; callers handling
+// extended-protocol or startup refusals select those rows directly.
 func ErrRowFor(r work.Refusal) (ErrRowID, bool) {
 	for id := ErrRowID(0); id < ErrRowCount; id++ {
 		if ErrorRows[id].Refusal == r && r != work.RefusalNone && ErrorRows[id].Reply == ErrorRowError {

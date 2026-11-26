@@ -199,6 +199,9 @@ func clsLastStatus(msgs []testclient.Msg) byte {
 	return 0
 }
 
+// TestTierRClassifierDifferential proves against a live Postgres 17 server
+// that every forwarded corpus statement leaves session state unchanged and
+// that the session-state and read-only oracle canaries catch real hazards.
 func TestTierRClassifierDifferential(t *testing.T) {
 	if os.Getenv(clsTierREnv) != "1" {
 		t.Skip("tier R: set MG_TIER_R=1 (scripts/tier-r.sh starts Postgres 17 and does this)")

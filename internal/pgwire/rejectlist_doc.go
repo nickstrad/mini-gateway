@@ -2,6 +2,8 @@ package pgwire
 
 import "strings"
 
+// RejectListMarkdown renders docs/reject-list.md directly from RejectRules and
+// RejectAllowedForms so the published courtesy list cannot drift from code.
 func RejectListMarkdown() string {
 	var b strings.Builder
 	b.WriteString("# Reject list\n\n")
