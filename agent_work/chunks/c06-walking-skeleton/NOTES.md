@@ -500,30 +500,34 @@ pass.
 
 ## Gate result
 
-`scripts/gate.sh c06-walking-skeleton` (build stage) at `6dcbb7a`, 2026-11-26, about 40
-minutes: **overall fail, for one expected reason only.** Every check passes except G3 unit,
-whose single failing test is `TestAdv_6_GateSeedSweepCounts` in
-`agent_work/adversarial/cr01-shrink-fuzz-rules` (the pinned fuzz inventory, 14 targets; the
-module now has 16 sim-level targets with `FuzzEngineOps`). The brief's addendum item 4
-expects exactly this until the orchestrator reviews the new target and re-pins; builders may
-not edit that directory. `TestAdv_7_InventoryAndHiddenHashImports` passed.
+Repair round: `scripts/gate.sh c06-walking-skeleton` (build stage) at `dbc896b`, 2026-11-26,
+clean tree, 2,222 s: **overall fail, for one expected reason only.** Every check passes
+except G3 unit, whose only failing tests are the two adversarial attacks that assert
+against this round's rulings (see "Adversarial tests that assert against a ruling"):
+`TestAdv_5_ZeroAcceptedBytes` and `TestAdv_13_ExplicitZeroCapacity` in
+`agent_work/adversarial/c06-walking-skeleton`, which builders may not edit. The pinned fuzz
+inventory test `TestAdv_6_GateSeedSweepCounts` now passes (the orchestrator re-pinned it).
+The gate was run once to completion; an earlier start of the same run was stopped at G1
+because boundlint refused the new writer-exit channel (fixed in `dbc896b`) and the fast
+stages G0–G2 were re-checked before the full run. No fuzz `context deadline exceeded`
+occurred, so no re-run.
 
 | Check | Result |
 | --- | --- |
 | G0 tools, gofmt, build, vet, tools-vet, tools-test, tidy | pass |
 | G1 detlint, importlint, boundlint, paniccheck | pass |
 | G2 comments | pass |
-| G3 unit | fail: only `TestAdv_6_GateSeedSweepCounts` (expected, see above) |
+| G3 unit | fail: only `TestAdv_5_ZeroAcceptedBytes` and `TestAdv_13_ExplicitZeroCapacity` (expected, see above) |
 | G3 race | pass |
-| G4 markers, sweep (200 seeds) | pass (sweep 355 s) |
-| G5 fuzz | pass: 16 targets, 0 seed sweeps; `FuzzEngineOps` 2,998 executions, 142/s, class fuzz |
-| G6 tier R | pass (177 s; chunks 2, 4, 5 and 6) |
-| G7 CSV assertions | pass (195 SQL files over the sweep and tier R runs, 0 failures) |
+| G4 markers, sweep (200 seeds) | pass (sweep 304 s) |
+| G5 fuzz | pass: 16 targets, 0 seed sweeps; `FuzzEngineOps` 2,947 executions, 140/s, class fuzz |
+| G6 tier R | pass (203 s) |
+| G7 CSV assertions | pass (4,269 run directories, 59 scenarios with SQL files) |
 | G8 generated documents | pass |
 | G9 site | pass |
-| G10 chunk extra | pass: canaries and ablations, shrunk scenario, `fuzz-plant.sh` found the planted bug after 1 s, simrun SQL with DuckDB required |
+| G10 chunk extra | pass: `fuzz-plant.sh` found the planted bug after 2 s |
 
-An earlier full run (at `7dd4085`) differed in one row: G10 failed because the planted-bug
-fuzz check missed its 20 s budget with the two-connection fuzz world; that is why the fuzz
-world now has one connection (see "Operation fuzzing"). `result.json` is not committed
-(the orchestrator runs the landing gate).
+`result.json` is not committed (the orchestrator runs the landing gate).
+
+The first build's gate (at `6dcbb7a`) failed G3 only for the then-pinned fuzz inventory
+(`TestAdv_6_GateSeedSweepCounts`); everything else passed.
