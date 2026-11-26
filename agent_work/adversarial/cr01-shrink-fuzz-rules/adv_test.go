@@ -287,6 +287,7 @@ func TestAdv_5_EveryByteCorruptionCanonical(t *testing.T) {
 	}
 }
 func TestAdv_5_UnboundedScheduleClaim(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 5 narrowed to schedules of at most MaxScheduleLen faults. See agent_work/chunks/cr01-shrink-fuzz-rules/ADVERSARIAL.md.")
 	start(t)
 	in := make([]sim.Fault, sim.MaxScheduleLen+1)
 	s, e := sim.FormatSchedule(in, nil)
