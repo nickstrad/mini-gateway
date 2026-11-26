@@ -16,8 +16,9 @@
 # testdata/fuzz/FuzzXxx/, which then runs as a plain test from then on.
 # A run that finds no fuzz target at all is a failure, not a pass.
 #
-# The rate. Go prints `fuzz: elapsed: <d>, execs: <N> (<M>/sec)` as it goes; the last such
-# line of a target's run is its summary. The rate reported is N divided by the elapsed whole
+# The rate. Go prints `fuzz: elapsed: <d>, execs: <N> (<M>/sec)` as it goes; the last line
+# of a target's run that starts `fuzz: elapsed:` is its summary, and it must have that form:
+# a rate is never taken from an earlier line when the last one cannot be read. The rate reported is N divided by the elapsed whole
 # seconds of that line (at least 1). Go's own M is the rate over the last interval only and
 # can be 0 on the final line, so it is not used. A target with no such line (its run never
 # got past the baseline coverage, or the go tool fuzzed nothing) has no rate: that target
@@ -29,7 +30,8 @@
 # as fuzzing. Every other target with a rate is `fuzz`. A seed sweep is not a failure.
 #
 # Output: the go test output of each target, then a table (package, target, executions,
-# executions per second, class) and a NOTE line with the counts.
+# executions per second, class) and a NOTE line with the counts. When the run fails, its
+# last line names every failed target: `fuzz: FAILED: <dir> <target>, ...`.
 #
 # Exit status: 0 green, 1 a target failed, has no readable rate, or cannot be classed, or
 # no target exists, 2 usage or setup error.
@@ -65,11 +67,11 @@ elapsed_seconds() {
   echo $(( 10#${BASH_REMATCH[2]:-0} * 3600 + 10#${BASH_REMATCH[4]:-0} * 60 + 10#${BASH_REMATCH[5]} ))
 }
 
-# read_rate <log>: prints "<execs> <execs per second>" from the last summary line.
+# read_rate <log>: prints "<execs> <execs per second>" from the last progress line.
 read_rate() {
   local line el
-  line=$(grep -E '^fuzz: elapsed: [0-9hms]+, execs: [0-9]+ \([0-9]+/sec\)' "$1" | tail -n 1)
-  [[ "$line" =~ ^fuzz:\ elapsed:\ ([0-9hms]+),\ execs:\ ([0-9]+)\ \( ]] || return 1
+  line=$(grep -E '^fuzz: elapsed: ' "$1" | tail -n 1)
+  [[ "$line" =~ ^fuzz:\ elapsed:\ ([0-9hms]+),\ execs:\ ([0-9]+)\ \([0-9]+/sec\) ]] || return 1
   el=$(elapsed_seconds "${BASH_REMATCH[1]}") || return 1
   [ "$el" -ge 1 ] || el=1
   echo "${BASH_REMATCH[2]} $(( ${BASH_REMATCH[2]} / el ))"
@@ -87,10 +89,21 @@ sim_level() {
   [ "${level_of[$1]}" = sim ]
 }
 
+# fail_target <dir> <name>: marks the run failed and lists the target once.
+fail_target() {
+  rc=1
+  [ "$last_failed" = "$1 $2" ] || failed+=("$1 $2")
+  last_failed="$1 $2"
+}
+
 rc=0
 rows=()
+failed=()
+last_failed=
 sweeps=0
 fuzzed=0
+unreadable=0
+unclassified=0
 i=0
 while read -r dir name; do
   i=$((i + 1))
@@ -98,12 +111,13 @@ while read -r dir name; do
   echo "fuzz: ./$dir $name"
   if ! "$fuzz_go" test -run '^$' -fuzz "^${name}\$" -fuzztime "${secs}s" "./$dir" 2>&1 | tee "$log"; then
     echo "fuzz: $name in ./$dir FAILED" >&2
-    rc=1
+    fail_target "$dir" "$name"
   fi
   if ! rate=$(read_rate "$log"); then
     echo "fuzz: $name in ./$dir: no execution rate in the go test output (no 'fuzz: elapsed: ..., execs: N (M/sec)' line)" >&2
     rows+=("$dir	$name	-	-	unreadable")
-    rc=1
+    unreadable=$((unreadable + 1))
+    fail_target "$dir" "$name"
     continue
   fi
   read -r execs per_sec <<<"$rate"
@@ -111,7 +125,8 @@ while read -r dir name; do
   if [ $lvl = 2 ]; then
     echo "fuzz: $name in ./$dir: cannot list the dependencies of its test package" >&2
     rows+=("$dir	$name	$execs	$per_sec	unclassified")
-    rc=1
+    unclassified=$((unclassified + 1))
+    fail_target "$dir" "$name"
     continue
   fi
   class=fuzz
@@ -122,8 +137,12 @@ done <<<"$targets"
 table=$(printf 'package\ttarget\texecs\texecs_per_sec\tclass\n'; printf '%s\n' "${rows[@]}")
 echo "fuzz: summary"
 column -t -s $'\t' <<<"$table" 2>/dev/null || printf '%s\n' "$table"
-echo "NOTE: $count fuzz targets, ${secs}s each: $fuzzed fuzz, $sweeps seed-sweep (floor ${floor}/s), $((count - fuzzed - sweeps)) without a rate"
+echo "NOTE: $count fuzz targets, ${secs}s each: $fuzzed fuzz, $sweeps seed-sweep (floor ${floor}/s), $unreadable without a rate, $unclassified unclassified"
 if [ -n "$report" ]; then
   printf '%s\n' "$table" > "$report" || { echo "fuzz.sh: cannot write FUZZ_REPORT $report" >&2; exit 2; }
+fi
+if [ $rc != 0 ]; then
+  list=$(printf '%s, ' "${failed[@]}")
+  echo "fuzz: FAILED: ${list%, }"
 fi
 exit $rc

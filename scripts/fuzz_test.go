@@ -33,6 +33,7 @@ type fuzzRun struct {
 	stderr string
 	rows   map[string][]string
 	note   string
+	last   string
 }
 
 func runFuzzSh(t *testing.T, recordings map[string]string) fuzzRun {
@@ -72,6 +73,9 @@ func runFuzzSh(t *testing.T, recordings map[string]string) fuzzRun {
 	for _, l := range strings.Split(string(out), "\n") {
 		if strings.HasPrefix(l, "NOTE: ") {
 			run.note = l
+		}
+		if l != "" {
+			run.last = l
 		}
 	}
 	tsv, err := os.ReadFile(report)
@@ -203,5 +207,41 @@ func TestFuzzShFailsWhenATargetFails(t *testing.T) {
 	}
 	if got := run.rows["internal/sim/world FuzzWorldSchedule"]; !slices.Equal(got, []string{"300", "150", "fuzz"}) {
 		t.Fatalf("row %v", got)
+	}
+}
+
+func TestFuzzShTakesNoRateFromALineBeforeAnUnreadableLastOne(t *testing.T) {
+	run := runFuzzSh(t, map[string]string{
+		"internal_sim_simtoy__FuzzToySchedule.out": "fuzz: elapsed: 1s, execs: 300 (300/sec)\nfuzz: elapsed: corrupt, execs: unavailable\n",
+	})
+	if run.code != 1 || !strings.Contains(run.stderr, "FuzzToySchedule in ./internal/sim/simtoy: no execution rate") {
+		t.Fatalf("a stale rate was accepted: exit %d: %s", run.code, run.stderr)
+	}
+	if got := run.rows["internal/sim/simtoy FuzzToySchedule"]; !slices.Equal(got, []string{"-", "-", "unreadable"}) {
+		t.Fatalf("row %v", got)
+	}
+}
+
+func TestFuzzShNamesEveryFailedTargetOnItsLastLine(t *testing.T) {
+	run := runFuzzSh(t, map[string]string{
+		"internal_sim_world__FuzzWorldSchedule.out": "fuzz: elapsed: 2s, execs: 300 (150/sec)\n--- FAIL: FuzzWorldSchedule\n",
+		"internal_sim_world__FuzzWorldSchedule.rc":  "1",
+		"internal_sim_simtoy__FuzzToySchedule.out":  "fuzz: elapsed: 3s, gathering baseline coverage: 1/3 completed\n",
+	})
+	if run.code != 1 {
+		t.Fatalf("exit %d: %s", run.code, run.stderr)
+	}
+	if want := "fuzz: FAILED: internal/sim/simtoy FuzzToySchedule, internal/sim/world FuzzWorldSchedule"; run.last != want {
+		t.Fatalf("last line %q, want %q", run.last, want)
+	}
+	if !strings.HasSuffix(run.note, " 1 without a rate, 0 unclassified") {
+		t.Fatalf("note %q", run.note)
+	}
+}
+
+func TestFuzzShPrintsNoFailedLineWhenGreen(t *testing.T) {
+	run := runFuzzSh(t, nil)
+	if run.code != 0 || strings.Contains(run.last, "FAILED") || !strings.HasSuffix(run.note, " 0 without a rate, 0 unclassified") {
+		t.Fatalf("exit %d, last %q, note %q", run.code, run.last, run.note)
 	}
 }
