@@ -217,7 +217,7 @@ has 62 failing cases.
 | 11 | Flushed numbers equal the snapshot; tier S files byte-identical per seed; conservation from the files | `runScenario` (`Flush.Check` round trip + byte-identical files of two runs); `conservation.sql`, `completed.sql`, `rows.sql`, `resets.sql` per scenario; tier R `stopAndRead` (`csvflush.RoundTrip` + conservation from the file) and `tierr-*/*.sql` |
 | 12 | Deterministic, sans-I/O; replay law | detlint over `internal/proxy`, `proxysim`, `enginesrc`; `runScenario` compares trace and state digests of two runs of every seed |
 | 13 | Config validation fails closed | `TestValidationFailsClosedNamingTheKey`, `TestNoConfigOrCommandFileMentionsThePlantSwitch` |
-| 14 | The fuzz target: no seed from a hash, total and local decoding, finds the planted bug | `OpSeed` constant; `TestOpDecodingIsTotalBoundedAndLocal`; `TestFuzzEngineOpsCostIsBounded`; `scripts/fuzz-plant.sh` (found in 13 s); `TestShrunkQueuedVanishScenarioReplays` |
+| 14 | The fuzz target: no seed from a hash, total and local decoding, finds the planted bug | `OpSeed` constant; `TestOpDecodingIsTotalBoundedAndLocal`; `TestFuzzEngineOpsCostIsBounded`; `scripts/fuzz-plant.sh` (found in 1–4 s, 5 of 5 runs); `TestShrunkQueuedVanishScenarioReplays` |
 
 ## Canaries and ablations (all test-only `proxy.Plant` bits)
 
@@ -237,13 +237,21 @@ client, argument, gap in ms below 32), at most 48 operations, trailing bytes ign
 byte string is a valid bounded list and a one-byte change alters one operation. Operations:
 connect, read, write, begin, commit, rollback, reject, extended, slow read, big read,
 disconnect, vanish (reset), stop/resume reading, cancel, advance time, database fragment,
-first-byte stall, database reset at a point, a wrong reset reply. World: 3 clients, 2
-connections, queue 2, short deadlines. After every event the engine's invariants hold
+first-byte stall, database reset at a point, a wrong reset reply. World: 3 clients, 1
+connection, queue 2, short deadlines. (Two connections first: random inputs reached the
+planted bug in 1.25% of cases and the gate's 20 s run missed it in about half the tries;
+with one connection 10.5% of random inputs reach a queued client, and
+`scripts/fuzz-plant.sh` found the bug in 1–4 s in 5 of 5 runs.) After every event the engine's invariants hold
 (registered with the simulator); every client reply is checked (exactly one end marker per
 query, tags match the statement, no `DISCARD` tag ever reaches a client, nothing
 unsolicited); after the operations the world quiesces. Rate on vm-1: about 200–400 per
-second (30 s run: 6,694 executions) — above the 100/s floor. The seed corpus (9 entries)
-runs as plain tests. Fuzzing without the plant found no bug in the runs made.
+second (gate run with two connections: 251/s; one connection on a loaded host: about
+130/s) — above the 100/s floor. The seed corpus (11 entries plus one found input) runs as
+plain tests. Fuzzing without the plant found one input that failed: after a database
+reset between statements, the proxy correctly sent `FATAL 08006` and closed, and the fuzz
+client reported the closed session as an undecodable reply. That was a harness defect (the
+client now treats a proxy FATAL as a close); the input is kept in
+`test/e2e/testdata/fuzz/FuzzEngineOps/` as a regression. No product bug was found.
 
 The pinned inventory test in `agent_work/adversarial/cr01-shrink-fuzz-rules/adv_test.go`
 (14 targets) now sees 15; `TestAdv_6_GateSeedSweepCounts` and

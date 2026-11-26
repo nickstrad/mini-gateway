@@ -67,6 +67,7 @@ Facts a later builder (chunks 6a–13) needs before touching `internal/proxy`,
   late).
 - Tier R starts its own container `<MG_TIER_R_PREFIX>-c06` (Postgres 17, ssl=on with a test
   CA made at test time, scram-sha-256, pg_stat_statements) and builds the binary; about 30 s.
-- `FuzzEngineOps` (fixed seed; 4 bytes per operation; at most 48 operations) runs at
-  roughly 200–400 executions per second on vm-1. Its planted bug is checked by
+- `FuzzEngineOps` (fixed seed; 4 bytes per operation; at most 48 operations; 3 clients over
+  1 connection so queueing is common) runs at roughly 130–250 executions per second on vm-1.
+  Go's fuzz cache changes how fast a planted bug is found; `fuzz-plant.sh` uses an empty one. Its planted bug is checked by
   `scripts/fuzz-plant.sh`; the minimised input is `test/e2e/testdata/shrunk/queued-vanish.faults`.

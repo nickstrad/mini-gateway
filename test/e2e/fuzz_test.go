@@ -34,7 +34,9 @@ func seedCorpus() [][]sim.Fault {
 		with(op(OpDBFragment, 0, 0, 0), op(OpRead, 0, 0, 2), op(OpDBReset, 0, 1, 0), op(OpRead, 1, 0, 2)),
 		with(op(OpBadReset, 0, 2, 0), op(OpRead, 0, 0, 2), op(OpAdvance, 0, 10, 0), op(OpRead, 1, 0, 2)),
 		with(op(OpCancel, 0, 0, 0), op(OpDBFirstByte, 0, 30, 0), op(OpRead, 2, 0, 1), op(OpDisconnect, 2, 0, 0)),
-		{op(OpSlowRead, 0, 0, 0), op(OpSlowRead, 1, 0, 0), op(OpRead, 2, 0, 5), op(OpDisconnect, 1, 0, 2), op(OpRead, 0, 0, 2)},
+		{op(OpSlowRead, 0, 0, 0), op(OpSlowRead, 1, 0, 0), op(OpRead, 2, 0, 5), op(OpVanish, 1, 0, 2), op(OpRead, 0, 0, 2)},
+		{op(OpBegin, 0, 0, 0), op(OpBegin, 1, 0, 0), op(OpWrite, 2, 0, 5), op(OpVanish, 0, 0, 2), op(OpCommit, 1, 0, 2)},
+		{op(OpSlowRead, 2, 0, 0), op(OpBegin, 0, 0, 0), op(OpRead, 1, 0, 5), op(OpVanish, 2, 0, 3), op(OpRollback, 0, 0, 2)},
 	}
 }
 

@@ -18,7 +18,7 @@ import (
 const (
 	OpSeed       = 1
 	OpClients    = 3
-	OpConns      = 2
+	OpConns      = 1
 	OpQueueCap   = 2
 	MaxOps       = 48
 	opBytes      = 4
@@ -334,6 +334,10 @@ func (c *opClient) drain() {
 	for !c.done {
 		m, ok, err := c.sess.Next()
 		if err != nil {
+			if strings.Contains(err.Error(), "FATAL") {
+				c.gone()
+				return
+			}
 			c.ow.violate("client %d: undecodable reply: %v", c.idx, err)
 			c.closeNow()
 			return
