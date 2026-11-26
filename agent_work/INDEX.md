@@ -165,3 +165,4 @@ Record: `chunks/c06-walking-skeleton/` (brief, notes, gate extra).
 | `../scripts/tier-r.sh` (changed) | Passes `MG_TIER_R_PREFIX` and `RUN_DIR` to the tests and also removes every container named `<prefix>-*` (chunk 6 starts `<prefix>-c06` itself) | Opus | Full tier R (chunks 2, 4, 5, 6) green |
 | `../docs/knowledge/walking-skeleton.md` | Facts for the builders of chunks 6a–13: the engine API and read protocol, seams, plants, shell, e2e harness | Opus | — |
 | `chunks/c06-walking-skeleton/gate/extra.sh` | G10: canaries and ablations, the shrunk fuzz scenario, `scripts/fuzz-plant.sh`, the simrun baseline SQL with DuckDB required | Opus | — |
+| `adversarial/c06-walking-skeleton/` | Astra's 46 attacks on the 15 claims. Run: `go test -count=1 ./agent_work/adversarial/c06-walking-skeleton/...`; long and real-server: `ADV_LONG=1` | Astra | 43 held / 3 broken, then 44 pass / 2 settled (`chunks/c06-walking-skeleton/ADVERSARIAL.md`) |
