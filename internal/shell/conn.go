@@ -174,14 +174,18 @@ func (c *conn) closeByEngine() bool {
 		return true
 	}
 	c.engineClosed = true
-	if len(c.queue) >= maxQueueItems+closeSlack {
-		c.mu.Unlock()
-		return false
+	cancel := c.cancelDial
+	c.cancelDial = nil
+	queued := len(c.queue) < maxQueueItems+closeSlack
+	if queued {
+		c.queue = append(c.queue, writeItem{kind: itemClose})
 	}
-	c.queue = append(c.queue, writeItem{kind: itemClose})
 	c.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 	ring(c.writeBell)
-	return true
+	return queued
 }
 
 func (c *conn) next() (writeItem, bool) {
