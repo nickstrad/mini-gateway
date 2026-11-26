@@ -181,6 +181,8 @@ func (h *Harness) post(ev proxy.Event) {
 	h.drain()
 }
 
+func (h *Harness) Post(ev proxy.Event) { h.post(ev) }
+
 func (h *Harness) drain() {
 	if h.running {
 		return
