@@ -36,6 +36,7 @@ type dbConn struct {
 	cur        msgCursor
 	holding    bool
 	hold       []byte
+	trailing   bool
 	client     *client
 	lastTenant work.TenantID
 	queued     int64

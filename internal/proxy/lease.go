@@ -185,7 +185,9 @@ func (e *Engine) relay(d *dbConn, b []byte) []byte {
 			held := d.hold
 			d.hold = nil
 			evs, _ := d.cycle.Receive(nil, held)
+			d.trailing = len(b) > 0
 			e.relayEvents(d, evs, held)
+			d.trailing = false
 			continue
 		}
 		evs, _ := d.cycle.Receive(nil, seg)
@@ -277,7 +279,7 @@ func (e *Engine) release(d *dbConn, c *client, status byte) {
 	e.snap.LeasesEnded++
 	d.client = nil
 	c.db = nil
-	in := ReleaseInput{Conn: d.id, Tenant: c.tenant, LastTenant: d.lastTenant, Status: status, Unread: len(d.hold) > 0 || d.cur.mid()}
+	in := ReleaseInput{Conn: d.id, Tenant: c.tenant, LastTenant: d.lastTenant, Status: status, Unread: len(d.hold) > 0 || d.cur.mid() || d.trailing}
 	act := e.seams.Release.AtRelease(e.now, in)
 	if e.cfg.Plant&(PlantNoReset|PlantReleaseOnAnyReady) != 0 {
 		act = ReleaseLendAsIs
@@ -438,6 +440,10 @@ func (e *Engine) judgeReset(d *dbConn, b []byte) []byte {
 		e.resetFailed(d, why)
 		return nil
 	case rvDone:
+		if n < len(b) {
+			e.resetFailed(d, ResetFailSurprise)
+			return nil
+		}
 		e.t.cancel(&d.resetT)
 		e.snap.Resetting.Add(-1)
 		e.snap.ResetsCompleted++
