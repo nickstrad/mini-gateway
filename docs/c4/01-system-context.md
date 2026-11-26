@@ -1,6 +1,6 @@
 # C4 Level 1: System context
 
-**Built so far: chunks 0–4. Dashed parts are planned.** In this diagram 2 of 7 elements and 0 of 7 relationships are built. Model: diagram `context` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–5. Dashed parts are planned.** In this diagram 2 of 7 elements and 0 of 7 relationships are built. Model: diagram `context` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 Clients speak the Postgres wire protocol to mini-gateway as if it were the database. The proxy holds the only connections to Postgres. Metrics leave through exporters; nothing inside the proxy depends on who reads them.
 

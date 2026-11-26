@@ -1,6 +1,6 @@
 # C4 Level 3: Components: admission
 
-**Built so far: chunks 0–4. Dashed parts are planned.** In this diagram 0 of 12 elements and 0 of 15 relationships are built. Model: diagram `component-admission` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–5. Dashed parts are planned.** In this diagram 1 of 12 elements and 0 of 15 relationships are built. Model: diagram `component-admission` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 Order of decisions: gate, then queue, then dispatch under the limit. The two queue rules are equal, selectable implementations of one interface. Two control loops read two different signals: the queue rule reads queue wait, the adaptive limit reads database round-trip time.
 
@@ -9,7 +9,7 @@ A solid box or arrow is built; a dashed one is planned. An arrow points to the s
 ```mermaid
 flowchart TB
   N_ENGINE["Engine"]:::planned
-  N_WORK["Work vocabulary"]:::planned
+  N_WORK["Work vocabulary"]:::built
   subgraph SCOPE["Admission"]
     A_GATE["Rate gate (GCRA)"]:::planned
     A_TENANTS["Tenant table"]:::planned
@@ -61,7 +61,7 @@ flowchart TB
 | Adaptive limit (AIMD) | component | planned | One integer limit on concurrent leases. Cut by a tenth on a slow statement, a timeout or a connection failure; raised by one when busy. Bounded by a floor, the pool size, a maximum step and a minimum interval. Reads database round-trip time, never queue wait. |
 | Admission snapshot | component | planned | Snapshot(): per tenant and total — depth, oldest-item age, queue-wait histogram, rule state, LIFO switches, sheds by reason, in flight, share, limit and its changes, gate refusals. |
 | Engine | neighbouring container | planned | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code. |
-| Work vocabulary | neighbouring container | planned | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
+| Work vocabulary | neighbouring container | built (chunk 5) | internal/work. Small plain types the cores are written against: tenant, unit of work with its class, reject reason and sharing flags, share key and its scope, outcome, refusal. Carries no Postgres type and imports only the standard library. This is the extension seam for a second protocol. |
 
 ## Relationships
 

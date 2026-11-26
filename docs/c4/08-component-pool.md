@@ -1,6 +1,6 @@
 # C4 Level 3: Components: pool
 
-**Built so far: chunks 0–4. Dashed parts are planned.** In this diagram 0 of 10 elements and 0 of 12 relationships are built. Model: diagram `component-pool` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–5. Dashed parts are planned.** In this diagram 1 of 10 elements and 0 of 12 relationships are built. Model: diagram `component-pool` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 A request never waits inside the pool: the dispatcher releases it only when a lease is available. The pool's job is the cap, the creation rate, and never lending a connection that is not idle and clean.
 
@@ -9,7 +9,7 @@ A solid box or arrow is built; a dashed one is planned. An arrow points to the s
 ```mermaid
 flowchart TB
   N_ENGINE["Engine"]:::planned
-  N_WORK["Work vocabulary"]:::planned
+  N_WORK["Work vocabulary"]:::built
   subgraph SCOPE["Pool"]
     P_ACCT["Connection accounting"]:::planned
     P_CREATE["Creation limiter"]:::planned
@@ -54,7 +54,7 @@ flowchart TB
 | Cancel map | component | planned | Maps proxy-issued key data to the connection a client currently holds, so a client's cancel request reaches its own statement and no one else's. Caps concurrent cancels. |
 | Pool snapshot | component | planned | Snapshot(): open, idle, lent, connecting, creation rate, closes by reason, exhaustion events, breaker state and transitions, dirty-table outcomes, lease-time histogram. |
 | Engine | neighbouring container | planned | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code. |
-| Work vocabulary | neighbouring container | planned | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
+| Work vocabulary | neighbouring container | built (chunk 5) | internal/work. Small plain types the cores are written against: tenant, unit of work with its class, reject reason and sharing flags, share key and its scope, outcome, refusal. Carries no Postgres type and imports only the standard library. This is the extension seam for a second protocol. |
 
 ## Relationships
 

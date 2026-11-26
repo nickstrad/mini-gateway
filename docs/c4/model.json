@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "id": "mini-gateway",
  "title": "mini-gateway — target architecture",
- "revision": "target-approved-2026-11-24-rulings+built-through-chunk-4",
+ "revision": "target-approved-2026-11-24-rulings+built-through-chunk-5",
  "defaultDiagramId": "context",
  "model": {
   "elements": [
@@ -244,11 +244,11 @@
     "id": "c-pgwire",
     "kind": "container",
     "name": "Wire layer",
-    "description": "internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the statement classifier, the error contract, the wire snapshot. The only product package allowed to import pgproto3. Its test packages pgwiretest and wireworld run the session machines in the simulator.",
+    "description": "internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the SQL lexer, the statement classifier with its courtesy reject list, the safe-shape recogniser that decides sharing, the error contract, the wire snapshot. The only product package allowed to import pgproto3. Its test packages pgwiretest, wireworld and clsworld run this code in the simulator.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunk 4 (internal/pgwire): the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the query-cycle tracker, the client query-phase tracker, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest (startup-only proxy, startup fidelity runner) and wireworld (19 wire scenarios). Not built: the codec boundary (no file in the package imports pgproto3 yet), the SQL lexer, the statement classifier, the error contract and its reply builders (chunk 5). No engine exists yet, so only the test proxy drives the machines."
+     "Built in chunks 4 and 5 (internal/pgwire): every component drawn here except the codec boundary. Chunk 4: the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the two trackers, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest and wireworld. Chunk 5: the SQL lexer, the reject list, the statement classifier, the safe-shape recogniser, the error table with its reply builders, and the test package clsworld. Not built: the codec boundary (no file in the package imports pgproto3; the reply builders code their messages by hand). No engine exists yet, so only the test proxies drive this code, and nothing produces outcomes."
     ],
     "docIds": [],
     "sourceIds": [
@@ -269,7 +269,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunk 4 (internal/pgwire): the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the query-cycle tracker, the client query-phase tracker, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest (startup-only proxy, startup fidelity runner) and wireworld (19 wire scenarios). Not built: the codec boundary (no file in the package imports pgproto3 yet), the SQL lexer, the statement classifier, the error contract and its reply builders (chunk 5). No engine exists yet, so only the test proxy drives the machines."
+     "Built in chunks 4 and 5 (internal/pgwire): every component drawn here except the codec boundary. Chunk 4: the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the two trackers, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest and wireworld. Chunk 5: the SQL lexer, the reject list, the statement classifier, the safe-shape recogniser, the error table with its reply builders, and the test package clsworld. Not built: the codec boundary (no file in the package imports pgproto3; the reply builders code their messages by hand). No engine exists yet, so only the test proxies drive this code, and nothing produces outcomes."
     ],
     "docIds": [],
     "sourceIds": [
@@ -283,8 +283,8 @@
     "id": "c-work",
     "kind": "container",
     "name": "Work vocabulary",
-    "description": "internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, outcome. Carries no Postgres type. This is the extension seam for a second protocol.",
-    "status": "planned",
+    "description": "internal/work. Small plain types the cores are written against: tenant, unit of work with its class, reject reason and sharing flags, share key and its scope, outcome, refusal. Carries no Postgres type and imports only the standard library. This is the extension seam for a second protocol.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -300,7 +300,7 @@
     "kind": "container",
     "name": "Work vocabulary",
     "description": "Neighbour in a component view: stands for the container `c-work`.",
-    "status": "planned",
+    "status": "existing",
     "tags": [
      "external",
      "neighbour"
@@ -388,7 +388,7 @@
     "id": "c-coal",
     "kind": "container",
     "name": "Coalescer",
-    "description": "internal/coalesce. Identical provably-read-only statements share one database read. Never writes.",
+    "description": "internal/coalesce. Identical statements share one database read: in auto mode those the wire layer marks as fitting the safe shape, in hinted mode those carrying the client's mark. Never writes.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -462,7 +462,7 @@
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunks 1, 3 and 4: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP."
+     "Built in chunks 1, 3, 4 and 5: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP."
     ],
     "docIds": [],
     "sourceIds": [
@@ -483,7 +483,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunks 1, 3 and 4: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP."
+     "Built in chunks 1, 3, 4 and 5: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP."
     ],
     "docIds": [],
     "sourceIds": [
@@ -538,7 +538,7 @@
      "test"
     ],
     "plannedNotes": [
-     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: no engine exists yet, so the harness drives the fake Postgres, the toy protocol and the wire layer's startup-only test proxy; nothing implements the engine's transport seam, and no synthetic workload drives the cores."
+     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: no engine exists yet, so the harness drives the fake Postgres, the toy protocol and the wire layer's two test proxies (startup-only, and the classifier scenarios' gateway); nothing implements the engine's transport seam, and no synthetic workload drives the cores."
     ],
     "docIds": [],
     "sourceIds": [
@@ -559,7 +559,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: no engine exists yet, so the harness drives the fake Postgres, the toy protocol and the wire layer's startup-only test proxy; nothing implements the engine's transport seam, and no synthetic workload drives the cores."
+     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: no engine exists yet, so the harness drives the fake Postgres, the toy protocol and the wire layer's two test proxies (startup-only, and the classifier scenarios' gateway); nothing implements the engine's transport seam, and no synthetic workload drives the cores."
     ],
     "docIds": [],
     "sourceIds": [
@@ -775,7 +775,7 @@
     "id": "w-codec",
     "kind": "component",
     "name": "Codec boundary",
-    "description": "The only product code that touches pgproto3: encodes message structs to bytes for the reply builders. pgproto3's own blocking reader is not used. The session machines and the trackers do not pass through it; they use the hand-written message coding.",
+    "description": "The only product code that may touch pgproto3: message structs encoded and decoded in one place. pgproto3's own blocking reader is not used. Nothing passes through it so far: the session machines, the trackers and the reply builders all use the hand-written message coding.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [],
@@ -865,7 +865,7 @@
     "id": "w-fatal",
     "kind": "component",
     "name": "Startup FATAL replies",
-    "description": "The replies the session machines make themselves during startup: an ErrorResponse with severity, SQLSTATE and message, the old-format error for a protocol 2 client, and NegotiateProtocolVersion. Also parses the severity and SQLSTATE of an ErrorResponse from the database. The error contract takes the replies over when it lands.",
+    "description": "The replies the session machines make themselves during startup: an ErrorResponse with severity, SQLSTATE and message, the old-format error for a protocol 2 client, and NegotiateProtocolVersion. Also parses the severity and SQLSTATE of an ErrorResponse from the database. The error table lists the startup rows too, but the session machines still build their replies here.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -895,8 +895,23 @@
     "id": "w-lexer",
     "kind": "component",
     "name": "SQL lexer",
-    "description": "Tokens only: strings, escape strings, dollar quotes, comments, identifiers; splits a message into statements. Not a parser.",
-    "status": "planned",
+    "description": "Tokens only: words, quoted and Unicode identifiers, strings (escape, Unicode and bit strings, and a string continued across a newline, joined as Postgres does), dollar quotes, numbers, parameters, operators, punctuation, comments; anything else is a bad token. Not a parser. Linear time.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-rejects",
+    "kind": "component",
+    "name": "Reject list",
+    "description": "The courtesy list as one table: 16 reasons, each with the feature, why it cannot work under transaction pooling and an example, plus the transaction-scoped forms that are allowed. docs/reject-list.md is generated from it. Not a safety mechanism: no guarantee rests on it.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -910,8 +925,23 @@
     "id": "w-classifier",
     "kind": "component",
     "name": "Statement classifier",
-    "description": "Turns a statement into a work unit: rejected (session-level feature), transaction control, provably read-only, shareable with its key. Conservative: what it cannot tokenise is never shared.",
-    "status": "planned",
+    "description": "Turns one Query message into a work unit. Lexes it, splits it on semicolons and rejects the whole message when any statement uses a reject-list feature (first reason wins); otherwise the unit starts a lease, or continues one inside a transaction. Never refuses a message for being untokenisable: it is marked opaque and forwarded. Sets safe-read from the safe-shape recogniser, shareable (safe-read, outside a transaction, not rejected), hinted (the text begins with /* mg:share */) and the share key (exact text, tenant by config). Counts by class and reason in its own snapshot, with a conservation check.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-share",
+    "kind": "component",
+    "name": "Safe-shape recogniser",
+    "description": "Decides what may be shared, from the raw bytes alone: it uses neither the lexer nor the classifier and imports nothing. A text fits when it is at most 4,096 bytes of a small alphabet, starts with SELECT, has no word on the stop list, no time word in a string, and calls only functions on the allow-list. Allocates nothing. docs/safe-shape.md is generated from its tables. Stated limit: it cannot see a view, operator or row-level security policy that hides a side effect.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -925,8 +955,8 @@
     "id": "w-errors",
     "kind": "component",
     "name": "Error contract and reply builders",
-    "description": "One table: each refusal and failure, its SQLSTATE, whether anything reached the database, whether a write may have applied. Builds the ErrorResponse and the correct end marker. docs/error-contract.md is generated from it.",
-    "status": "planned",
+    "description": "One table of 20 rows: each refusal and failure, its reply form, its SQLSTATE, whether anything reached the database, whether a write may have applied, and what happens to the client connection. The reply builder appends the ErrorResponse and the correct end marker for a row and counts replies by row. The discard-until-Sync rule refuses extended-protocol messages. docs/error-contract.md is generated from the table. Later chunks start to send their rows; so far only the two unsupported rows are sent, by the test gateway.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -958,6 +988,23 @@
     "kind": "component",
     "name": "Wire scenarios",
     "description": "internal/pgwire/pgwiretest/wireworld. 19 named scenarios with their exact checks: the test proxy between simulated clients and the fake Postgres, plaintext and TLS, one-byte delivery, and one startup fault each on the client side (TLS stall, bad hello, smuggled bytes, second TLS request, plaintext refused, wrong password, unknown user) or the database side (silence, connect stall, garbage, reset, connection limit, TLS refused, bad certificate, handshake stall). Each failure must be counted under its one reason within its deadline.",
+    "status": "existing",
+    "tags": [
+     "test"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-pgwire",
+    "technology": "Go"
+   },
+   {
+    "id": "w-clsworld",
+    "kind": "component",
+    "name": "Classifier scenarios",
+    "description": "internal/pgwire/pgwiretest/clsworld. Two named scenarios and a small test gateway on simulated streams: it relays startup to the fake Postgres (trust login, no session machines), classifies each Query, answers a rejected one and every extended-protocol message itself, and forwards the rest. Simulated clients send every reject-list feature, plain and in padded spellings. Checks: each gets 0A000, no rejected statement reaches the fake, and the session's search_path is unchanged.",
     "status": "existing",
     "tags": [
      "test"
@@ -1939,6 +1986,21 @@
     "technology": "Go"
    },
    {
+    "id": "o-clssrc",
+    "kind": "component",
+    "name": "Classifier source mapping",
+    "description": "internal/obs/clssrc. The metric declarations of component classifier and the mapping to points from three wire-layer snapshots: the classifier's (statements, by class, rejects by reason, opaque, safe-read, shareable, hinted, share keys), the reply builder's (replies by error-table row, failures) and the discard-until-Sync counters. All counters; every known label value is emitted, zero included; no tenant label.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
     "id": "o-catalog",
     "kind": "component",
     "name": "Metric catalog and schema document",
@@ -1957,7 +2019,7 @@
     "id": "o-simrun",
     "kind": "component",
     "name": "Scenario flush harness",
-    "description": "internal/obs/simrun. Runs a simulator world scenario, or a wire scenario, with a collector that publishes on the virtual clock and with the CSV, JSON, Prometheus and log adapters attached, then checks every output against the final snapshot. Its tests run the five direct baselines and every wire scenario twice per seed and compare the files byte for byte.",
+    "description": "internal/obs/simrun. Runs a simulator world scenario, a wire scenario or a classifier scenario, with a collector that publishes on the virtual clock and with the CSV, JSON, Prometheus and log adapters attached, then checks every output against the final snapshot. Its tests run the five direct baselines, every wire scenario and both classifier scenarios twice per seed and compare the files byte for byte.",
     "status": "existing",
     "tags": [
      "test"
@@ -1974,7 +2036,7 @@
     "id": "o-assert",
     "kind": "component",
     "name": "SQL assertions and their runner",
-    "description": "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The assertion files check the direct baselines' counts and, for each wire scenario, that startup failures by reason, TLS requests by answer and handshake failures equal what was injected and sent.",
+    "description": "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The assertion files check the direct baselines' counts and, for each wire scenario, that startup failures by reason, TLS requests by answer and handshake failures equal what was injected and sent, and for the classifier scenarios that rejects equal the statements sent and the fake Postgres started only what was forwarded (nothing in the reject-only scenario).",
     "status": "existing",
     "tags": [
      "test"
@@ -2951,9 +3013,9 @@
    {
     "id": "w9",
     "sourceId": "w-errors",
-    "targetId": "w-codec",
-    "label": "Encode ErrorResponse and ReadyForQuery",
-    "status": "planned",
+    "targetId": "w-msgs",
+    "label": "Encodes ErrorResponse and ReadyForQuery by hand",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2965,7 +3027,7 @@
     "id": "w10",
     "sourceId": "w-codec",
     "targetId": "w-framer",
-    "label": "Framed message bodies",
+    "label": "Framed message bodies (no caller yet)",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
@@ -3186,8 +3248,34 @@
     "id": "w14",
     "sourceId": "w-classifier",
     "targetId": "w-lexer",
-    "label": "Tokens and statement boundaries",
-    "status": "planned",
+    "label": "Tokens of the message; whether any was bad",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w40",
+    "sourceId": "w-classifier",
+    "targetId": "w-rejects",
+    "label": "The reason of each refusal; the lists of session lock functions and lexing settings",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w41",
+    "sourceId": "w-classifier",
+    "targetId": "w-share",
+    "label": "Raw text in; fits the safe shape or not",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3199,14 +3287,157 @@
     "id": "w15",
     "sourceId": "w-classifier",
     "targetId": "n-work",
-    "label": "Produces work units",
-    "status": "planned",
+    "label": "Produces work units with their reject reason and share key",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
     "technology": "Go types"
+   },
+   {
+    "id": "w42",
+    "sourceId": "w-rejects",
+    "targetId": "n-work",
+    "label": "Names each rule by its reject reason",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "w43",
+    "sourceId": "w-errors",
+    "targetId": "n-work",
+    "label": "Maps a refusal to its row; records reached and write-applied as three-valued facts",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "w44",
+    "sourceId": "w-clsworld",
+    "targetId": "w-classifier",
+    "label": "Classifies every Query the clients send",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w45",
+    "sourceId": "w-clsworld",
+    "targetId": "w-errors",
+    "label": "Builds each refusal; runs the discard-until-Sync rule on every client message",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w52",
+    "sourceId": "w-clsworld",
+    "targetId": "w-rejects",
+    "label": "Takes every rule's example as a statement to send, plain and padded",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w46",
+    "sourceId": "w-clsworld",
+    "targetId": "w-front",
+    "label": "Reads the clients' messages through it",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w47",
+    "sourceId": "w-clsworld",
+    "targetId": "w-framer",
+    "label": "Cuts the startup packet and the database's replies, to follow ReadyForQuery",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w48",
+    "sourceId": "w-clsworld",
+    "targetId": "w-msgs",
+    "label": "Encodes the queries it forwards",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w49",
+    "sourceId": "w-clsworld",
+    "targetId": "w-snapshot",
+    "label": "Keeps wire counters; statements sent is its count of queries seen",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w50",
+    "sourceId": "w-clsworld",
+    "targetId": "n-sim",
+    "label": "Starts the fake Postgres and the simulated clients on simulated streams",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "w51",
+    "sourceId": "w-share",
+    "targetId": "pg",
+    "label": "Tier R test: every corpus text that fits runs on a real Postgres 17 inside a read-only transaction, changes nothing and returns the same rows twice",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "go test, scripts/tier-r.sh, Docker"
    },
    {
     "id": "w16",
@@ -5136,7 +5367,7 @@
     "id": "o55",
     "sourceId": "o-simrun",
     "targetId": "n-pgwire",
-    "label": "Builds and runs a wire scenario (wireworld) and checks it with the scenario's own assertions",
+    "label": "Builds and runs a wire scenario (wireworld) or a classifier scenario (clsworld) and checks it with the scenario's own assertions",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -5149,7 +5380,59 @@
     "id": "o56",
     "sourceId": "o-simrun",
     "targetId": "o-wiresrc",
-    "label": "Takes the wire source of the scenario's test proxy",
+    "label": "Takes the wire source of the scenario's test proxy or test gateway",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o57",
+    "sourceId": "o-clssrc",
+    "targetId": "n-pgwire",
+    "label": "Reads the classifier, reply-builder and discard-until-Sync snapshots",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o58",
+    "sourceId": "o-clssrc",
+    "targetId": "o-collector",
+    "label": "Gives it one source for component classifier, with its metric declarations",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o59",
+    "sourceId": "o-catalog",
+    "targetId": "o-clssrc",
+    "label": "Lists every metric it declares",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o60",
+    "sourceId": "o-simrun",
+    "targetId": "o-clssrc",
+    "label": "Takes the classifier source of the scenario's test gateway",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -5967,7 +6250,7 @@
    "id": "component-engine",
    "kind": "component",
    "title": "Components: engine",
-   "status": "planned",
+   "status": "mixed",
    "nodes": [
     {
      "elementId": "e-transport"
@@ -6196,7 +6479,13 @@
      "elementId": "w-lexer"
     },
     {
+     "elementId": "w-rejects"
+    },
+    {
      "elementId": "w-classifier"
+    },
+    {
+     "elementId": "w-share"
     },
     {
      "elementId": "w-errors"
@@ -6206,6 +6495,9 @@
     },
     {
      "elementId": "w-world"
+    },
+    {
+     "elementId": "w-clsworld"
     },
     {
      "elementId": "n-engine"
@@ -6300,7 +6592,19 @@
      "relationshipId": "w14"
     },
     {
+     "relationshipId": "w40"
+    },
+    {
+     "relationshipId": "w41"
+    },
+    {
      "relationshipId": "w15"
+    },
+    {
+     "relationshipId": "w42"
+    },
+    {
+     "relationshipId": "w43"
     },
     {
      "relationshipId": "w16"
@@ -6331,6 +6635,33 @@
     },
     {
      "relationshipId": "w36"
+    },
+    {
+     "relationshipId": "w44"
+    },
+    {
+     "relationshipId": "w45"
+    },
+    {
+     "relationshipId": "w52"
+    },
+    {
+     "relationshipId": "w46"
+    },
+    {
+     "relationshipId": "w47"
+    },
+    {
+     "relationshipId": "w48"
+    },
+    {
+     "relationshipId": "w49"
+    },
+    {
+     "relationshipId": "w50"
+    },
+    {
+     "relationshipId": "w51"
     }
    ],
    "legend": {
@@ -6407,7 +6738,7 @@
    "id": "component-admission",
    "kind": "component",
    "title": "Components: admission",
-   "status": "planned",
+   "status": "mixed",
    "nodes": [
     {
      "elementId": "a-gate"
@@ -6567,7 +6898,7 @@
    "id": "component-pool",
    "kind": "component",
    "title": "Components: pool",
-   "status": "planned",
+   "status": "mixed",
    "nodes": [
     {
      "elementId": "p-acct"
@@ -6712,7 +7043,7 @@
    "id": "component-coalescer",
    "kind": "component",
    "title": "Components: coalescer",
-   "status": "planned",
+   "status": "mixed",
    "nodes": [
     {
      "elementId": "f-join"
@@ -6851,7 +7182,7 @@
    "id": "component-retry",
    "kind": "component",
    "title": "Components: retry policy",
-   "status": "planned",
+   "status": "mixed",
    "nodes": [
     {
      "elementId": "r-policy"
@@ -7313,6 +7644,9 @@
      "elementId": "o-wiresrc"
     },
     {
+     "elementId": "o-clssrc"
+    },
+    {
      "elementId": "o-catalog"
     },
     {
@@ -7465,10 +7799,19 @@
      "relationshipId": "o53"
     },
     {
+     "relationshipId": "o57"
+    },
+    {
+     "relationshipId": "o58"
+    },
+    {
      "relationshipId": "o37"
     },
     {
      "relationshipId": "o54"
+    },
+    {
+     "relationshipId": "o59"
     },
     {
      "relationshipId": "o38"
@@ -7490,6 +7833,9 @@
     },
     {
      "relationshipId": "o56"
+    },
+    {
+     "relationshipId": "o60"
     },
     {
      "relationshipId": "o43"
@@ -7587,7 +7933,7 @@
    "id": "plan",
    "title": "mini-gateway PLAN.md (approved 2026-11-24)",
    "url": "https://github.com/nickstrad/mini-gateway/blob/main/PLAN.md",
-   "notes": "Target architecture. Built so far: chunks 0–4. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
+   "notes": "Target architecture. Built so far: chunks 0–5. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
   }
  ]
 }
