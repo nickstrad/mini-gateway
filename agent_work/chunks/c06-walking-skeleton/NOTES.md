@@ -351,6 +351,19 @@ and zero backends in the fake. `timers_pending` is zero after `Shutdown`.
 - **`promtext` replacers** are built once (a chunk 3 hot spot: half of every simulated
   flush was spent building a `strings.Replacer` per label).
 
+## One error table (chunk 4's FATAL helper absorbed)
+
+Every FATAL the client session writes now names its row of chunk 5's error table
+(`pgwire.AppendRowFatal(dst, row, message)`, code from the row, Postgres-matching text kept
+where Postgres adds detail such as the user name). Three rows were appended for startup
+refusals that had only a local code: `unknown-database` (3D000), `protocol-version`
+(0A000; version 2 and older still get the old-format error, its close code taken from the
+row) and `no-user` (28000). The bytes on the wire are unchanged (the golden replies of the
+existing rows did not move; `TestReplyGoldenBytes` regenerated for the three new rows only),
+and `docs/error-contract.md` lists them. `fatal.go` keeps only the encoders the fake and the
+test proxy also use (`AppendErrorResponse`, `AppendFatal`, `AppendLegacyFatal`) and the
+SQLSTATE constants the database side reads.
+
 ## Items carried from chunks 3 and 4
 
 | Item | Change | Regression test |

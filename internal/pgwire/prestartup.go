@@ -81,16 +81,16 @@ func (s *ClientSession) tlsRequest(acts []Action) []Action {
 func (s *ClientSession) startup(acts []Action, p startupPacket) []Action {
 	if s.cfg.TLS == ClientTLSRequire && !s.upgraded {
 		s.st.PlaintextRefused++
-		return s.fatal(acts, CodeInvalidAuthorization, "TLS is required for this connection: SSL off", ReasonPlaintextRefused)
+		return s.fatal(acts, ErrRowTLSRequired, "TLS is required for this connection: SSL off", ReasonPlaintextRefused)
 	}
 	major, minor := p.version>>16, p.version&0xffff
 	text := "unsupported frontend protocol " + strconv.Itoa(int(major)) + "." + strconv.Itoa(int(minor)) + ": server supports 3.0 to 3.0"
 	switch {
 	case major < ProtocolVersion30>>16:
 		acts = s.write(acts, AppendLegacyFatal(nil, text), 1)
-		return s.close(acts, Action{Reason: ReasonProtocolVersion, Code: CodeFeatureNotSupported})
+		return s.close(acts, Action{Reason: ReasonProtocolVersion, Code: ErrRowProtocolVersion.Row().Code})
 	case major > ProtocolVersion30>>16:
-		return s.fatal(acts, CodeFeatureNotSupported, text, ReasonProtocolVersion)
+		return s.fatal(acts, ErrRowProtocolVersion, text, ReasonProtocolVersion)
 	}
 	var negotiate []byte
 	p.params, negotiate = splitProtocolOptions(p.params, minor)
@@ -99,10 +99,10 @@ func (s *ClientSession) startup(acts []Action, p startupPacket) []Action {
 	}
 	user, _ := LookupParam(p.params, ParamUser)
 	if user == "" {
-		return s.fatal(acts, CodeInvalidAuthorization, "no PostgreSQL user name specified in startup packet", ReasonNoUser)
+		return s.fatal(acts, ErrRowNoUser, "", ReasonNoUser)
 	}
 	if name, ok := s.refusedParam(p.params); !ok {
-		return s.fatal(acts, CodeFeatureNotSupported, `unsupported startup parameter "`+name+
+		return s.fatal(acts, ErrRowStartupParameter, `unsupported startup parameter "`+name+
 			`": it differs from the pool's fixed session settings`, ReasonParamRefused)
 	}
 	s.user = user

@@ -26,5 +26,8 @@ Every reply the proxy makes itself is an `ErrorResponse` with the severity, SQLS
 | `protocol-violation` | Malformed or unexpected client message, or a client deadline passed mid-message | `FATAL` — FATAL, then close | `08P01` | mini-gateway: protocol violation | no | no | no | closed | `reply_protocol-violation` | 4 |
 | `partial-reply` | Reply already partly sent to the client when the database connection failed | close, no message | — | — | yes | unknown | per the rows above | closed | `reply_partial-reply` | 6 |
 | `pass-through` | An error from Postgres itself | Postgres's own reply, unchanged | — | — | yes | unknown | as Postgres says | as Postgres decides | `reply_pass-through` | 6 |
+| `unknown-database` | Startup names a database other than the pool's | `FATAL` — FATAL, then close | `3D000` | database does not exist | no | no | no, fix the database name | closed | `reply_unknown-database` | 4 |
+| `protocol-version` | Startup asks for a protocol major version other than 3 (version 2 and older get the old-format error) | `FATAL` — FATAL, then close | `0A000` | unsupported frontend protocol | no | no | no, change the client | closed | `reply_protocol-version` | 4 |
+| `no-user` | Startup packet names no user | `FATAL` — FATAL, then close | `28000` | no PostgreSQL user name specified in startup packet | no | no | no, fix the client | closed | `reply_no-user` | 4 |
 
 "Reached the database? no" means no byte of the request was written to a database connection. The proxy's own retry may act only on rows where that column is "no".

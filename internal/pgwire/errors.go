@@ -55,6 +55,9 @@ const (
 	// ErrRowPassThrough accounts for Postgres's own ErrorResponse relayed
 	// unchanged; ReplyBuilder refuses to synthesize a message for it.
 	ErrRowPassThrough
+	ErrRowUnknownDatabase
+	ErrRowProtocolVersion
+	ErrRowNoUser
 	// ErrRowCount is the sentinel count of rows in ErrorRows.
 	ErrRowCount
 )
@@ -208,6 +211,20 @@ var ErrorRows = [ErrRowCount]ErrorRow{
 		"", work.Yes, work.Unknown, "per the rows above", ErrorRowConnClosed, work.RefusalNone, 6},
 	ErrRowPassThrough: {"pass-through", "An error from Postgres itself", ErrorRowPassThrough, "",
 		"", work.Yes, work.Unknown, "as Postgres says", ErrorRowConnAsPostgres, work.RefusalNone, 6},
+	ErrRowUnknownDatabase: {"unknown-database", "Startup names a database other than the pool's", ErrorRowFatal, "3D000",
+		"database does not exist", work.No, work.No, "no, fix the database name", ErrorRowConnClosed, work.RefusalNone, 4},
+	ErrRowProtocolVersion: {"protocol-version", "Startup asks for a protocol major version other than 3 (version 2 and older get the old-format error)", ErrorRowFatal, "0A000",
+		"unsupported frontend protocol", work.No, work.No, "no, change the client", ErrorRowConnClosed, work.RefusalNone, 4},
+	ErrRowNoUser: {"no-user", "Startup packet names no user", ErrorRowFatal, "28000",
+		"no PostgreSQL user name specified in startup packet", work.No, work.No, "no, fix the client", ErrorRowConnClosed, work.RefusalNone, 4},
+}
+
+func AppendRowFatal(dst []byte, id ErrRowID, message string) []byte {
+	row := id.Row()
+	if message == "" {
+		message = row.Message
+	}
+	return AppendErrorResponse(dst, SeverityFatal, row.Code, message)
 }
 
 // ErrRowFor maps a core pre-forward refusal to its ErrorRowError entry.
