@@ -51,7 +51,7 @@ func hasPrefixAny(s string, prefixes []string) bool {
 func TestOneRawExportImportRule(t *testing.T) {
 	root := repoRoot(t)
 	forbidden := append(append([]string{}, adapters...), "internal/obs/simrun", "internal/obs/catalog")
-	for _, dir := range []string{"internal/sim", "internal/testclient", "internal/randdist", "internal/obs/simsrc", "internal/obs/wiresrc"} {
+	for _, dir := range []string{"internal/sim", "internal/testclient", "internal/randdist", "internal/obs/simsrc", "internal/obs/wiresrc", "internal/obs/clssrc"} {
 		for file, imps := range importsUnder(t, filepath.Join(root, dir)) {
 			for _, imp := range imps {
 				if hasPrefixAny(imp, forbidden) {

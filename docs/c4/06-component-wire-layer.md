@@ -1,15 +1,15 @@
 # C4 Level 3: Components: wire layer
 
-**Built so far: chunks 0–4. Dashed parts are planned.** In this diagram 12 of 20 elements and 24 of 36 relationships are built. Model: diagram `component-wire` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–5. Dashed parts are planned.** In this diagram 19 of 23 elements and 40 of 49 relationships are built. Model: diagram `component-wire` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
-pgproto3 gives message structs and nothing else. The framer, the session machines, SCRAM, transaction tracking, classification and error mapping are ours. Everything here is a pure state machine that accepts bytes in any fragments. Chunk 4 built the sessions: the machines and trackers code their few messages by hand, so no file in the package imports pgproto3 yet; the codec boundary comes with the reply builders. No engine exists yet, so a startup-only test proxy drives the machines in the simulator, between simulated clients and the fake Postgres.
+pgproto3 gives message structs and nothing else. The framer, the session machines, SCRAM, transaction tracking, classification and error mapping are ours. Everything here is a pure state machine or a pure function. Chunk 4 built the sessions. Chunk 5 built the classifier and the contracts: session safety does not depend on reading SQL (the pool will reset every connection after every lease), so the reject list is a courtesy, and what may be shared is decided by a recogniser that does not use the lexer. The machines, the trackers and the reply builders code their messages by hand, so no file in the package imports pgproto3 and the codec boundary has no caller yet. No engine exists yet, so two test proxies drive this code in the simulator, between simulated clients and the fake Postgres.
 
 A solid box or arrow is built; a dashed one is planned. An arrow points to the supplier.
 
 ```mermaid
 flowchart TB
   N_ENGINE["Engine"]:::planned
-  N_WORK["Work vocabulary"]:::planned
+  N_WORK["Work vocabulary"]:::built
   N_SIM["Simulator harness"]:::planned
   PGPROTO3[["pgproto3 (from pgx/v5)"]]:::built
   PG[("Postgres")]:::planned
@@ -24,11 +24,14 @@ flowchart TB
     W_SCRAM["SCRAM-SHA-256 functions"]:::built
     W_FATAL["Startup FATAL replies"]:::built
     W_SNAPSHOT["Wire snapshot"]:::built
-    W_LEXER["SQL lexer"]:::planned
-    W_CLASSIFIER["Statement classifier"]:::planned
-    W_ERRORS["Error contract and reply builders"]:::planned
+    W_LEXER["SQL lexer"]:::built
+    W_REJECTS["Reject list"]:::built
+    W_CLASSIFIER["Statement classifier"]:::built
+    W_SHARE["Safe-shape recogniser"]:::built
+    W_ERRORS["Error contract and reply builders"]:::built
     W_HARNESS["Startup-only test proxy and startup fidelity runner"]:::built
     W_WORLD["Wire scenarios"]:::built
+    W_CLSWORLD["Classifier scenarios"]:::built
   end
   N_ENGINE -.->|1| W_CLIENT
   N_ENGINE -.->|2| W_BACKEND
@@ -51,21 +54,34 @@ flowchart TB
   W_BACKEND -->|19| W_SNAPSHOT
   W_CYCLE -->|20| W_SNAPSHOT
   W_FRONT -->|21| W_SNAPSHOT
-  W_ERRORS -.->|22| W_CODEC
+  W_ERRORS -->|22| W_MSGS
   W_CODEC -.->|23| W_FRAMER
   W_CODEC -.->|24| PGPROTO3
-  W_CLASSIFIER -.->|25| W_LEXER
-  W_CLASSIFIER -.->|26| N_WORK
-  W_CYCLE -.->|27| N_WORK
-  W_HARNESS -->|28| W_CLIENT
-  W_HARNESS -->|29| W_BACKEND
-  W_HARNESS -->|30| W_CYCLE
-  W_HARNESS -->|31| W_FRONT
-  W_HARNESS -->|32| W_SNAPSHOT
-  W_HARNESS -->|33| N_SIM
-  W_WORLD -->|34| W_HARNESS
-  W_WORLD -->|35| N_SIM
-  W_HARNESS -->|36| PG
+  W_CLASSIFIER -->|25| W_LEXER
+  W_CLASSIFIER -->|26| W_REJECTS
+  W_CLASSIFIER -->|27| W_SHARE
+  W_CLASSIFIER -->|28| N_WORK
+  W_REJECTS -->|29| N_WORK
+  W_ERRORS -->|30| N_WORK
+  W_CYCLE -.->|31| N_WORK
+  W_HARNESS -->|32| W_CLIENT
+  W_HARNESS -->|33| W_BACKEND
+  W_HARNESS -->|34| W_CYCLE
+  W_HARNESS -->|35| W_FRONT
+  W_HARNESS -->|36| W_SNAPSHOT
+  W_HARNESS -->|37| N_SIM
+  W_WORLD -->|38| W_HARNESS
+  W_WORLD -->|39| N_SIM
+  W_HARNESS -->|40| PG
+  W_CLSWORLD -->|41| W_CLASSIFIER
+  W_CLSWORLD -->|42| W_ERRORS
+  W_CLSWORLD -->|43| W_REJECTS
+  W_CLSWORLD -->|44| W_FRONT
+  W_CLSWORLD -->|45| W_FRAMER
+  W_CLSWORLD -->|46| W_MSGS
+  W_CLSWORLD -->|47| W_SNAPSHOT
+  W_CLSWORLD -->|48| N_SIM
+  W_SHARE -->|49| PG
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned
@@ -81,22 +97,25 @@ flowchart TB
 | --- | --- | --- | --- |
 | Framer | component | built (chunk 4) | Ours. Cuts a byte stream into messages (type byte, 4-byte length, body) whatever the fragmentation, down to one byte at a time; also the untyped packets before startup. Enforces a maximum message size and refuses an oversized message from its header alone. Can skip the bodies of chosen message types instead of buffering them. |
 | Message coding | component | built (chunk 4) | Ours, written by hand, no pgproto3. Appends each message the session machines write (TLS and startup packets, authentication, parameter status, key data, ready, query, terminate, cancel) and parses the startup packet and its parameters. |
-| Codec boundary | component | planned | The only product code that touches pgproto3: encodes message structs to bytes for the reply builders. pgproto3's own blocking reader is not used. The session machines and the trackers do not pass through it; they use the hand-written message coding. |
+| Codec boundary | component | planned | The only product code that may touch pgproto3: message structs encoded and decoded in one place. pgproto3's own blocking reader is not used. Nothing passes through it so far: the session machines, the trackers and the reply builders all use the hand-written message coding. |
 | Client session machine | component | built (chunk 4) | Client-facing, startup only: events in, actions out. Runs the exchange before startup: answers a TLS request S or N by client_tls.mode and asks its driver to start TLS (at most one upgrade; a byte before the handshake result is a violation), answers a GSS encryption request N. Reads the startup message, refuses plaintext when TLS is required, negotiates protocol 3.x down to 3.0, finds the tenant by user, runs SCRAM-SHA-256 (server side; trust only as a named test setting; an unknown user gets the wrong-password reply), sends the parameter set and proxy-issued key data, recognises cancel requests. Every failed startup ends under one reason. Consumes no byte after ready. |
 | Database session machine | component | built (chunk 4) | Database-facing, startup only: events in, actions out. Sends a TLS request first when backend_tls.mode asks for one (an N answer is a connect failure; a byte after S before the handshake result is a violation), then startup, SCRAM-SHA-256 (client side, never -PLUS), collects server parameters and key data, reaches ready. Every failed startup ends in one class (TLS refused or failed, authentication, too many connections, server FATAL, violation, deadline, connection lost). |
 | Query-cycle tracker | component | built (chunk 4) | Follows a reply to its ReadyForQuery, reports the transaction status byte (idle, in transaction, failed), flags an unsolicited ParameterStatus (the connection is now dirty) and any protocol surprise, including a stream that ends without its marker. Never buffers row data. Unknown but well-framed message types are reported and passed through. |
 | Client query-phase tracker | component | built (chunk 4) | Reads the client's bytes after login. Reports each Query (body copied, bounded), Terminate, and every extended-protocol message as one to refuse; any other message type is a violation. |
 | SCRAM-SHA-256 functions | component | built (chunk 4) | Pure functions on the standard library: verifier, key derivation, nonce, the GS2 header rule, and the server and client sides of the exchange with bounded messages. Shared with the simulator's fake Postgres and simulated clients. |
-| Startup FATAL replies | component | built (chunk 4) | The replies the session machines make themselves during startup: an ErrorResponse with severity, SQLSTATE and message, the old-format error for a protocol 2 client, and NegotiateProtocolVersion. Also parses the severity and SQLSTATE of an ErrorResponse from the database. The error contract takes the replies over when it lands. |
+| Startup FATAL replies | component | built (chunk 4) | The replies the session machines make themselves during startup: an ErrorResponse with severity, SQLSTATE and message, the old-format error for a protocol 2 client, and NegotiateProtocolVersion. Also parses the severity and SQLSTATE of an ErrorResponse from the database. The error table lists the startup rows too, but the session machines still build their replies here. |
 | Wire snapshot | component | built (chunk 4) | The wire layer's counters as one plain struct, per side: startups begun, completed, in progress and failed by reason; pre-startup requests by kind and answer; TLS handshakes by version and failure; plaintext refused; authentication failures by cause; messages and bytes each way; violations; oversized messages; what the trackers saw. Its check: begun = completed + failed + in startup, on each side. |
-| SQL lexer | component | planned | Tokens only: strings, escape strings, dollar quotes, comments, identifiers; splits a message into statements. Not a parser. |
-| Statement classifier | component | planned | Turns a statement into a work unit: rejected (session-level feature), transaction control, provably read-only, shareable with its key. Conservative: what it cannot tokenise is never shared. |
-| Error contract and reply builders | component | planned | One table: each refusal and failure, its SQLSTATE, whether anything reached the database, whether a write may have applied. Builds the ErrorResponse and the correct end marker. docs/error-contract.md is generated from it. |
+| SQL lexer | component | built (chunk 5) | Tokens only: words, quoted and Unicode identifiers, strings (escape, Unicode and bit strings, and a string continued across a newline, joined as Postgres does), dollar quotes, numbers, parameters, operators, punctuation, comments; anything else is a bad token. Not a parser. Linear time. |
+| Reject list | component | built (chunk 5) | The courtesy list as one table: 16 reasons, each with the feature, why it cannot work under transaction pooling and an example, plus the transaction-scoped forms that are allowed. docs/reject-list.md is generated from it. Not a safety mechanism: no guarantee rests on it. |
+| Statement classifier | component | built (chunk 5) | Turns one Query message into a work unit. Lexes it, splits it on semicolons and rejects the whole message when any statement uses a reject-list feature (first reason wins); otherwise the unit starts a lease, or continues one inside a transaction. Never refuses a message for being untokenisable: it is marked opaque and forwarded. Sets safe-read from the safe-shape recogniser, shareable (safe-read, outside a transaction, not rejected), hinted (the text begins with /* mg:share */) and the share key (exact text, tenant by config). Counts by class and reason in its own snapshot, with a conservation check. |
+| Safe-shape recogniser | component | built (chunk 5) | Decides what may be shared, from the raw bytes alone: it uses neither the lexer nor the classifier and imports nothing. A text fits when it is at most 4,096 bytes of a small alphabet, starts with SELECT, has no word on the stop list, no time word in a string, and calls only functions on the allow-list. Allocates nothing. docs/safe-shape.md is generated from its tables. Stated limit: it cannot see a view, operator or row-level security policy that hides a side effect. |
+| Error contract and reply builders | component | built (chunk 5) | One table of 20 rows: each refusal and failure, its reply form, its SQLSTATE, whether anything reached the database, whether a write may have applied, and what happens to the client connection. The reply builder appends the ErrorResponse and the correct end marker for a row and counts replies by row. The discard-until-Sync rule refuses extended-protocol messages. docs/error-contract.md is generated from the table. Later chunks start to send their rows; so far only the two unsupported rows are sent, by the test gateway. |
 | Startup-only test proxy and startup fidelity runner | component, test code | built (chunk 4) | internal/pgwire/pgwiretest. A proxy for tests on simulated streams: the two session machines back to back, one database connection per client, no pool; after login it relays queries and replies through both trackers. A database startup failure reaches the client as FATAL 08006. Also the startup fidelity runner: one script (TLS answers, SCRAM, protocol versions) played against the fake Postgres and compared with Postgres 17's transcript, recorded for CI or live in tier R. |
 | Wire scenarios | component, test code | built (chunk 4) | internal/pgwire/pgwiretest/wireworld. 19 named scenarios with their exact checks: the test proxy between simulated clients and the fake Postgres, plaintext and TLS, one-byte delivery, and one startup fault each on the client side (TLS stall, bad hello, smuggled bytes, second TLS request, plaintext refused, wrong password, unknown user) or the database side (silence, connect stall, garbage, reset, connection limit, TLS refused, bad certificate, handshake stall). Each failure must be counted under its one reason within its deadline. |
+| Classifier scenarios | component, test code | built (chunk 5) | internal/pgwire/pgwiretest/clsworld. Two named scenarios and a small test gateway on simulated streams: it relays startup to the fake Postgres (trust login, no session machines), classifies each Query, answers a rejected one and every extended-protocol message itself, and forwards the rest. Simulated clients send every reject-list feature, plain and in padded spellings. Checks: each gets 0A000, no rejected statement reaches the fake, and the session's search_path is unchanged. |
 | Engine | neighbouring container | planned | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code. |
-| Work vocabulary | neighbouring container | planned | internal/work. Small plain types the cores are written against: tenant, unit of work and its class, share key, outcome. Carries no Postgres type. This is the extension seam for a second protocol. |
-| Simulator harness | neighbouring container | planned | internal/sim and its sub-packages simnet, simtls, fakepg, workload, world, simtest and simtoy; internal/testclient; internal/randdist; cmd/mgsim; scripts/tier-r.sh. A deterministic single-threaded world: virtual clock, simulated byte streams, a simulated TLS handshake, a fake Postgres, simulated clients, scenarios with a driver interface, faults, replay. Its fake Postgres is checked against a real Postgres 17. Test code; built before any proxy code. **So far:** Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: no engine exists yet, so the harness drives the fake Postgres, the toy protocol and the wire layer's startup-only test proxy; nothing implements the engine's transport seam, and no synthetic workload drives the cores. |
+| Work vocabulary | neighbouring container | built (chunk 5) | internal/work. Small plain types the cores are written against: tenant, unit of work with its class, reject reason and sharing flags, share key and its scope, outcome, refusal. Carries no Postgres type and imports only the standard library. This is the extension seam for a second protocol. |
+| Simulator harness | neighbouring container | planned | internal/sim and its sub-packages simnet, simtls, fakepg, workload, world, simtest and simtoy; internal/testclient; internal/randdist; cmd/mgsim; scripts/tier-r.sh. A deterministic single-threaded world: virtual clock, simulated byte streams, a simulated TLS handshake, a fake Postgres, simulated clients, scenarios with a driver interface, faults, replay. Its fake Postgres is checked against a real Postgres 17. Test code; built before any proxy code. **So far:** Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: no engine exists yet, so the harness drives the fake Postgres, the toy protocol and the wire layer's two test proxies (startup-only, and the classifier scenarios' gateway); nothing implements the engine's transport seam, and no synthetic workload drives the cores. |
 | pgproto3 (from pgx/v5) | softwareSystem, external | built (chunk 2) | Go package github.com/jackc/pgx/v5/pgproto3: Postgres wire message structs with Encode and Decode. The one external dependency, used for message encoding only. |
 | Postgres | softwareSystem, external | planned | One ordinary Postgres server. Sees at most the fleet's connection budget, all logged in as one role. |
 
@@ -125,18 +144,31 @@ flowchart TB
 | 19 | Database session machine | Wire snapshot | built | Counts database startups, TLS answers and failures by class | Go |
 | 20 | Query-cycle tracker | Wire snapshot | built | Counts replies, ready by status, errors and unsolicited messages | Go |
 | 21 | Client query-phase tracker | Wire snapshot | built | Counts queries seen, terminates and extended messages refused | Go |
-| 22 | Error contract and reply builders | Codec boundary | planned | Encode ErrorResponse and ReadyForQuery | Go |
-| 23 | Codec boundary | Framer | planned | Framed message bodies | Go |
+| 22 | Error contract and reply builders | Message coding | built | Encodes ErrorResponse and ReadyForQuery by hand | Go |
+| 23 | Codec boundary | Framer | planned | Framed message bodies (no caller yet) | Go |
 | 24 | Codec boundary | pgproto3 (from pgx/v5) | planned | Message structs: Encode, Decode | Go import |
-| 25 | Statement classifier | SQL lexer | planned | Tokens and statement boundaries | Go |
-| 26 | Statement classifier | Work vocabulary | planned | Produces work units | Go types |
-| 27 | Query-cycle tracker | Work vocabulary | planned | Produces outcomes | Go types |
-| 28 | Startup-only test proxy and startup fidelity runner | Client session machine | built | Drives one per client connection, with the simulated handshake and a startup deadline | Go, test code |
-| 29 | Startup-only test proxy and startup fidelity runner | Database session machine | built | Drives one per database connection, opened after the client is authenticated | Go, test code |
-| 30 | Startup-only test proxy and startup fidelity runner | Query-cycle tracker | built | Relays each reply through it | Go, test code |
-| 31 | Startup-only test proxy and startup fidelity runner | Client query-phase tracker | built | Relays each client message through it | Go, test code |
-| 32 | Startup-only test proxy and startup fidelity runner | Wire snapshot | built | Registers its conservation check as a simulator invariant | Go, test code |
-| 33 | Startup-only test proxy and startup fidelity runner | Simulator harness | built | Listens and dials on simulated streams; plays the simulated TLS handshake; the fidelity runner dials the fake Postgres | Go, test code |
-| 34 | Wire scenarios | Startup-only test proxy and startup fidelity runner | built | Builds one test proxy per scenario and reads its wire snapshot | Go, test code |
-| 35 | Wire scenarios | Simulator harness | built | Starts the fake Postgres and the simulated clients; injects the scenario's fault | Go, test code |
-| 36 | Startup-only test proxy and startup fidelity runner | Postgres | built | Tier R: plays the startup fidelity script against two Postgres 17 servers, ssl off and ssl on with SCRAM; on request rewrites the recording CI replays | scripts/tier-r.sh, Docker, go test |
+| 25 | Statement classifier | SQL lexer | built | Tokens of the message; whether any was bad | Go |
+| 26 | Statement classifier | Reject list | built | The reason of each refusal; the lists of session lock functions and lexing settings | Go |
+| 27 | Statement classifier | Safe-shape recogniser | built | Raw text in; fits the safe shape or not | Go |
+| 28 | Statement classifier | Work vocabulary | built | Produces work units with their reject reason and share key | Go types |
+| 29 | Reject list | Work vocabulary | built | Names each rule by its reject reason | Go types |
+| 30 | Error contract and reply builders | Work vocabulary | built | Maps a refusal to its row; records reached and write-applied as three-valued facts | Go types |
+| 31 | Query-cycle tracker | Work vocabulary | planned | Produces outcomes | Go types |
+| 32 | Startup-only test proxy and startup fidelity runner | Client session machine | built | Drives one per client connection, with the simulated handshake and a startup deadline | Go, test code |
+| 33 | Startup-only test proxy and startup fidelity runner | Database session machine | built | Drives one per database connection, opened after the client is authenticated | Go, test code |
+| 34 | Startup-only test proxy and startup fidelity runner | Query-cycle tracker | built | Relays each reply through it | Go, test code |
+| 35 | Startup-only test proxy and startup fidelity runner | Client query-phase tracker | built | Relays each client message through it | Go, test code |
+| 36 | Startup-only test proxy and startup fidelity runner | Wire snapshot | built | Registers its conservation check as a simulator invariant | Go, test code |
+| 37 | Startup-only test proxy and startup fidelity runner | Simulator harness | built | Listens and dials on simulated streams; plays the simulated TLS handshake; the fidelity runner dials the fake Postgres | Go, test code |
+| 38 | Wire scenarios | Startup-only test proxy and startup fidelity runner | built | Builds one test proxy per scenario and reads its wire snapshot | Go, test code |
+| 39 | Wire scenarios | Simulator harness | built | Starts the fake Postgres and the simulated clients; injects the scenario's fault | Go, test code |
+| 40 | Startup-only test proxy and startup fidelity runner | Postgres | built | Tier R: plays the startup fidelity script against two Postgres 17 servers, ssl off and ssl on with SCRAM; on request rewrites the recording CI replays | scripts/tier-r.sh, Docker, go test |
+| 41 | Classifier scenarios | Statement classifier | built | Classifies every Query the clients send | Go, test code |
+| 42 | Classifier scenarios | Error contract and reply builders | built | Builds each refusal; runs the discard-until-Sync rule on every client message | Go, test code |
+| 43 | Classifier scenarios | Reject list | built | Takes every rule's example as a statement to send, plain and padded | Go, test code |
+| 44 | Classifier scenarios | Client query-phase tracker | built | Reads the clients' messages through it | Go, test code |
+| 45 | Classifier scenarios | Framer | built | Cuts the startup packet and the database's replies, to follow ReadyForQuery | Go, test code |
+| 46 | Classifier scenarios | Message coding | built | Encodes the queries it forwards | Go, test code |
+| 47 | Classifier scenarios | Wire snapshot | built | Keeps wire counters; statements sent is its count of queries seen | Go, test code |
+| 48 | Classifier scenarios | Simulator harness | built | Starts the fake Postgres and the simulated clients on simulated streams | Go, test code |
+| 49 | Safe-shape recogniser | Postgres | built | Tier R test: every corpus text that fits runs on a real Postgres 17 inside a read-only transaction, changes nothing and returns the same rows twice | go test, scripts/tier-r.sh, Docker |

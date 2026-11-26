@@ -90,7 +90,7 @@ echo "NOTE: Postgres $version in $prefix-main (127.0.0.1:$main_port), $prefix-bu
 rc=0
 MG_TIER_R=1 MG_PG_ADDR="127.0.0.1:$main_port" MG_PG_BURST_ADDR="127.0.0.1:$burst_port" \
   MG_PG_SCRAM_ADDR="127.0.0.1:$scram_port" MG_PG_SCRAM_PASSWORD="$scram_pw" \
-  go test -count=1 -timeout 20m -v -run '^TestTierR' ./... >"$log" 2>&1 || rc=$?
+  go test -p 1 -count=1 -timeout 30m -v -run '^TestTierR' ./... >"$log" 2>&1 || rc=$?
 
 passed=$(grep -cE -- '^\s*--- PASS: TestTierR' "$log" || true)
 failed=$(grep -cE -- '^\s*--- FAIL: ' "$log" || true)

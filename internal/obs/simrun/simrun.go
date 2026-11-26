@@ -15,6 +15,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs/jsonstats"
 	"github.com/nickstrad/mini-gateway/internal/obs/promtext"
 	"github.com/nickstrad/mini-gateway/internal/obs/simsrc"
+	"github.com/nickstrad/mini-gateway/internal/pgwire/pgwiretest/clsworld"
 	"github.com/nickstrad/mini-gateway/internal/pgwire/pgwiretest/wireworld"
 	"github.com/nickstrad/mini-gateway/internal/sim"
 	"github.com/nickstrad/mini-gateway/internal/sim/workload"
@@ -61,6 +62,8 @@ type Run struct {
 	Publishes int64
 	PublishAt []sim.Time
 	Wire      wireworld.Result
+	// Classifier holds the completed clsworld result when Run came from Classifier.
+	Classifier clsworld.Result
 }
 
 // RunID formats the schema v1 simulator run identifier "<scenario>/<seed>/<arm>".

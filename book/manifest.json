@@ -39,9 +39,9 @@
     {
       "number": 5,
       "chunk": 5,
-      "title": "What a statement is allowed to do: classification and the error contract",
-      "file": "book/chapters/05-classifier-and-contracts.md",
-      "status": "planned"
+      "title": "What the proxy says and what it will not guess: the error contract, a courtesy list, and a safe shape for sharing",
+      "file": "book/chapters/05-classifier.md",
+      "status": "live"
     },
     {
       "number": 6,

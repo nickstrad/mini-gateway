@@ -27,6 +27,7 @@ flowchart TB
     O_OTLP["OTLP/HTTP push exporter"]:::planned
     O_SIMSRC["Simulator source mappings"]:::built
     O_WIRESRC["Wire source mapping"]:::built
+    O_CLSSRC["Classifier source mapping"]:::built
     O_CATALOG["Metric catalog and schema document"]:::built
     O_SIMRUN["Scenario flush harness"]:::built
     O_ASSERT["SQL assertions and their runner"]:::built
@@ -69,21 +70,25 @@ flowchart TB
   O_SIMSRC -->|36| O_COLLECTOR
   O_WIRESRC -->|37| N_PGWIRE
   O_WIRESRC -->|38| O_COLLECTOR
-  O_CATALOG -->|39| O_SIMSRC
-  O_CATALOG -->|40| O_WIRESRC
-  O_CATALOG -->|41| O_CSV
-  O_CATALOG -->|42| O_REGISTRY
-  O_SIMRUN -->|43| N_SIM
-  O_SIMRUN -->|44| O_COLLECTOR
-  O_SIMRUN -->|45| O_SIMSRC
-  O_SIMRUN -->|46| N_PGWIRE
-  O_SIMRUN -->|47| O_WIRESRC
-  O_SIMRUN -->|48| O_CSV
-  O_SIMRUN -->|49| O_PROM
-  O_SIMRUN -->|50| O_JSON
-  O_SIMRUN -->|51| O_ASSERT
-  O_ASSERT -->|52| DUCKDB
-  O_ASSERT -->|53| CSVFILES
+  O_CLSSRC -->|39| N_PGWIRE
+  O_CLSSRC -->|40| O_COLLECTOR
+  O_CATALOG -->|41| O_SIMSRC
+  O_CATALOG -->|42| O_WIRESRC
+  O_CATALOG -->|43| O_CLSSRC
+  O_CATALOG -->|44| O_CSV
+  O_CATALOG -->|45| O_REGISTRY
+  O_SIMRUN -->|46| N_SIM
+  O_SIMRUN -->|47| O_COLLECTOR
+  O_SIMRUN -->|48| O_SIMSRC
+  O_SIMRUN -->|49| N_PGWIRE
+  O_SIMRUN -->|50| O_WIRESRC
+  O_SIMRUN -->|51| O_CLSSRC
+  O_SIMRUN -->|52| O_CSV
+  O_SIMRUN -->|53| O_PROM
+  O_SIMRUN -->|54| O_JSON
+  O_SIMRUN -->|55| O_ASSERT
+  O_ASSERT -->|56| DUCKDB
+  O_ASSERT -->|57| CSVFILES
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned

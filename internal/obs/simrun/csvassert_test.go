@@ -76,7 +76,9 @@ func baselineRuns(t *testing.T) string {
 				return
 			}
 		}
-		baselineErr = wireRuns(dir)
+		if baselineErr = wireRuns(dir); baselineErr == nil {
+			baselineErr = classifierRuns(dir)
+		}
 	})
 	if baselineErr != nil {
 		t.Fatal(baselineErr)
