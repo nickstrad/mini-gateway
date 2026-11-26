@@ -75,3 +75,12 @@ Two, both made when the first final-stage gate run failed on them (2026-11-26):
   PLAN.md section 6.6: none runs the simulator or derives a seed from its input (the
   check for hash calls in the entry points passed). The pinned number is now 14. Every
   chunk that adds a fuzz target repeats this review.
+
+## A gate script change by the orchestrator
+
+`scripts/tier-r.sh` now runs the real-server tests one package at a time (`go test -p 1`).
+The packages share one Postgres cluster. Chunk 5's real-server tests run the corpus line
+`SELECT v FROM kv WHERE k = 'a'` in their own database while chunk 2's
+`TestTierRIdenticalReads` counts executions of that statement shape in
+`pg_stat_statements`, which is cluster-wide: the second final-stage gate run counted 1,001
+for 1,000. Found by the gate, not by a review.
