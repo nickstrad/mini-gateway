@@ -293,7 +293,10 @@ func reach(t *testing.T, n int, replyByte bool) {
 }
 func TestAdv_5_FirstByteAccepted(t *testing.T)      { reach(t, 1, false) }
 func TestAdv_5_ResponseBeforeWriteAck(t *testing.T) { reach(t, 0, true) }
-func TestAdv_5_ZeroAcceptedBytes(t *testing.T)      { reach(t, 0, false) }
+func TestAdv_5_ZeroAcceptedBytes(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: this test took silence from the driver as zero bytes accepted; review 1 finding 3 ruled that a request handed to the driver may have reached unless the driver reports a zero-byte refusal. See agent_work/chunks/c06-walking-skeleton/ADVERSARIAL.md.")
+	reach(t, 0, false)
+}
 
 func TestAdv_6_QueueStorm(t *testing.T) {
 	r := newRig(t, nil)

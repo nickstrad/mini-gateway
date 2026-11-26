@@ -10,3 +10,34 @@
   bounded (`TestFuzzEngineOpsCostIsBounded`). The pinned number is now 15 simulator-level
   targets, and `test/e2e` is added to the directories whose fuzz entry points are checked
   for hash calls.
+
+## Astra's pass (gpt-6-astra)
+
+First pass, against the build tip: **HELD 43, BROKEN 3** —
+`agent_work/adversarial/c06-walking-skeleton/RESULTS.md`. (The first run was cut by its
+provider's content filter; the one re-dispatch finished the harness and wrote the report.)
+
+After the one repair round: **44 attacks pass, 2 settled by the orchestrator**.
+
+Fixed product defects: bytes left in the same read after the reset's `ReadyForQuery` were
+accepted and the connection lent (`TestAdv_3_ResetWithTrailingReply`; the review's second
+blocker was the same fault at the end of a lease) — any leftover byte now closes the
+connection; a reset reply arriving at the instant of its deadline was accepted
+(`TestAdv_3_ResetDeadlineTie`) — every engine deadline now follows one rule: timers due
+at or before an event's time fire before the event.
+
+## Narrowed claims (accepted by the orchestrator)
+
+- **Claim 13** (`TestAdv_13_ExplicitZeroCapacity`, skipped with a pointer here). As
+  written: caps are positive and validation fails closed. As narrowed: a cap that is zero
+  or omitted takes its default; a negative cap is refused naming its key. The generated
+  capacity document says so for each cap.
+
+## An attack the repair made wrong (settled by the orchestrator)
+
+- `TestAdv_5_ZeroAcceptedBytes` (held at first) treated a database close with no write
+  report as "zero bytes accepted" and expected `reached: No`. Review 1 finding 3 showed
+  that in the shell a close can overtake the writer's report, so silence proves nothing;
+  the ruling is that a request handed to the driver may have reached unless the driver
+  reports a zero-byte refusal. The corrected form is the product test
+  `TestWriteRefusedWithZeroBytesIsNotReached`.

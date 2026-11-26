@@ -178,6 +178,7 @@ func TestAdv_13_NegativeFleetBudget(t *testing.T) {
 	invalid(t, func(m map[string]any) { m["fleet"].(map[string]any)["backend_connections"] = -1 }, "fleet.backend_connections")
 }
 func TestAdv_13_ExplicitZeroCapacity(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 13 narrowed: a zero or omitted cap means the default; a negative cap is refused naming its key. See agent_work/chunks/c06-walking-skeleton/ADVERSARIAL.md.")
 	invalid(t, func(m map[string]any) { m["queue"].(map[string]any)["capacity"] = 0 }, "queue.capacity")
 }
 func TestAdv_13_NestedTimeoutEquality(t *testing.T) {
