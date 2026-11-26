@@ -38,7 +38,7 @@ export PATH
 for tool in go jq git tar; do
   command -v "$tool" >/dev/null 2>&1 || { echo "canaries: $tool is not on PATH" >&2; exit 2; }
 done
-unset GATE_ONLY GATE_STAGE GATE_BASE GATE_PREPROSE GATE_SHORT GATE_OUT SWEEP_SEEDS FUZZ_SECONDS
+unset GATE_ONLY GATE_STAGE GATE_BASE GATE_PREPROSE GATE_SHORT GATE_OUT SWEEP_SEEDS FUZZ_SECONDS FUZZ_RATE_FLOOR FUZZ_REPORT FUZZ_GO
 
 module=github.com/nickstrad/mini-gateway
 result_file=agent_work/chunks/c00-foundation/gate/canaries.json
@@ -339,7 +339,7 @@ canary g4-marker-restored  red "a not-built marker restored after a commit remov
 canary g4-marker-added     red "a not-built marker that the baseline commit does not have" G4 markers 'scripts/\.not-built/new-stage is absent at the baseline commit' plant_marker_added
 canary g5-built-with-marker red "a stage script that runs while its not-built marker still exists" G5 fuzz 'delete the marker' plant_built_with_marker
 canary g5-unreadable-rate  red "a fuzz target the go tool never runs, so it prints no execution rate" G5 fuzz 'FuzzNever in \./internal/canary: no execution rate' plant_unreadable_rate FUZZ_SECONDS=5
-canary g5-seed-sweep-reported green "control: a rate floor no target reaches; G5 passes and result.json counts the seed sweeps" G5 fuzz '.fuzz_seed_sweeps >= 1 and .fuzz_targets > .fuzz_seed_sweeps' plant_nothing FUZZ_SECONDS=5 FUZZ_RATE_FLOOR=1000000000
+canary g5-seed-sweep-reported green "control: a rate floor no target reaches; G5 passes and result.json counts the seed sweeps" G5 fuzz '.fuzz_seed_sweeps >= 1 and .fuzz_targets > .fuzz_seed_sweeps' plant_nothing FUZZ_SECONDS=20 FUZZ_RATE_FLOOR=1000000000
 canary g6-built-stage-fails red "a built stage (marker deleted) whose script fails" G6 tier-r 'PLANTED-STAGE-FAILURE' plant_stage_fails
 canary g9-broken-link      red "a broken link in a site page" G9 site 'broken link: no-such-page\.md' plant_broken_link
 canary g9-broken-html-link red "a broken link in a single-quoted raw HTML anchor" G9 site 'broken link: no-such-page\.md' plant_broken_html_link
