@@ -298,8 +298,29 @@ CANARY_ONLY=g5-unreadable-rate,g5-seed-sweep-reported scripts/gate-canaries.sh
 
 ## Gate
 
-`scripts/gate.sh cr01-shrink-fuzz-rules` at the build stage on the clean commit 3fb773d
-(code complete; only this NOTES.md was committed after it): exit 0, `overall: pass`,
-`counts_for_landing: true`, 981 s, `fuzz_targets: 12`, `fuzz_seed_sweeps: 0`,
-`fuzz_rate_floor: 100`. Every check passed (G3 unit 176 s, G4 sweep 332 s, G5 256 s, G6
-tier R 40 s, G7 131 s); G10 skip-none. The generated `result.json` was deleted, not committed.
+Repair round, `scripts/gate.sh cr01-shrink-fuzz-rules` at the build stage on the clean
+commit after the repair (only this NOTES.md changed after it): exit 1, `overall: fail`,
+`counts_for_landing: false`. Every check passed except two:
+
+- **G3 unit: fail, by design of this round.** The only failing test is
+  `agent_work/adversarial/cr01-shrink-fuzz-rules TestAdv_5_UnboundedScheduleClaim`, the
+  attack on the unbounded wording of claim 5 (see "Narrowed claims"). The builder may not
+  edit `agent_work/adversarial/`, so G3 cannot be green until the orchestrator rules on the
+  narrowed claim and settles that test. Every product package passes
+  (`go test -count=1 ./...`: 28 packages ok, that one package FAIL).
+- **G5 fuzz: fail, Go fuzz-engine deadline under load, not a target failure.**
+  `FuzzScheduleFromBytes` (pure decoder, 29,862/s) ended `--- FAIL: ... context deadline
+  exceeded` at the end of its 20 s with no failing input written. A G5-only rerun
+  (`GATE_ONLY=G5`, load average 9.8) failed the same way on a different, untouched target,
+  `internal/pgwire FuzzClientSession`; that one and `FuzzScheduleFromBytes` both PASS when
+  run alone for 20 s right after. The new last line of fuzz.sh named the target each time
+  (`fuzz: FAILED: internal/sim FuzzScheduleFromBytes`). This is the go tool's coordinator
+  reporting its own `-fuzztime` context when workers are slow to stop on a heavily loaded
+  host; it is not produced by any code in this chunk. fuzz.sh fails closed on it as on any
+  nonzero exit (left as is: whether to tolerate that one message is a gate-policy decision
+  for the orchestrator).
+
+Other checks: G0, G1, G2, G3 race, G4 markers, G4 sweep (379 s, 200 seeds), G6 tier R
+(41 s), G7 (87 s), G8, G9 pass; G10 skip-none. In the gate's G5 `FuzzWorldSchedule` was
+95/s (seed-sweep) and 143/s in the rerun, `FuzzToySchedule` 1,823/s and 380/s: the host
+was heavily loaded by other builders. No `result.json` committed.
