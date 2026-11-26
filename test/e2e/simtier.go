@@ -16,6 +16,7 @@ import (
 )
 
 const (
+	FlushInterval = 5 * time.Second
 	logCap        = 1 << 16
 	DefaultSettle = 30 * time.Second
 )
@@ -102,7 +103,7 @@ func RunSim(spec Spec, seed int64, o SimOptions) (*SimRun, error) {
 		err = run()
 	} else {
 		srcs := append(enginesrc.Sources(w.Proxy.Engine, nil), simsrc.Kernel(w.S), simsrc.Net(w.Net), simsrc.Fake(w.Fake), r.workloadSource())
-		r.Flush, err = simrun.Custom(spec.Name, seed, fingerprint(spec), simrun.Options{Dir: o.Dir, Arm: o.Arm, Replay: o.Replay},
+		r.Flush, err = simrun.Custom(spec.Name, seed, fingerprint(spec), simrun.Options{Dir: o.Dir, Arm: o.Arm, Replay: o.Replay, Interval: FlushInterval},
 			w.S, srcs, run)
 		if r.Flush != nil {
 			r.Final = r.Flush.Final

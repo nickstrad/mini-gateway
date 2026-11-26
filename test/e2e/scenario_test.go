@@ -64,6 +64,7 @@ func runScenario(t *testing.T, sc Scenario, seed int64) *SimRun {
 func TestScenarioE2E(t *testing.T) {
 	for _, sc := range Scenarios() {
 		t.Run(sc.Spec.Name, func(t *testing.T) {
+			t.Parallel()
 			simtest.Sweep(t, func(t *testing.T, seed int64) { runScenario(t, sc, seed) })
 		})
 	}
