@@ -305,6 +305,15 @@ func (e *Engine) Invariants() error {
 			return fmt.Errorf("client %d holds database connection %d lent to another client", c.id, c.db.id)
 		}
 	}
+	queued := 0
+	for _, c := range e.clientList {
+		if c.phase == cpQueued {
+			queued++
+		}
+	}
+	if e.seams.Queue.Len() != queued || len(e.waiting) != queued {
+		return fmt.Errorf("queue holds %d entries and %d waiting requests for %d queued clients", e.seams.Queue.Len(), len(e.waiting), queued)
+	}
 	if int64(lent) != e.snap.DBLent.Value {
 		return fmt.Errorf("%d connections lent, gauge says %d", lent, e.snap.DBLent.Value)
 	}
