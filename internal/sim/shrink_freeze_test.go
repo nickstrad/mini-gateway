@@ -41,6 +41,8 @@ func shrinkRows() []shrinkRow {
 	}
 }
 
+// Proves sim.Shrink matches its freeze-sim outputs on fixed edge and
+// tie-breaking cases without mutating inputs.
 func TestShrinkFrozenTable(t *testing.T) {
 	for i, row := range shrinkRows() {
 		in := slices.Clone(row.in)
@@ -107,6 +109,8 @@ func shrinkFreezeSweep() string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// Proves sim.Shrink's inputs, predicate-call sequence, and outputs over 400
+// seeded schedules match the SHA-256 digest captured at freeze-sim.
 func TestShrinkFrozenSweepDigest(t *testing.T) {
 	if got := shrinkFreezeSweep(); got != shrinkFreezeDigest {
 		t.Fatalf("Shrink's inputs, predicate calls and outputs moved: digest %s, frozen %s", got, shrinkFreezeDigest)

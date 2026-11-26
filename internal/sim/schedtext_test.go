@@ -31,6 +31,9 @@ func randomTextSchedule(seed int64) []Fault {
 	return out
 }
 
+// Proves FormatSchedule and ParseSchedule round-trip schedules up to
+// MaxScheduleLen faults (including int64 extremes and named/unnamed kinds)
+// into identical schedules and canonical text.
 func TestScheduleTextRoundTrips(t *testing.T) {
 	for seed := int64(0); seed < 500; seed++ {
 		sched := randomTextSchedule(seed)
@@ -54,6 +57,8 @@ func TestScheduleTextRoundTrips(t *testing.T) {
 	}
 }
 
+// Proves FormatSchedule emits the exact documented header, field order,
+// nanosecond suffix, and named/unnamed kind tokens, including for empty input.
 func TestScheduleTextReadsAsDocumented(t *testing.T) {
 	sched := []Fault{{At: 2500000, Kind: 5, Target: 1, Arg1: 3, Arg2: 1}, {At: -4, Kind: 2, Target: 0, Arg1: -1, Arg2: 0}}
 	want := "faults 2\nat=2500000ns kind=net.chunk target=1 arg1=3 arg2=1\nat=-4ns kind=fault-2 target=0 arg1=-1 arg2=0\n"
@@ -66,6 +71,8 @@ func TestScheduleTextReadsAsDocumented(t *testing.T) {
 	}
 }
 
+// Proves ParseSchedule rejects malformed or non-canonical inputs with a nil
+// slice and an error wrapping ErrScheduleText.
 func TestScheduleTextRejectsMalformed(t *testing.T) {
 	good := "faults 2\nat=10ns kind=net.chunk target=1 arg1=3 arg2=1\nat=20ns kind=fault-2 target=0 arg1=0 arg2=0\n"
 	if _, err := ParseSchedule(good, textNames); err != nil {
@@ -115,6 +122,8 @@ func TestScheduleTextRejectsMalformed(t *testing.T) {
 	}
 }
 
+// Proves FormatSchedule and ParseSchedule reject invalid or duplicate KindName
+// tables and FormatSchedule rejects schedules longer than MaxScheduleLen.
 func TestScheduleTextRejectsBadNameTables(t *testing.T) {
 	for _, names := range [][]KindName{
 		{{1, ""}}, {{1, "Net"}}, {{1, "a b"}}, {{1, ".a"}}, {{1, "fault-3"}}, {{1, strings.Repeat("a", 65)}},
@@ -132,6 +141,9 @@ func TestScheduleTextRejectsBadNameTables(t *testing.T) {
 	}
 }
 
+// Proves ParseSchedule never panics on arbitrary text, returns (nil, err)
+// wrapping ErrScheduleText on failure, and only accepts text that re-formats
+// identically via FormatSchedule.
 func FuzzParseSchedule(f *testing.F) {
 	f.Add("faults 0\n")
 	f.Add("faults 1\nat=10ns kind=net.chunk target=1 arg1=3 arg2=1\n")

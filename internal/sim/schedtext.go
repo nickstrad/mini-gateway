@@ -7,11 +7,17 @@ import (
 	"strings"
 )
 
+// KindName maps a numeric FaultKind to its canonical textual name for
+// FormatSchedule and ParseSchedule. Names must be 1 to 64 characters of
+// [a-z0-9._-], start with a lowercase letter or digit, not start with
+// "fault-", and be unique per Kind and per Name.
 type KindName struct {
 	Kind FaultKind
 	Name string
 }
 
+// ErrScheduleText is the sentinel error wrapped by every error returned from
+// FormatSchedule and ParseSchedule.
 var ErrScheduleText = errors.New("sim: malformed fault schedule text")
 
 const (
@@ -23,6 +29,11 @@ const (
 
 var faultLineKeys = [faultLineFields]string{"at", "kind", "target", "arg1", "arg2"}
 
+// FormatSchedule encodes sched into the canonical line-oriented text form:
+// a "faults <n>\n" header followed by one line per fault
+// ("at=<ns>ns kind=<name|fault-id> target=<int> arg1=<int> arg2=<int>\n").
+// Schedules longer than MaxScheduleLen or invalid/duplicate names tables
+// return an error wrapping ErrScheduleText.
 func FormatSchedule(sched []Fault, names []KindName) (string, error) {
 	if err := checkKindNames(names); err != nil {
 		return "", err
@@ -38,6 +49,12 @@ func FormatSchedule(sched []Fault, names []KindName) (string, error) {
 	return b.String(), nil
 }
 
+// ParseSchedule decodes canonical schedule text produced by FormatSchedule
+// back into the identical []Fault slice (at most MaxScheduleLen entries).
+// Any syntax error, missing trailing newline, blank line, CRLF, comment,
+// count mismatch, non-canonical integer, numeric form of a named kind, or
+// invalid names table returns (nil, err) wrapping ErrScheduleText without
+// panicking or returning a silently truncated schedule.
 func ParseSchedule(text string, names []KindName) ([]Fault, error) {
 	if err := checkKindNames(names); err != nil {
 		return nil, err
@@ -45,6 +62,8 @@ func ParseSchedule(text string, names []KindName) ([]Fault, error) {
 	if !strings.HasSuffix(text, "\n") {
 		return nil, fmt.Errorf("%w: the text does not end with a newline", ErrScheduleText)
 	}
+	// Cap line count before strings.Split so oversized input cannot force an
+	// unbounded slice allocation.
 	if strings.Count(text, "\n") > MaxScheduleLen+1 {
 		return nil, fmt.Errorf("%w: more than %d lines", ErrScheduleText, MaxScheduleLen+1)
 	}
@@ -114,6 +133,8 @@ func parseFaultLine(line string, names []KindName) (Fault, error) {
 
 func canonicalInt(s string) (int64, error) {
 	v, err := strconv.ParseInt(s, 10, 64)
+	// Round-trip formatting rejects "+1", "-0", leading zeros, and whitespace
+	// so every accepted schedule text is canonical.
 	if err != nil || strconv.FormatInt(v, 10) != s {
 		return 0, fmt.Errorf("%q is not a canonical decimal int64", s)
 	}
@@ -131,6 +152,8 @@ func parseKind(tok string, names []KindName) (FaultKind, error) {
 	if !ok || err != nil || v < 0 || v > int64(^FaultKind(0)) {
 		return 0, fmt.Errorf("kind: %q is neither a known name nor %s<id>", tok, unnamedPrefix)
 	}
+	// Reject numeric fallback when the kind has a registered name so every
+	// schedule has a single canonical spelling.
 	if _, named := kindName(FaultKind(v), names); named {
 		return 0, fmt.Errorf("kind: %q has a name, write the name", tok)
 	}

@@ -175,12 +175,17 @@ func lowerIntsSweep(seeds int64) []error {
 	return errs
 }
 
+// Proves LowerInts preserves failure, respects per-element floors, never
+// mutates caller slices, obeys the stated call bound, is deterministic, and
+// matches brute-force minimality across monotone and non-monotone predicates.
 func TestLowerIntsAgainstBruteForce(t *testing.T) {
 	if errs := lowerIntsSweep(600); len(errs) > 0 {
 		t.Fatalf("%d failures, first: %v", len(errs), errs[0])
 	}
 }
 
+// Proves the planted-bug canary (accepting the floor without calling the
+// predicate) causes both LowerInts and Minimize brute-force sweeps to fail.
 func TestPlantedAcceptUncheckedFailsTheBruteForceProperty(t *testing.T) {
 	plantAcceptUnchecked = true
 	defer func() { plantAcceptUnchecked = false }()
@@ -192,6 +197,9 @@ func TestPlantedAcceptUncheckedFailsTheBruteForceProperty(t *testing.T) {
 	}
 }
 
+// Proves LowerInts handles full-width int64 ranges (MinInt64..MaxInt64) and
+// values already at or below their floor without overflow, staying within the
+// predicate-call bound.
 func TestLowerIntsExtremesAndBounds(t *testing.T) {
 	cases := []struct {
 		vals, floors []int64
@@ -246,6 +254,7 @@ func checkExtreme(vals, floors []int64, k int64, name string, out []int64) error
 	return nil
 }
 
+// Proves LowerInts returns an empty slice with zero predicate calls on nil input.
 func TestLowerIntsEmptyAndNil(t *testing.T) {
 	calls := 0
 	if out := LowerInts(nil, nil, func([]int64) bool { calls++; return true }); len(out) != 0 || calls != 0 {
@@ -337,6 +346,8 @@ func faultCallBound(s []Fault, deletions bool, monotone bool) int64 {
 	return satMul(satAdd(p, 1), n*(n+1)+c)
 }
 
+// Proves the test call-bound helpers saturate at MaxInt64 on full-width ranges
+// instead of wrapping negative.
 func TestCallBoundsSaturateInsteadOfWrapping(t *testing.T) {
 	full := intCallBound([]int64{math.MaxInt64}, []int64{math.MinInt64}, false)
 	if full != math.MaxInt64 {
@@ -518,18 +529,27 @@ func minimizeSweep(seeds int64) []error {
 	return errs
 }
 
+// Proves LowerValues preserves schedule order, Kind, Target, and per-kind
+// floors, never mutates inputs, stays within its call bound, and achieves
+// brute-force value minimality on monotone and non-monotone predicates.
 func TestLowerValuesAgainstBruteForce(t *testing.T) {
 	if errs := lowerValuesSweep(500); len(errs) > 0 {
 		t.Fatalf("%d failures, first: %v", len(errs), errs[0])
 	}
 }
 
+// Proves Minimize returns a failing subsequence of the input that is both
+// 1-minimal under single-fault deletion and minimal under one-step value
+// lowering within per-kind floors, within its call bound, without mutating
+// the input.
 func TestMinimizeAgainstBruteForce(t *testing.T) {
 	if errs := minimizeSweep(400); len(errs) > 0 {
 		t.Fatalf("%d failures, first: %v", len(errs), errs[0])
 	}
 }
 
+// Proves a nil floor callback lowers At, Arg1, and Arg2 toward zero in both
+// Minimize and LowerValues.
 func TestMinimizeNilFloorLowersToZero(t *testing.T) {
 	in := []Fault{{At: 900, Kind: 7, Target: 3, Arg1: 40, Arg2: 1}, {At: 5, Kind: 8, Target: 1, Arg1: 2, Arg2: 2}}
 	fails := func(s []Fault) bool {
@@ -545,6 +565,8 @@ func TestMinimizeNilFloorLowersToZero(t *testing.T) {
 	}
 }
 
+// Proves Minimize produces bit-identical results across runs and processes by
+// checking a pinned FNV-64a digest over 120 seeded schedules and predicates.
 func TestMinimizeIsDeterministicAcrossProcesses(t *testing.T) {
 	h := fnv.New64a()
 	for seed := int64(0); seed < 120; seed++ {

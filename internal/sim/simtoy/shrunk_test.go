@@ -66,6 +66,8 @@ func valueSum(s []sim.Fault) int64 {
 	return n
 }
 
+// Proves sim.Minimize strictly lowers the planted-bug schedule's value sum
+// beyond delete-only sim.Shrink and matches the committed scenario file.
 func TestPlantedBugMinimisedBeyondShrink(t *testing.T) {
 	sched := firstPlantedBugSchedule(t)
 	shrunk := sim.Shrink(sched, plantedFails)
@@ -95,6 +97,9 @@ func TestPlantedBugMinimisedBeyondShrink(t *testing.T) {
 	t.Logf("%d faults; Shrink kept %d (value sum %d); Minimize kept %d (value sum %d)", len(sched), len(shrunk), valueSum(shrunk), len(minimal), valueSum(minimal))
 }
 
+// Proves the committed shrunk scenario file parses cleanly, reproduces
+// ErrMismatch with the bug planted, passes cleanly without it, and is already
+// a fixed point of sim.Minimize.
 func TestShrunkScenarioPlantedBugReplays(t *testing.T) {
 	text, err := os.ReadFile(plantedBugScenario)
 	if err != nil {
@@ -118,6 +123,8 @@ func TestShrunkScenarioPlantedBugReplays(t *testing.T) {
 	}
 }
 
+// Proves sim.LowerInts shrinks non-fault workload parameters (clients, lines,
+// max line) against the replayed scenario without mutating the input slice.
 func TestPlantedBugWorkloadSizesLowered(t *testing.T) {
 	text, err := os.ReadFile(plantedBugScenario)
 	if err != nil {
