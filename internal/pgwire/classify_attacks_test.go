@@ -226,13 +226,13 @@ func TestReplyEveryRowWithPrefixAndStatusIsWellFormed(t *testing.T) {
 		for _, status := range []byte{'I', 'T', 'E'} {
 			prefix := []byte{9, 8, 7}
 			b, a, e := builder.Build(prefix, id, status)
-			count++
 			if row.Reply == p.ErrorRowPassThrough {
 				if e == nil {
 					t.Error("pass-through produced local message")
 				}
 				continue
 			}
+			count++
 			if e != nil {
 				t.Fatal(e)
 			}

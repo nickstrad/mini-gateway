@@ -271,9 +271,18 @@ func TestReplyRefusesBadInput(t *testing.T) {
 			t.Errorf("status %q: %v %x", st, err, out)
 		}
 	}
+	if out, _, err := b.Build(nil, ErrRowPassThrough, 'I'); err != ReplyErrNoMessage || out != nil {
+		t.Errorf("pass-through row: %v %x", err, out)
+	}
 	s := b.Snapshot()
-	if s.Failed != 4 || s.ByRow[ErrRowShed] != 3 {
-		t.Errorf("failures not counted: %+v", s)
+	if s.Failed != 5 || s.Total != 0 || s.ByRow != ([ErrRowCount]int64{}) {
+		t.Errorf("refused builds must count as failures only: %+v", s)
+	}
+	if _, _, err := b.Build(nil, ErrRowShed, 'I'); err != nil {
+		t.Fatal(err)
+	}
+	if s := b.Snapshot(); s.Failed != 5 || s.Total != 1 || s.ByRow[ErrRowShed] != 1 {
+		t.Errorf("a built reply must count once: %+v", s)
 	}
 	if _, err := ReplyReady(nil, 'Q'); err != ReplyErrBadStatus {
 		t.Error("ReplyReady accepted a bad status")

@@ -38,28 +38,33 @@ func (b *ReplyBuilder) Snapshot() ReplySnapshot { return b.snap }
 func ReplyValidStatus(s byte) bool { return s == 'I' || s == 'T' || s == 'E' }
 
 func (b *ReplyBuilder) Build(dst []byte, id ErrRowID, status byte) ([]byte, ReplyAction, error) {
-	if id >= ErrRowCount {
+	out, act, err := rplBuild(dst, id, status)
+	if err != nil {
 		b.snap.Failed++
+		return dst, ReplyAction{}, err
+	}
+	b.snap.ByRow[id]++
+	b.snap.Total++
+	return out, act, nil
+}
+
+func rplBuild(dst []byte, id ErrRowID, status byte) ([]byte, ReplyAction, error) {
+	if id >= ErrRowCount {
 		return dst, ReplyAction{}, ReplyErrBadRow
 	}
 	row := ErrorRows[id]
-	b.snap.ByRow[id]++
-	b.snap.Total++
 	switch row.Reply {
 	case ErrorRowCloseOnly:
 		return dst, ReplyAction{End: ReplyEndNone, Close: true}, nil
 	case ErrorRowPassThrough:
-		b.snap.Failed++
 		return dst, ReplyAction{}, ReplyErrNoMessage
 	case ErrorRowError:
 		if !ReplyValidStatus(status) {
-			b.snap.Failed++
 			return dst, ReplyAction{}, ReplyErrBadStatus
 		}
 	}
 	out, err := rplEncodeError(dst, row)
 	if err != nil {
-		b.snap.Failed++
 		return dst, ReplyAction{}, err
 	}
 	switch row.Reply {
