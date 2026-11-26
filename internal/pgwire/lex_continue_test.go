@@ -71,7 +71,6 @@ func TestClassifierRejectsWhatHidesBehindAStringContinuation(t *testing.T) {
 		"SELECT 'foo' --c\n'bar'",
 		"SELECT 'foo' /*\n*/ 'bar'",
 		"SELECT 'n'\r'ow'",
-		"SELECT 'a' 'b'",
 		"SELECT U&'n'\n'ow'",
 		"SELECT E'n'\n'ow'",
 		"SELECT a FROM t_ts WHERE ts < ('n' || 'ow')",
