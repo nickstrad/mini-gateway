@@ -228,13 +228,6 @@ func TestTierRClassifierDifferential(t *testing.T) {
 	t.Logf("tier R: classifier differential: %d forwarded statements left the session state unchanged; %d not run (rejected or noexec)", session, skipped)
 }
 
-func clsTierRReadOnly(t *testing.T, addr string, admin *clsPG, c clsCase) {
-	t.Helper()
-	if err := clsTierRReadOnlyErr(addr, admin, c); err != nil {
-		t.Errorf("line %d %q: %v", c.line, c.text, err)
-	}
-}
-
 func clsTierRReadOnlyErr(addr string, admin *clsPG, c clsCase) error {
 	before, err := clsTierRResetErr(admin)
 	if err != nil {
