@@ -40,15 +40,17 @@ type CapacityRow struct {
 
 func itoa(n int) string { return strconv.Itoa(n) }
 
+func configured(def string) string { return def + "; zero means the default" }
+
 func CapacityRows(c Config) []CapacityRow {
 	c = c.WithDefaults()
 	return []CapacityRow{
-		{"Client connections", "proxy memory and file descriptors", itoa(c.MaxClients), "limits.max_clients", "FATAL 53300 (too-many-clients), connection closed", "timeouts.client_startup", "engine.clients_connected"},
-		{"Clients in startup", "handshake and SCRAM CPU during a reconnection storm", itoa(c.MaxStartup), "limits.max_startup", "FATAL 53300 (too-many-clients), connection closed", "timeouts.client_startup", "engine.clients_in_startup"},
-		{"Database connections (the fixed set)", "the database's connection slots", itoa(c.Connections), "pool.connections", "Requests wait in the queue", "timeouts.database_connect", "engine.database_open"},
+		{"Client connections", "proxy memory and file descriptors", configured(itoa(c.MaxClients)), "limits.max_clients", "FATAL 53300 (too-many-clients), connection closed", "timeouts.client_startup", "engine.clients_connected"},
+		{"Clients in startup", "handshake and SCRAM CPU during a reconnection storm", configured(itoa(c.MaxStartup)), "limits.max_startup", "FATAL 53300 (too-many-clients), connection closed", "timeouts.client_startup", "engine.clients_in_startup"},
+		{"Database connections (the fixed set)", "the database's connection slots", configured(itoa(c.Connections)), "pool.connections", "Requests wait in the queue", "timeouts.database_connect", "engine.database_open"},
 		{"Database connections being opened", "the database's fork rate", "1", "(fixed in chunk 6)", "The next dial waits", "timeouts.database_connect", "engine.database_connecting"},
-		{"Queue (one FIFO, keyed by tenant in its API)", "proxy memory; the wait bound", itoa(c.QueueCap), "queue.capacity", "ERROR 53M01 (shed), connection stays usable", "timeouts.queue_wait", "engine.requests_queued"},
-		{"Per-client reply buffer", "proxy memory under a slow client", itoa(c.ReplyBufferCap) + " bytes", "limits.reply_buffer", "Reading that database connection is paused", "timeouts.client_write", "engine.relay_buffer_high_water"},
+		{"Queue (one FIFO, keyed by tenant in its API)", "proxy memory; the wait bound", configured(itoa(c.QueueCap)), "queue.capacity", "ERROR 53M01 (shed), connection stays usable", "timeouts.queue_wait", "engine.requests_queued"},
+		{"Per-client reply buffer", "proxy memory under a slow client", configured(itoa(c.ReplyBufferCap) + " bytes"), "limits.reply_buffer", "Reading that database connection is paused", "timeouts.client_write", "engine.relay_buffer_high_water"},
 		{"Unprocessed client input", "proxy memory under a pipelining client", itoa(maxClientInput) + " bytes", "(constant)", "FATAL 08P01, connection closed", "timeouts.client_mid_message", "-"},
 		{"Held error or end-marker message of a reply", "proxy memory", "database max message + 5 bytes", "(constant)", "Database connection closed as a protocol violation", "timeouts.statement", "-"},
 		{"Reset reply", "proxy memory", itoa(MaxResetReply) + " bytes", "(constant)", "Reset fails, connection closed", "timeouts.reset", "engine.resets_failed"},
