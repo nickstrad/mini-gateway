@@ -51,6 +51,7 @@ func TestClassifierRejectsWhatHidesBehindAStringContinuation(t *testing.T) {
 		{"SELECT E'ok'\n'\\' || ' || set_config('search_path', 'hidden_1stmt', false) --'", work.RejectSetConfig},
 		{"BEGIN; SET LOCAL search_path = 'pg_'\n'temp'; CREATE TABLE sneaky_c1 (a int); COMMIT", work.RejectTempObject},
 		{"BEGIN; SET LOCAL SCHEMA 'pg_'\n'temp'; CREATE TABLE sneaky_c2 (a int); COMMIT", work.RejectTempObject},
+		{"SET LOCAL search_path = 'pg_'\n'temp'", work.RejectTempObject},
 		{"SELECT set_config('search_path', 'pg_'\n'temp', true)", work.RejectTempObject},
 		{"SELECT set_config('search_'\n'path', 'pg_temp', true)", work.RejectSetConfig},
 		{"SELECT set_config('standard_conforming_'\n'strings', 'off', true)", work.RejectSetConfig},
@@ -65,6 +66,7 @@ func TestClassifierRejectsWhatHidesBehindAStringContinuation(t *testing.T) {
 	for _, q := range []string{
 		"SELECT E'ok'\n'\\' || ' || nextval('s')::text --'",
 		"SELECT E'ok'\n'\\' ; SELECT ' ; INSERT INTO w VALUES (42) ; --'",
+		"SELECT E'ok'\n'\\' ; SELECT ' ; BEGIN ; --'",
 		"SELECT a FROM t_ts WHERE ts < 'n'\n'ow'",
 		"SELECT 'n'\n'ow'",
 		"SELECT 'foo'\n'bar'",

@@ -1,6 +1,7 @@
 package pgwire
 
 import (
+	"math/rand/v2"
 	"strings"
 	"testing"
 )
@@ -116,6 +117,9 @@ func lexCheckSpans(t testing.TB, src []byte) {
 		if tk.Kind == TokenBad {
 			sawBad = true
 		}
+		if tk.Kind == TokenOperator && tk.End != lexRefOperatorEnd(src, tk.Start) {
+			t.Fatalf("%q: operator %+v, the one-run-at-a-time rule ends it at %d", src, tk, lexRefOperatorEnd(src, tk.Start))
+		}
 		pos = tk.End
 	}
 	if pos != len(src) {
@@ -148,4 +152,41 @@ func FuzzLex(f *testing.F) {
 	f.Fuzz(func(t *testing.T, src []byte) {
 		lexCheckSpans(t, src)
 	})
+}
+
+func lexRefOperatorEnd(src []byte, start int) int {
+	end := start
+	for end < len(src) && strings.IndexByte("+-*/<>=~!@#%^&|`?", src[end]) >= 0 {
+		if end+1 < len(src) && ((src[end] == '-' && src[end+1] == '-') || (src[end] == '/' && src[end+1] == '*')) {
+			break
+		}
+		end++
+	}
+	op := src[start:end]
+	n := len(op)
+	if n < 2 || (op[n-1] != '+' && op[n-1] != '-') {
+		return end
+	}
+	if strings.ContainsAny(string(op[:n-1]), "~!@#^&|`?%") {
+		return end
+	}
+	for n > 1 && (op[n-1] == '+' || op[n-1] == '-') {
+		n--
+	}
+	return start + n
+}
+
+func TestLexOperatorRunsMatchTheOneRunAtATimeRule(t *testing.T) {
+	const alphabet = "+-*/<>=~!@#%^&|`?+-+- a1(;'"
+	r := rand.New(rand.NewPCG(0xC05, 0x0B))
+	for k := 0; k < 50000; k++ {
+		src := make([]byte, 1+r.IntN(24))
+		for i := range src {
+			src[i] = alphabet[r.IntN(len(alphabet))]
+		}
+		lexCheckSpans(t, src)
+	}
+	for _, src := range []string{"+++", "*+-+", "!+-", "<+-+-x", "+--c", "-/*c*/", "a+-1", "=-", "@-+"} {
+		lexCheckSpans(t, []byte(src))
+	}
 }
