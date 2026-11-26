@@ -64,7 +64,7 @@ type conn struct {
 func newConn(s side, id proxy.ConnID, start time.Time, first int) *conn {
 	c := &conn{side: s, id: id, start: start, first: first,
 		readBell: make(chan struct{}, bellCap), writeBell: make(chan struct{}, bellCap), done: make(chan struct{}, bellCap),
-		writerDone: make(chan struct{})}
+		writerDone: make(chan struct{}, bellCap)}
 	if first == 0 {
 		c.mode = readFree
 	}
