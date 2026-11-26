@@ -32,6 +32,9 @@ only under `/tmp/zgw-@CHUNK@-review@ROUND@/`. Your one output is the review file
   for the code of this chunk ("not applicable here because …" is a valid answer).
 - Check the observability gate (section 7.6) for this chunk: `Snapshot()` present, counters
   move in a test, conservation asserted.
+- Fuzz targets (PLAN.md section 6.6): a target that runs the simulator must take its seed from a
+  fixed value or a dedicated prefix of its input, never from a hash of the input. A target
+  that breaks this is a MAJOR finding.
 - Do not review style, naming taste, or the absence of comments (comments are forbidden at
   this stage by project rule and are written later by another seat).
 
