@@ -201,8 +201,12 @@ func TestReplyEveryRowIsWellFormedWithTheRightMarker(t *testing.T) {
 			before := b.Snapshot()
 			out, act, err := b.Build([]byte("prefix"), id, st)
 			after := b.Snapshot()
-			if after.ByRow[id] != before.ByRow[id]+1 || after.Total != before.Total+1 {
-				t.Errorf("%s: not counted", r.ID)
+			built := int64(1)
+			if r.Reply == ErrorRowPassThrough {
+				built = 0
+			}
+			if after.ByRow[id] != before.ByRow[id]+built || after.Total != before.Total+built {
+				t.Errorf("%s: counted %d built, want %d", r.ID, after.Total-before.Total, built)
 			}
 			switch r.Reply {
 			case ErrorRowPassThrough:
