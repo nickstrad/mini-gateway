@@ -11,6 +11,9 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// Engine is the single-threaded, deterministic proxy state machine. It owns all
+// client sessions, database connection lifecycles, transaction leases, resets,
+// deadlines, and counters; drivers call Start, Step, and Shutdown on one thread.
 type Engine struct {
 	cfg        Config
 	seams      Seams
@@ -18,6 +21,8 @@ type Engine struct {
 	replies    pgwire.ReplyBuilder
 	wire       pgwire.WireStats
 	clients    map[ConnID]*client
+	// clientList mirrors clients in a deterministic slice so Shutdown and
+	// Invariants never iterate over a Go map.
 	clientList []*client
 	dbs        map[ConnID]*dbConn
 	slots      []*dbConn
@@ -40,8 +45,12 @@ type Engine struct {
 	syncSnap   pgwire.SyncDiscardSnapshot
 }
 
+// ErrEngine is the sentinel error for engine-level failures.
 var ErrEngine = errors.New("proxy: engine")
 
+// New validates cfg (after applying defaults), wires any nil seams to their
+// chunk 6 defaults, and returns a ready Engine. Call Start to open the fixed
+// set of database connections.
 func New(cfg Config) (*Engine, error) {
 	cfg = cfg.WithDefaults()
 	if err := cfg.Validate(); err != nil {
@@ -92,14 +101,19 @@ func New(cfg Config) (*Engine, error) {
 	return e, nil
 }
 
+// Config returns the effective configuration with defaults applied.
 func (e *Engine) Config() Config { return e.cfg }
 
+// Start begins opening the fixed set of database connections (one dial at a time)
+// and appends the initial driver actions to out.
 func (e *Engine) Start(now Instant, out []Action) []Action {
 	e.begin(now, out)
 	e.dialMore()
 	return e.finish()
 }
 
+// Shutdown performs a plain stop: it closes every client and database connection,
+// cancels redials, and returns the resulting close actions.
 func (e *Engine) Shutdown(now Instant, out []Action) []Action {
 	e.begin(now, out)
 	e.stopping = true
@@ -115,9 +129,14 @@ func (e *Engine) Shutdown(now Instant, out []Action) []Action {
 	return e.finish()
 }
 
+// Step advances the engine clock to now, fires any deadlines due at or before
+// now, handles ev, and appends all resulting actions (including ActWake if the
+// earliest deadline changed) to out.
 func (e *Engine) Step(now Instant, ev Event, out []Action) []Action {
 	e.begin(now, out)
 	e.snap.Events++
+	// Deadline rule: time passes before the event, so a reply, byte, or freed
+	// connection arriving at the exact instant of its deadline is late.
 	e.fireTimers()
 	switch ev.Kind {
 	case EvClientAccepted:
@@ -231,6 +250,8 @@ func (e *Engine) after(d time.Duration) Instant {
 	return e.now + Instant(d)
 }
 
+// Snapshot returns a plain value copy of the engine's current counters, gauges,
+// and histograms for observability export.
 func (e *Engine) Snapshot() Snapshot {
 	s := e.snap
 	s.StatementTime = e.stmtHist.Snapshot()
@@ -251,8 +272,11 @@ func (e *Engine) dbDown() bool {
 	return e.lastFailed
 }
 
+// WireSnapshot returns the accumulated pgwire session counters owned by the engine.
 func (e *Engine) WireSnapshot() pgwire.WireSnapshot { return e.wire.Snapshot() }
 
+// ClassifierSnapshot returns the built-in classifier's counters, or zero when a
+// custom Classifier seam was injected.
 func (e *Engine) ClassifierSnapshot() pgwire.ClassifierSnapshot {
 	if e.classifier == nil {
 		return pgwire.ClassifierSnapshot{}
@@ -260,10 +284,14 @@ func (e *Engine) ClassifierSnapshot() pgwire.ClassifierSnapshot {
 	return e.classifier.Snapshot()
 }
 
+// ReplySnapshot returns the error-contract ReplyBuilder counters.
 func (e *Engine) ReplySnapshot() pgwire.ReplySnapshot { return e.replies.Snapshot() }
 
+// SyncSnapshot returns the extended-protocol discard-until-Sync counters.
 func (e *Engine) SyncSnapshot() pgwire.SyncDiscardSnapshot { return e.syncSnap }
 
+// Quiesce verifies that no clients, queued or in-flight requests, lent
+// connections, or resets remain active. An idle or connecting fixed set is quiet.
 func (e *Engine) Quiesce() error {
 	var errs []error
 	if n := len(e.clients); n != 0 {
@@ -289,8 +317,12 @@ func (e *Engine) Quiesce() error {
 	return errors.Join(errs...)
 }
 
+// Idle reports whether Quiesce returns nil.
 func (e *Engine) Idle() bool { return e.Quiesce() == nil }
 
+// Invariants checks counter conservation, 1:1 client-to-database lease pairing,
+// queue/waiting agreement, and wire counter conservation. Registered with the
+// simulator to run after every step.
 func (e *Engine) Invariants() error {
 	if err := e.Snapshot().Check(); err != nil {
 		return err
@@ -328,6 +360,7 @@ func (e *Engine) Invariants() error {
 	return nil
 }
 
+// Tenant returns the authenticated tenant identity for client connection id.
 func (e *Engine) Tenant(id ConnID) (work.TenantID, bool) {
 	c := e.clients[id]
 	if c == nil {
@@ -336,6 +369,7 @@ func (e *Engine) Tenant(id ConnID) (work.TenantID, bool) {
 	return c.tenant, true
 }
 
+// LentTo returns the client ConnID currently holding database connection db.
 func (e *Engine) LentTo(db ConnID) (ConnID, bool) {
 	d := e.dbs[db]
 	if d == nil || d.client == nil {

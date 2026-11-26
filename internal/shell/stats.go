@@ -44,6 +44,8 @@ type counters struct {
 	dropped          atomic.Int64
 }
 
+// Snapshot returns a plain value copy of the shell's mailbox, goroutine, and
+// socket counters for observability export.
 func (s *Shell) Snapshot() proxy.ShellSnapshot {
 	st := &s.stats
 	mb := st.mailbox.load()
@@ -70,6 +72,7 @@ func (s *Shell) Snapshot() proxy.ShellSnapshot {
 	}
 }
 
+// Extra exposes shell-only refusal and overflow counters used by unit tests.
 type Extra struct {
 	Refused        int64
 	AcceptErrors   int64
@@ -77,6 +80,7 @@ type Extra struct {
 	Dropped        int64
 }
 
+// Extra returns a point-in-time copy of the shell's refusal and overflow counters.
 func (s *Shell) Extra() Extra {
 	return Extra{Refused: s.stats.refused.Load(), AcceptErrors: s.stats.acceptErrors.Load(),
 		QueueOverflows: s.stats.queueOverflows.Load(), Dropped: s.stats.dropped.Load()}

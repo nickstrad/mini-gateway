@@ -8,6 +8,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/world"
 )
 
+// TestScenarioChunk2BaselineThroughTheProxy proves chunk 2's direct-mixed-transactions baseline runs cleanly behind ProxyDriver.
 func TestScenarioChunk2BaselineThroughTheProxy(t *testing.T) {
 	sc, ok := world.Lookup("direct-mixed-transactions")
 	if !ok {

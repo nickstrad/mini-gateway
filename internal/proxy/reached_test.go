@@ -29,18 +29,21 @@ func lostWrite(t *testing.T, refused bool) proxy.Snapshot {
 	return s
 }
 
+// TestDatabaseClosedBeforeTheWriteReportIsMayHaveReached proves a close without EvDBWriteRefused defaults to Reached=Yes and 08007 on writes.
 func TestDatabaseClosedBeforeTheWriteReportIsMayHaveReached(t *testing.T) {
 	if s := lostWrite(t, false); s.ReachedNo != 0 || s.ReachedYes != 1 {
 		t.Fatalf("reached no %d yes %d", s.ReachedNo, s.ReachedYes)
 	}
 }
 
+// TestWriteRefusedWithZeroBytesIsNotReached proves an explicit zero-byte EvDBWriteRefused before close records Reached=No and 08006.
 func TestWriteRefusedWithZeroBytesIsNotReached(t *testing.T) {
 	if s := lostWrite(t, true); s.ReachedNo != 1 || s.ReachedYes != 0 {
 		t.Fatalf("reached no %d yes %d", s.ReachedNo, s.ReachedYes)
 	}
 }
 
+// TestWriteRefusedAfterPartBytesIsMayHaveReached proves a refusal after partial EvDBWrote stays Reached=Yes and 08007.
 func TestWriteRefusedAfterPartBytesIsMayHaveReached(t *testing.T) {
 	r := newRig(t, nil)
 	r.client(11)
@@ -53,6 +56,7 @@ func TestWriteRefusedAfterPartBytesIsMayHaveReached(t *testing.T) {
 	}
 }
 
+// TestClientVanishedBeforeTheWriteReportIsMayHaveReached proves a client vanish after ActDBWrite records Reached=Yes without a write refusal.
 func TestClientVanishedBeforeTheWriteReportIsMayHaveReached(t *testing.T) {
 	r := newRig(t, nil)
 	r.client(11)

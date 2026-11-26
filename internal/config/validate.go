@@ -61,6 +61,7 @@ func (f *File) proxyCaps() proxy.Config {
 		Reset: proxy.ResetAlways}
 }
 
+// Proxy converts the JSON Timeouts block into proxy.Timeouts.
 func (t Timeouts) Proxy() proxy.Timeouts {
 	return proxy.Timeouts{ClientStartup: t.ClientStartup.D(), ClientMidMessage: t.ClientMidMessage.D(),
 		ClientIdle: t.ClientIdle.D(), QueueWait: t.QueueWait.D(), DBConnect: t.DatabaseConnect.D(),

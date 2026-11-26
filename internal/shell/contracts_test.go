@@ -53,6 +53,7 @@ func CapacityTableMarkdown() []byte {
 	return b.Bytes()
 }
 
+// TestContractDocumentsAreGeneratedFromTheCode proves committed docs/timeout-budget.md and docs/capacity-table.md match code generation.
 func TestContractDocumentsAreGeneratedFromTheCode(t *testing.T) {
 	docs := map[string][]byte{"timeout-budget.md": TimeoutBudgetMarkdown(), "capacity-table.md": CapacityTableMarkdown()}
 	root := filepath.Join("..", "..", "docs")
@@ -75,6 +76,7 @@ func TestContractDocumentsAreGeneratedFromTheCode(t *testing.T) {
 	}
 }
 
+// TestDefaultTimeoutsNest proves every inner wait in DefaultTimeouts ends before its outer wait.
 func TestDefaultTimeoutsNest(t *testing.T) {
 	if errs := proxy.DefaultTimeouts().Validate(); len(errs) != 0 {
 		t.Fatal(errs)

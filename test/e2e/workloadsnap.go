@@ -12,6 +12,8 @@ import (
 
 const maxCodes = 64
 
+// WorkloadSnapshot summarizes r's scripted client outcomes into component
+// "workload" metrics so SQL assertions can cross-check proxy vs client totals.
 func (r *SimRun) WorkloadSnapshot() workload.Snapshot {
 	tenants := make([]workload.TenantSnapshot, max(r.Spec.Tenants, 1))
 	lat := make([]*obs.Histogram, len(tenants))

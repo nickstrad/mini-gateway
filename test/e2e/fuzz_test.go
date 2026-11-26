@@ -40,6 +40,7 @@ func seedCorpus() [][]sim.Fault {
 	}
 }
 
+// FuzzEngineOps fuzzes bounded sequences of client and database operations against OpSeed, proving invariants and quiescence hold.
 func FuzzEngineOps(f *testing.F) {
 	for _, ops := range seedCorpus() {
 		f.Add(EncodeOps(ops))
@@ -53,6 +54,7 @@ func FuzzEngineOps(f *testing.F) {
 	})
 }
 
+// TestOpDecodingIsTotalBoundedAndLocal proves DecodeOps accepts arbitrary bytes, caps at MaxOps, and confines one-byte edits to one op.
 func TestOpDecodingIsTotalBoundedAndLocal(t *testing.T) {
 	for n := 0; n < 3*opBytes*MaxOps; n += 7 {
 		b := make([]byte, n)
@@ -80,6 +82,7 @@ func TestOpDecodingIsTotalBoundedAndLocal(t *testing.T) {
 	}
 }
 
+// TestFuzzEngineOpsCostIsBounded proves worst-case fuzz inputs execute well within the per-execution time bound.
 func TestFuzzEngineOpsCostIsBounded(t *testing.T) {
 	var worst []sim.Fault
 	for i := 0; i < MaxOps; i++ {
@@ -100,6 +103,7 @@ func TestFuzzEngineOpsCostIsBounded(t *testing.T) {
 	}
 }
 
+// TestSeedCorpusOpsPassAndMoveCounters proves every seed corpus operation list passes RunOps and exercises engine counters.
 func TestSeedCorpusOpsPassAndMoveCounters(t *testing.T) {
 	for i, ops := range seedCorpus() {
 		r := RunOps(ops, 0)

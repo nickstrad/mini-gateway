@@ -29,6 +29,7 @@ func engineForShell(t *testing.T) *proxy.Engine {
 	return e
 }
 
+// TestCloseShutsTheEngineDownBeforeTheFinalFlush proves Shell.Close invokes Engine.Shutdown before the final CSV publish so gauges flush zero.
 func TestCloseShutsTheEngineDownBeforeTheFinalFlush(t *testing.T) {
 	dir := t.TempDir()
 	synctest.Test(t, func(t *testing.T) {

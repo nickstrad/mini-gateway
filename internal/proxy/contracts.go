@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// TimeoutRow describes one wait rendered into the generated docs/timeout-budget.md table.
 type TimeoutRow struct {
 	Wait  string
 	Where string
@@ -13,6 +14,8 @@ type TimeoutRow struct {
 	Ends  string
 }
 
+// TimeoutRows returns the ordered timeout budget rows for documentation generation
+// and contract verification.
 func TimeoutRows(t Timeouts) []TimeoutRow {
 	return []TimeoutRow{
 		{"Client startup: the TLS request exchange, the TLS handshake and authentication, together", "engine, client session (armed at accept)", "timeouts.client_startup", t.ClientStartup, "Connection closed (FATAL 08P01 during authentication); a TLS handshake past it is closed with no message"},
@@ -28,6 +31,7 @@ func TimeoutRows(t Timeouts) []TimeoutRow {
 	}
 }
 
+// CapacityRow describes one bounded structure rendered into the generated docs/capacity-table.md.
 type CapacityRow struct {
 	Thing    string
 	Protects string
@@ -42,6 +46,7 @@ func itoa(n int) string { return strconv.Itoa(n) }
 
 func configured(def string) string { return def + "; zero means the default" }
 
+// CapacityRows returns the engine's bounded-resource rows for docs/capacity-table.md.
 func CapacityRows(c Config) []CapacityRow {
 	c = c.WithDefaults()
 	return []CapacityRow{

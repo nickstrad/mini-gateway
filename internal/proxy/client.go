@@ -214,6 +214,9 @@ func (e *Engine) pump(c *client) {
 			e.front(c, ev)
 		}
 	}
+	// Cancel the mid-message deadline as soon as the cursor returns to a
+	// message boundary, even if startRequest moved the client to cpQueued or
+	// cpActive; leaving it armed would kill a slow fragmented query mid-flight.
 	if !c.cur.mid() {
 		e.t.cancel(&c.midT)
 	}
@@ -309,6 +312,7 @@ func (e *Engine) reply(c *client, row pgwire.ErrRowID) {
 }
 
 func (e *Engine) clientViolation(c *client) {
+	// Never splice FATAL 08P01 onto a stream that already relayed part of a reply.
 	if c.req == nil || c.req.relayed == 0 {
 		e.snap.NonRequestReplies++
 		e.reply(c, pgwire.ErrRowProtocolViolation)

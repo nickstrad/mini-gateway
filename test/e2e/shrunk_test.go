@@ -18,6 +18,7 @@ func failsWith(plant proxy.Plant) func([]sim.Fault) bool {
 	return func(ops []sim.Fault) bool { return RunOps(ops, plant).Failed() }
 }
 
+// TestShrunkQueuedVanishScenarioReplays proves the minimized shrunk scenario fails under PlantQueuedVanishKeepsSlot and passes without it.
 func TestShrunkQueuedVanishScenarioReplays(t *testing.T) {
 	if *updateShrunk != "" {
 		ops := DecodeOps([]byte(*updateShrunk))

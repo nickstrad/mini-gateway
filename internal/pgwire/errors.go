@@ -55,8 +55,11 @@ const (
 	// ErrRowPassThrough accounts for Postgres's own ErrorResponse relayed
 	// unchanged; ReplyBuilder refuses to synthesize a message for it.
 	ErrRowPassThrough
+	// ErrRowUnknownDatabase is returned when startup names a database other than the pool's.
 	ErrRowUnknownDatabase
+	// ErrRowProtocolVersion is returned when startup requests a major version other than 3.
 	ErrRowProtocolVersion
+	// ErrRowNoUser is returned when a startup packet omits the user parameter.
 	ErrRowNoUser
 	// ErrRowCount is the sentinel count of rows in ErrorRows.
 	ErrRowCount
@@ -219,6 +222,9 @@ var ErrorRows = [ErrRowCount]ErrorRow{
 		"no PostgreSQL user name specified in startup packet", work.No, work.No, "no, fix the client", ErrorRowConnClosed, work.RefusalNone, 4},
 }
 
+// AppendRowFatal encodes a FATAL ErrorResponse using id's SQLSTATE and default
+// message (overridden when message is non-empty), keeping every startup refusal
+// anchored to ErrorRows.
 func AppendRowFatal(dst []byte, id ErrRowID, message string) []byte {
 	row := id.Row()
 	if message == "" {

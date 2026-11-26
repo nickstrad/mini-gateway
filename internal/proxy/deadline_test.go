@@ -8,6 +8,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
+// TestResetReplyAtItsDeadlineIsLate proves a DISCARD ALL reply arriving at the exact reset deadline fails the reset.
 func TestResetReplyAtItsDeadlineIsLate(t *testing.T) {
 	r := newRig(t, nil)
 	r.leaseThenReset(11, 12)
@@ -21,6 +22,7 @@ func TestResetReplyAtItsDeadlineIsLate(t *testing.T) {
 	}
 }
 
+// TestResetReplyJustBeforeItsDeadlineCompletes proves a DISCARD ALL reply arriving 1 ns before the deadline succeeds.
 func TestResetReplyJustBeforeItsDeadlineCompletes(t *testing.T) {
 	r := newRig(t, nil)
 	r.leaseThenReset(11, 12)
@@ -31,6 +33,7 @@ func TestResetReplyJustBeforeItsDeadlineCompletes(t *testing.T) {
 	}
 }
 
+// TestStatementReplyAtItsDeadlineIsLate proves a statement reply arriving at the exact statement deadline times out.
 func TestStatementReplyAtItsDeadlineIsLate(t *testing.T) {
 	r := newRig(t, nil)
 	r.client(11)
@@ -45,6 +48,7 @@ func TestStatementReplyAtItsDeadlineIsLate(t *testing.T) {
 	}
 }
 
+// TestMessageRestAtTheMidMessageDeadlineIsLate proves trailing bytes of a partial message arriving at the mid-message deadline are late.
 func TestMessageRestAtTheMidMessageDeadlineIsLate(t *testing.T) {
 	r := newRig(t, nil)
 	r.client(11)
@@ -57,6 +61,7 @@ func TestMessageRestAtTheMidMessageDeadlineIsLate(t *testing.T) {
 	}
 }
 
+// TestConnectionFreedAtTheQueueDeadlineDoesNotServeTheExpiredRequest proves a connection becoming idle at the queue deadline sheds the expired request.
 func TestConnectionFreedAtTheQueueDeadlineDoesNotServeTheExpiredRequest(t *testing.T) {
 	r := newRig(t, nil)
 	r.client(11)

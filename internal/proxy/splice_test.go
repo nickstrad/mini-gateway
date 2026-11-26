@@ -7,6 +7,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
+// TestInputOverflowAfterAPartialReplyClosesWithoutSplicingAnError proves a pipelining overflow mid-reply closes the client without splicing FATAL 08P01.
 func TestInputOverflowAfterAPartialReplyClosesWithoutSplicingAnError(t *testing.T) {
 	r := newRig(t, nil)
 	r.client(11)

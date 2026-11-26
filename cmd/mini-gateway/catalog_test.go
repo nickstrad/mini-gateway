@@ -13,6 +13,9 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/shell"
 )
 
+// TestEveryMetricTheBinaryExportsIsInTheCatalog proves every point and histogram
+// emitted along the real binary's shellConfig registration path is declared in
+// internal/obs/catalog so docs/csv-schema.md stays complete.
 func TestEveryMetricTheBinaryExportsIsInTheCatalog(t *testing.T) {
 	f, err := config.Load(exampleConfig(t, ephemeral))
 	if err != nil {

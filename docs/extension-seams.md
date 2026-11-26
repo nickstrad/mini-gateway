@@ -1,8 +1,6 @@
 # Extension seams
 
-Operational facts as of chunk 6 (the walking skeleton). PLAN.md section 4 gives the reasons;
-this page says where each seam is in the code and what a second protocol would have to
-supply.
+Operational facts as of Chunk 6 (the walking skeleton). [Section 4 of the plan](../PLAN.md#4-steering-answer-1-does-a-generic-backend-interface-stay-honest-for-postgres) explains why `mini-gateway` is Postgres-first rather than hiding Postgres behind a generic backend interface; this page records where each seam lives in the code and what a second backend protocol would need to supply.
 
 ## The three seams
 

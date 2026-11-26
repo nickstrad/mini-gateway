@@ -59,6 +59,7 @@ func get(t *testing.T, s *Shell, path string) (int, string, []byte) {
 	return resp.StatusCode, resp.Header.Get("Content-Type"), body
 }
 
+// TestAdminAnswersWhileTheEngineIsBlocked proves /healthz, /stats, and /metrics serve from the last published snapshot while the engine goroutine is blocked.
 func TestAdminAnswersWhileTheEngineIsBlocked(t *testing.T) {
 	core := newCore()
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -126,6 +127,7 @@ func TestAdminAnswersWhileTheEngineIsBlocked(t *testing.T) {
 	}
 }
 
+// TestAdminRefusesOtherMethods proves the read-only admin endpoints reject non-GET/HEAD methods with 405.
 func TestAdminRefusesOtherMethods(t *testing.T) {
 	cfg := testConfig(listen(t))
 	cfg.AdminListener = listen(t)
@@ -141,6 +143,7 @@ func TestAdminRefusesOtherMethods(t *testing.T) {
 	}
 }
 
+// TestListenerDownFailsHealthAndEndsRun proves closing the client listener marks health failed and ends Run with ErrListenerDown.
 func TestListenerDownFailsHealthAndEndsRun(t *testing.T) {
 	ln := listen(t)
 	cfg := testConfig(ln)
@@ -180,6 +183,7 @@ func TestListenerDownFailsHealthAndEndsRun(t *testing.T) {
 	wantGoroutines(t, s, 0)
 }
 
+// TestListenerDownAnswers503 proves /healthz returns HTTP 503 when the client listener is down.
 func TestListenerDownAnswers503(t *testing.T) {
 	ln := listen(t)
 	cfg := testConfig(ln)
@@ -194,6 +198,7 @@ func TestListenerDownAnswers503(t *testing.T) {
 	}
 }
 
+// TestRunStopsOnCancelAndFlushesTheCSVFiles proves context cancellation shuts down cleanly and writes metrics.csv and run.csv.
 func TestRunStopsOnCancelAndFlushesTheCSVFiles(t *testing.T) {
 	dir := t.TempDir()
 	cfg := testConfig(listen(t))
@@ -244,6 +249,7 @@ func TestRunStopsOnCancelAndFlushesTheCSVFiles(t *testing.T) {
 	wantGoroutines(t, s, 0)
 }
 
+// TestSmuggledPlaintextAfterTheTLSRequestClosesTheConnection proves plaintext bytes sent right after SSLRequest fail the TLS record check and close the connection.
 func TestSmuggledPlaintextAfterTheTLSRequestClosesTheConnection(t *testing.T) {
 	ca := certtest.NewCA(t, "shell test CA")
 	core := newCore()
@@ -306,6 +312,7 @@ func clientTLSRun(t *testing.T, client *tls.Config) (*scriptCore, error, []byte)
 	return core, nil, reply
 }
 
+// TestClientTLSLeg proves real crypto/tls client upgrades succeed under allow/require and report TLS version to the engine.
 func TestClientTLSLeg(t *testing.T) {
 	for _, c := range []struct {
 		name    string
@@ -415,6 +422,7 @@ func dbStep(_ proxy.Instant, ev proxy.Event) []proxy.Action {
 	return nil
 }
 
+// TestDatabaseTLSModes proves backend TLS require, verify-full, and wrong-CA verification failure outcomes on real sockets.
 func TestDatabaseTLSModes(t *testing.T) {
 	dbCA, otherCA := certtest.NewCA(t, "database CA"), certtest.NewCA(t, "unrelated CA")
 	leaf := dbCA.Issue(t, "db.test")
@@ -510,6 +518,7 @@ func TestDatabaseTLSModes(t *testing.T) {
 	})
 }
 
+// TestNewRefusesBadConfigs proves shell.New rejects nil core/listener and out-of-range mailbox or publish interval values.
 func TestNewRefusesBadConfigs(t *testing.T) {
 	ln := listen(t)
 	defer ln.Close()
@@ -539,6 +548,7 @@ func TestNewRefusesBadConfigs(t *testing.T) {
 	}
 }
 
+// TestCloseWithoutStartAndStartTwice proves Close before Start is safe and a second Start returns ErrStarted.
 func TestCloseWithoutStartAndStartTwice(t *testing.T) {
 	s, err := New(newCore(), testConfig(listen(t)))
 	if err != nil {

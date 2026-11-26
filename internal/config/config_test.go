@@ -36,6 +36,7 @@ func exampleDir(t *testing.T) string {
 	return dir
 }
 
+// TestExampleConfigLoads proves the shipped example.json loads and validates cleanly.
 func TestExampleConfigLoads(t *testing.T) {
 	dir := exampleDir(t)
 	f, err := config.Load(filepath.Join(dir, "example.json"))
@@ -85,6 +86,7 @@ func TestExampleConfigLoads(t *testing.T) {
 	}
 }
 
+// TestExampleVerifiersMatchTheirPasswords proves the example config's SCRAM verifiers match their documented passwords.
 func TestExampleVerifiersMatchTheirPasswords(t *testing.T) {
 	f, err := config.Load(filepath.Join(exampleDir(t), "example.json"))
 	if err != nil {
@@ -103,6 +105,7 @@ func TestExampleVerifiersMatchTheirPasswords(t *testing.T) {
 	}
 }
 
+// TestDeriveVerifierRoundTrips proves DeriveVerifier output parses and validates via pgwire.ParseVerifier.
 func TestDeriveVerifierRoundTrips(t *testing.T) {
 	v, err := config.DeriveVerifier("pw", []byte("0123456789abcdef"), 4096)
 	if err != nil {
@@ -128,6 +131,7 @@ const minimal = `{
   "tenants": [{"user": "alice", "verifier": "SCRAM-SHA-256$4096:YWxpY2Utc2FsdC0xNmJ5dA==$wFsWRjw4CdurXhNfUCJ5TYgWLpm7VaVe1BnlT3YMkHQ=:kigZ7dHs129bcEpWRXAE1OULr7tdMHWVvgKrM5fmcQU="}]
 }`
 
+// TestDefaults proves omitted fields take their documented defaults.
 func TestDefaults(t *testing.T) {
 	f, err := config.Parse([]byte(minimal))
 	if err != nil {
@@ -166,6 +170,7 @@ func TestDefaults(t *testing.T) {
 	}
 }
 
+// TestFingerprint proves Fingerprint is stable across password changes and sensitive to effective settings.
 func TestFingerprint(t *testing.T) {
 	fp := func(js string) string {
 		t.Helper()
@@ -191,6 +196,7 @@ func TestFingerprint(t *testing.T) {
 	}
 }
 
+// TestProxyNeedsAParsedFile proves File.Proxy refuses an unvalidated zero File.
 func TestProxyNeedsAParsedFile(t *testing.T) {
 	r := &fixedRandom{}
 	if _, err := (&config.File{}).Proxy(r, pgwire.NewKeyIssuer(r)); !errors.Is(err, config.ErrNotValidated) {
@@ -205,6 +211,7 @@ func TestProxyNeedsAParsedFile(t *testing.T) {
 	}
 }
 
+// TestPasswordFileIsReadRelativeToTheConfig proves relative password_file paths resolve against the config directory.
 func TestPasswordFileIsReadRelativeToTheConfig(t *testing.T) {
 	dir := t.TempDir()
 	certtest.WriteFile(t, filepath.Join(dir, "pw.txt"), []byte("from-file\n"))
@@ -221,6 +228,7 @@ func TestPasswordFileIsReadRelativeToTheConfig(t *testing.T) {
 	}
 }
 
+// TestVerifyFullUsesServerNameOrHost proves verify-full uses backend_tls.server_name when set and falls back to database.address host.
 func TestVerifyFullUsesServerNameOrHost(t *testing.T) {
 	dir := t.TempDir()
 	ca := certtest.NewCA(t, "db CA")
@@ -277,6 +285,7 @@ const otherShapeIters = "SCRAM-SHA-256$8192:Ym9iLXNhbHQtMTZieXRlcw==$6LsavMiZUI+
 const otherShapeSalt = "SCRAM-SHA-256$4096:c2hvcnQ=$6LsavMiZUI+B727MKlgjdT/C6El3jPBup8NRgJxLzec=:V9non7svIjxX0rnRmMlvrZyEtUOZzxkPhfzjiMzQZZ8="
 const sameShape = "SCRAM-SHA-256$4096:Ym9iLXNhbHQtMTZieXRlcw==$6LsavMiZUI+B727MKlgjdT/C6El3jPBup8NRgJxLzec=:V9non7svIjxX0rnRmMlvrZyEtUOZzxkPhfzjiMzQZZ8="
 
+// TestValidationFailsClosedNamingTheKey proves every invalid configuration case is refused with an error naming the offending key.
 func TestValidationFailsClosedNamingTheKey(t *testing.T) {
 	files := writeTLSFiles(t)
 	alice := map[string]any{"user": "alice", "verifier": sameShape}
@@ -444,6 +453,7 @@ func TestValidationFailsClosedNamingTheKey(t *testing.T) {
 	}
 }
 
+// TestEmptyPasswordFileIsRefused proves a whitespace-only or empty password_file fails closed.
 func TestEmptyPasswordFileIsRefused(t *testing.T) {
 	dir := t.TempDir()
 	certtest.WriteFile(t, filepath.Join(dir, "pw"), []byte("\n"))
@@ -454,6 +464,7 @@ func TestEmptyPasswordFileIsRefused(t *testing.T) {
 	}
 }
 
+// TestLoadRefusesAMissingOrHugeFile proves Load rejects missing files and files larger than MaxConfigBytes.
 func TestLoadRefusesAMissingOrHugeFile(t *testing.T) {
 	dir := t.TempDir()
 	if _, err := config.Load(filepath.Join(dir, "absent.json")); !errors.Is(err, config.ErrInvalid) {
@@ -466,6 +477,7 @@ func TestLoadRefusesAMissingOrHugeFile(t *testing.T) {
 	}
 }
 
+// TestNoConfigOrCommandFileMentionsThePlantSwitch proves test-only proxy.Plant switches cannot be reached from config or cmd/mini-gateway.
 func TestNoConfigOrCommandFileMentionsThePlantSwitch(t *testing.T) {
 	for _, root := range []string{".", filepath.Join("..", "..", "cmd")} {
 		err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {

@@ -107,6 +107,7 @@ func records(t *testing.T, path string) [][]string {
 	return r
 }
 
+// TestZeroFlushCloseCountsAFailedOpen proves a zero-flush Close whose file open fails increments FlushErrors.
 func TestZeroFlushCloseCountsAFailedOpen(t *testing.T) {
 	cfg := config(t.TempDir())
 	cfg.Strict = false

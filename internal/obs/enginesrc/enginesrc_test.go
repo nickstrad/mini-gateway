@@ -49,6 +49,7 @@ func (f *filler) fill(v reflect.Value, path string) {
 var unexported = []string{".Lo", ".Hi", ".Count", ".Min", ".Max", "ClampedLow", "ClampedHigh", ".Buckets",
 	"ByRow[19]", "ClientCloses[0]", "DBCloses[0]", "DBConnectFails[0]", "Engine.Draining", "Engine.DBDown"}
 
+// TestMappingMovesEveryMetricAndExportsEveryField proves every field of proxy.Snapshot and proxy.ShellSnapshot maps to an exported metric that moves.
 func TestMappingMovesEveryMetricAndExportsEveryField(t *testing.T) {
 	var v enginesrc.Snapshot
 	f := &filler{paths: map[int64]string{}}
@@ -100,6 +101,7 @@ func TestMappingMovesEveryMetricAndExportsEveryField(t *testing.T) {
 	}
 }
 
+// TestZeroSnapshotEmitsEveryMetricAndPlainStructs proves zero snapshots emit all declared metrics and contain only plain value types.
 func TestZeroSnapshotEmitsEveryMetricAndPlainStructs(t *testing.T) {
 	c := obs.NewCollector(obs.Config{Instance: "i", Detail: true})
 	if err := c.Register(enginesrc.Source(func() proxy.Snapshot { return proxy.Snapshot{} }, nil)); err != nil {
@@ -125,6 +127,7 @@ func TestZeroSnapshotEmitsEveryMetricAndPlainStructs(t *testing.T) {
 	obstest.RequirePlain(t, proxy.ShellSnapshot{})
 }
 
+// TestDatabaseHealthRuleIsDegradedNotFailed proves database unreachability reports StateDegraded rather than StateFailed.
 func TestDatabaseHealthRuleIsDegradedNotFailed(t *testing.T) {
 	for _, down := range []bool{false, true} {
 		c := obs.NewCollector(obs.Config{Instance: "i"})

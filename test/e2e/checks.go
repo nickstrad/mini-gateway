@@ -82,6 +82,8 @@ func checkResults(r *SimRun) error {
 	return nil
 }
 
+// ResultsEqual verifies that every client received identical reply tokens
+// through the proxy as when running directly against the database.
 func ResultsEqual(direct, proxied []ClientResult) error {
 	if len(direct) != len(proxied) {
 		return failf("%d direct clients, %d through the proxy", len(direct), len(proxied))
@@ -94,6 +96,8 @@ func ResultsEqual(direct, proxied []ClientResult) error {
 	return nil
 }
 
+// TxCrossings counts statements in fakepg's log that executed inside a
+// transaction opened by a different tagged client.
 func TxCrossings(log []fakepg.StatementRecord) int {
 	owner := map[int64]string{}
 	n := 0
@@ -200,6 +204,9 @@ func stripTag(text string) string {
 	return text
 }
 
+// SessionCrossings counts both backend leases that started with dirty settings
+// (replayed from fakepg's statement log) and observer SHOW replies that saw a
+// non-default value.
 func SessionCrossings(r *SimRun) int {
 	type state struct {
 		tag   string

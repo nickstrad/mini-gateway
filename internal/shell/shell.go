@@ -1,3 +1,6 @@
+// Package shell wraps a sans-I/O proxy.Engine (Core) in real TCP/TLS sockets,
+// per-connection reader and writer goroutines, one bounded mailbox, an isolated
+// admin HTTP listener (/healthz, /stats, /metrics), and optional CSV flushing.
 package shell
 
 import (
@@ -41,18 +44,26 @@ const (
 )
 
 var (
+	// ErrListenerDown is returned by Run when the client listener stops unexpectedly.
 	ErrListenerDown = errors.New("shell: the client listener stopped")
-	ErrConfig       = errors.New("shell: bad configuration")
-	ErrStarted      = errors.New("shell: already started")
+	// ErrConfig is wrapped by New when Config is missing required fields or has invalid bounds.
+	ErrConfig = errors.New("shell: bad configuration")
+	// ErrStarted is returned by Start when called more than once or after Close.
+	ErrStarted = errors.New("shell: already started")
 )
 
+// Core is the sans-I/O state machine driven by the shell's single engine goroutine.
+// If Core also implements Shutdown(proxy.Instant, []proxy.Action) []proxy.Action,
+// the shell invokes it before the final observability publish on exit.
 type Core interface {
 	Start(now proxy.Instant, out []proxy.Action) []proxy.Action
 	Step(now proxy.Instant, ev proxy.Event, out []proxy.Action) []proxy.Action
 }
 
+// DialFunc opens a backend byte-stream connection within ctx's deadline.
 type DialFunc func(ctx context.Context, address string) (net.Conn, error)
 
+// ObsConfig configures the shell's collector, HTTP adapters, and optional CSV writer.
 type ObsConfig struct {
 	Instance          string
 	Build             string
@@ -63,6 +74,7 @@ type ObsConfig struct {
 	CSVScenario       string
 }
 
+// Config configures a Shell instance.
 type Config struct {
 	Listener        net.Listener
 	AdminListener   net.Listener
@@ -90,6 +102,7 @@ type published struct {
 	metrics []byte
 }
 
+// Shell owns the goroutines, sockets, mailbox, and admin HTTP server that drive Core.
 type Shell struct {
 	cfg     Config
 	core    Core
@@ -126,6 +139,7 @@ type Shell struct {
 	stats      counters
 }
 
+// New validates cfg, wires observability adapters, and returns an unstarted Shell.
 func New(core Core, cfg Config) (*Shell, error) {
 	if core == nil || cfg.Listener == nil {
 		return nil, fmt.Errorf("%w: a core and a client listener are required", ErrConfig)
@@ -157,8 +171,10 @@ func dialTCP(ctx context.Context, address string) (net.Conn, error) {
 	return d.DialContext(ctx, "tcp", address)
 }
 
+// Addr returns the client listener's bound network address.
 func (s *Shell) Addr() net.Addr { return s.cfg.Listener.Addr() }
 
+// AdminAddr returns the admin HTTP listener's bound address, or nil if disabled.
 func (s *Shell) AdminAddr() net.Addr {
 	if s.cfg.AdminListener == nil {
 		return nil
@@ -168,6 +184,7 @@ func (s *Shell) AdminAddr() net.Addr {
 
 func (s *Shell) now() proxy.Instant { return proxy.Instant(time.Since(s.base)) }
 
+// Start spawns the engine, accept, and optional admin goroutines.
 func (s *Shell) Start() error {
 	s.mu.Lock()
 	if s.started || s.closing {
@@ -187,6 +204,8 @@ func (s *Shell) Start() error {
 	return nil
 }
 
+// Run starts the shell and blocks until ctx is cancelled or the client listener
+// fails, then tears down all goroutines and closes observability outputs.
 func (s *Shell) Run(ctx context.Context) error {
 	if err := s.Start(); err != nil {
 		return err
@@ -204,8 +223,11 @@ func (s *Shell) Run(ctx context.Context) error {
 	return err
 }
 
+// ListenerLost returns a channel closed if the client listener exits unexpectedly.
 func (s *Shell) ListenerLost() <-chan struct{} { return s.lost }
 
+// Close stops listeners, aborts live connections, waits for every goroutine to
+// exit, and closes observability writers. Safe to call multiple times.
 func (s *Shell) Close() error {
 	s.closeOnce.Do(func() {
 		s.mu.Lock()

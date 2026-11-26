@@ -1,3 +1,6 @@
+// Command mini-gateway runs the PostgreSQL transaction-pooling gateway,
+// validates configuration files (-check), or derives SCRAM-SHA-256 verifiers
+// (-verifier) for the tenant table.
 package main
 
 import (

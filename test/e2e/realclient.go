@@ -19,8 +19,11 @@ const (
 	realReadChunk = 32 << 10
 )
 
+// ErrStartup is wrapped when a real-socket Postgres or proxy startup is refused.
 var ErrStartup = errors.New("e2e: startup refused")
 
+// RealClient is a real-socket Postgres wire client built on internal/testclient
+// with optional TLS upgrade, SCRAM-SHA-256 login, and byte-by-byte writes.
 type RealClient struct {
 	conn       net.Conn
 	sess       testclient.Session
@@ -32,6 +35,7 @@ type RealClient struct {
 	TLS        bool
 }
 
+// DialOptions configures DialReal's credentials, TLS leg, and fragmentation mode.
 type DialOptions struct {
 	User       string
 	Password   string
@@ -40,6 +44,8 @@ type DialOptions struct {
 	ByteByByte bool
 }
 
+// DialReal connects over TCP to addr, optionally upgrades to TLS, and completes
+// SCRAM-SHA-256 authentication.
 func DialReal(addr string, o DialOptions) (*RealClient, error) {
 	conn, err := net.DialTimeout("tcp", addr, realOpTimeout)
 	if err != nil {
@@ -165,8 +171,10 @@ func (c *RealClient) next() (testclient.Msg, error) {
 	}
 }
 
+// Query sends a simple-protocol Query message for sql and collects reply tokens until ReadyForQuery.
 func (c *RealClient) Query(sql string) []string { return c.Send(c.sess.Query(nil, sql)) }
 
+// Send writes raw wire bytes b and collects reply tokens until ReadyForQuery or close.
 func (c *RealClient) Send(b []byte) []string {
 	if err := c.write(b); err != nil {
 		return []string{"closed:write"}
@@ -174,6 +182,7 @@ func (c *RealClient) Send(b []byte) []string {
 	return c.Reply()
 }
 
+// Reply reads tokenized wire messages until ReadyForQuery or connection close.
 func (c *RealClient) Reply() []string {
 	var out []string
 	for {
@@ -188,6 +197,7 @@ func (c *RealClient) Reply() []string {
 	}
 }
 
+// Next reads and returns a single tokenized wire message.
 func (c *RealClient) Next() ([]string, error) {
 	m, err := c.next()
 	if err != nil {
@@ -196,13 +206,17 @@ func (c *RealClient) Next() ([]string, error) {
 	return []string{token(m)}, nil
 }
 
+// Conn returns the underlying TCP or TLS net.Conn.
 func (c *RealClient) Conn() net.Conn { return c.conn }
 
+// Close sends a Postgres Terminate ('X') message and closes the socket cleanly.
 func (c *RealClient) Close() {
 	_ = c.write(testclient.EncodeTerminate(nil))
 	_ = c.conn.Close()
 }
 
+// Abort forces an immediate TCP RST (SO_LINGER=0) without Terminate to simulate
+// a vanished client.
 func (c *RealClient) Abort() {
 	if tc, ok := c.conn.(*tls.Conn); ok {
 		if tcp, ok := tc.NetConn().(*net.TCPConn); ok {

@@ -11,6 +11,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/simnet"
 )
 
+// Default database, credentials, and SCRAM parameters for simulated proxy worlds.
 const (
 	Database       = "app"
 	BackendUser    = "gateway"
@@ -19,10 +20,13 @@ const (
 	DefaultTenants = 4
 )
 
+// TenantName returns the deterministic tenant user name ("tenant0", "tenant1", ...).
 func TenantName(i int) string { return "tenant" + strconv.Itoa(i) }
 
+// TenantPassword returns the deterministic test password for tenant name.
 func TenantPassword(name string) string { return "pw-" + name }
 
+// TenantTable constructs a pgwire.TenantTable with n deterministic test tenants.
 func TenantTable(n int) (*pgwire.TenantTable, error) {
 	var list []pgwire.Tenant
 	for i := 0; i < n; i++ {
@@ -36,6 +40,7 @@ func TenantTable(n int) (*pgwire.TenantTable, error) {
 	return pgwire.NewTenantTable(list)
 }
 
+// WorldConfig configures BuildWorld, assembling sim.Sim, simnet, fakepg, and Harness.
 type WorldConfig struct {
 	Seed        int64
 	Scenario    string
@@ -52,6 +57,7 @@ type WorldConfig struct {
 	Tap         func(sim.Record)
 }
 
+// World groups a simulator instance, network, fake Postgres server, and proxy Harness.
 type World struct {
 	S     *sim.Sim
 	Net   *simnet.Net
@@ -60,6 +66,7 @@ type World struct {
 	Cfg   WorldConfig
 }
 
+// NetOptions returns the default low-latency simnet options used by simulated proxy tests.
 func NetOptions() simnet.Options {
 	o := simnet.DefaultOptions()
 	o.Up.Latency = simnet.Latency{Base: 100 * time.Microsecond, Jitter: 50 * time.Microsecond}
@@ -67,6 +74,8 @@ func NetOptions() simnet.Options {
 	return o
 }
 
+// BuildWorld creates a deterministic sim.Sim, simnet.Net, fakepg.Server, and
+// proxysim.Harness wired together with shared tenants and backend credentials.
 func BuildWorld(cfg WorldConfig) (*World, error) {
 	if cfg.Tenants <= 0 {
 		cfg.Tenants = DefaultTenants

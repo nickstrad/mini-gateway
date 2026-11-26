@@ -15,11 +15,19 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/testclient"
 )
 
+// Fixed world parameters and decoder bounds for FuzzEngineOps (PLAN.md 6.6).
+// OpSeed is a constant rather than a hash of the fuzz input so mutations explore
+// operations rather than re-seeding the simulator.
 const (
-	OpSeed       = 1
-	OpClients    = 3
-	OpConns      = 1
-	OpQueueCap   = 2
+	// OpSeed is the fixed simulator seed used by RunOps.
+	OpSeed = 1
+	// OpClients is the number of simulated clients in the fuzz world.
+	OpClients = 3
+	// OpConns is the single backend connection so queueing occurs frequently.
+	OpConns = 1
+	// OpQueueCap is the bounded queue size in the fuzz world.
+	OpQueueCap = 2
+	// MaxOps caps decoded operations so every fuzz execution finishes well under a second.
 	MaxOps       = 48
 	opBytes      = 4
 	maxGapMs     = 32
@@ -29,6 +37,7 @@ const (
 	slowKey      = "slow"
 )
 
+// Operation kinds decoded by DecodeOps for engine operation fuzzing.
 const (
 	OpConnect sim.FaultKind = iota + 1
 	OpRead
@@ -53,12 +62,14 @@ const (
 	opEnd
 )
 
+// NumOps is the number of distinct operation kinds in FuzzEngineOps.
 const NumOps = int(opEnd - OpConnect)
 
 var opNames = [NumOps]string{"connect", "read", "write", "begin", "commit", "rollback", "reject", "extended",
 	"slow-read", "big-read", "disconnect", "vanish", "stop-reading", "resume-reading", "cancel", "advance",
 	"db-fragment", "db-first-byte", "db-reset", "bad-reset"}
 
+// OpNames returns the KindName table used to format and parse shrunk scenario files.
 func OpNames() []sim.KindName {
 	out := make([]sim.KindName, NumOps)
 	for i := range out {
@@ -67,6 +78,8 @@ func OpNames() []sim.KindName {
 	return out
 }
 
+// DecodeOps decodes arbitrary bytes into at most MaxOps valid operations (4 bytes
+// per op). Decoding is total and local: a one-byte edit alters at most one operation.
 func DecodeOps(b []byte) []sim.Fault {
 	n := min(len(b)/opBytes, MaxOps)
 	ops := make([]sim.Fault, 0, n)
@@ -82,6 +95,7 @@ func DecodeOps(b []byte) []sim.Fault {
 	return ops
 }
 
+// EncodeOps serializes a slice of operations back into DecodeOps's 4-byte wire format.
 func EncodeOps(ops []sim.Fault) []byte {
 	var b []byte
 	for _, o := range ops {
@@ -90,6 +104,7 @@ func EncodeOps(ops []sim.Fault) []byte {
 	return b
 }
 
+// OpTimeouts returns compressed engine deadlines so timeouts fire within short fuzz runs.
 func OpTimeouts() proxy.Timeouts {
 	return proxy.Timeouts{ClientStartup: 400 * time.Millisecond, ClientMidMessage: 400 * time.Millisecond,
 		ClientIdle: 20 * time.Second, QueueWait: 500 * time.Millisecond, DBConnect: 300 * time.Millisecond,
@@ -97,6 +112,8 @@ func OpTimeouts() proxy.Timeouts {
 		RedialDelay: 20 * time.Millisecond}
 }
 
+// OpResult reports invariant errors, client-visible protocol violations, and the
+// final snapshot from one RunOps execution.
 type OpResult struct {
 	Violations []string
 	Err        error
@@ -104,8 +121,10 @@ type OpResult struct {
 	Steps      int64
 }
 
+// Failed reports whether the run encountered an error or any client violation.
 func (r OpResult) Failed() bool { return r.Err != nil || len(r.Violations) > 0 }
 
+// String returns the error text or semicolon-joined violation descriptions.
 func (r OpResult) String() string {
 	if r.Err != nil {
 		return r.Err.Error()
@@ -129,6 +148,8 @@ func (ow *opWorld) violate(format string, args ...any) {
 	}
 }
 
+// RunOps executes ops against a fresh OpSeed simulator world with optional
+// planted bugs, verifying every engine invariant, reply property, and quiescence.
 func RunOps(ops []sim.Fault, plant proxy.Plant) OpResult {
 	tm := &tamperer{}
 	rows := []fakepg.Row{{Key: slowKey, Value: "s"}}

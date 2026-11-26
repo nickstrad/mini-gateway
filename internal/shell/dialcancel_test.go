@@ -10,6 +10,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
+// TestEngineCloseCancelsADialInProgress proves ActDBClose cancels an in-progress dial immediately instead of waiting for timeouts.database_connect.
 func TestEngineCloseCancelsADialInProgress(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		l, core := newPipeListener(), newCore()

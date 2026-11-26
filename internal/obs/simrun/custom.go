@@ -8,8 +8,12 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim"
 )
 
+// CustomInterval is the default virtual-time publish interval used by Custom.
 const CustomInterval = time.Second
 
+// Custom runs an arbitrary simulator workload alongside a collector and CSV
+// flush writer, publishing at t=0, every opt.Interval (and any opt.FlushAt
+// timestamps), and once after run returns.
 func Custom(scenario string, seed int64, fingerprint string, opt Options, s *sim.Sim, sources []obs.Source, run func() error) (*Run, error) {
 	if opt.Interval <= 0 {
 		opt.Interval = CustomInterval

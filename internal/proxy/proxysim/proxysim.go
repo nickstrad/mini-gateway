@@ -1,3 +1,6 @@
+// Package proxysim drives proxy.Engine over simnet inside the deterministic
+// simulator. It obeys the same byte-stream read protocol and write-report rules
+// as internal/shell, using simtls for simulated TLS on both legs.
 package proxysim
 
 import (
@@ -14,6 +17,7 @@ import (
 )
 
 const (
+	// DefaultAddr is the default simnet listener address for the simulated proxy.
 	DefaultAddr   = "proxy"
 	maxEventQueue = 1 << 20
 )
@@ -24,6 +28,7 @@ var (
 	kindClose = sim.K("px.cls")
 )
 
+// Config configures a simulated proxy Harness on simnet.
 type Config struct {
 	Addr       string
 	DBAddr     string
@@ -34,6 +39,7 @@ type Config struct {
 	Trace      bool
 }
 
+// Harness adapts proxy.Engine to simnet listeners, dials, and sim.Sim timers.
 type Harness struct {
 	S       *sim.Sim
 	Net     *simnet.Net
@@ -75,6 +81,8 @@ type conn struct {
 	reading   bool
 }
 
+// New constructs a proxy.Engine, binds a simnet listener, registers quiesce,
+// invariant, and state-digest hooks with net.Sim(), and runs Engine.Start.
 func New(net *simnet.Net, cfg Config) (*Harness, error) {
 	if cfg.Addr == "" {
 		cfg.Addr = DefaultAddr
@@ -117,16 +125,21 @@ func New(net *simnet.Net, cfg Config) (*Harness, error) {
 	return h, nil
 }
 
+// Addr returns the simnet address the harness listens on.
 func (h *Harness) Addr() string { return h.cfg.Addr }
 
+// Close stops accepting new simulated client connections.
 func (h *Harness) Close() { h.l.Close() }
 
+// Shutdown closes the listener and executes Engine.Shutdown.
 func (h *Harness) Shutdown() {
 	h.l.Close()
 	h.acts = h.Engine.Shutdown(proxy.Instant(h.S.Now()), h.acts[:0])
 	h.execute()
 }
 
+// Finish drains the simulation until quiet, checks Engine.Quiesce, shuts the
+// proxy down so the fixed set closes, drains again, and verifies all hooks.
 func (h *Harness) Finish() error {
 	if err := h.S.RunUntilQuiet(); err != nil {
 		return err
@@ -181,8 +194,12 @@ func (h *Harness) post(ev proxy.Event) {
 	h.drain()
 }
 
+// Post enqueues an external proxy.Event (such as EvDraining) and drains the loop.
 func (h *Harness) Post(ev proxy.Event) { h.post(ev) }
 
+// drain serialises all re-entrant events and reads so that one read chunk is
+// fully processed by Engine.Step (and any resulting pause action applied) before
+// the next chunk is read from simnet.
 func (h *Harness) drain() {
 	if h.running {
 		return
@@ -323,6 +340,8 @@ func (c *conn) gone() {
 	if c.end != nil {
 		_ = c.end.Close()
 	}
+	// Rule G8: report unwritten buffered bytes as EvDBWriteRefused before
+	// EvDBClosed so the engine knows no byte at or past the acked offset went out.
 	unwritten := len(c.out) > 0
 	c.out = nil
 	if unwritten && c.side == sideDB && c.connected {

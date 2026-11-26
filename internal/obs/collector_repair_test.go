@@ -173,6 +173,7 @@ func TestOpenLabelsAreOptionalAndNeedANonTenantLabel(t *testing.T) {
 	}
 }
 
+// TestDeclareIsAllOrNothing proves a refused Registry.Declare leaves no descriptors registered.
 func TestDeclareIsAllOrNothing(t *testing.T) {
 	refused := [][]MetricDesc{
 		{CounterDesc("a", 0, "A."), HistogramDesc("h", 0, UnitNs, "H."), CounterDesc("a", 0, "A again.")},
@@ -207,6 +208,7 @@ func TestDeclareIsAllOrNothing(t *testing.T) {
 	}
 }
 
+// TestSelfViewDoesNotShareHistogramsWithTheLastSnapshot proves mutating selfView does not corrupt the last published snapshot.
 func TestSelfViewDoesNotShareHistogramsWithTheLastSnapshot(t *testing.T) {
 	s := newSynth()
 	c := synthCollector(t, "i1", s, true)

@@ -11,21 +11,33 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/simnet"
 )
 
+// Tamper selects one reset-reply fault injected by the simnet relay placed in
+// front of the frozen fakepg server so reset failure paths are tested without
+// modifying internal/sim.
 type Tamper uint8
 
 const (
+	// TamperNone disables reset-reply tampering.
 	TamperNone Tamper = iota
+	// TamperError replaces the first DISCARD ALL reply with an ErrorResponse.
 	TamperError
+	// TamperWrongTag replaces the CommandComplete tag with "DISCARD".
 	TamperWrongTag
+	// TamperStatusT replaces ReadyForQuery status 'I' with 'T'.
 	TamperStatusT
+	// TamperSilent drops the DISCARD ALL reply until the reset deadline fires.
 	TamperSilent
+	// TamperDrop resets the connection as soon as DISCARD ALL is forwarded.
 	TamperDrop
+	// TamperLate delays the DISCARD ALL reply past the reset deadline.
 	TamperLate
+	// NumTampers is the cardinality of Tamper.
 	NumTampers
 )
 
 var tamperNames = [NumTampers]string{"none", "error", "wrong-tag", "status-t", "silent", "drop", "late"}
 
+// String returns the canonical hyphenated name of the tamper mode.
 func (t Tamper) String() string {
 	if t < NumTampers {
 		return tamperNames[t]

@@ -16,11 +16,14 @@ import (
 )
 
 const (
+	// FlushInterval is the virtual-time CSV publish period used by tier S runs.
 	FlushInterval = 5 * time.Second
 	logCap        = 1 << 16
+	// DefaultSettle is the post-workload virtual-time settle horizon.
 	DefaultSettle = 30 * time.Second
 )
 
+// SimOptions configures how RunSim and BuildSim execute a Spec in tier S.
 type SimOptions struct {
 	Direct bool
 	Dir    string
@@ -30,6 +33,8 @@ type SimOptions struct {
 	Tap    bool
 }
 
+// SimRun holds the completed world, client replies, engine snapshot, and CSV flush
+// record of one tier S scenario execution.
 type SimRun struct {
 	Spec    Spec
 	Seed    int64
@@ -52,6 +57,8 @@ func (spec Spec) engineConfig() proxy.Config {
 		ReplyBufferCap: spec.ReplyCap, Plant: spec.Plant, MaxClients: 1024, MaxStartup: 1024}
 }
 
+// BuildSim constructs a tier S world (with optional tamper relay and scheduled
+// faults) without running the scripted clients yet.
 func BuildSim(spec Spec, seed int64, o SimOptions) (*SimRun, error) {
 	opts := proxysim.NetOptions()
 	if spec.Fragment {
@@ -78,6 +85,8 @@ func BuildSim(spec Spec, seed int64, o SimOptions) (*SimRun, error) {
 	return r, nil
 }
 
+// RunSim builds and executes spec in tier S with seed, optionally flushing CSV
+// files under o.Dir, and verifies engine conservation and simulator invariants.
 func RunSim(spec Spec, seed int64, o SimOptions) (*SimRun, error) {
 	r, err := BuildSim(spec, seed, o)
 	if err != nil {
@@ -123,6 +132,7 @@ func fingerprint(spec Spec) string {
 	return fmt.Sprintf("%s-c%d-q%d-p%d", spec.Name, spec.Conns, spec.QueueCap, spec.Plant)
 }
 
+// ErrCheck is wrapped by scenario check failures.
 var ErrCheck = errors.New("e2e: check failed")
 
 func failf(format string, args ...any) error {

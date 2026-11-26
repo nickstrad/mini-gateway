@@ -1,3 +1,5 @@
+// Package certtest generates ephemeral ECDSA test CAs and server certificates
+// using only the Go standard library.
 package certtest
 
 import (
@@ -16,6 +18,7 @@ import (
 	"time"
 )
 
+// CA holds an ephemeral self-signed test certificate authority.
 type CA struct {
 	Cert *x509.Certificate
 	Key  *ecdsa.PrivateKey
@@ -32,10 +35,13 @@ func nextSerial() *big.Int {
 
 const serialBits = 62
 
+// validity starts in 1990 so certificates remain valid inside testing/synctest's
+// synthetic clock epoch (2000-01-01) as well as real wall-clock runs.
 func validity() (time.Time, time.Time) {
 	return time.Date(1990, 1, 1, 0, 0, 0, 0, time.UTC), time.Now().Add(7 * 24 * time.Hour)
 }
 
+// NewCA creates a fresh self-signed CA with CommonName name.
 func NewCA(t testing.TB, name string) *CA {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -56,18 +62,21 @@ func NewCA(t testing.TB, name string) *CA {
 	return &CA{Cert: cert, Key: key, PEM: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})}
 }
 
+// Pool returns an x509.CertPool trusting only ca.
 func (ca *CA) Pool() *x509.CertPool {
 	p := x509.NewCertPool()
 	p.AddCert(ca.Cert)
 	return p
 }
 
+// Leaf holds a signed server certificate and private key in both tls and PEM form.
 type Leaf struct {
 	TLS     tls.Certificate
 	CertPEM []byte
 	KeyPEM  []byte
 }
 
+// Issue signs a server certificate for the given DNS names or IP addresses.
 func (ca *CA) Issue(t testing.TB, names ...string) Leaf {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -101,6 +110,7 @@ func (ca *CA) Issue(t testing.TB, names ...string) Leaf {
 	return l
 }
 
+// WriteFiles writes the leaf certificate and private key PEM files into dir.
 func (l Leaf) WriteFiles(t testing.TB, dir, certName, keyName string) (string, string) {
 	t.Helper()
 	certPath, keyPath := filepath.Join(dir, certName), filepath.Join(dir, keyName)
@@ -109,6 +119,7 @@ func (l Leaf) WriteFiles(t testing.TB, dir, certName, keyName string) (string, s
 	return certPath, keyPath
 }
 
+// WriteFile writes b to path with mode 0600, failing the test on error.
 func WriteFile(t testing.TB, path string, b []byte) {
 	t.Helper()
 	if err := os.WriteFile(path, b, 0o600); err != nil {

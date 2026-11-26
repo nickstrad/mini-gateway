@@ -9,6 +9,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
+// TestFragmentedQueryOutlivesTheMidMessageDeadline proves completing a fragmented query cancels client_mid_message so slow statements succeed.
 func TestFragmentedQueryOutlivesTheMidMessageDeadline(t *testing.T) {
 	mid := 100 * time.Millisecond
 	r := newRig(t, func(c *proxy.Config) { c.Timeouts.ClientMidMessage = mid })

@@ -8,22 +8,33 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
 )
 
+// ResetFailure classifies why a post-lease DISCARD ALL reset failed and caused
+// the database connection to be closed.
 type ResetFailure uint8
 
 const (
+	// ResetFailError records an ErrorResponse during reset.
 	ResetFailError ResetFailure = iota
+	// ResetFailWrongTag records an unexpected, missing, or duplicate CommandComplete tag.
 	ResetFailWrongTag
+	// ResetFailWrongStatus records a ReadyForQuery status byte other than 'I'.
 	ResetFailWrongStatus
+	// ResetFailDeadline records a reset exceeding timeouts.reset.
 	ResetFailDeadline
+	// ResetFailConnLost records the database closing before the reset completed.
 	ResetFailConnLost
+	// ResetFailSurprise records an unexpected message, framing error, or trailing bytes.
 	ResetFailSurprise
+	// ResetFailClosed records a reset aborted by proxy shutdown.
 	ResetFailClosed
+	// NumResetFailures is the cardinality of ResetFailure for metric arrays.
 	NumResetFailures
 )
 
 var resetFailNames = [NumResetFailures]string{"error", "wrong-tag", "wrong-status", "deadline", "connection-lost",
 	"protocol-surprise", "closed"}
 
+// String returns the canonical metric label name for the reset failure.
 func (r ResetFailure) String() string {
 	if r < NumResetFailures {
 		return resetFailNames[r]
@@ -31,18 +42,25 @@ func (r ResetFailure) String() string {
 	return "?"
 }
 
+// Outcome classifies the final disposition of an accepted or rejected request.
 type Outcome uint8
 
 const (
+	// OutcomeCompleted indicates a reply reached its end marker.
 	OutcomeCompleted Outcome = iota
+	// OutcomeFailed indicates an accepted request failed after acceptance.
 	OutcomeFailed
+	// OutcomeShed indicates a request was refused by the queue (full or expired).
 	OutcomeShed
+	// OutcomeRejected indicates a request was refused before acceptance.
 	OutcomeRejected
+	// NumOutcomes is the cardinality of Outcome.
 	NumOutcomes
 )
 
 var outcomeNames = [NumOutcomes]string{"completed", "failed", "shed", "rejected"}
 
+// String returns the canonical outcome label name.
 func (o Outcome) String() string {
 	if o < NumOutcomes {
 		return outcomeNames[o]
@@ -50,8 +68,11 @@ func (o Outcome) String() string {
 	return "?"
 }
 
+// NumTLSVersions is the number of client TLS buckets (plain, TLS 1.2, TLS 1.3).
 const NumTLSVersions = 3
 
+// Snapshot is a plain value copy of all engine counters, gauges, and histograms
+// exported under component "engine".
 type Snapshot struct {
 	ClientsConnected obs.Gauge
 	ClientsInStartup obs.Gauge
@@ -119,6 +140,7 @@ type Snapshot struct {
 	Events        int64
 }
 
+// Check enforces exact counter conservation and capacity invariants on s.
 func (s Snapshot) Check() error {
 	var errs []error
 	if err := obs.Conserve(obs.T("received", s.Received), obs.T("accepted", s.Accepted), obs.T("rejected", s.Rejected)); err != nil {
@@ -166,6 +188,8 @@ func (s Snapshot) Check() error {
 	return errors.Join(errs...)
 }
 
+// ShellSnapshot is a plain value copy of the goroutine shell's mailbox,
+// goroutine, socket, and admin counters exported beside Engine.Snapshot.
 type ShellSnapshot struct {
 	MailboxDepth     obs.Gauge
 	MailboxCap       int64

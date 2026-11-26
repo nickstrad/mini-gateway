@@ -17,7 +17,9 @@ import (
 )
 
 const (
-	CheckListener      = "listener"
+	// CheckListener is the health check name reporting client listener availability.
+	CheckListener = "listener"
+	// PromContentType is the Content-Type header served by /metrics.
 	PromContentType    = "text/plain; version=0.0.4"
 	jsonContentType    = "application/json"
 	notPublishedYet    = "nothing published yet"
@@ -63,6 +65,7 @@ func (s *Shell) wireObs() error {
 	return nil
 }
 
+// CSVRunDir returns the active CSV run directory, or "" if CSV flushing is off.
 func (s *Shell) CSVRunDir() string {
 	if s.csv == nil {
 		return ""
@@ -83,6 +86,8 @@ func (s *Shell) publish() {
 		metrics: bytes.Clone(s.prom.Last())})
 }
 
+// Health combines the last published collector health snapshot with the live
+// listener status without touching the engine goroutine (decision D12).
 func (s *Shell) Health() obs.Health {
 	var h obs.Health
 	if p := s.pub.Load(); p != nil {

@@ -1,3 +1,6 @@
+// Package enginesrc maps proxy.Snapshot and proxy.ShellSnapshot into component
+// "engine" metrics for internal/obs, registers the wire and classifier sources
+// beside it, and provides the "database" health check rule.
 package enginesrc
 
 import (
@@ -15,8 +18,10 @@ const (
 	lr = obs.LabelReason
 	lm = obs.LabelMode
 
+	// MetricDatabaseDown is the gauge set to 1 while no database connection is usable and dials fail.
 	MetricDatabaseDown = "database_down"
-	CheckDatabase      = "database"
+	// CheckDatabase is the health rule name evaluating MetricDatabaseDown.
+	CheckDatabase = "database"
 )
 
 var none = obs.Labels{}
@@ -25,6 +30,7 @@ var tlsModes = [proxy.NumTLSVersions]string{"plain", "1.2", "1.3"}
 
 var leaseOutcomes = [...]string{"reset", "close", "as-is"}
 
+// Metrics returns the metric descriptors exported from proxy.Snapshot.
 func Metrics() []obs.MetricDesc {
 	return []obs.MetricDesc{
 		obs.GaugeDesc("clients_connected", 0, "Client connections open now."),
@@ -96,6 +102,7 @@ func Metrics() []obs.MetricDesc {
 	}
 }
 
+// ShellMetrics returns the metric descriptors exported from proxy.ShellSnapshot.
 func ShellMetrics() []obs.MetricDesc {
 	return []obs.MetricDesc{
 		obs.GaugeDesc("shell_mailbox_depth", 0, "Events waiting in the engine mailbox now."),
@@ -119,6 +126,7 @@ func ShellMetrics() []obs.MetricDesc {
 	}
 }
 
+// Map emits every engine metric from s into e.
 func Map(s proxy.Snapshot, e *obs.Emitter) {
 	mapClients(s, e)
 	mapRequests(s, e)
@@ -229,6 +237,7 @@ func mapDatabase(s proxy.Snapshot, e *obs.Emitter) {
 	}
 }
 
+// MapShell emits every goroutine-shell metric from s into e.
 func MapShell(s proxy.ShellSnapshot, e *obs.Emitter) {
 	e.Gauge("shell_mailbox_depth", none, s.MailboxDepth.Value)
 	e.Gauge("shell_mailbox_peak", none, s.MailboxDepth.Peak)
@@ -262,18 +271,25 @@ func boolInt(b bool) int64 {
 	return 0
 }
 
+// Snapshot bundles the engine and shell snapshots so one obs.Source exports
+// both under component "engine".
 type Snapshot struct {
 	Engine proxy.Snapshot
 	Shell  proxy.ShellSnapshot
 }
 
+// MapAll emits both Engine and Shell snapshots into e.
 func MapAll(s Snapshot, e *obs.Emitter) {
 	Map(s.Engine, e)
 	MapShell(s.Shell, e)
 }
 
+// AllMetrics returns the combined engine and shell metric descriptors registered
+// under component "engine".
 func AllMetrics() []obs.MetricDesc { return append(Metrics(), ShellMetrics()...) }
 
+// Source builds the obs.Source for component "engine". A nil shell callback
+// leaves shell metrics at zero (used in tier S simulator runs).
 func Source(engine func() proxy.Snapshot, shell func() proxy.ShellSnapshot) obs.Source {
 	snap := func() Snapshot {
 		s := Snapshot{Engine: engine()}
@@ -285,6 +301,7 @@ func Source(engine func() proxy.Snapshot, shell func() proxy.ShellSnapshot) obs.
 	return obs.NewSource(obs.ComponentEngine, AllMetrics(), snap, MapAll)
 }
 
+// Sources returns the engine, wire, and classifier obs.Sources for e.
 func Sources(e *proxy.Engine, shell func() proxy.ShellSnapshot) []obs.Source {
 	return []obs.Source{
 		Source(e.Snapshot, shell),
@@ -295,6 +312,7 @@ func Sources(e *proxy.Engine, shell func() proxy.ShellSnapshot) []obs.Source {
 	}
 }
 
+// Register attaches the engine, wire, and classifier sources of e to collector c.
 func Register(c *obs.Collector, e *proxy.Engine, shell func() proxy.ShellSnapshot) error {
 	var errs []error
 	for _, s := range Sources(e, shell) {
@@ -303,6 +321,8 @@ func Register(c *obs.Collector, e *proxy.Engine, shell func() proxy.ShellSnapsho
 	return errors.Join(errs...)
 }
 
+// HealthRules returns the database reachability rule, which reports StateDegraded
+// (never StateFailed) while no database connection is usable and dials are failing.
 func HealthRules() []obs.Rule {
 	return []obs.Rule{{Name: CheckDatabase, Check: func(s obs.InstanceSnapshot) (obs.State, string) {
 		if s.Value(obs.ComponentEngine, MetricDatabaseDown, none) > 0 {

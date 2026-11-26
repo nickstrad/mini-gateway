@@ -23,7 +23,7 @@ func challengeFor(t *testing.T, cfg ClientConfig, user string) string {
 }
 
 // TestMockChallengeTakesTheTableShapeByDefault proves unknown-user SCRAM
-// challenges inherit the tenant table's modal iterations and salt length unless
+// challenges inherit the tenant table's iteration count and salt length unless
 // MockIterations overrides them.
 func TestMockChallengeTakesTheTableShapeByDefault(t *testing.T) {
 	var tenants []Tenant

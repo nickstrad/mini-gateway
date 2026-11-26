@@ -33,6 +33,8 @@ func (s *Shell) readLoop(c *conn) {
 		var n int
 		var err error
 		if exact > 0 {
+			// Exact unbuffered read for the 8-byte client pre-startup header or
+			// 1-byte database TLS reply so no bytes are buffered across upgrade.
 			n, err = io.ReadFull(nc, buf[:exact])
 			if err != nil {
 				n = 0
@@ -44,6 +46,7 @@ func (s *Shell) readLoop(c *conn) {
 		}
 		if n > 0 {
 			ev := proxy.Event{Kind: c.kind(proxy.EvClientData, proxy.EvDBData), Conn: c.id, Data: append([]byte(nil), buf[:n]...)}
+			// Hold the per-connection read credit until the engine consumes this chunk.
 			c.setInflight(true)
 			if !s.post(envelope{ev: ev, conn: c}) {
 				return
@@ -60,6 +63,9 @@ func (s *Shell) readLoop(c *conn) {
 
 func (s *Shell) readerExit(c *conn) {
 	c.abort()
+	// Rule G8: on the database leg, wait for writeLoop to finish posting any
+	// EvDBWrote before posting EvDBWriteRefused and EvDBClosed so a close can
+	// never overtake a completed write report.
 	if c.side == sideDB {
 		<-c.writerDone
 	}

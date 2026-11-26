@@ -11,6 +11,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// Scenario pairs a Spec with an optional reset-reply Tamper mode and its
+// post-run assertion function.
 type Scenario struct {
 	Spec   Spec
 	Tamper Tamper
@@ -73,6 +75,7 @@ func resultsScript(c, tenants int) Script {
 	)}
 }
 
+// ResultsSpec builds the direct-vs-proxy equivalence scenario (with optional 1-byte fragmentation).
 func ResultsSpec(name string, fragment bool) Spec {
 	clients := 12
 	if fragment {
@@ -107,8 +110,10 @@ func txSpec(plant proxy.Plant) Spec {
 	return sp
 }
 
+// TxIntegritySpec builds the interleaved multi-statement transaction scenario.
 func TxIntegritySpec() Spec { return txSpec(0) }
 
+// TxIntegrityCanarySpec builds TxIntegritySpec with PlantReleaseOnAnyReady set.
 func TxIntegrityCanarySpec() Spec { return txSpec(proxy.PlantReleaseOnAnyReady) }
 
 func rejectSpec() Spec {
@@ -126,6 +131,7 @@ func rejectSpec() Spec {
 	return sp
 }
 
+// ExtendedMessages encodes a Parse/Bind/Execute/Sync extended-protocol batch.
 func ExtendedMessages() []byte {
 	parse := append([]byte{0}, "SELECT 1"...)
 	parse = append(parse, 0, 0, 0)
@@ -178,10 +184,14 @@ func sessionSpec(plant proxy.Plant) Spec {
 	return sp
 }
 
+// SessionSpec builds the session-isolation scenario with courtesy rejects bypassed
+// so SET/RESET statements reach the fake database and test DISCARD ALL.
 func SessionSpec() Spec { return sessionSpec(0) }
 
+// SessionAblationSpec builds SessionSpec with PlantNoReset set (must show crossings).
 func SessionAblationSpec() Spec { return sessionSpec(proxy.PlantNoReset) }
 
+// SessionLendEarlySpec builds SessionSpec with PlantLendBeforeResetReply set.
 func SessionLendEarlySpec() Spec { return sessionSpec(proxy.PlantLendBeforeResetReply) }
 
 func resetTamperSpec(t Tamper) Spec {
@@ -258,6 +268,7 @@ func silentQuerySpec() Spec {
 	return sp
 }
 
+// Scenarios returns all 21 named tier S scenarios of chunk 6.
 func Scenarios() []Scenario {
 	out := []Scenario{
 		{Spec: ResultsSpec("e2e-results", false), Check: checkResults},
@@ -282,6 +293,7 @@ func Scenarios() []Scenario {
 	return out
 }
 
+// Lookup returns the named tier S Scenario if registered.
 func Lookup(name string) (Scenario, bool) {
 	for _, sc := range Scenarios() {
 		if sc.Spec.Name == name {

@@ -62,6 +62,7 @@ func finish(t *testing.T, w *proxysim.World, probes ...*workload.Probe) proxy.Sn
 	return s
 }
 
+// TestDrainingRefusesNewWorkWith53M05AndClosesWhenIdle proves EvDraining refuses new idle-client work with 53M05 and closes the client.
 func TestDrainingRefusesNewWorkWith53M05AndClosesWhenIdle(t *testing.T) {
 	w := world(t, proxy.Config{Connections: 1})
 	p := ready(t, w, 0)
@@ -76,6 +77,7 @@ func TestDrainingRefusesNewWorkWith53M05AndClosesWhenIdle(t *testing.T) {
 	}
 }
 
+// TestPlaintextStartupUnderRequireGets28000 proves plaintext startup under ClientTLSRequire returns FATAL 28000.
 func TestPlaintextStartupUnderRequireGets28000(t *testing.T) {
 	cfg := proxy.Config{Connections: 1}
 	cfg.Client.TLS = pgwire.ClientTLSRequire
@@ -94,6 +96,7 @@ func TestPlaintextStartupUnderRequireGets28000(t *testing.T) {
 	}
 }
 
+// TestClientCapRefusesWith53300 proves exceeding limits.max_clients returns FATAL 53300 and closes the extra client.
 func TestClientCapRefusesWith53300(t *testing.T) {
 	w := world(t, proxy.Config{Connections: 1, MaxClients: 1, MaxStartup: 1, QueueCap: 1})
 	a := ready(t, w, 0)
@@ -111,6 +114,7 @@ func TestClientCapRefusesWith53300(t *testing.T) {
 	}
 }
 
+// TestStageCountersMoveAndConserve proves every pipeline stage counter moves and Snapshot.Check conservation holds.
 func TestStageCountersMoveAndConserve(t *testing.T) {
 	w := world(t, proxy.Config{Connections: 1})
 	p := ready(t, w, 0)
@@ -131,6 +135,7 @@ func TestStageCountersMoveAndConserve(t *testing.T) {
 	}
 }
 
+// TestSnapshotCheckCatchesBrokenConservation proves Snapshot.Check fails on every mutated conservation identity.
 func TestSnapshotCheckCatchesBrokenConservation(t *testing.T) {
 	good := proxy.Snapshot{Received: 3, Accepted: 2, Rejected: 1, Completed: 1, Failed: 1, FailedNoReply: 0, ReachedYes: 1, DBCap: 1, QueueCap: 1, RelayCap: 1}
 	good.ByRow[pgwire.ErrRowLostAfterRead] = 1
@@ -157,6 +162,7 @@ func TestSnapshotCheckCatchesBrokenConservation(t *testing.T) {
 	}
 }
 
+// TestFIFOAndFixedSet proves FIFO queue push/pop/remove ordering and FixedSet checkin/checkout/remove bounds.
 func TestFIFOAndFixedSet(t *testing.T) {
 	q := proxy.NewFIFO(2)
 	if !q.Push(0, "a", 1) || !q.Push(0, "b", 2) || q.Push(0, "c", 3) || q.Len() != 2 {
@@ -192,6 +198,7 @@ func TestFIFOAndFixedSet(t *testing.T) {
 	}
 }
 
+// TestConfigValidationNamesTheKey proves every invalid proxy.Config field returns ErrConfig naming the key.
 func TestConfigValidationNamesTheKey(t *testing.T) {
 	base := proxy.Config{}.WithDefaults()
 	for key, mut := range map[string]func(*proxy.Config){

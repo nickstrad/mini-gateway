@@ -81,6 +81,8 @@ func (ca *testCA) issue(names ...string) ([]byte, []byte, error) {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kd}), nil
 }
 
+// RealSetup owns a throwaway Postgres 17 Docker container (ssl=on, SCRAM),
+// test CA certificates, and the compiled mini-gateway binary for tier R tests.
 type RealSetup struct {
 	Env       *RealEnv
 	Container string
@@ -105,6 +107,8 @@ func writeAll(files map[string][]byte) error {
 	return nil
 }
 
+// StartRealEnv generates ephemeral test certificates, builds cmd/mini-gateway,
+// starts a Postgres 17 container named "<prefix>-c06", and installs the test schema.
 func StartRealEnv(prefix, runDir string) (*RealSetup, error) {
 	dir, err := os.MkdirTemp("", "mg-tier-r-c06-")
 	if err != nil {
@@ -187,6 +191,7 @@ func (s *RealSetup) waitReady() error {
 	return fmt.Errorf("postgres did not become ready: %v\n%s", last, logs)
 }
 
+// Close removes the throwaway Docker container and deletes the temp directory.
 func (s *RealSetup) Close() error {
 	var errs []error
 	if s.Container != "" {

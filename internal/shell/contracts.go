@@ -6,6 +6,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
+// CapacityRows returns the shell's bounded-resource rows appended to
+// proxy.CapacityRows when generating docs/capacity-table.md.
 func CapacityRows() []proxy.CapacityRow {
 	return []proxy.CapacityRow{
 		{Thing: "Engine mailbox", Protects: "proxy memory between socket goroutines and the engine", Capacity: strconv.Itoa(mailboxCap) + " events",

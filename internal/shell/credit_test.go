@@ -7,6 +7,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
+// TestReaderPostsNoSecondReadBeforeTheEngineTakesTheFirst proves the per-connection inflight credit keeps ActDBPause bounded to one read chunk.
 func TestReaderPostsNoSecondReadBeforeTheEngineTakesTheFirst(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		l, core := newPipeListener(), newCore()

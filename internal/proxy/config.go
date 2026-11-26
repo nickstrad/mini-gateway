@@ -9,35 +9,66 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// CloseReason classifies why the engine closed a client or database connection.
 type CloseReason uint8
 
 const (
+	// CloseNone is the zero value indicating no close reason.
 	CloseNone CloseReason = iota
+	// CloseClientGone records a peer-initiated close or reset on the client leg.
 	CloseClientGone
+	// CloseClientTerminate records a clean Postgres Terminate ('X') from the client.
 	CloseClientTerminate
+	// CloseClientStartup records a client closed during TLS negotiation or startup.
 	CloseClientStartup
+	// CloseClientViolation records a client closed for framing or buffer violation.
 	CloseClientViolation
+	// CloseClientIdle records a client closed after exceeding timeouts.client_idle.
 	CloseClientIdle
+	// CloseClientMidMessage records a client closed for an incomplete message deadline.
 	CloseClientMidMessage
+	// CloseClientWriteStalled records a slow client dropped at timeouts.client_write.
 	CloseClientWriteStalled
+	// CloseClientPartialReply records a client closed because the database failed after
+	// part of the reply had already been relayed.
 	CloseClientPartialReply
+	// CloseClientLostInTx records a client closed with FATAL 08006 after losing its
+	// held database connection inside a transaction.
 	CloseClientLostInTx
+	// CloseClientTooMany records a client refused at limits.max_clients or limits.max_startup.
 	CloseClientTooMany
+	// CloseClientDraining records a client closed after a draining refusal (53M05).
 	CloseClientDraining
+	// CloseClientCancelRequest records a client connection that carried a CancelRequest.
 	CloseClientCancelRequest
+	// CloseDBConnectFailed records a database dial or startup failure.
 	CloseDBConnectFailed
+	// CloseDBConnectDeadline records a database dial or startup exceeding timeouts.database_connect.
 	CloseDBConnectDeadline
+	// CloseDBLost records an unexpected close or reset from the database.
 	CloseDBLost
+	// CloseDBStatementDeadline records a database connection closed at timeouts.statement.
 	CloseDBStatementDeadline
+	// CloseDBClientVanished records a lent database connection destroyed because its client left.
 	CloseDBClientVanished
+	// CloseDBResetFailed records a database connection closed because DISCARD ALL failed.
 	CloseDBResetFailed
+	// CloseDBReleaseDirty records a database connection closed at release because status
+	// was not 'I' or unread bytes remained after ReadyForQuery.
 	CloseDBReleaseDirty
+	// CloseDBUnsolicited records an idle database connection closed on unexpected bytes.
 	CloseDBUnsolicited
+	// CloseDBViolation records a database connection closed on a wire framing violation.
 	CloseDBViolation
+	// CloseDBServerFatal records a database connection closed on a FATAL/PANIC ErrorResponse.
 	CloseDBServerFatal
+	// CloseDBWriteStalled records a database connection closed on a write stall.
 	CloseDBWriteStalled
+	// CloseClientShutdown records a client closed by Engine.Shutdown.
 	CloseClientShutdown
+	// CloseDBShutdown records a database connection closed by Engine.Shutdown.
 	CloseDBShutdown
+	// NumCloseReasons is the cardinality of CloseReason for fixed-size metric arrays.
 	NumCloseReasons
 )
 
@@ -47,6 +78,7 @@ var closeNames = [NumCloseReasons]string{"none", "client-gone", "client-terminat
 	"connection-lost", "statement-deadline", "client-vanished", "reset-failed", "release-dirty", "unsolicited-bytes",
 	"protocol-violation", "server-fatal", "database-write-stalled", "client-shutdown", "database-shutdown"}
 
+// String returns the canonical metric label name for the close reason.
 func (r CloseReason) String() string {
 	if r < NumCloseReasons {
 		return closeNames[r]
@@ -54,16 +86,20 @@ func (r CloseReason) String() string {
 	return "?"
 }
 
+// ClientSide reports whether r classifies a client-leg close rather than a database-leg close.
 func (r CloseReason) ClientSide() bool {
 	return (r >= CloseClientGone && r <= CloseClientCancelRequest) || r == CloseClientShutdown
 }
 
+// ResetPolicy selects the lease-release reset behaviour (decision D8).
 type ResetPolicy uint8
 
 const (
+	// ResetAlways sends DISCARD ALL after every cleanly ended lease.
 	ResetAlways ResetPolicy = iota + 1
 )
 
+// String returns the config string for the reset policy.
 func (p ResetPolicy) String() string {
 	if p == ResetAlways {
 		return "always"
@@ -71,16 +107,28 @@ func (p ResetPolicy) String() string {
 	return "?"
 }
 
+// Plant is a bitmask of test-only fault-injection switches used for canaries,
+// ablations, and fuzz verification. It is never exposed through internal/config.
 type Plant uint16
 
 const (
+	// PlantReleaseOnAnyReady releases a connection on any ReadyForQuery status byte
+	// (canary for transaction integrity).
 	PlantReleaseOnAnyReady Plant = 1 << iota
+	// PlantLendBeforeResetReply returns a connection to idle immediately after writing
+	// DISCARD ALL without waiting for its reply (canary for reset verification).
 	PlantLendBeforeResetReply
+	// PlantNoReset skips DISCARD ALL at release (ablation proving state crosses without reset).
 	PlantNoReset
+	// PlantQueuedVanishKeepsSlot leaks a queue slot when a queued client closes
+	// (ordering bug that FuzzEngineOps must find within the gate budget).
 	PlantQueuedVanishKeepsSlot
+	// PlantSkipCourtesy bypasses the courtesy reject list so session-mutating statements
+	// reach the fake database in tier S reset tests.
 	PlantSkipCourtesy
 )
 
+// Timeouts configures every deadline enforced by the engine (docs/timeout-budget.md).
 type Timeouts struct {
 	ClientStartup    time.Duration
 	ClientMidMessage time.Duration
@@ -93,6 +141,7 @@ type Timeouts struct {
 	RedialDelay      time.Duration
 }
 
+// Default timeout budget values (PLAN.md section 9.2).
 const (
 	DefaultClientStartup    = 5 * time.Second
 	DefaultClientMidMessage = 5 * time.Second
@@ -105,6 +154,7 @@ const (
 	DefaultRedialDelay      = 100 * time.Millisecond
 )
 
+// DefaultTimeouts returns the initial timeout budget before tuning.
 func DefaultTimeouts() Timeouts {
 	return Timeouts{ClientStartup: DefaultClientStartup, ClientMidMessage: DefaultClientMidMessage,
 		ClientIdle: DefaultClientIdle, QueueWait: DefaultQueueWait, DBConnect: DefaultDBConnect,
@@ -112,6 +162,7 @@ func DefaultTimeouts() Timeouts {
 		RedialDelay: DefaultRedialDelay}
 }
 
+// Default and hard-limit capacity constants (docs/capacity-table.md).
 const (
 	DefaultConnections    = 4
 	DefaultQueueCap       = 256
@@ -127,6 +178,8 @@ const (
 	MaxReplyBufferCap     = 64 << 20
 )
 
+// Config holds the engine's capacities, timeouts, wire configurations, stage
+// seams, and test-only Plant switches.
 type Config struct {
 	Client         pgwire.ClientConfig
 	Backend        pgwire.BackendConfig
@@ -142,8 +195,12 @@ type Config struct {
 	Plant          Plant
 }
 
+// ErrConfig is wrapped by all engine configuration validation errors.
 var ErrConfig = errors.New("proxy: bad configuration")
 
+// WithDefaults returns a copy of c with any zero capacity, timeout, or reset
+// policy replaced by its documented default. Negative values are left untouched
+// so Validate fails closed on them.
 func (c Config) WithDefaults() Config {
 	if c.Connections == 0 {
 		c.Connections = DefaultConnections
@@ -178,6 +235,8 @@ func (c Config) WithDefaults() Config {
 	return c
 }
 
+// Validate checks capacities, cross-field bounds, reset policy, and timeout
+// nesting, returning joined errors that each name the offending config key.
 func (c Config) Validate() error {
 	var errs []error
 	bad := func(key string, format string, args ...any) {
@@ -208,6 +267,8 @@ func (c Config) Validate() error {
 	return errors.Join(errs...)
 }
 
+// TimeoutNest describes one required strict ordering (InnerValue < OuterValue)
+// between an inner wait and the outer wait that encloses it.
 type TimeoutNest struct {
 	Inner, Outer       string
 	InnerKey, OuterKey string
@@ -215,6 +276,8 @@ type TimeoutNest struct {
 	OuterValue         time.Duration
 }
 
+// Nesting returns all timeout nesting constraints checked at config load and
+// rendered into docs/timeout-budget.md.
 func (t Timeouts) Nesting() []TimeoutNest {
 	n := func(inner, outer string, ik, ok string, iv, ov time.Duration) TimeoutNest {
 		return TimeoutNest{Inner: inner, Outer: outer, InnerKey: ik, OuterKey: ok, InnerValue: iv, OuterValue: ov}
@@ -231,6 +294,8 @@ func (t Timeouts) Nesting() []TimeoutNest {
 	}
 }
 
+// Validate checks that every timeout is in (0, 24h] and that every inner wait
+// strictly precedes its outer wait.
 func (t Timeouts) Validate() []error {
 	var errs []error
 	for _, f := range []struct {

@@ -13,12 +13,15 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/world"
 )
 
+// ProxyDriver implements chunk 2's world.Driver interface with a proxysim.Harness
+// placed between the simulated workload and fakepg.
 type ProxyDriver struct {
 	world.SimDriver
 	Conns int
 	Proxy *proxysim.Harness
 }
 
+// Start creates sim, simnet, fakepg, and the simulated proxy for scenario setup s.
 func (d *ProxyDriver) Start(s world.Setup) error {
 	d.S = sim.New(sim.Config{Seed: d.Seed, Scenario: d.Scenario, Replay: d.Replay})
 	d.Net = simnet.New(d.S)
@@ -49,6 +52,7 @@ func (d *ProxyDriver) Start(s world.Setup) error {
 	return err
 }
 
+// Addr returns the proxy's simnet listener address.
 func (d *ProxyDriver) Addr() string {
 	if d.Proxy == nil {
 		return ""
@@ -56,6 +60,7 @@ func (d *ProxyDriver) Addr() string {
 	return d.Proxy.Addr()
 }
 
+// Connect starts the simulated workload aimed at the proxy rather than fakepg.
 func (d *ProxyDriver) Connect(c workload.Config) error {
 	if d.Proxy == nil {
 		return world.ErrNotStarted
@@ -74,6 +79,7 @@ func (d *ProxyDriver) Connect(c workload.Config) error {
 	return nil
 }
 
+// Stop runs Proxy.Finish to verify quiescence and invariants after the scenario.
 func (d *ProxyDriver) Stop() error {
 	if d.Proxy == nil {
 		return world.ErrNotStarted
@@ -84,6 +90,7 @@ func (d *ProxyDriver) Stop() error {
 	return nil
 }
 
+// Result assembles the world.Result snapshots for scenario assertions.
 func (d *ProxyDriver) Result(name string, err error) *world.Result {
 	r := &world.Result{Scenario: name, Seed: d.Seed, Err: err, Obs: d.Observe(), Sim: d.S, Server: d.Fake, Workload: d.Workload}
 	if d.Fake != nil {

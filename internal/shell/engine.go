@@ -35,6 +35,8 @@ type stopper interface {
 func (s *Shell) engineExit(ticker *time.Ticker) {
 	ticker.Stop()
 	s.wake.Stop()
+	// Shut the engine down before the final publish so the final CSV flush
+	// records zero in-flight requests and zero connections resetting.
 	if st, ok := s.core.(stopper); ok {
 		s.out = st.Shutdown(s.now(), s.out[:0])
 		s.execute()
@@ -53,6 +55,8 @@ func (s *Shell) engineExit(ticker *time.Ticker) {
 
 func (s *Shell) deliver(env envelope) {
 	ev := env.ev
+	// Release the per-connection read credit only after Engine.Step finishes
+	// processing this chunk (and any resulting ActClientPause/ActDBPause).
 	if (ev.Kind == proxy.EvClientData || ev.Kind == proxy.EvDBData) && env.conn != nil {
 		defer env.conn.setInflight(false)
 	}

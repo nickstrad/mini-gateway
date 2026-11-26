@@ -51,6 +51,8 @@ func runCmd(t *testing.T, stdin string, args ...string) (int, string, string) {
 	return code, out.String(), errOut.String()
 }
 
+// TestVerifierMode proves -verifier derives valid SCRAM-SHA-256 verifiers from
+// both a flag value and stdin ("-").
 func TestVerifierMode(t *testing.T) {
 	for _, c := range []struct {
 		args  []string
@@ -81,6 +83,7 @@ func TestVerifierMode(t *testing.T) {
 	}
 }
 
+// TestUsageErrorsExitTwo proves invalid flags, missing -config, and bad config files exit 2.
 func TestUsageErrorsExitTwo(t *testing.T) {
 	for _, args := range [][]string{
 		{},
@@ -117,6 +120,7 @@ func exampleConfig(t *testing.T, edit func(string) string) string {
 	return path
 }
 
+// TestCheckPrintsTheFingerprint proves -check validates a config and prints its fingerprint without serving.
 func TestCheckPrintsTheFingerprint(t *testing.T) {
 	path := exampleConfig(t, nil)
 	code, out, errOut := runCmd(t, "", "-config", path, "-check")
@@ -145,6 +149,7 @@ func ephemeral(s string) string {
 
 var startLine = regexp.MustCompile(`listening on (\S+), admin on (\S+), config fingerprint ([0-9a-f]{16})`)
 
+// TestServeStartsAndStopsCleanly proves serve binds listeners, serves admin endpoints, and exits 0 on cancel.
 func TestServeStartsAndStopsCleanly(t *testing.T) {
 	path := exampleConfig(t, ephemeral)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -195,6 +200,7 @@ func TestServeStartsAndStopsCleanly(t *testing.T) {
 	}
 }
 
+// TestListenFailureExitsOne proves an occupied listener address causes a runtime exit 1.
 func TestListenFailureExitsOne(t *testing.T) {
 	busy, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -213,6 +219,7 @@ func TestListenFailureExitsOne(t *testing.T) {
 	}
 }
 
+// TestSignalsEndTheRunContext proves signalContext cancels cleanly on SIGINT/SIGTERM.
 func TestSignalsEndTheRunContext(t *testing.T) {
 	for _, sig := range []syscall.Signal{syscall.SIGTERM, syscall.SIGINT} {
 		ctx, stop := signalContext()
@@ -228,6 +235,7 @@ func TestSignalsEndTheRunContext(t *testing.T) {
 	}
 }
 
+// TestCryptoRandomVaries proves cryptoRandom draws distinct values for BackendKeyData issuance.
 func TestCryptoRandomVaries(t *testing.T) {
 	r := cryptoRandom{}
 	if r.Uint64() == r.Uint64() && r.Uint64() == r.Uint64() {

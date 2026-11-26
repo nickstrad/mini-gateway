@@ -7,6 +7,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
+// TestBytesAfterReadyForQueryEndingALeaseCloseTheConnection proves trailing bytes in the same read after ReadyForQuery 'I' close the connection dirty without resetting.
 func TestBytesAfterReadyForQueryEndingALeaseCloseTheConnection(t *testing.T) {
 	r := newRig(t, nil)
 	r.client(11)
@@ -30,6 +31,7 @@ func TestBytesAfterReadyForQueryEndingALeaseCloseTheConnection(t *testing.T) {
 	}
 }
 
+// TestBytesAfterTheResetReplyCloseTheConnection proves trailing bytes in the same read after DISCARD ALL's ReadyForQuery fail the reset and close the connection.
 func TestBytesAfterTheResetReplyCloseTheConnection(t *testing.T) {
 	r := newRig(t, nil)
 	r.leaseThenReset(11, 12)

@@ -185,6 +185,9 @@ func (e *Engine) relay(d *dbConn, b []byte) []byte {
 			held := d.hold
 			d.hold = nil
 			evs, _ := d.cycle.Receive(nil, held)
+			// Any bytes left in the same read after a lease-ending ReadyForQuery
+			// mark ReleaseInput.Unread so the connection closes dirty instead of
+			// feeding pre-reset bytes into judgeReset.
 			d.trailing = len(b) > 0
 			e.relayEvents(d, evs, held)
 			d.trailing = false
@@ -350,6 +353,9 @@ func (e *Engine) statementLost(c *client, d *dbConn) {
 	}
 }
 
+// reachedFor implements rule G8: once ActDBWrite was emitted, the request may
+// have reached the database unless the driver explicitly reported a write
+// refusal at or before the request's first byte and nothing was relayed.
 func reachedFor(d *dbConn, req *request) work.Tri {
 	if req.relayed > 0 || d == nil || !d.refused || d.refusedAt > req.start {
 		return work.Yes
@@ -444,6 +450,8 @@ func (e *Engine) judgeReset(d *dbConn, b []byte) []byte {
 		e.resetFailed(d, why)
 		return nil
 	case rvDone:
+		// Trailing unread bytes after the reset's ReadyForQuery fail the reset
+		// on doubt so they can never leak into the next client's lease.
 		if n < len(b) {
 			e.resetFailed(d, ResetFailSurprise)
 			return nil

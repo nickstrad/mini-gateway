@@ -26,6 +26,7 @@ var (
 	realErr   error
 )
 
+// TestMain manages the shared Postgres 17 Docker container and compiled binary when MG_TIER_R=1.
 func TestMain(m *testing.M) {
 	code := 0
 	if os.Getenv("MG_TIER_R") == "1" {
@@ -141,6 +142,7 @@ func runBoth(t *testing.T, env *RealEnv, spec Spec, scenario string, byteByByte 
 	return direct, proxied, stopAndRead(t, env, g, scenario)
 }
 
+// TestTierRResultsThroughTheProxyEqualDirect proves real-binary proxy results match direct Postgres 17 results over TLS.
 func TestTierRResultsThroughTheProxyEqualDirect(t *testing.T) {
 	env := tierR(t)
 	direct, proxied, final := runBoth(t, env, realSpec(ResultsSpec("tierr-results", false)), "tierr-results", false)
@@ -153,6 +155,7 @@ func TestTierRResultsThroughTheProxyEqualDirect(t *testing.T) {
 	t.Logf("tier R: results equal direct for %d clients", len(proxied))
 }
 
+// TestTierRFragmentationChangesNothing proves byte-by-byte client writes produce identical results through the real binary.
 func TestTierRFragmentationChangesNothing(t *testing.T) {
 	env := tierR(t)
 	direct, proxied, _ := runBoth(t, env, realSpec(ResultsSpec("tierr-fragment", true)), "tierr-fragment", true)
@@ -161,6 +164,7 @@ func TestTierRFragmentationChangesNothing(t *testing.T) {
 	}
 }
 
+// TestTierRTransactionIntegrity proves interleaved real transactions over 2 connections never mix statements across clients.
 func TestTierRTransactionIntegrity(t *testing.T) {
 	env := tierR(t)
 	const clients, rounds = 12, 4
@@ -224,6 +228,7 @@ func statementCalls(t *testing.T, env *RealEnv) int64 {
 	return 0
 }
 
+// TestTierRRejectListAndExtendedProtocol proves reject-list statements and extended protocol batches get 0A000 without reaching Postgres.
 func TestTierRRejectListAndExtendedProtocol(t *testing.T) {
 	env := tierR(t)
 	g := gateway(t, env, GatewayOpts{Scenario: "tierr-reject-list", Conns: 1})
@@ -306,6 +311,7 @@ func sessionRun(t *testing.T, env *RealEnv, g *Gateway) int {
 	return dirty
 }
 
+// TestTierRSessionStateNeverCrossesClients proves DISCARD ALL clears hidden function-driven SET, temp table, lock, PREPARE, and LISTEN state against dirty-check.sql.
 func TestTierRSessionStateNeverCrossesClients(t *testing.T) {
 	env := tierR(t)
 	g := gateway(t, env, GatewayOpts{Scenario: "tierr-session-state", Conns: 1})
@@ -321,6 +327,7 @@ func TestTierRSessionStateNeverCrossesClients(t *testing.T) {
 	t.Logf("tier R: 0 dirty observations over %d hostile leases", 3*len(hostileCalls))
 }
 
+// TestTierRSessionAblationWithoutResetCrosses proves disabling DISCARD ALL via PlantNoReset leaves dirty rows on real Postgres 17.
 func TestTierRSessionAblationWithoutResetCrosses(t *testing.T) {
 	env := tierR(t)
 	g := startInProcess(t, env, GatewayOpts{Scenario: "tierr-session-ablation", Conns: 1}, true)
@@ -331,6 +338,7 @@ func TestTierRSessionAblationWithoutResetCrosses(t *testing.T) {
 	}
 }
 
+// TestTierRClientVanishes proves an abruptly reset real client causes its database connection to be closed and never reused dirty.
 func TestTierRClientVanishes(t *testing.T) {
 	env := tierR(t)
 	if err := env.ResetRows([]string{"INSERT INTO kv VALUES ('shared', 'clean'), ('x', 'clean')"}); err != nil {
@@ -405,6 +413,7 @@ func kill(t *testing.T, env *RealEnv, pid string) {
 	}
 }
 
+// TestTierRDatabaseKilled proves killing backend sessions mid-read, mid-write, mid-reply, and mid-transaction produces the documented error-contract rows.
 func TestTierRDatabaseKilled(t *testing.T) {
 	env := tierR(t)
 	if err := env.ResetRows([]string{"INSERT INTO kv VALUES ('a', 'v')"}); err != nil {
@@ -471,6 +480,7 @@ func TestTierRDatabaseKilled(t *testing.T) {
 	}
 }
 
+// TestTierRSlowReader proves a stalled real reader keeps relay high-water within limits.reply_buffer and is dropped at timeouts.client_write.
 func TestTierRSlowReader(t *testing.T) {
 	env := tierR(t)
 	const capacity = 65536
@@ -505,6 +515,7 @@ func TestTierRSlowReader(t *testing.T) {
 	}
 }
 
+// TestTierRQueueFull proves exceeding pool plus queue capacity returns 53M01 while keeping refused clients usable.
 func TestTierRQueueFull(t *testing.T) {
 	env := tierR(t)
 	g := gateway(t, env, GatewayOpts{Scenario: "tierr-queue-full", Conns: 1, QueueCap: 2})
@@ -571,6 +582,7 @@ func silentListener(t *testing.T) string {
 	return l.Addr().String()
 }
 
+// TestTierRSilentDatabase proves silent connect and silent query peers trip timeouts.database_connect/queue_wait/statement and mark /healthz degraded.
 func TestTierRSilentDatabase(t *testing.T) {
 	env := tierR(t)
 	silent := silentListener(t)
@@ -638,6 +650,7 @@ func psql(env *RealEnv, g *Gateway, sslmode string, sql string) (string, error) 
 	return string(out), err
 }
 
+// TestTierRTLS proves real psql require/verify-full, plaintext refusal (28000), smuggled bytes, handshake stall, and post-TLS CancelRequest recognition.
 func TestTierRTLS(t *testing.T) {
 	env := tierR(t)
 	g := gateway(t, env, GatewayOpts{Scenario: "tierr-tls", Conns: 1, Timeouts: map[string]string{"client_startup": "1s"}})
@@ -699,6 +712,7 @@ func TestTierRTLS(t *testing.T) {
 	}
 }
 
+// TestTierRDatabaseLegTLSModes proves disable, require, verify-full, and wrong-CA backend TLS modes against Postgres 17 pg_stat_ssl.
 func TestTierRDatabaseLegTLSModes(t *testing.T) {
 	env := tierR(t)
 	for _, m := range []struct{ mode, ca, want string }{{"disable", "", "f"}, {"require", "", "t"}, {"verify-full", env.CAFile, "t"}} {
@@ -733,6 +747,7 @@ func TestTierRDatabaseLegTLSModes(t *testing.T) {
 	}
 }
 
+// TestTierRSmokePsqlAndPgbench proves stock psql and pgbench -S -M simple succeed through the real binary over TLS.
 func TestTierRSmokePsqlAndPgbench(t *testing.T) {
 	env := tierR(t)
 	g := gateway(t, env, GatewayOpts{Scenario: "tierr-smoke", Conns: 2})

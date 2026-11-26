@@ -42,6 +42,7 @@ func dbWriteThenGone(t *testing.T, accept int) []string {
 	return got
 }
 
+// TestDatabaseCloseIsPostedAfterTheWriterReports proves readerExit waits for writeLoop so EvDBWrote always precedes EvDBClosed.
 func TestDatabaseCloseIsPostedAfterTheWriterReports(t *testing.T) {
 	got := dbWriteThenGone(t, 10)
 	want := []string{"db-opened", "db-wrote", "db-write-refused", "db-closed"}
@@ -50,6 +51,7 @@ func TestDatabaseCloseIsPostedAfterTheWriterReports(t *testing.T) {
 	}
 }
 
+// TestDatabaseWriteRefusedWithZeroBytesIsReportedBeforeTheClose proves a failing or dropped database write posts EvDBWriteRefused before EvDBClosed.
 func TestDatabaseWriteRefusedWithZeroBytesIsReportedBeforeTheClose(t *testing.T) {
 	got := dbWriteThenGone(t, 0)
 	want := []string{"db-opened", "db-write-refused", "db-closed"}

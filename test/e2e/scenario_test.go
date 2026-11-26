@@ -61,6 +61,7 @@ func runScenario(t *testing.T, sc Scenario, seed int64) *SimRun {
 	return a
 }
 
+// TestScenarioE2E proves all 21 tier S scenarios satisfy their assertions, replay bit-identically per seed, and pass CSV round-trip checks.
 func TestScenarioE2E(t *testing.T) {
 	for _, sc := range Scenarios() {
 		t.Run(sc.Spec.Name, func(t *testing.T) {

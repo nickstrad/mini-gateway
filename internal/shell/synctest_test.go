@@ -27,6 +27,7 @@ func resumeOnData(_ proxy.Instant, ev proxy.Event) []proxy.Action {
 	return nil
 }
 
+// TestTeardownLeavesNoGoroutine proves eight distinct client, database, deadline, and shutdown teardown paths leave zero leaked goroutines.
 func TestTeardownLeavesNoGoroutine(t *testing.T) {
 	t.Run("client gone", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
@@ -227,6 +228,7 @@ func TestTeardownLeavesNoGoroutine(t *testing.T) {
 	})
 }
 
+// TestMailboxNeverExceedsItsCap proves the engine mailbox enforces its configured cap and counts back-pressure waits.
 func TestMailboxNeverExceedsItsCap(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const capacity, clients = 4, 24
@@ -271,6 +273,7 @@ func TestMailboxNeverExceedsItsCap(t *testing.T) {
 	})
 }
 
+// TestExactlyEightBytesAreReadBeforeTheDecision proves the initial client read takes exactly 8 bytes without buffering past the TLS upgrade point.
 func TestExactlyEightBytesAreReadBeforeTheDecision(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		l, core := newPipeListener(), newCore()
@@ -311,6 +314,7 @@ func TestExactlyEightBytesAreReadBeforeTheDecision(t *testing.T) {
 	})
 }
 
+// TestClientStalledMidHandshakeIsClosedAtTheStartupDeadline proves a client stalling inside TLS handshake closes at timeouts.client_startup with no goroutine leak.
 func TestClientStalledMidHandshakeIsClosedAtTheStartupDeadline(t *testing.T) {
 	ca := certtest.NewCA(t, "shell test CA")
 	leaf := ca.Issue(t, "localhost")
@@ -371,6 +375,7 @@ func tlsDecider(_ proxy.Instant, ev proxy.Event) []proxy.Action {
 	return nil
 }
 
+// TestStuckWriterIsBoundedByTheWriteDeadline proves a blocked socket write terminates at timeouts.client_write and counts the deadline.
 func TestStuckWriterIsBoundedByTheWriteDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		l, core := newPipeListener(), newCore()
@@ -405,6 +410,7 @@ func TestStuckWriterIsBoundedByTheWriteDeadline(t *testing.T) {
 	})
 }
 
+// TestWriteQueueOverflowClosesTheConnection proves exceeding the per-connection write queue cap aborts the connection and counts the overflow.
 func TestWriteQueueOverflowClosesTheConnection(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		l, core := newPipeListener(), newCore()
@@ -436,6 +442,7 @@ func TestWriteQueueOverflowClosesTheConnection(t *testing.T) {
 	})
 }
 
+// TestWakeTimerIsArmedRearmedAndStopped proves ActWake arms, re-arms, and cancels (At=0) the shell's single wake timer.
 func TestWakeTimerIsArmedRearmedAndStopped(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		l, core := newPipeListener(), newCore()
@@ -466,6 +473,7 @@ func TestWakeTimerIsArmedRearmedAndStopped(t *testing.T) {
 	})
 }
 
+// TestPublishTickerDrivesThePublication proves the publish ticker delivers EvPublish at PublishInterval.
 func TestPublishTickerDrivesThePublication(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		l, core := newPipeListener(), newCore()

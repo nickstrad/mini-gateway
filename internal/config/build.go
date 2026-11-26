@@ -13,8 +13,11 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
+// ErrNotValidated is returned when Proxy is called on a File not produced by Parse or Load.
 var ErrNotValidated = errors.New("config: the file was not built by Parse or Load")
 
+// Proxy builds a validated proxy.Config from f using r for SCRAM nonces and the
+// mock-challenge secret, and keys for proxy-issued BackendKeyData values.
 func (f *File) Proxy(r pgwire.Random, keys *pgwire.KeyIssuer) (proxy.Config, error) {
 	if !f.res.ok {
 		return proxy.Config{}, ErrNotValidated
@@ -60,6 +63,7 @@ func (f *File) backendMode() pgwire.BackendTLSMode {
 	return pgwire.BackendTLSDisable
 }
 
+// ClientTLSConfig returns the server-side TLS 1.2+ config for clients, or nil when off.
 func (f *File) ClientTLSConfig() *tls.Config {
 	if !f.res.ok || f.ClientTLS.Mode == ClientTLSOff {
 		return nil
@@ -67,6 +71,7 @@ func (f *File) ClientTLSConfig() *tls.Config {
 	return &tls.Config{Certificates: []tls.Certificate{f.res.clientCert}, MinVersion: tls.VersionTLS12}
 }
 
+// BackendTLSConfig returns the client-side TLS 1.2+ config for Postgres, or nil when disabled.
 func (f *File) BackendTLSConfig() *tls.Config {
 	if !f.res.ok {
 		return nil
@@ -80,8 +85,10 @@ func (f *File) BackendTLSConfig() *tls.Config {
 	return nil
 }
 
+// ProxyTimeouts returns the effective engine timeout budget.
 func (f *File) ProxyTimeouts() proxy.Timeouts { return f.Timeouts.Proxy() }
 
+// PublishInterval returns the configured observability publish interval.
 func (f *File) PublishInterval() time.Duration { return f.Obs.PublishInterval.D() }
 
 func (f *File) computeFingerprint() string {
@@ -96,6 +103,7 @@ func (f *File) computeFingerprint() string {
 	return hex.EncodeToString(sum[:])[:fingerprintLen]
 }
 
+// DeriveVerifier derives a SCRAM-SHA-256 verifier string suitable for the tenants table.
 func DeriveVerifier(password string, salt []byte, iterations int) (string, error) {
 	if password == "" {
 		return "", fmt.Errorf("%w: empty password", pgwire.ErrVerifier)

@@ -18,6 +18,7 @@ func mustFailCheck(t *testing.T, sc Scenario, check func(*SimRun) error) *SimRun
 	return r
 }
 
+// TestCanaryReleaseOnAnyReadyBreaksTransactionIntegrity proves the transaction-integrity scenario catches a planted early-release bug.
 func TestCanaryReleaseOnAnyReadyBreaksTransactionIntegrity(t *testing.T) {
 	r := mustFailCheck(t, Scenario{Spec: TxIntegrityCanarySpec()}, checkTxIntegrity)
 	if n := TxCrossings(r.World.Fake.StatementLog()); n == 0 {
@@ -25,6 +26,7 @@ func TestCanaryReleaseOnAnyReadyBreaksTransactionIntegrity(t *testing.T) {
 	}
 }
 
+// TestAblationWithoutResetSessionStateCrosses proves disabling DISCARD ALL causes session state to cross clients in tier S.
 func TestAblationWithoutResetSessionStateCrosses(t *testing.T) {
 	r := mustFailCheck(t, Scenario{Spec: SessionAblationSpec()}, checkSession)
 	if n := SessionCrossings(r); n == 0 {
@@ -35,6 +37,7 @@ func TestAblationWithoutResetSessionStateCrosses(t *testing.T) {
 	}
 }
 
+// TestCanaryLendBeforeResetReplyIsCaught proves lending a connection before DISCARD ALL completes fails scenario 4b or invariants.
 func TestCanaryLendBeforeResetReplyIsCaught(t *testing.T) {
 	r, err := RunSim(SessionLendEarlySpec(), 1, SimOptions{})
 	if err == nil {
@@ -48,6 +51,7 @@ func TestCanaryLendBeforeResetReplyIsCaught(t *testing.T) {
 	}
 }
 
+// TestResultsThroughTheProxyEqualDirectOnEveryPinnedSeed proves proxy and direct results match across all pinned seeds.
 func TestResultsThroughTheProxyEqualDirectOnEveryPinnedSeed(t *testing.T) {
 	sc, _ := Lookup("e2e-results")
 	for _, seed := range []int64{1, 2, 3} {

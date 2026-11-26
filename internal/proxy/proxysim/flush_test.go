@@ -39,6 +39,7 @@ func lostInsert(t *testing.T) proxy.Snapshot {
 	return s
 }
 
+// TestWriteRefusedByAResetSocketIsReportedBeforeTheClose proves proxysim posts EvDBWriteRefused before EvDBClosed when a database write fails on a reset socket.
 func TestWriteRefusedByAResetSocketIsReportedBeforeTheClose(t *testing.T) {
 	s := lostInsert(t)
 	if s.ReachedNo != 1 || s.ByRow[pgwire.ErrRowLostAfterRead] != 1 {

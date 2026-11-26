@@ -23,6 +23,8 @@ func parseWith(t *testing.T, key string, v any) (*config.File, error) {
 	return config.Parse(b)
 }
 
+// TestZeroCapMeansTheDefaultAndANegativeCapIsRefused proves narrowed claim 13:
+// explicit zero takes the documented default while any negative cap is refused naming its key.
 func TestZeroCapMeansTheDefaultAndANegativeCapIsRefused(t *testing.T) {
 	def := proxy.Config{}.WithDefaults()
 	for key, effective := range map[string]struct {

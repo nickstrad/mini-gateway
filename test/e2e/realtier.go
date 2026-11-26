@@ -22,6 +22,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/proxy/proxysim"
 )
 
+// Credentials and database constants for the tier R Postgres 17 test cluster.
 const (
 	RealBackendUser = "gateway"
 	RealBackendPass = "gateway-tier-r-pw"
@@ -32,6 +33,8 @@ const (
 	gatewayStop     = 30 * time.Second
 )
 
+// RealEnv holds the addresses, certificates, binary path, and tenant verifiers
+// shared across tier R subtests.
 type RealEnv struct {
 	PGAddr   string
 	CertDir  string
@@ -44,14 +47,17 @@ type RealEnv struct {
 	Verifier map[string]string
 }
 
+// ClientTLS returns a TLS 1.2+ client config trusting env's test CA for localhost.
 func (env *RealEnv) ClientTLS() *tls.Config {
 	return &tls.Config{RootCAs: env.CA, ServerName: "localhost", MinVersion: tls.VersionTLS12}
 }
 
+// Super opens a direct superuser connection to the tier R Postgres container.
 func (env *RealEnv) Super() (*RealClient, error) {
 	return DialReal(env.PGAddr, DialOptions{User: "postgres", Password: RealSuperPass, Database: RealDatabase})
 }
 
+// Exec executes one or more SQL statements directly as superuser, failing on any error.
 func (env *RealEnv) Exec(sqls ...string) error {
 	c, err := env.Super()
 	if err != nil {
@@ -66,6 +72,7 @@ func (env *RealEnv) Exec(sqls ...string) error {
 	return nil
 }
 
+// GatewayOpts configures a mini-gateway subprocess launched by StartGateway.
 type GatewayOpts struct {
 	Scenario   string
 	Conns      int
@@ -80,6 +87,7 @@ type GatewayOpts struct {
 	Tenants    int
 }
 
+// Gateway represents a running mini-gateway process (or in-process shell for ablations).
 type Gateway struct {
 	Addr     string
 	Admin    string
@@ -143,6 +151,8 @@ func (env *RealEnv) gatewayConfig(o GatewayOpts, dir string) map[string]any {
 	return cfg
 }
 
+// StartGateway writes a JSON config file, launches the compiled mini-gateway
+// binary, and waits until it prints its bound client and admin addresses.
 func (env *RealEnv) StartGateway(o GatewayOpts) (*Gateway, error) {
 	dir := env.RunDir
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -198,6 +208,7 @@ func (env *RealEnv) StartGateway(o GatewayOpts) (*Gateway, error) {
 	return g, nil
 }
 
+// Stop sends SIGTERM (or stops the in-process shell) and waits for clean exit.
 func (g *Gateway) Stop() error {
 	var err error
 	g.stopOnce.Do(func() {
@@ -219,22 +230,26 @@ func (g *Gateway) Stop() error {
 	return err
 }
 
+// Dial opens a TLS+SCRAM client connection for tenant through gateway g.
 func (env *RealEnv) Dial(g *Gateway, tenant int, byteByByte bool) (*RealClient, error) {
 	name := proxysim.TenantName(tenant)
 	return DialReal(g.Addr, DialOptions{User: name, Password: proxysim.TenantPassword(name), Database: RealDatabase,
 		TLS: env.ClientTLS(), ByteByByte: byteByByte})
 }
 
+// DialDirect opens a direct client connection to Postgres without the proxy.
 func (env *RealEnv) DialDirect(byteByByte bool) (*RealClient, error) {
 	return DialReal(env.PGAddr, DialOptions{User: RealBackendUser, Password: RealBackendPass, Database: RealDatabase,
 		ByteByByte: byteByByte})
 }
 
+// ResetRows truncates kv and inserts the given SQL row statements.
 func (env *RealEnv) ResetRows(rows []string) error {
 	stmts := []string{"TRUNCATE kv"}
 	return env.Exec(append(stmts, rows...)...)
 }
 
+// RowsSQL converts spec.Rows into INSERT statements for the tier R kv table.
 func RowsSQL(spec Spec) []string {
 	var out []string
 	for _, r := range spec.Rows {
@@ -243,6 +258,7 @@ func RowsSQL(spec Spec) []string {
 	return out
 }
 
+// RunReal executes every client Script in spec concurrently over real sockets.
 func RunReal(ctx context.Context, spec Spec, dial func(tenant int) (*RealClient, error), byteByByte bool) []ClientResult {
 	res := make([]ClientResult, len(spec.Clients))
 	var wg sync.WaitGroup
@@ -305,6 +321,7 @@ func runRealScript(ctx context.Context, sc Script, dial func(int) (*RealClient, 
 	c.Close()
 }
 
+// FreePort binds and immediately releases an ephemeral loopback TCP port.
 func FreePort() (string, error) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -314,6 +331,7 @@ func FreePort() (string, error) {
 	return l.Addr().String(), nil
 }
 
+// TenantVerifiers derives SCRAM-SHA-256 verifier strings for tenants 0..n-1.
 func TenantVerifiers(n int) (map[string]string, error) {
 	out := map[string]string{}
 	for i := 0; i < n; i++ {
@@ -328,8 +346,10 @@ func TenantVerifiers(n int) (map[string]string, error) {
 	return out, nil
 }
 
+// TierRPrefix identifies tier R SQL assertion directories under test/analysis/.
 const TierRPrefix = "tierr-"
 
+// TierRScenarios returns the ordered list of tier R CSV scenario names asserted by DuckDB.
 func TierRScenarios() []string {
 	return []string{"tierr-results", "tierr-fragment", "tierr-tx-integrity", "tierr-reject-list", "tierr-session-state",
 		"tierr-client-vanish", "tierr-db-killed", "tierr-slow-reader", "tierr-queue-full", "tierr-silent-db", "tierr-tls",

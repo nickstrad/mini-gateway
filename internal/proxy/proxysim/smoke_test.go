@@ -10,6 +10,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/workload"
 )
 
+// TestSmokeQueryThroughProxy proves a simple query runs end-to-end through proxysim against fakepg and quiesces cleanly.
 func TestSmokeQueryThroughProxy(t *testing.T) {
 	w, err := BuildWorld(WorldConfig{Seed: 1, Scenario: "smoke", Engine: proxy.Config{Connections: 2},
 		Fake: fakepg.Config{Rows: []fakepg.Row{{Key: "k1", Value: "v1"}}}})

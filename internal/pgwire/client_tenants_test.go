@@ -16,6 +16,7 @@ func verifierWith(t *testing.T, saltLen, iterations int) Verifier {
 	return v
 }
 
+// TestNewTenantTableRefusesAnOversizedSalt proves salts exceeding maxMockSaltLen are refused.
 func TestNewTenantTableRefusesAnOversizedSalt(t *testing.T) {
 	ok := Tenant{User: "alice", Verifier: verifierWith(t, maxMockSaltLen, 32)}
 	if _, err := NewTenantTable([]Tenant{ok}); err != nil {
@@ -27,6 +28,7 @@ func TestNewTenantTableRefusesAnOversizedSalt(t *testing.T) {
 	}
 }
 
+// TestNewTenantTableRefusesMixedShapes proves a tenant table rejects mixed SCRAM iteration counts or salt lengths.
 func TestNewTenantTableRefusesMixedShapes(t *testing.T) {
 	a := Tenant{User: "alice", Verifier: verifierWith(t, 20, 32)}
 	cases := []struct {
@@ -48,6 +50,7 @@ func TestNewTenantTableRefusesMixedShapes(t *testing.T) {
 	}
 }
 
+// TestMockShapeOfAUniformTableIsTheTablesShape proves a valid table's mock challenge shape matches its uniform verifiers.
 func TestMockShapeOfAUniformTableIsTheTablesShape(t *testing.T) {
 	a := Tenant{User: "alice", Verifier: verifierWith(t, 20, 32)}
 	b := Tenant{User: "bob", Verifier: verifierWith(t, 20, 32)}
