@@ -309,8 +309,10 @@ func (e *Engine) reply(c *client, row pgwire.ErrRowID) {
 }
 
 func (e *Engine) clientViolation(c *client) {
-	e.snap.NonRequestReplies++
-	e.reply(c, pgwire.ErrRowProtocolViolation)
+	if c.req == nil || c.req.relayed == 0 {
+		e.snap.NonRequestReplies++
+		e.reply(c, pgwire.ErrRowProtocolViolation)
+	}
 	e.closeClient(c, CloseClientViolation)
 }
 
