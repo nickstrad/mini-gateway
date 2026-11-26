@@ -332,7 +332,7 @@ func (g *shrGen) selectText() string {
 		}
 		return q
 	case 2:
-		return s + " " + g.textExpr() + ", " + g.intExpr()
+		return s + " " + g.textExpr() + ", " + g.intExpr() + " " + g.kw("from") + " t"
 	}
 	q := s + " "
 	if g.rng.IntN(4) == 0 {
