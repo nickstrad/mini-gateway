@@ -30,8 +30,8 @@ func server(t *testing.T) string {
 			serverFailure = fmt.Sprintf("start: %v %s", e, out)
 			return
 		}
-		for i := 0; i < 60; i++ {
-			out, e = command(t, "docker", "exec", serverName, "psql", "-X", "-U", "postgres", "-Atqc", "SHOW server_version_num")
+		for i := 0; i < 300; i++ {
+			out, e = command(t, "docker", "exec", serverName, "psql", "-X", "-h", "127.0.0.1", "-U", "postgres", "-Atqc", "SHOW server_version_num")
 			if e == nil && strings.HasPrefix(strings.TrimSpace(string(out)), "17") {
 				return
 			}

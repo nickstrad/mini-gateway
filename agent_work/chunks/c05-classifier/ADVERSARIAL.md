@@ -59,8 +59,19 @@ decided each, and the losing test is skipped:
 A `UESCAPE` literal continued across a newline hides an advisory-lock call from the
 reject list (Neon). Session safety is the reset's job (PLAN.md D8).
 
-## Note for the gate
+## Edits to the adversaries' harnesses by the orchestrator (besides the skips above)
 
-Astra's real-server attacks start their own Postgres container; under heavy load one
-(`TestAdv_2_PlainTableCoercionAndAggregates`) once met "the database system is starting
-up". It passes alone.
+Two, both made when the first final-stage gate run failed on them (2026-11-26):
+
+- `agent_work/adversarial/c05-classifier/server_test.go`: the wait for Astra's own
+  Postgres container asked over the local socket, which the image's start-up server also
+  answers before it restarts; a test could then meet no server
+  (`TestAdv_2_PlainTableCoercionAndAggregates`, twice). The wait now asks over TCP
+  (`-h 127.0.0.1`), which only the final server answers, for up to 30 seconds. No attack
+  changed.
+- `agent_work/adversarial/cr01-shrink-fuzz-rules/adv_test.go`: its two inventory checks
+  pin the number of fuzz targets (11) so that a new one is noticed. Chunk 5 adds three
+  (`FuzzLex`, `FuzzClassify`, `FuzzSafeShape`). The orchestrator reviewed them against
+  PLAN.md section 6.6: none runs the simulator or derives a seed from its input (the
+  check for hash calls in the entry points passed). The pinned number is now 14. Every
+  chunk that adds a fuzz target repeats this review.
