@@ -118,6 +118,7 @@ func (e *Engine) Shutdown(now Instant, out []Action) []Action {
 func (e *Engine) Step(now Instant, ev Event, out []Action) []Action {
 	e.begin(now, out)
 	e.snap.Events++
+	e.fireTimers()
 	switch ev.Kind {
 	case EvClientAccepted:
 		e.accept(ev.Conn)
