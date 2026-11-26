@@ -39,7 +39,7 @@ type TenantTable struct {
 }
 
 // NewTenantTable validates tenants and builds a lookup table, precomputing the
-// iteration count and salt length shared by every tenant for default mock challenges.
+// modal iteration count and salt length used by default mock challenges.
 func NewTenantTable(tenants []Tenant) (*TenantTable, error) {
 	if len(tenants) > MaxTenants {
 		return nil, fmt.Errorf("%w: %d tenants, the limit is %d", ErrTenants, len(tenants), MaxTenants)

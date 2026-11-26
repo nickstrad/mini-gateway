@@ -327,3 +327,11 @@ func TenantVerifiers(n int) (map[string]string, error) {
 	}
 	return out, nil
 }
+
+const TierRPrefix = "tierr-"
+
+func TierRScenarios() []string {
+	return []string{"tierr-results", "tierr-fragment", "tierr-tx-integrity", "tierr-reject-list", "tierr-session-state",
+		"tierr-client-vanish", "tierr-db-killed", "tierr-slow-reader", "tierr-queue-full", "tierr-silent-db", "tierr-tls",
+		"tierr-backend-tls", "tierr-smoke"}
+}
