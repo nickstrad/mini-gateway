@@ -71,12 +71,27 @@ func intCallBound(vals, floors []int64, monotone bool) int64 {
 		}
 		d := uint64(v) - uint64(f)
 		c += 1 + int64(bits.Len64(d))
-		p += int64(d)
+		p = satAdd(p, d)
 	}
 	if monotone {
 		return 2 * c
 	}
-	return (1 + p) * c
+	return satMul(satAdd(p, 1), c)
+}
+
+func satAdd(a int64, d uint64) int64 {
+	if d > uint64(math.MaxInt64-a) {
+		return math.MaxInt64
+	}
+	return a + int64(d)
+}
+
+func satMul(a, b int64) int64 {
+	hi, lo := bits.Mul64(uint64(a), uint64(b))
+	if hi != 0 || lo > math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return int64(lo)
 }
 
 func floorAt(floors []int64, i int) int64 {
@@ -309,17 +324,35 @@ func faultCallBound(s []Fault, deletions bool, monotone bool) int64 {
 			}
 			d := uint64(fv[j]) - uint64(fl[j])
 			c += 1 + int64(bits.Len64(d))
-			p += int64(d)
+			p = satAdd(p, d)
 		}
 	}
 	if !deletions {
 		if monotone {
 			return 2 * c
 		}
-		return (1 + p) * c
+		return satMul(satAdd(p, 1), c)
 	}
 	n := int64(len(s))
-	return (1 + p) * (n*(n+1) + c)
+	return satMul(satAdd(p, 1), n*(n+1)+c)
+}
+
+func TestCallBoundsSaturateInsteadOfWrapping(t *testing.T) {
+	full := intCallBound([]int64{math.MaxInt64}, []int64{math.MinInt64}, false)
+	if full != math.MaxInt64 {
+		t.Fatalf("full-width non-monotone bound %d, want saturation at %d", full, int64(math.MaxInt64))
+	}
+	two := intCallBound([]int64{math.MaxInt64, math.MaxInt64}, []int64{0, 0}, false)
+	if two != math.MaxInt64 {
+		t.Fatalf("summed distance bound %d, want saturation", two)
+	}
+	if small := intCallBound([]int64{5, 2}, []int64{1, 0}, false); small != (1+4+2)*(1+3+1+2) {
+		t.Fatalf("small bound %d", small)
+	}
+	wide := []Fault{{At: MaxTime, Kind: 1, Arg1: math.MaxInt64, Arg2: math.MaxInt64}}
+	if b := faultCallBound(wide, true, false); b != math.MaxInt64 {
+		t.Fatalf("fault bound %d, want saturation", b)
+	}
 }
 
 func checkValuesMinimal(in, out []Fault, p faultPred, deletions bool) error {
@@ -328,6 +361,9 @@ func checkValuesMinimal(in, out []Fault, p faultPred, deletions bool) error {
 	}
 	if p.fails(in) && !p.fails(out) {
 		return fmt.Errorf("%s: %v -> %v no longer fails", p.name, in, out)
+	}
+	if err := checkLoweredFrom(in, out, deletions); err != nil {
+		return fmt.Errorf("%s: %w", p.name, err)
 	}
 	for i, f := range out {
 		if deletions && p.fails(slices.Delete(slices.Clone(out), i, i+1)) {
@@ -350,6 +386,44 @@ func checkValuesMinimal(in, out []Fault, p faultPred, deletions bool) error {
 				}
 			}
 		}
+	}
+	return nil
+}
+
+func loweredFrom(src, dst Fault) bool {
+	if src.Kind != dst.Kind || src.Target != dst.Target {
+		return false
+	}
+	sv, dv, fl := faultFields(src), faultFields(dst), floorFields(testFloor(src.Kind))
+	for j := range sv {
+		if sv[j] <= fl[j] && dv[j] != sv[j] {
+			return false
+		}
+		if sv[j] > fl[j] && (dv[j] < fl[j] || dv[j] > sv[j]) {
+			return false
+		}
+	}
+	return true
+}
+
+func checkLoweredFrom(in, out []Fault, deletions bool) error {
+	if !deletions {
+		for i := range out {
+			if !loweredFrom(in[i], out[i]) {
+				return fmt.Errorf("fault %d %v is not %v lowered within [floor, input]", i, out[i], in[i])
+			}
+		}
+		return nil
+	}
+	k := 0
+	for i := range out {
+		for k < len(in) && !loweredFrom(in[k], out[i]) {
+			k++
+		}
+		if k == len(in) {
+			return fmt.Errorf("%v is not a subsequence of %v with each value lowered within [floor, input]", out, in)
+		}
+		k++
 	}
 	return nil
 }
