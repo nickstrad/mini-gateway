@@ -1,0 +1,4 @@
+tier,campaign,test,workload,load,policy,patience,warm_mode,w,runs,misses,n,measured,lambda_per_s,connect_mean_ns,m,predicted,band_lo,band_hi,side
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,remake-always,,cold,0,4,22286,22286,1.0,159.186,30435536.0,4.8449,1.0,1.0,1.0,inside
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,remake-on-switch,0s,fixed,4,5,308847,308847,1.0,1764.84,36457021.0,64.3408,1.0,1.0,1.0,inside
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,remake-on-switch,auto,fixed,4,4,130892,130936,0.999664,935.257,36140384.0,33.8006,1.0,1.0,1.0,below

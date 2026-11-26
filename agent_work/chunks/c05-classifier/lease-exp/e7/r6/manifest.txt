@@ -1,0 +1,21 @@
+# E7 step 1 — R6: server-side backend count (pg_stat_activity, application_name = mglease, from
+# a separate monitor session every 2 ms; back to back when a sample takes longer) during remake
+# at load. Asserted in every run: peak <= pool.cap (both remake orders: the core counts a closing
+# connection against the cap until the server has ended it). Loads are nominal workload.load
+# values: the remake policies are connect-bound far below the baseline's capacity. As in
+# REVIEW-E5-1's proposed campaign: unchanged but for obs.warmup (histograms only; the R6
+# assertion covers the whole run). 6 arms x 3 repetitions x 20 s, about 7 min.
+campaign r6
+test r6
+tier real
+reps 3
+seed 1
+common pool.cap=20 run.duration=20s obs.interval=20s obs.warmup=5s oracle.rate=0
+real monitor=2ms
+loads 4 60
+arm rmsf release.policy=remake-on-switch warm.mode=fixed warm.size=4 workload.profile=skewed workload.tenants=10 @loads=60
+arm rmsfo release.policy=remake-on-switch warm.mode=fixed warm.size=4 remake.order=open-then-close workload.profile=skewed workload.tenants=10 @loads=60
+arm rmsu release.policy=remake-on-switch warm.mode=fixed warm.size=4 workload.tenants=100 @loads=4
+arm rmsuo release.policy=remake-on-switch warm.mode=fixed warm.size=4 remake.order=open-then-close workload.tenants=100 @loads=4
+arm rma release.policy=remake-always warm.mode=cold @loads=4
+arm rmak release.policy=remake-always warm.mode=cold connect.max_concurrent=20 @loads=4

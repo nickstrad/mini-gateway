@@ -1,0 +1,33 @@
+# Functional isolation; no throughput verdict. Roughly 48 minutes full, 2 minutes reduced.
+campaign e4isolation
+test r1_r5
+tier real
+reps 1
+seed 741
+common pool.cap=2 connect.max_concurrent=2 workload.tenants=12 workload.profile=hostile run.duration=120s obs.interval=120s obs.leases_csv=on oracle.inspector=hostile oracle.rate=1 run.max_requests=100000 pool.wait_cap=10000 connect.timeout=10s reset.timeout=5s
+real identity=query monitor=100ms late_p99=30s late_max=30s
+loads 5
+arm base_aon_roff release.policy=none remake.patience=auto affinity=on reset.reseed=off warm.mode=cold
+arm base_aon_ron release.policy=none remake.patience=auto affinity=on reset.reseed=on warm.mode=cold
+arm base_aoff_roff release.policy=none remake.patience=auto affinity=off reset.reseed=off warm.mode=cold
+arm base_aoff_ron release.policy=none remake.patience=auto affinity=off reset.reseed=on warm.mode=cold
+arm ra_aon_roff release.policy=reset-always remake.patience=auto affinity=on reset.reseed=off warm.mode=cold
+arm ra_aon_ron release.policy=reset-always remake.patience=auto affinity=on reset.reseed=on warm.mode=cold
+arm ra_aoff_roff release.policy=reset-always remake.patience=auto affinity=off reset.reseed=off warm.mode=cold
+arm ra_aoff_ron release.policy=reset-always remake.patience=auto affinity=off reset.reseed=on warm.mode=cold
+arm ros_aon_roff release.policy=reset-on-switch remake.patience=auto affinity=on reset.reseed=off warm.mode=cold
+arm ros_aon_ron release.policy=reset-on-switch remake.patience=auto affinity=on reset.reseed=on warm.mode=cold
+arm ros_aoff_roff release.policy=reset-on-switch remake.patience=auto affinity=off reset.reseed=off warm.mode=cold
+arm ros_aoff_ron release.policy=reset-on-switch remake.patience=auto affinity=off reset.reseed=on warm.mode=cold
+arm rms_aon_roff release.policy=remake-on-switch remake.patience=auto affinity=on reset.reseed=off warm.mode=fixed warm.size=1
+arm rms_aon_ron release.policy=remake-on-switch remake.patience=auto affinity=on reset.reseed=on warm.mode=fixed warm.size=1
+arm rms_aoff_roff release.policy=remake-on-switch remake.patience=auto affinity=off reset.reseed=off warm.mode=fixed warm.size=1
+arm rms_aoff_ron release.policy=remake-on-switch remake.patience=auto affinity=off reset.reseed=on warm.mode=fixed warm.size=1
+arm rms0_aon_roff release.policy=remake-on-switch remake.patience=0 affinity=on reset.reseed=off warm.mode=fixed warm.size=1
+arm rms0_aon_ron release.policy=remake-on-switch remake.patience=0 affinity=on reset.reseed=on warm.mode=fixed warm.size=1
+arm rms0_aoff_roff release.policy=remake-on-switch remake.patience=0 affinity=off reset.reseed=off warm.mode=fixed warm.size=1
+arm rms0_aoff_ron release.policy=remake-on-switch remake.patience=0 affinity=off reset.reseed=on warm.mode=fixed warm.size=1
+arm rma_aon_roff release.policy=remake-always remake.patience=auto affinity=on reset.reseed=off warm.mode=cold
+arm rma_aon_ron release.policy=remake-always remake.patience=auto affinity=on reset.reseed=on warm.mode=cold
+arm rma_aoff_roff release.policy=remake-always remake.patience=auto affinity=off reset.reseed=off warm.mode=cold
+arm rma_aoff_ron release.policy=remake-always remake.patience=auto affinity=off reset.reseed=on warm.mode=cold

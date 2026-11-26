@@ -1,0 +1,315 @@
+=== RUN   TestS6CapacityKnee
+    capacity_scenario_test.go:127: 
+        arm	cell	offered/s	goodput/s	refused(win)	wait_p50_ms	wait_p99_ms	predicted/s	error	knee_load%	plan_ratio	verdict
+        none	short-l30	11917.812	11916.875	0	0.001	12.713	28723.870	-58.512%	71.809	-	-
+        none	short-l60	23990.000	23989.062	0	0.001	9.109	28723.870	-16.483%	71.809	-	-
+        none	short-l80	32078.125	28770.937	10587	6.750	8.159	28723.870	0.163%	71.809	-	-
+        none	short-l95	38078.750	28770.000	29787	6.881	8.159	28723.870	0.160%	71.809	-	-
+        none	short-l120	48094.062	28713.437	62016	6.914	8.224	28723.870	-0.036%	71.809	-	in band
+        reset-always	short-l30	11917.812	11916.875	0	0.001	15.269	22902.738	-47.967%	57.256	plan 73.858% measured 41.502%	-
+        reset-always	short-l60	23990.000	22702.187	4129	8.355	10.485	22902.738	-0.875%	57.256	plan 73.858% measured 79.064%	-
+        reset-always	short-l80	32078.125	22752.812	29839	8.716	10.027	22902.738	-0.654%	57.256	plan 73.858% measured 79.240%	-
+        reset-always	short-l95	38078.750	22784.375	48940	8.781	9.961	22902.738	-0.516%	57.256	plan 73.858% measured 79.350%	-
+        reset-always	short-l120	48094.062	22713.125	81218	8.781	10.747	22902.738	-0.827%	57.256	plan 73.858% measured 79.102%	in band
+        reset-on-switch	short-l30	11917.812	11917.500	0	0.177	15.466	23335.044	-48.928%	58.337	-	-
+        reset-on-switch	short-l60	23990.000	22747.500	3981	8.355	10.223	22948.885	-0.877%	57.372	-	-
+        reset-on-switch	short-l80	32078.125	22805.000	29672	8.716	10.092	22949.649	-0.630%	57.374	-	-
+        reset-on-switch	short-l95	38078.750	22811.875	48854	8.716	10.158	22949.570	-0.599%	57.373	-	-
+        reset-on-switch	short-l120	48094.062	22722.187	81189	8.781	10.485	22946.568	-0.977%	57.366	-	in band
+        remake-on-switch.fixed2.pauto	short-l30	11917.812	1005.625	34919	202.375	413.138	1006.569	-0.093%	2.516	-	-
+        remake-on-switch.fixed2.pauto	short-l60	23990.000	1008.750	73540	199.229	421.527	1009.701	-0.094%	2.524	-	-
+        remake-on-switch.fixed2.pauto	short-l80	32078.125	1026.562	99366	193.986	421.527	1027.526	-0.093%	2.568	-	-
+        remake-on-switch.fixed2.pauto	short-l95	38078.750	987.187	118694	203.423	417.333	988.113	-0.093%	2.470	-	-
+        remake-on-switch.fixed2.pauto	short-l120	48094.062	1001.875	150696	206.569	413.138	1002.819	-0.094%	2.507	-	in band
+        remake-on-switch.fixed2.p0	short-l30	11917.812	1005.625	34919	202.375	413.138	1006.569	-0.093%	2.516	-	-
+        remake-on-switch.fixed2.p0	short-l60	23990.000	1008.750	73540	199.229	421.527	1009.701	-0.094%	2.524	-	-
+        remake-on-switch.fixed2.p0	short-l80	32078.125	1026.562	99366	193.986	421.527	1027.526	-0.093%	2.568	-	-
+        remake-on-switch.fixed2.p0	short-l95	38078.750	987.187	118694	203.423	417.333	988.113	-0.093%	2.470	-	-
+        remake-on-switch.fixed2.p0	short-l120	48094.062	1001.875	150696	206.569	413.138	1002.819	-0.094%	2.507	-	in band
+        remake-always.cold	short-l30	11917.812	173.750	37580	1157.627	1157.627	173.600	0.086%	0.434	-	-
+        remake-always.cold	short-l60	23990.000	173.750	76212	1157.627	1157.627	173.913	-0.093%	0.434	-	-
+        remake-always.cold	short-l80	32078.125	173.750	102093	1157.627	1157.627	173.600	0.086%	0.434	-	-
+        remake-always.cold	short-l95	38078.750	173.750	121295	1157.627	1157.627	173.600	0.086%	0.434	-	-
+        remake-always.cold	short-l120	48094.062	173.750	153344	1157.627	1157.627	173.600	0.086%	0.434	-	in band
+        none	medium-l30	1206.875	1206.875	0	0.001	0.001	3848.903	-68.643%	96.222	-	-
+        none	medium-l60	2395.250	2395.625	0	0.001	16.646	3848.903	-37.758%	96.222	-	-
+        none	medium-l80	3180.500	3180.500	0	0.001	34.078	3848.903	-17.366%	96.222	-	-
+        none	medium-l95	3778.375	3783.000	0	6.553	50.331	3848.903	-1.712%	96.222	-	-
+        none	medium-l120	4767.125	3866.625	7203	50.593	60.555	3848.903	0.460%	96.222	-	in band
+        reset-always	medium-l30	1206.875	1206.875	0	0.001	0.001	3722.136	-67.575%	93.053	plan 96.581% measured 31.212%	-
+        reset-always	medium-l60	2395.250	2395.625	0	0.001	18.481	3722.136	-35.638%	93.053	plan 96.581% measured 61.956%	-
+        reset-always	medium-l80	3180.500	3180.500	0	0.001	36.962	3722.136	-14.551%	93.053	plan 96.581% measured 82.255%	-
+        reset-always	medium-l95	3778.375	3736.625	377	37.224	58.458	3722.136	0.389%	93.053	plan 96.581% measured 96.637%	-
+        reset-always	medium-l120	4767.125	3724.625	8338	52.690	62.390	3722.136	0.066%	93.053	plan 96.581% measured 96.327%	in band
+        reset-on-switch	medium-l30	1206.875	1206.875	0	0.177	0.177	3735.503	-67.691%	93.387	-	-
+        reset-on-switch	medium-l60	2395.250	2395.625	0	0.177	18.481	3730.496	-35.782%	93.262	-	-
+        reset-on-switch	medium-l80	3180.500	3180.500	0	0.177	36.962	3725.840	-14.636%	93.146	-	-
+        reset-on-switch	medium-l95	3778.375	3736.375	384	37.224	58.720	3723.248	0.352%	93.081	-	-
+        reset-on-switch	medium-l120	4767.125	3724.750	8337	52.690	63.438	3723.347	0.037%	93.083	-	in band
+        remake-on-switch.fixed2.pauto	medium-l30	1206.875	911.125	2366	225.443	429.916	910.672	0.049%	22.766	-	-
+        remake-on-switch.fixed2.pauto	medium-l60	2395.250	932.125	11706	220.200	427.819	931.660	0.049%	23.291	-	-
+        remake-on-switch.fixed2.pauto	medium-l80	3180.500	911.375	18150	223.346	432.013	910.920	0.049%	22.773	-	-
+        remake-on-switch.fixed2.pauto	medium-l95	3778.375	927.125	22809	220.200	434.110	926.666	0.049%	23.166	-	-
+        remake-on-switch.fixed2.pauto	medium-l120	4767.125	929.750	30697	217.055	427.819	929.285	0.050%	23.232	-	in band
+        remake-on-switch.fixed2.p0	medium-l30	1206.875	911.125	2366	225.443	429.916	910.672	0.049%	22.766	-	-
+        remake-on-switch.fixed2.p0	medium-l60	2395.250	932.125	11706	220.200	427.819	931.660	0.049%	23.291	-	-
+        remake-on-switch.fixed2.p0	medium-l80	3180.500	911.375	18150	223.346	432.013	910.920	0.049%	22.773	-	-
+        remake-on-switch.fixed2.p0	medium-l95	3778.375	927.125	22809	220.200	434.110	926.666	0.049%	23.166	-	-
+        remake-on-switch.fixed2.p0	medium-l120	4767.125	929.750	30697	217.055	427.819	929.285	0.050%	23.232	-	in band
+        remake-always.cold	medium-l30	1206.875	173.250	8270	1157.627	1166.016	173.913	-0.381%	4.347	-	-
+        remake-always.cold	medium-l60	2395.250	173.250	17777	1157.627	1166.016	174.038	-0.452%	4.350	-	-
+        remake-always.cold	medium-l80	3180.500	173.500	24057	1157.627	1166.016	174.163	-0.380%	4.354	-	-
+        remake-always.cold	medium-l95	3778.375	173.250	28842	1157.627	1166.016	174.038	-0.452%	4.350	-	-
+        remake-always.cold	medium-l120	4767.125	173.375	36752	1157.627	1166.016	174.164	-0.453%	4.354	-	in band
+        remake-always.fixed4	medium-l120	4767.125	173.375	36752	1157.627	1166.016	cold 173.375	-	-	-	ceiling unmoved
+--- PASS: TestS6CapacityKnee (217.73s)
+=== RUN   TestS8TenantScaleNoStarvation
+    capacity_scenario_test.go:214: 
+        cell	arm	switch_fraction	switches/s	vs_195/s	connects/s	reuse_share	closes_switch	goodput/s	wait_p99_ms	wait_max_ms	bound_ms	refused
+        t10-affon-l60	none	39.206%	939.500	481.794%	2.000	95.088%	0	2395.625	16.646	40.371	1093.503	0
+        t10-affon-l60	reset-always	41.564%	996.000	510.769%	2.000	93.890%	0	2395.625	18.481	41.726	1095.173	0
+        t10-affon-l60	reset-on-switch	40.132%	961.700	493.179%	2.000	94.391%	0	2395.625	18.481	41.406	1096.008	0
+        t10-affon-l60	remake-on-switch.fixed2.pauto	2.937%	69.900	35.846%	70.300	30.576%	688	2393.875	39.845	64.222	1096.913	0
+        t10-affon-l60	remake-on-switch.fixed2.p0	7.248%	173.300	88.871%	173.700	22.292%	1719	2393.375	38.797	61.860	1096.934	0
+        t10-affon-l80	none	60.135%	1912.800	980.923%	2.000	66.976%	0	3180.500	34.078	51.955	1113.189	0
+        t10-affon-l80	reset-always	63.587%	2022.600	1037.230%	2.000	58.268%	0	3180.500	36.962	52.795	1114.447	0
+        t10-affon-l80	reset-on-switch	62.430%	1985.800	1018.358%	2.000	60.792%	0	3180.500	36.438	52.836	1114.447	0
+        t10-affon-l80	remake-on-switch.fixed2.pauto	4.247%	134.300	68.871%	134.700	3.332%	1333	3179.500	87.031	146.702	1127.064	0
+        t10-affon-l80	remake-on-switch.fixed2.p0	4.247%	134.300	68.871%	134.700	3.332%	1333	3179.500	87.031	146.702	1127.064	0
+        t10-affoff-l60	none	80.282%	1923.800	986.564%	2.000	95.088%	0	2395.625	16.646	40.371	1093.503	0
+        t10-affoff-l60	reset-always	80.286%	1923.900	986.615%	2.000	93.890%	0	2395.625	18.481	41.726	1095.173	0
+        t10-affoff-l60	reset-on-switch	80.023%	1917.600	983.384%	2.000	94.124%	0	2395.625	18.481	41.406	1096.008	0
+        t10-affoff-l60	remake-on-switch.fixed2.pauto	70.920%	173.000	88.717%	173.400	0.000%	1854	241.125	914.358	922.758	2824.779	21346
+        t10-affoff-l60	remake-on-switch.fixed2.p0	70.920%	173.000	88.717%	173.400	0.000%	1854	241.125	914.358	922.758	2824.779	21346
+        t10-affoff-l80	none	80.360%	2556.100	1310.820%	2.000	66.976%	0	3180.500	34.078	51.955	1113.189	0
+        t10-affoff-l80	reset-always	80.152%	2549.500	1307.435%	2.000	58.268%	0	3180.500	36.962	52.795	1114.447	0
+        t10-affoff-l80	reset-on-switch	80.338%	2555.400	1310.461%	2.000	59.988%	0	3180.500	36.438	52.836	1114.447	0
+        t10-affoff-l80	remake-on-switch.fixed2.pauto	72.554%	173.100	88.769%	173.500	0.000%	1867	236.750	922.746	938.072	2858.500	29232
+        t10-affoff-l80	remake-on-switch.fixed2.p0	72.554%	173.100	88.769%	173.500	0.000%	1867	236.750	922.746	938.072	2858.500	29232
+        t100-affon-l60	none	69.962%	1676.500	859.743%	2.000	95.088%	0	2395.625	16.646	40.371	1093.503	0
+        t100-affon-l60	reset-always	71.234%	1707.000	875.384%	2.000	93.890%	0	2395.625	18.481	41.726	1095.173	0
+        t100-affon-l60	reset-on-switch	70.913%	1699.300	871.435%	2.000	94.199%	0	2395.625	18.481	41.471	1095.173	0
+        t100-affon-l60	remake-on-switch.fixed2.pauto	11.153%	174.000	89.230%	174.400	9.399%	1782	1581.875	362.807	407.572	1278.150	7824
+        t100-affon-l60	remake-on-switch.fixed2.p0	11.153%	174.000	89.230%	174.400	9.399%	1782	1581.875	362.807	407.572	1278.150	7824
+        t100-affon-l80	none	81.677%	2598.000	1332.307%	2.000	66.976%	0	3180.500	34.078	51.955	1113.189	0
+        t100-affon-l80	reset-always	83.302%	2649.700	1358.820%	2.000	58.268%	0	3180.500	36.962	52.795	1114.447	0
+        t100-affon-l80	reset-on-switch	83.035%	2641.200	1354.461%	2.000	59.381%	0	3180.500	36.700	52.868	1114.447	0
+        t100-affon-l80	remake-on-switch.fixed2.pauto	10.851%	174.000	89.230%	174.400	9.378%	1772	1639.000	352.321	379.519	1268.456	15312
+        t100-affon-l80	remake-on-switch.fixed2.p0	10.851%	174.000	89.230%	174.400	9.378%	1772	1639.000	352.321	379.519	1268.456	15312
+        t100-affoff-l60	none	92.079%	2206.500	1131.538%	2.000	95.088%	0	2395.625	16.646	40.371	1093.503	0
+        t100-affoff-l60	reset-always	92.062%	2206.100	1131.333%	2.000	93.890%	0	2395.625	18.481	41.726	1095.173	0
+        t100-affoff-l60	reset-on-switch	92.121%	2207.500	1132.051%	2.000	93.969%	0	2395.625	18.481	41.471	1095.173	0
+        t100-affoff-l60	remake-on-switch.fixed2.pauto	86.992%	173.200	88.820%	173.600	0.000%	1902	199.250	1048.575	1065.929	3208.281	21772
+        t100-affoff-l60	remake-on-switch.fixed2.p0	86.992%	173.200	88.820%	173.600	0.000%	1902	199.250	1048.575	1065.929	3208.281	21772
+        t100-affoff-l80	none	92.212%	2933.100	1504.153%	2.000	66.976%	0	3180.500	34.078	51.955	1113.189	0
+        t100-affoff-l80	reset-always	92.134%	2930.600	1502.871%	2.000	58.268%	0	3180.500	36.962	52.795	1114.447	0
+        t100-affoff-l80	reset-on-switch	92.090%	2929.200	1502.153%	2.000	58.950%	0	3180.500	36.700	52.868	1114.447	0
+        t100-affoff-l80	remake-on-switch.fixed2.pauto	86.239%	173.100	88.769%	173.500	0.000%	1896	200.625	1040.187	1052.930	3193.146	29606
+        t100-affoff-l80	remake-on-switch.fixed2.p0	86.239%	173.100	88.769%	173.500	0.000%	1896	200.625	1040.187	1052.930	3193.146	29606
+        t10000-affon-l60	none	85.519%	2049.300	1050.923%	2.000	95.088%	0	2395.625	16.646	40.371	1093.503	0
+        t10000-affon-l60	reset-always	86.191%	2065.400	1059.179%	2.000	93.890%	0	2395.625	18.481	41.726	1095.173	0
+        t10000-affon-l60	reset-on-switch	86.161%	2064.700	1058.820%	2.000	93.999%	0	2395.625	18.481	41.471	1095.173	0
+        t10000-affon-l60	remake-on-switch.fixed2.pauto	48.240%	174.000	89.230%	174.400	8.312%	1874	370.250	943.718	968.884	2188.386	20041
+        t10000-affon-l60	remake-on-switch.fixed2.p0	48.240%	174.000	89.230%	174.400	8.312%	1874	370.250	943.718	968.884	2188.386	20041
+        t10000-affon-l80	none	91.605%	2913.800	1494.256%	2.000	66.976%	0	3180.500	34.078	51.955	1113.189	0
+        t10000-affon-l80	reset-always	92.407%	2939.300	1507.333%	2.000	58.268%	0	3180.500	36.962	52.795	1114.447	0
+        t10000-affon-l80	reset-on-switch	92.275%	2935.100	1505.179%	2.000	58.768%	0	3180.500	36.962	52.960	1114.447	0
+        t10000-affon-l80	remake-on-switch.fixed2.pauto	47.811%	174.000	89.230%	174.400	7.251%	1861	367.250	910.163	930.622	2198.093	27878
+        t10000-affon-l80	remake-on-switch.fixed2.p0	47.811%	174.000	89.230%	174.400	7.251%	1861	367.250	910.163	930.622	2198.093	27878
+        t10000-affoff-l60	none	96.878%	2321.500	1190.512%	2.000	95.088%	0	2395.625	16.646	40.371	1093.503	0
+        t10000-affoff-l60	reset-always	96.916%	2322.400	1190.974%	2.000	93.890%	0	2395.625	18.481	41.726	1095.173	0
+        t10000-affoff-l60	reset-on-switch	96.966%	2323.600	1191.589%	2.000	93.932%	0	2395.625	18.481	41.471	1095.173	0
+        t10000-affoff-l60	remake-on-switch.fixed2.pauto	93.369%	173.000	88.717%	173.400	0.000%	1912	185.500	1124.073	1126.738	3371.967	21912
+        t10000-affoff-l60	remake-on-switch.fixed2.p0	93.369%	173.000	88.717%	173.400	0.000%	1912	185.500	1124.073	1126.738	3371.967	21912
+        t10000-affoff-l80	none	96.890%	3081.900	1580.461%	2.000	66.976%	0	3180.500	34.078	51.955	1113.189	0
+        t10000-affoff-l80	reset-always	96.720%	3076.500	1577.692%	2.000	58.268%	0	3180.500	36.962	52.795	1114.447	0
+        t10000-affoff-l80	reset-on-switch	96.746%	3077.300	1578.102%	2.000	58.535%	0	3180.500	36.962	52.960	1114.447	0
+        t10000-affoff-l80	remake-on-switch.fixed2.pauto	93.381%	173.100	88.769%	173.500	0.000%	1915	185.750	1115.684	1123.278	3368.775	29753
+        t10000-affoff-l80	remake-on-switch.fixed2.p0	93.381%	173.100	88.769%	173.500	0.000%	1915	185.750	1115.684	1123.278	3368.775	29753
+--- PASS: TestS8TenantScaleNoStarvation (114.44s)
+=== RUN   TestS9ColdStartAndRestart
+    faults_scenario_test.go:94: 
+        run	db_lost	connects_refused	connects_started_in_window	storm_bound	goodput_before/s	goodput_during/s	goodput_last2s	first_ok_flush_s	warm_end	open_hw	db_hw
+        s9-none-steady100-l60-r1	1	32	32	48	2419.666	0.000	100.041% of 2381.500/s	6.000	0	20	20
+        s9-none.fixed4-steady100-l60-r1	1	32	32	48	2419.666	0.000	100.041% of 2381.500/s	6.000	0	20	20
+        s9-reset-always-steady100-l60-r1	1	32	32	48	2419.666	0.000	100.041% of 2381.500/s	6.000	0	20	20
+        s9-reset-always.fixed4-steady100-l60-r1	1	32	32	48	2419.666	0.000	100.041% of 2381.500/s	6.000	0	20	20
+        s9-reset-on-switch-steady100-l60-r1	1	32	32	48	2420.000	0.000	100.041% of 2381.500/s	6.000	0	20	20
+        s9-reset-on-switch.fixed4-steady100-l60-r1	1	32	32	48	2420.000	0.000	100.041% of 2381.500/s	6.000	0	20	20
+        s9-remake-on-switch.cold.pauto-skewed10-l30-r1	1	32	32	48	1197.333	0.000	100.376% of 1195.500/s	6.000	0	20	20
+        s9-remake-on-switch.fixed2.pauto-skewed10-l30-r1	1	32	32	48	1197.333	0.000	100.460% of 1195.500/s	6.000	2	20	20
+        s9-remake-on-switch.dynamic.pauto-skewed10-l30-r1	1	32	32	48	1197.333	0.000	100.376% of 1195.500/s	6.000	0	20	20
+        s9-remake-on-switch.cold.p0-skewed10-l30-r1	1	28	28	48	1197.333	0.000	100.543% of 1195.500/s	6.000	0	20	20
+        s9-remake-on-switch.fixed2.p0-skewed10-l30-r1	1	28	28	48	1197.000	0.000	100.501% of 1195.500/s	6.000	2	20	20
+        s9-remake-on-switch.dynamic.p0-skewed10-l30-r1	1	28	28	48	1197.333	0.000	100.543% of 1195.500/s	6.000	0	20	20
+        s9-remake-always.cold-steady100-l3-r1	1	28	32	48	111.000	0.000	98.518% of 135.000/s	6.000	0	8	8
+        s9-none-steady100-l60-r2	1	32	32	48	2405.000	0.000	100.188% of 2384.500/s	6.000	0	20	20
+        s9-none.fixed4-steady100-l60-r2	1	32	32	48	2405.000	0.000	100.188% of 2384.500/s	6.000	0	20	20
+        s9-reset-always-steady100-l60-r2	1	32	32	48	2405.000	0.000	100.188% of 2384.500/s	6.000	0	20	20
+        s9-reset-always.fixed4-steady100-l60-r2	1	32	32	48	2405.000	0.000	100.188% of 2384.500/s	6.000	0	20	20
+        s9-reset-on-switch-steady100-l60-r2	1	32	32	48	2405.333	0.000	100.188% of 2384.500/s	6.000	0	20	20
+        s9-reset-on-switch.fixed4-steady100-l60-r2	1	32	32	48	2405.333	0.000	100.188% of 2384.500/s	6.000	0	20	20
+        s9-remake-on-switch.cold.pauto-skewed10-l30-r2	1	32	32	48	1186.333	0.000	100.042% of 1177.000/s	6.000	0	20	20
+        s9-remake-on-switch.fixed2.pauto-skewed10-l30-r2	1	32	32	48	1186.000	0.000	100.042% of 1177.000/s	6.000	2	20	20
+        s9-remake-on-switch.dynamic.pauto-skewed10-l30-r2	1	32	32	48	1185.666	0.000	99.872% of 1177.000/s	6.000	0	20	20
+        s9-remake-on-switch.cold.p0-skewed10-l30-r2	1	28	28	48	1185.333	0.000	100.042% of 1177.000/s	6.000	2	20	20
+        s9-remake-on-switch.fixed2.p0-skewed10-l30-r2	1	28	28	48	1186.333	0.000	100.084% of 1177.000/s	6.000	3	20	20
+        s9-remake-on-switch.dynamic.p0-skewed10-l30-r2	1	28	28	48	1185.333	0.000	100.084% of 1177.000/s	6.000	0	20	20
+        s9-remake-always.cold-steady100-l3-r2	0	28	28	48	124.000	0.000	100.378% of 132.000/s	6.000	0	8	8
+        s9-none-steady100-l60-r3	1	32	32	48	2394.333	0.000	100.040% of 2445.500/s	6.000	0	20	20
+        s9-none.fixed4-steady100-l60-r3	1	32	32	48	2394.333	0.000	100.040% of 2445.500/s	6.000	0	20	20
+        s9-reset-always-steady100-l60-r3	1	32	32	48	2394.333	0.000	100.040% of 2445.500/s	6.000	0	20	20
+        s9-reset-always.fixed4-steady100-l60-r3	1	32	32	48	2394.333	0.000	100.040% of 2445.500/s	6.000	0	20	20
+        s9-reset-on-switch-steady100-l60-r3	1	32	32	48	2394.666	0.000	100.040% of 2445.500/s	6.000	0	20	20
+        s9-reset-on-switch.fixed4-steady100-l60-r3	1	32	32	48	2394.666	0.000	100.040% of 2445.500/s	6.000	0	20	20
+        s9-remake-on-switch.cold.pauto-skewed10-l30-r3	1	32	32	48	1218.333	0.000	100.245% of 1223.500/s	6.000	0	20	20
+        s9-remake-on-switch.fixed2.pauto-skewed10-l30-r3	1	32	32	48	1217.666	0.000	100.245% of 1223.500/s	6.000	2	20	20
+        s9-remake-on-switch.dynamic.pauto-skewed10-l30-r3	1	32	32	48	1218.666	0.000	100.245% of 1223.500/s	6.000	0	20	20
+        s9-remake-on-switch.cold.p0-skewed10-l30-r3	1	32	32	48	1217.666	0.000	100.326% of 1223.500/s	6.000	1	20	20
+        s9-remake-on-switch.fixed2.p0-skewed10-l30-r3	1	28	28	48	1217.000	0.000	100.326% of 1223.500/s	6.000	2	20	20
+        s9-remake-on-switch.dynamic.p0-skewed10-l30-r3	1	28	28	48	1217.666	0.000	100.286% of 1223.500/s	6.000	0	20	20
+        s9-remake-always.cold-steady100-l3-r3	1	28	28	48	110.000	0.000	98.513% of 134.500/s	6.000	0	9	8
+--- PASS: TestS9ColdStartAndRestart (61.18s)
+=== RUN   TestS10ConnectFaults
+    faults_scenario_test.go:129: 
+        run	connects	refused	timeout	db_lost	wait_p99_ms	wait_max_ms	bound_ms	goodput_last2s	goodput
+        s10-remake-on-switch.fixed2.pauto-skewed10-l30-r1	243	49	4	1	1044.381	1141.745	6000.000	99.958%	23668
+        s10-remake-on-switch.dynamic.pauto-skewed10-l30-r1	212	35	4	1	1044.381	1141.745	6000.000	99.958%	23667
+        s10-remake-on-switch.fixed2.p0-skewed10-l30-r1	2109	57	4	1	985.661	1086.549	6000.000	100.000%	23726
+        s10-remake-on-switch.dynamic.p0-skewed10-l30-r1	2047	55	4	1	989.855	1086.549	6000.000	99.958%	23726
+        s10-remake-always.cold-t100-l3-r1	2423	69	4	1	2483.027	2547.799	6000.000	157.943%	2348
+        s10-none-t100-l60-r1	72	32	0	1	1056.964	1120.393	6000.000	100.063%	46063
+        s10-reset-always-t100-l60-r1	72	32	0	1	1061.158	1122.038	6000.000	100.063%	46061
+        s10-remake-on-switch.fixed2.pauto-skewed10-l30-r2	207	44	4	1	1019.215	1128.052	6000.000	100.295%	23535
+        s10-remake-on-switch.dynamic.pauto-skewed10-l30-r2	262	38	4	1	1019.215	1128.052	6000.000	100.253%	23535
+        s10-remake-on-switch.fixed2.p0-skewed10-l30-r2	2099	58	4	1	1052.770	2110.166	6000.000	100.295%	23603
+        s10-remake-on-switch.dynamic.p0-skewed10-l30-r2	2052	50	4	1	964.689	1079.824	6000.000	100.253%	23603
+        s10-remake-always.cold-t100-l3-r2	2463	65	4	0	2583.691	2601.643	6000.000	142.553%	2391
+        s10-none-t100-l60-r2	72	32	0	1	1069.547	1113.456	6000.000	99.979%	46239
+        s10-reset-always-t100-l60-r2	72	32	0	1	1073.741	1114.258	6000.000	99.958%	46238
+        s10-remake-on-switch.fixed2.pauto-skewed10-l30-r3	244	48	4	1	977.272	1087.977	6000.000	99.629%	23764
+        s10-remake-on-switch.dynamic.pauto-skewed10-l30-r3	261	38	4	1	977.272	1087.977	6000.000	99.958%	23764
+        s10-remake-on-switch.fixed2.p0-skewed10-l30-r3	2110	60	4	1	985.661	1085.312	6000.000	100.205%	23766
+        s10-remake-on-switch.dynamic.p0-skewed10-l30-r3	2033	46	4	1	985.661	1085.312	6000.000	100.164%	23769
+        s10-remake-always.cold-t100-l3-r3	2460	65	4	1	2684.354	2727.527	6000.000	148.898%	2384
+        s10-none-t100-l60-r3	72	32	0	1	1082.130	1125.082	6000.000	99.978%	46515
+        s10-reset-always-t100-l60-r3	72	32	0	1	1090.519	1126.111	6000.000	99.957%	46513
+--- PASS: TestS10ConnectFaults (53.20s)
+=== RUN   TestS11ServerPeak
+    faults_scenario_test.go:160: S11 s11-remake-on-switch.fixed4.pauto-skewed10-l60-r1: identical counters under both remake orders (no spare slot when a switch closes)
+    faults_scenario_test.go:160: S11 s11-remake-on-switch.fixed4.pauto-steady10000-l2-r1: identical counters under both remake orders (no spare slot when a switch closes)
+    faults_scenario_test.go:160: S11 s11-remake-on-switch.fixed4.p0-steady10000-l2-r1: identical counters under both remake orders (no spare slot when a switch closes)
+    faults_scenario_test.go:160: S11 s11-remake-on-switch.dynamic.pauto-steady10000-l2-r1: identical counters under both remake orders (no spare slot when a switch closes)
+    faults_scenario_test.go:160: S11 s11-remake-on-switch.fixed4.pauto-skewed10-l60-r2: identical counters under both remake orders (no spare slot when a switch closes)
+    faults_scenario_test.go:160: S11 s11-remake-on-switch.fixed4.pauto-steady10000-l2-r2: identical counters under both remake orders (no spare slot when a switch closes)
+    faults_scenario_test.go:160: S11 s11-remake-on-switch.fixed4.p0-skewed10-l60-r2: identical counters under both remake orders (no spare slot when a switch closes)
+    faults_scenario_test.go:160: S11 s11-remake-on-switch.fixed4.p0-steady10000-l2-r2: identical counters under both remake orders (no spare slot when a switch closes)
+    faults_scenario_test.go:160: S11 s11-remake-on-switch.dynamic.pauto-steady10000-l2-r2: identical counters under both remake orders (no spare slot when a switch closes)
+    faults_scenario_test.go:164: 
+        run	connects	closes_switch	db_backends_hw	open_conn_hw	bound	goodput
+        s11-remake-on-switch.fixed4.pauto.close-then-open-skewed10-l60-r1	1252	1232	20	20	20	23963
+        s11-remake-on-switch.fixed4.pauto.close-then-open-steady10000-l2-r1	2352	2332	20	20	20	2350
+        s11-remake-on-switch.fixed4.p0.close-then-open-skewed10-l60-r1	1745	1725	20	20	20	23963
+        s11-remake-on-switch.fixed4.p0.close-then-open-steady10000-l2-r1	2352	2332	20	20	20	2350
+        s11-remake-on-switch.dynamic.pauto.close-then-open-skewed10-l60-r1	690	584	20	20	20	23963
+        s11-remake-on-switch.dynamic.pauto.close-then-open-steady10000-l2-r1	2364	2334	20	20	20	2350
+        s11-remake-on-switch.fixed4.pauto.open-then-close-skewed10-l60-r1	1252	1232	20	20	20	23963
+        s11-remake-on-switch.fixed4.pauto.open-then-close-steady10000-l2-r1	2352	2332	20	20	20	2350
+        s11-remake-on-switch.fixed4.p0.open-then-close-skewed10-l60-r1	1745	1725	20	20	20	23963
+        s11-remake-on-switch.fixed4.p0.open-then-close-steady10000-l2-r1	2352	2332	20	20	20	2350
+        s11-remake-on-switch.dynamic.pauto.open-then-close-skewed10-l60-r1	678	576	20	20	20	23963
+        s11-remake-on-switch.dynamic.pauto.open-then-close-steady10000-l2-r1	2364	2334	20	20	20	2350
+        s11-remake-on-switch.fixed4.pauto.close-then-open-skewed10-l60-r2	1360	1340	20	20	20	23899
+        s11-remake-on-switch.fixed4.pauto.close-then-open-steady10000-l2-r2	2392	2372	20	20	20	2391
+        s11-remake-on-switch.fixed4.p0.close-then-open-skewed10-l60-r2	1738	1718	20	20	20	23899
+        s11-remake-on-switch.fixed4.p0.close-then-open-steady10000-l2-r2	2392	2372	20	20	20	2391
+        s11-remake-on-switch.dynamic.pauto.close-then-open-skewed10-l60-r2	796	619	20	20	20	23899
+        s11-remake-on-switch.dynamic.pauto.close-then-open-steady10000-l2-r2	2406	2375	20	20	20	2391
+        s11-remake-on-switch.fixed4.pauto.open-then-close-skewed10-l60-r2	1360	1340	20	20	20	23899
+        s11-remake-on-switch.fixed4.pauto.open-then-close-steady10000-l2-r2	2392	2372	20	20	20	2391
+        s11-remake-on-switch.fixed4.p0.open-then-close-skewed10-l60-r2	1738	1718	20	20	20	23899
+        s11-remake-on-switch.fixed4.p0.open-then-close-steady10000-l2-r2	2392	2372	20	20	20	2391
+        s11-remake-on-switch.dynamic.pauto.open-then-close-skewed10-l60-r2	796	619	20	20	20	23899
+        s11-remake-on-switch.dynamic.pauto.open-then-close-steady10000-l2-r2	2406	2375	20	20	20	2391
+--- PASS: TestS11ServerPeak (32.63s)
+=== RUN   TestS3MissRateAgainstPoisson
+    stock_scenario_test.go:138: 
+        arm	cell	lambda/s	L_ms(=m/λ)	connect_mean_ms	connect_cpu	m	trials	measured	predicted	band±	domain	verdict
+        remake-on-switch.fixed1.pauto	l0.14	5.543	19.123	18.425	3.188%	0.106	3326	11.635%	10.057%	1.764%	in	in band
+        remake-on-switch.fixed2.pauto	l0.14	5.545	19.116	18.425	3.190%	0.106	3327	0.721%	0.523%	0.575%	in	in band
+        remake-on-switch.fixed4.pauto	l0.14	5.548	19.105	18.429	3.194%	0.106	3329	0.030%	0.000%	0.210%	in	in band
+        remake-on-switch.fixed8.pauto	l0.14	5.550	19.279	18.432	3.198%	0.107	3330	0.030%	0.000%	0.200%	in	in band
+        remake-on-switch.fixed2.p0	l0.14	5.545	19.116	18.425	3.190%	0.106	3327	0.721%	0.523%	0.575%	in	in band
+        remake-on-switch.fixed2.pauto.prime	l0.14	5.545	19.837	18.425	3.190%	0.110	3327	0.811%	0.562%	0.588%	in	in band
+        remake-on-switch.fixed1.pauto	l0.34	13.560	19.247	18.432	7.797%	0.261	8136	23.561%	22.971%	1.598%	in	in band
+        remake-on-switch.fixed2.pauto	l0.34	13.561	19.246	18.432	7.799%	0.261	8137	3.318%	2.867%	0.755%	in	in band
+        remake-on-switch.fixed4.pauto	l0.34	13.565	19.240	18.434	7.803%	0.261	8139	0.024%	0.015%	0.241%	in	in band
+        remake-on-switch.fixed8.pauto	l0.34	13.566	19.239	18.435	7.808%	0.261	8140	0.012%	0.000%	0.200%	in	in band
+        remake-on-switch.fixed2.p0	l0.34	13.561	19.246	18.432	7.799%	0.261	8137	3.318%	2.867%	0.755%	in	in band
+        remake-on-switch.fixed2.pauto.prime	l0.34	13.561	19.836	18.432	7.799%	0.269	8137	3.527%	3.030%	0.770%	in	in band
+        remake-on-switch.fixed1.pauto	l0.68	27.247	19.268	18.472	15.668%	0.525	9809	40.503%	40.844%	1.688%	in	in band
+        remake-on-switch.fixed2.pauto	l0.68	27.247	19.268	18.472	15.670%	0.525	9809	10.235%	9.787%	1.100%	in	in band
+        remake-on-switch.fixed4.pauto	l0.68	27.255	19.262	18.473	15.678%	0.525	9812	0.254%	0.208%	0.338%	in	in band
+        remake-on-switch.fixed8.pauto	l0.68	27.261	19.294	18.474	15.687%	0.526	9814	0.010%	0.000%	0.200%	in	in band
+        remake-on-switch.fixed2.p0	l0.68	27.247	19.268	18.472	15.670%	0.525	9809	10.235%	9.787%	1.100%	in	in band
+        remake-on-switch.fixed2.pauto.prime	l0.68	27.247	19.892	18.472	15.670%	0.542	9809	10.847%	10.319%	1.121%	in	in band
+        remake-on-switch.fixed1.pauto	l1.35	53.988	19.448	18.650	31.043%	1.050	9718	65.301%	65.006%	1.651%	in	in band
+        remake-on-switch.fixed2.pauto	l1.35	53.983	19.450	18.650	31.046%	1.050	9717	28.331%	28.262%	1.570%	in	in band
+        remake-on-switch.fixed4.pauto	l1.35	54.000	19.462	18.652	31.062%	1.051	9720	2.335%	2.227%	0.648%	OUT-OF-DOMAIN: K14 binds	in band (not asserted)
+        remake-on-switch.fixed8.pauto	l1.35	54.016	19.475	18.653	31.085%	1.052	9723	0.020%	0.001%	0.211%	OUT-OF-DOMAIN: K14 binds	in band (not asserted)
+        remake-on-switch.fixed2.p0	l1.35	53.988	19.448	18.650	31.046%	1.050	9718	28.339%	28.262%	1.570%	in	in band
+        remake-on-switch.fixed2.pauto.prime	l1.35	53.983	20.098	18.650	31.046%	1.085	9717	29.957%	29.547%	1.588%	in	in band
+        remake-on-switch.fixed1.pauto	l2	80.016	19.808	19.000	46.009%	1.585	9602	79.775%	79.505%	1.435%	in	in band
+        remake-on-switch.fixed2.pauto	l2	80.016	19.808	19.000	46.014%	1.585	9602	47.490%	47.020%	1.727%	in	in band
+        remake-on-switch.fixed4.pauto	l2	80.033	19.816	19.006	46.038%	1.586	9604	8.767%	7.689%	1.015%	OUT-OF-DOMAIN: K14 binds	OUTSIDE (not asserted)
+        remake-on-switch.fixed8.pauto	l2	80.058	19.835	19.005	46.071%	1.588	9607	0.176%	0.024%	0.248%	OUT-OF-DOMAIN: K14 binds	in band (not asserted)
+        remake-on-switch.fixed2.p0	l2	80.016	19.808	19.000	46.014%	1.585	9602	47.490%	47.020%	1.727%	in	in band
+        remake-on-switch.fixed2.pauto.prime	l2	80.016	20.445	19.000	46.014%	1.636	9602	49.281%	48.661%	1.730%	in	in band
+        remake-on-switch.fixed1.pauto	l2.7	107.900	20.379	19.575	62.036%	2.199	10790	89.286%	88.908%	1.106%	OUT-OF-DOMAIN: connect CPU > 50% (empirical line)	in band (not asserted)
+        remake-on-switch.fixed2.pauto	l2.7	107.900	20.389	19.576	62.048%	2.200	10790	66.533%	64.542%	1.581%	OUT-OF-DOMAIN: connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed4.pauto	l2.7	107.910	20.396	19.578	62.071%	2.201	10791	22.370%	18.084%	1.311%	OUT-OF-DOMAIN: K14 binds, connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed8.pauto	l2.7	107.940	20.400	19.578	62.111%	2.202	10794	0.926%	0.198%	0.328%	OUT-OF-DOMAIN: K14 binds, connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed2.p0	l2.7	107.910	20.387	19.576	62.048%	2.200	10791	66.527%	64.542%	1.581%	OUT-OF-DOMAIN: connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed2.pauto.prime	l2.7	107.910	21.017	19.576	62.048%	2.268	10791	68.121%	66.169%	1.566%	OUT-OF-DOMAIN: connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed1.pauto	l3.4	135.875	21.254	20.444	78.120%	2.888	10870	95.565%	94.431%	0.859%	OUT-OF-DOMAIN: connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed2.pauto	l3.4	135.887	21.260	20.448	78.135%	2.889	10871	83.322%	78.364%	1.384%	OUT-OF-DOMAIN: connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed4.pauto	l3.4	135.887	21.267	20.448	78.156%	2.890	10871	45.865%	32.814%	1.550%	OUT-OF-DOMAIN: K14 binds, connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed8.pauto	l3.4	135.937	21.274	20.449	78.214%	2.892	10875	7.080%	0.973%	0.482%	OUT-OF-DOMAIN: K14 binds, connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed2.p0	l3.4	135.912	21.263	20.450	78.149%	2.890	10873	83.353%	78.380%	1.384%	OUT-OF-DOMAIN: connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed2.pauto.prime	l3.4	135.887	21.893	20.448	78.135%	2.975	10871	84.270%	79.708%	1.357%	OUT-OF-DOMAIN: connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed1.pauto	l4	160.016	22.247	21.447	91.971%	3.560	9601	98.770%	97.156%	0.708%	OUT-OF-DOMAIN: connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed2.pauto	l4	160.033	22.257	21.448	92.000%	3.562	9602	94.521%	87.052%	1.227%	OUT-OF-DOMAIN: connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed4.pauto	l4	160.000	22.262	21.448	92.009%	3.562	9600	76.333%	47.668%	1.729%	OUT-OF-DOMAIN: K14 binds, connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed8.pauto	l4	160.083	22.282	21.458	92.105%	3.567	9605	41.343%	2.940%	0.716%	OUT-OF-DOMAIN: K14 binds, connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed2.p0	l4	160.050	22.255	21.448	92.000%	3.562	9603	94.522%	87.052%	1.227%	OUT-OF-DOMAIN: connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-on-switch.fixed2.pauto.prime	l4	160.033	22.889	21.448	92.000%	3.663	9602	94.844%	88.036%	1.193%	OUT-OF-DOMAIN: connect CPU > 50% (empirical line)	OUTSIDE (not asserted)
+        remake-always.cold	l0.14	5.433	-	18.425	-	0.104	163	100.000%	100.000%	0	in	control
+    stock_scenario_test.go:139: S3: 26 cells asserted inside the domain, 22 out-of-domain cells reported (flagged) and not asserted
+--- PASS: TestS3MissRateAgainstPoisson (60.85s)
+=== RUN   TestS4WhereTheModelBreaks
+    stock_scenario_test.go:175: 
+        arm	cell	switch_arrivals/s	m	connect_mean_ms	trials	no_slot_arrivals	measured	predicted	gap(pp)
+        remake-on-switch.fixed2.pauto	bursty-a1	11.300	0.225	21.558	1356	0	79.498%	2.181%	77.316%
+        remake-on-switch.fixed4.pauto	bursty-a1	10.983	0.226	21.551	1318	0	63.884%	0.009%	63.875%
+        remake-on-switch.fixed2.pauto	high-t20-l95	3416.200	1.163	19.488	33673	34651	100.000%	32.396%	67.604%
+        remake-on-switch.fixed4.pauto	high-t20-l95	3416.150	1.165	19.488	33672	34651	100.000%	3.081%	96.918%
+        remake-on-switch.fixed2.pauto	cpu50-l1.35	53.675	2.127	38.815	6441	0	59.571%	62.727%	-3.156%
+        remake-on-switch.fixed4.pauto	cpu50-l1.35	53.700	2.133	38.890	6444	0	17.318%	16.763%	0.554%
+--- PASS: TestS4WhereTheModelBreaks (30.76s)
+=== RUN   TestS12Ablations
+    stock_scenario_test.go:383: 
+        ablation	arm	claim_holds	detail
+        W=0	remake-on-switch.fixed8.pauto	true	miss 0.031%, wait p50 0.001 ms, p99 0.001 ms
+        W=0	remake-on-switch.fixed0.pauto	false	miss 100.000%, wait p50 19.267 ms, p99 27.787 ms
+        rule frozen	remake-on-switch.dynamic.pauto	true	miss 0.847%, target low third 4, ×4 third 9
+        rule frozen	remake-on-switch.dynamic.pauto.frozen	false	miss 55.262%, target low third 1, ×4 third 2
+        W=0	remake-on-switch.fixed8.p0	true	miss 0.031%, wait p50 0.001 ms, p99 0.001 ms
+        W=0	remake-on-switch.fixed0.p0	false	miss 100.000%, wait p50 19.267 ms, p99 27.787 ms
+        rule frozen	remake-on-switch.dynamic.p0	true	miss 0.847%, target low third 4, ×4 third 9
+        rule frozen	remake-on-switch.dynamic.p0.frozen	false	miss 55.262%, target low third 1, ×4 third 2
+        reset skipped	reset-always	true	cross-tenant pairs 804, unreset 0, markers read 0
+        reset skipped	reset-on-switch	true	cross-tenant pairs 749, unreset 0, markers read 0
+        reset skipped	none	false	cross-tenant pairs 728, unreset 728, markers read 728
+--- PASS: TestS12Ablations (8.06s)
+PASS
+ok  	github.com/nickstrad/mini-gateway/internal/lab/leaselab	578.884s

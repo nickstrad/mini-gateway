@@ -1,0 +1,22 @@
+# E7 step 4 — R7 head-to-head, mix B (10 tenants, Zipf 1.1, E2's C1 configuration: tenant
+# switches far above the remake budget). REVIEW-E5-1's proposed campaign: the ramp; cap:80 only;
+# 8 arms x 6 repetitions; every run 30 s measured after a 5 s warm-up. 48 runs + 6 ramp steps,
+# about 35 min.
+campaign r7
+test r7b
+tier real
+reps 6
+seed 1
+common workload.profile=skewed workload.tenants=10 workload.skew=1100 workload.lease=medium pool.cap=20 run.duration=35s obs.interval=35s obs.warmup=5s oracle.rate=0
+real monitor=100ms
+ramp 50 70 85 100 115 130
+ramp_arm release.policy=none warm.mode=cold
+loads cap:80
+arm base release.policy=none warm.mode=cold
+arm aa release.policy=none warm.mode=cold
+arm ra release.policy=reset-always warm.mode=cold
+arm ros release.policy=reset-on-switch warm.mode=cold
+arm rmsf release.policy=remake-on-switch warm.mode=fixed warm.size=4
+arm rmsf0 release.policy=remake-on-switch warm.mode=fixed warm.size=4 remake.patience=0
+arm rmsd release.policy=remake-on-switch warm.mode=dynamic warm.size=1
+arm rma release.policy=remake-always warm.mode=cold

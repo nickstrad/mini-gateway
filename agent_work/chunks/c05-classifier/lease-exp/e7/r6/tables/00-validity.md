@@ -1,0 +1,10 @@
+| severity |                  dir                   | check  |   detail    |
+|----------|----------------------------------------|--------|-------------|
+| invalid  | /root/runs/lease-r/1-r6/r6-rmak-l4-r0  | runner | run.valid 0 |
+| invalid  | /root/runs/lease-r/1-r6/r6-rmak-l4-r1  | runner | run.valid 0 |
+| invalid  | /root/runs/lease-r/1-r6/r6-rmak-l4-r2  | runner | run.valid 0 |
+| invalid  | /root/runs/lease-r/1-r6/r6-rmsf-l60-r1 | runner | run.valid 0 |
+| invalid  | /root/runs/lease-r/1-r6/r6-rmsu-l4-r0  | runner | run.valid 0 |
+| invalid  | /root/runs/lease-r/1-r6/r6-rmsu-l4-r1  | runner | run.valid 0 |
+| invalid  | /root/runs/lease-r/1-r6/r6-rmsuo-l4-r0 | runner | run.valid 0 |
+| invalid  | /root/runs/lease-r/1-r6/r6-rmsuo-l4-r1 | runner | run.valid 0 |

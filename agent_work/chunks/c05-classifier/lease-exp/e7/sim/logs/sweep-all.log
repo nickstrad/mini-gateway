@@ -1,0 +1,10 @@
+sweep s3 (S3): 192 runs, 0 failed, 92.6 s, dir /root/runs/lease-s/camp/s3
+sweep s4 (S4): 90 runs, 0 failed, 179.8 s, dir /root/runs/lease-s/camp/s4
+sweep s5 (S5): 84 runs, 0 failed, 32.2 s, dir /root/runs/lease-s/camp/s5
+sweep s6 (S6): 73 runs, 0 failed, 138.2 s, dir /root/runs/lease-s/camp/s6
+sweep s7 (S7): 108 runs, 0 failed, 163.0 s, dir /root/runs/lease-s/camp/s7
+sweep s8 (S8): 60 runs, 0 failed, 60.9 s, dir /root/runs/lease-s/camp/s8
+sweep s9 (S9): 39 runs, 0 failed, 28.6 s, dir /root/runs/lease-s/camp/s9
+sweep s10 (S10): 21 runs, 0 failed, 26.8 s, dir /root/runs/lease-s/camp/s10
+sweep s11 (S11): 24 runs, 0 failed, 14.1 s, dir /root/runs/lease-s/camp/s11
+sweep s12 (S12): 33 runs, 0 failed, 12.4 s, dir /root/runs/lease-s/camp/s12

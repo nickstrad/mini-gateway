@@ -1,0 +1,8 @@
+tier,campaign,test,workload,load,seed,rep,policy,patience,warm_mode,arm,w,misses,n,miss_rate,warm_conn_s,epsilon,holds_epsilon,hindsight_w,hindsight_warm_conn_s,ratio_to_hindsight
+real,r6,r6,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=20000000000,60.0,1,0,remake-on-switch,auto,fixed,rmsfo,4,14904,14904,1.0,0.047,NULL,NULL,NULL,NULL,NULL
+real,r6,r6,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=20000000000,60.0,1,0,remake-on-switch,auto,fixed,rmsf,4,14876,14876,1.0,0.046,NULL,NULL,NULL,NULL,NULL
+real,r6,r6,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=20000000000,60.0,2,1,remake-on-switch,auto,fixed,rmsfo,4,16986,16986,1.0,0.025,NULL,NULL,NULL,NULL,NULL
+real,r6,r6,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=20000000000,60.0,3,2,remake-on-switch,auto,fixed,rmsf,4,14306,14306,1.0,0.044,NULL,NULL,NULL,NULL,NULL
+real,r6,r6,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=20000000000,60.0,3,2,remake-on-switch,auto,fixed,rmsfo,4,12855,12855,1.0,0.039,NULL,NULL,NULL,NULL,NULL
+real,r6,r6,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=20000000000,4.0,3,2,remake-on-switch,auto,fixed,rmsuo,4,2670,2675,0.998131,0.041,NULL,NULL,NULL,NULL,NULL
+real,r6,r6,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=20000000000,4.0,3,2,remake-on-switch,auto,fixed,rmsu,4,2686,2686,1.0,0.039,NULL,NULL,NULL,NULL,NULL

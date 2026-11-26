@@ -1,0 +1,40 @@
+=== RUN   TestS1StructuralIsolationFromFakeLog
+    isolation_scenario_test.go:177: 
+        policy	runs	rows	pairs	cross_pairs	cross_unreset	same_unreset	backends_two_tenants	backends_two_leases	violations
+        none	200	478659	474659	174258	174258	300401	4000	4000	174258
+        reset-always	200	478659	474659	186930	0	0	4000	4000	0
+        reset-on-switch	200	478659	474659	179752	0	294907	4000	4000	0
+        remake-on-switch.fixed2.pauto	200	478659	470600	0	0	470600	0	8036	0
+        remake-on-switch.fixed2.p0	200	478659	444895	0	0	444895	0	32063	0
+        remake-always.cold	200	39887	0	0	0	0	0	0	0
+--- PASS: TestS1StructuralIsolationFromFakeLog (291.82s)
+=== RUN   TestS2SettingMarkerOnTheWire
+    isolation_scenario_test.go:231: 
+        policy	tenants	affinity	rows	cross_pairs	markers_read_by_other	cross_marker_present	own_marker_read
+        none	5	on	47926	17218	17218	17218	30308
+        none	5	off	47926	38035	38035	38035	9491
+        none	50	on	47926	41916	41916	41916	5610
+        none	50	off	47926	46601	46601	46601	925
+        reset-always	5	on	47926	18478	0	0	0
+        reset-always	5	off	47926	37996	0	0	0
+        reset-always	50	on	47926	42285	0	0	0
+        reset-always	50	off	47926	46597	0	0	0
+        reset-on-switch	5	on	47926	17728	0	0	29798
+        reset-on-switch	5	off	47926	37925	0	0	9601
+        reset-on-switch	50	on	47926	42239	0	0	5287
+        reset-on-switch	50	off	47926	46588	0	0	938
+        remake-on-switch.fixed2.pauto	5	on	47926	0	0	0	47180
+        remake-on-switch.fixed2.pauto	5	off	24933	0	0	0	7705
+        remake-on-switch.fixed2.pauto	50	on	47926	0	0	0	43607
+        remake-on-switch.fixed2.pauto	50	off	23597	0	0	0	1066
+        remake-on-switch.fixed2.p0	5	on	47926	0	0	0	44560
+        remake-on-switch.fixed2.p0	5	off	24900	0	0	0	7662
+        remake-on-switch.fixed2.p0	50	on	47926	0	0	0	43607
+        remake-on-switch.fixed2.p0	50	off	23597	0	0	0	1066
+        remake-always.cold	5	on	4039	0	0	0	0
+        remake-always.cold	5	off	4039	0	0	0	0
+        remake-always.cold	50	on	4039	0	0	0	0
+        remake-always.cold	50	off	4039	0	0	0	0
+--- PASS: TestS2SettingMarkerOnTheWire (129.27s)
+PASS
+ok  	github.com/nickstrad/mini-gateway/internal/lab/leaselab	421.114s

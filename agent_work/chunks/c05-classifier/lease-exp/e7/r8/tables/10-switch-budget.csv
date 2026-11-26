@@ -1,0 +1,28 @@
+tier,campaign,test,workload,load,policy,arm,runs,switches_per_s,switches_per_s_min,switches_per_s_max,ceiling_measured_per_s,frac_of_measured,ceiling_model_per_s,frac_of_model,connects_per_s,pg_cpus_if_switches_remake,pg_cpus_for_connects,pg_cpu_ns_per_1000_leases,cpu_runs,cpu_note
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,1.0,remake-on-switch,s3w1,2,32.87,32.46,33.29,195.35,0.1683,173.91,0.189,32.9,0.4697,0.4701,16547151625.0,2,
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,1.0,remake-on-switch,s3w2,2,33.47,33.0,33.94,195.35,0.1713,173.91,0.1925,33.53,0.4782,0.4791,16443102074.0,2,
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,1.0,remake-on-switch,s3w4,2,33.73,33.54,33.91,195.35,0.1727,173.91,0.1939,33.84,0.4819,0.4835,16379371234.0,2,
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,15.0,none,s6none,1,525.71,525.71,525.71,195.35,2.6911,173.91,3.0229,0.57,7.5114,0.0082,811070103.0,1,
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,15.0,reset-always,s6ra,3,516.31,509.8,518.57,195.35,2.643,173.91,2.9688,0.57,7.3771,0.0082,922406672.0,3,
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,30.0,none,s6none,2,1065.03,1063.34,1066.71,195.35,5.4519,173.91,6.1239,0.57,15.2171,0.0082,660791219.0,2,
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,30.0,reset-always,s6ra,3,1070.26,1066.94,1085.4,195.35,5.4787,173.91,6.154,0.57,15.2918,0.0082,761277656.0,3,
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,45.0,none,s6none,3,1668.46,1652.23,1684.86,195.35,8.5409,173.91,9.5936,0.57,23.8388,0.0082,563986383.0,3,
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,45.0,reset-always,s6ra,3,1685.29,1664.66,1698.89,195.35,8.627,173.91,9.6904,0.57,24.0793,0.0082,705525874.0,3,
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,1.0,remake-on-switch,s3w1,3,32.51,32.49,33.29,195.35,0.1664,173.91,0.187,32.54,0.4646,0.465,NULL,0,not measured
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,1.0,remake-on-switch,s3w2,3,32.97,32.97,33.94,195.35,0.1688,173.91,0.1896,33.03,0.4711,0.4719,NULL,0,not measured
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,1.0,remake-on-switch,s3w4,3,33.86,33.51,35.0,195.35,0.1733,173.91,0.1947,33.97,0.4837,0.4854,NULL,0,not measured
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,15.0,none,s6none,3,543.26,530.86,548.11,195.35,2.7809,173.91,3.1237,0.4,7.762,0.0057,NULL,0,not measured
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,15.0,reset-always,s6ra,3,543.17,531.51,548.69,195.35,2.7805,173.91,3.1232,0.4,7.7608,0.0057,NULL,0,not measured
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,30.0,none,s6none,3,1054.2,1044.14,1067.51,195.35,5.3965,173.91,6.0617,0.57,15.0623,0.0082,NULL,0,not measured
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,30.0,reset-always,s6ra,3,1052.69,1047.31,1066.6,195.35,5.3887,173.91,6.0529,0.57,15.0407,0.0082,NULL,0,not measured
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,45.0,none,s6none,3,1640.37,1628.23,1651.03,195.35,8.3971,173.91,9.4321,0.57,23.4375,0.0082,NULL,0,not measured
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,45.0,reset-always,s6ra,3,1646.46,1634.11,1657.54,195.35,8.4282,173.91,9.4671,0.57,23.5245,0.0082,NULL,0,not measured
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,1.0,remake-on-switch,s3w1,3,32.51,32.49,33.29,195.35,0.1664,173.91,0.187,32.54,0.4646,0.465,NULL,0,not measured
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,1.0,remake-on-switch,s3w2,3,32.97,32.97,33.94,195.35,0.1688,173.91,0.1896,33.03,0.4711,0.4719,NULL,0,not measured
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,1.0,remake-on-switch,s3w4,3,33.86,33.51,35.0,195.35,0.1733,173.91,0.1947,33.97,0.4837,0.4854,NULL,0,not measured
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,15.0,none,s6none,3,547.34,539.89,550.8,195.35,2.8019,173.91,3.1472,0.37,7.8204,0.0053,NULL,0,not measured
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,15.0,reset-always,s6ra,3,546.57,534.49,551.57,195.35,2.7979,173.91,3.1428,0.4,7.8094,0.0057,NULL,0,not measured
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,30.0,none,s6none,3,1051.94,1051.83,1062.51,195.35,5.3849,173.91,6.0487,0.57,15.0301,0.0082,NULL,0,not measured
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,30.0,reset-always,s6ra,3,1050.54,1049.6,1063.89,195.35,5.3777,173.91,6.0406,0.57,15.0101,0.0082,NULL,0,not measured
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,45.0,none,s6none,3,1614.74,1599.34,1623.09,195.35,8.2659,173.91,9.2848,0.57,23.0713,0.0082,NULL,0,not measured
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,45.0,reset-always,s6ra,3,1620.23,1605.66,1629.23,195.35,8.294,173.91,9.3163,0.57,23.1497,0.0082,NULL,0,not measured

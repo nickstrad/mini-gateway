@@ -1,0 +1,13 @@
+tier,campaign,test,policy,warm_mode,prime,metric,mode,runs,n,p50_ns,p50_res_ppm,p90_ns,p90_res_ppm,p99_ns,p99_res_ppm,clamped_low,clamped_high
+real,r6,r6,remake-always,cold,none,close_lag_ns,,3,9507,856064,4807,3457024,4761,7274496,4524,0,0
+real,r6,r6,remake-always,cold,none,connect_ns,,3,9507,33161216,3968,43253760,6097,56098816,4694,0,0
+real,r6,r6,remake-always,cold,none,first_stmt_ns,after_reset,3,0,NULL,NULL,NULL,NULL,NULL,NULL,0,0
+real,r6,r6,remake-always,cold,none,first_stmt_ns,fresh,3,7181,4292608,7692,8355840,3937,13107200,5025,0,0
+real,r6,r6,remake-always,cold,none,first_stmt_ns,reused,3,0,NULL,NULL,NULL,NULL,NULL,NULL,0,0
+real,r6,r6,remake-always,cold,none,reset_ns,,3,0,NULL,NULL,NULL,NULL,NULL,NULL,0,0
+real,r6,r6,remake-on-switch,fixed,none,close_lag_ns,,7,6814,1458176,5649,4227072,7812,8355840,3937,0,0
+real,r6,r6,remake-on-switch,fixed,none,connect_ns,,7,6954,34340864,7692,47448064,5555,64225280,4098,0,0
+real,r6,r6,remake-on-switch,fixed,none,first_stmt_ns,after_reset,7,0,NULL,NULL,NULL,NULL,NULL,NULL,0,0
+real,r6,r6,remake-on-switch,fixed,none,first_stmt_ns,fresh,7,4854,4521984,7299,9699328,6802,16515072,3984,0,0
+real,r6,r6,remake-on-switch,fixed,none,first_stmt_ns,reused,7,171995,782336,5263,2342912,7042,5603328,5882,0,0
+real,r6,r6,remake-on-switch,fixed,none,reset_ns,,7,0,NULL,NULL,NULL,NULL,NULL,NULL,0,0

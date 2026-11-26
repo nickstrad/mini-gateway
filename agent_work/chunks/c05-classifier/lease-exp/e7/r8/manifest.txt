@@ -1,0 +1,29 @@
+# E7 step 2 — R8: the simulator against real, same config and seed, both tiers (mglease compare
+# <root>; E6 table 8 with sim_real_band_pct=100). S3-like: miss rate against fixed W under
+# remake-on-switch, steady, 100 uniform tenants, workload.load 1 (40 leases/s, nearly every
+# lease a switch), below the cap. S6-like: wait and goodput against load, none and reset-always,
+# steady, at nominal loads 15/30/45 — below the real pool's knee (REVIEW-E5-1 finding 5: the
+# smoke's real capacity was 59% of nominal; 60 and 90 were at or past it).
+# Hold fidelity (finding 5): "hold probe" first measures how long a real pg_sleep holds the
+# backend for the drawn lease times (mglease holdprobe, 400 samples, in its own fresh container
+# before any run; not fitted to the R8 runs) and writes <root>/hold.csv; every simulator run
+# takes db.hold_quantum / db.hold_extra from it, and plain_twin runs each simulator twin again
+# without them (run.test r8.plain), so compare shows both. Agreement band (declared in
+# NOTES-E5.md before any run): warm hit rate within 10 points; wait p50/p90/p99 within x2 or
+# 1 ms; goodput/requested within 1 point. 9 cells x 3 repetitions x (30 s + 5 s warm-up),
+# about 20 min.
+campaign r8
+test r8
+tier both
+reps 3
+seed 1
+common pool.cap=20 run.duration=35s obs.interval=35s obs.warmup=5s oracle.rate=0 workload.tenants=100
+real monitor=100ms
+hold probe 400
+plain_twin
+loads 1 15 30 45
+arm s3w1 release.policy=remake-on-switch warm.mode=fixed warm.size=1 @loads=1
+arm s3w2 release.policy=remake-on-switch warm.mode=fixed warm.size=2 @loads=1
+arm s3w4 release.policy=remake-on-switch warm.mode=fixed warm.size=4 @loads=1
+arm s6none release.policy=none warm.mode=cold @loads=15,30,45
+arm s6ra release.policy=reset-always warm.mode=cold @loads=15,30,45

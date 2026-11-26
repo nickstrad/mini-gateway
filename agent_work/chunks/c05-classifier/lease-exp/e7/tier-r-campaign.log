@@ -1,0 +1,372 @@
+lease-exp.sh: waiting for /root/runs/vm1-machine.lock
+lease-exp.sh e7: 1-r6 start 09:41:43Z
+done requested 3154, goodput 3154, refused 0, connects 1694, server peak 20 (procs 21), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/1-r6/r6-rmsu-l4-r0
+done requested 3154, goodput 3154, refused 0, connects 1973, server peak 20 (procs 22), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/1-r6/r6-rmsuo-l4-r0
+done requested 3154, goodput 3154, refused 0, connects 3154, server peak 5 (procs 8), quiesce 0, valid, run dir /root/runs/lease-r/1-r6/r6-rma-l4-r0
+done requested 3154, goodput 3154, refused 0, connects 3154, server peak 12 (procs 19), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/1-r6/r6-rmak-l4-r0
+done requested 47751, goodput 45772, refused 1979, connects 482, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/1-r6/r6-rmsf-l60-r0
+done requested 47751, goodput 46540, refused 1211, connects 492, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/1-r6/r6-rmsfo-l60-r0
+done requested 47874, goodput 47874, refused 0, connects 543, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/1-r6/r6-rmsfo-l60-r1
+done requested 47874, goodput 46828, refused 1046, connects 510, server peak 20 (procs 21), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/1-r6/r6-rmsf-l60-r1
+done requested 3154, goodput 3154, refused 0, connects 2133, server peak 20 (procs 22), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/1-r6/r6-rmsu-l4-r1
+done requested 3154, goodput 3154, refused 0, connects 2120, server peak 20 (procs 21), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/1-r6/r6-rmsuo-l4-r1
+done requested 3154, goodput 3154, refused 0, connects 3154, server peak 5 (procs 8), quiesce 0, valid, run dir /root/runs/lease-r/1-r6/r6-rma-l4-r1
+done requested 3154, goodput 3154, refused 0, connects 3154, server peak 12 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/1-r6/r6-rmak-l4-r1
+done requested 3199, goodput 3199, refused 0, connects 2281, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/1-r6/r6-rmsu-l4-r2
+done requested 3199, goodput 3199, refused 0, connects 2195, server peak 20 (procs 22), quiesce 0, valid, run dir /root/runs/lease-r/1-r6/r6-rmsuo-l4-r2
+done requested 3199, goodput 3199, refused 0, connects 3199, server peak 5 (procs 8), quiesce 0, valid, run dir /root/runs/lease-r/1-r6/r6-rma-l4-r2
+done requested 3199, goodput 3199, refused 0, connects 3199, server peak 12 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/1-r6/r6-rmak-l4-r2
+done requested 48269, goodput 45876, refused 2393, connects 488, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/1-r6/r6-rmsf-l60-r2
+done requested 48269, goodput 45939, refused 2330, connects 473, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/1-r6/r6-rmsfo-l60-r2
+lease-exp.sh e7: 1-r6 end 09:48:34Z exit 0
+lease-exp.sh e7: 2-r8 start 09:48:34Z
+hold probe (400 samples): db.hold_quantum=1000000ns db.hold_extra=317000ns (residual IQR: q=0 504277 ns, q=1ms 159066 ns)
+done r8-s3w1-l1-r0-sim sim requested 1402 goodput 1402 result ok
+done requested 1402, goodput 1402, refused 0, connects 1166, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s3w1-l1-r0-real
+done r8-s3w1-l1-r0-simplain sim requested 1402 goodput 1402 result ok
+done r8-s3w2-l1-r0-sim sim requested 1402 goodput 1402 result ok
+done requested 1402, goodput 1402, refused 0, connects 1190, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s3w2-l1-r0-real
+done r8-s3w2-l1-r0-simplain sim requested 1402 goodput 1402 result ok
+done r8-s3w4-l1-r0-sim sim requested 1402 goodput 1402 result ok
+done requested 1402, goodput 1402, refused 0, connects 1229, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/2-r8/r8-s3w4-l1-r0-real
+done r8-s3w4-l1-r0-simplain sim requested 1402 goodput 1402 result ok
+done r8-s6none-l15-r0-sim sim requested 21012 goodput 21012 result ok
+done requested 21012, goodput 21012, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6none-l15-r0-real
+done r8-s6none-l15-r0-simplain sim requested 21012 goodput 21012 result ok
+done r8-s6ra-l15-r0-sim sim requested 21012 goodput 21012 result ok
+done requested 21012, goodput 21012, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6ra-l15-r0-real
+done r8-s6ra-l15-r0-simplain sim requested 21012 goodput 21012 result ok
+done r8-s6none-l30-r0-sim sim requested 41828 goodput 41828 result ok
+done requested 41828, goodput 41828, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6none-l30-r0-real
+done r8-s6none-l30-r0-simplain sim requested 41828 goodput 41828 result ok
+done r8-s6ra-l30-r0-sim sim requested 41828 goodput 41828 result ok
+done requested 41828, goodput 41828, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6ra-l30-r0-real
+done r8-s6ra-l30-r0-simplain sim requested 41828 goodput 41828 result ok
+done r8-s6none-l45-r0-sim sim requested 62863 goodput 62863 result ok
+done requested 62863, goodput 62863, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6none-l45-r0-real
+done r8-s6none-l45-r0-simplain sim requested 62863 goodput 62863 result ok
+done r8-s6ra-l45-r0-sim sim requested 62863 goodput 62863 result ok
+done requested 62863, goodput 62863, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6ra-l45-r0-real
+done r8-s6ra-l45-r0-simplain sim requested 62863 goodput 62863 result ok
+done r8-s6none-l15-r1-sim sim requested 20935 goodput 20935 result ok
+done requested 20935, goodput 20935, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/2-r8/r8-s6none-l15-r1-real
+done r8-s6none-l15-r1-simplain sim requested 20935 goodput 20935 result ok
+done r8-s6ra-l15-r1-sim sim requested 20935 goodput 20935 result ok
+done requested 20935, goodput 20935, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6ra-l15-r1-real
+done r8-s6ra-l15-r1-simplain sim requested 20935 goodput 20935 result ok
+done r8-s6none-l30-r1-sim sim requested 41836 goodput 41836 result ok
+done requested 41836, goodput 41836, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6none-l30-r1-real
+done r8-s6none-l30-r1-simplain sim requested 41836 goodput 41836 result ok
+done r8-s6ra-l30-r1-sim sim requested 41836 goodput 41836 result ok
+done requested 41836, goodput 41836, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6ra-l30-r1-real
+done r8-s6ra-l30-r1-simplain sim requested 41836 goodput 41836 result ok
+done r8-s6none-l45-r1-sim sim requested 62627 goodput 62627 result ok
+done requested 62627, goodput 62627, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6none-l45-r1-real
+done r8-s6none-l45-r1-simplain sim requested 62627 goodput 62627 result ok
+done r8-s6ra-l45-r1-sim sim requested 62627 goodput 62627 result ok
+done requested 62627, goodput 62627, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6ra-l45-r1-real
+done r8-s6ra-l45-r1-simplain sim requested 62627 goodput 62627 result ok
+done r8-s3w2-l1-r1-sim sim requested 1381 goodput 1381 result ok
+done requested 1381, goodput 1381, refused 0, connects 1157, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s3w2-l1-r1-real
+done r8-s3w2-l1-r1-simplain sim requested 1381 goodput 1381 result ok
+done r8-s3w4-l1-r1-sim sim requested 1381 goodput 1381 result ok
+done requested 1381, goodput 1381, refused 0, connects 1178, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s3w4-l1-r1-real
+done r8-s3w4-l1-r1-simplain sim requested 1381 goodput 1381 result ok
+done r8-s3w1-l1-r1-sim sim requested 1381 goodput 1381 result ok
+done requested 1381, goodput 1381, refused 0, connects 1137, server peak 20 (procs 21), quiesce 0, INVALID(late_p99;late_max), run dir /root/runs/lease-r/2-r8/r8-s3w1-l1-r1-real
+done r8-s3w1-l1-r1-simplain sim requested 1381 goodput 1381 result ok
+done r8-s6none-l30-r2-sim sim requested 42373 goodput 42373 result ok
+done requested 42373, goodput 42373, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/2-r8/r8-s6none-l30-r2-real
+done r8-s6none-l30-r2-simplain sim requested 42373 goodput 42373 result ok
+done r8-s6ra-l30-r2-sim sim requested 42373 goodput 42373 result ok
+done requested 42373, goodput 42373, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6ra-l30-r2-real
+done r8-s6ra-l30-r2-simplain sim requested 42373 goodput 42373 result ok
+done r8-s6none-l45-r2-sim sim requested 63337 goodput 63337 result ok
+done requested 63337, goodput 63337, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6none-l45-r2-real
+done r8-s6none-l45-r2-simplain sim requested 63337 goodput 63337 result ok
+done r8-s6ra-l45-r2-sim sim requested 63337 goodput 63337 result ok
+done requested 63337, goodput 63337, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6ra-l45-r2-real
+done r8-s6ra-l45-r2-simplain sim requested 63337 goodput 63337 result ok
+done r8-s3w4-l1-r2-sim sim requested 1422 goodput 1422 result ok
+done requested 1422, goodput 1422, refused 0, connects 1191, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s3w4-l1-r2-real
+done r8-s3w4-l1-r2-simplain sim requested 1422 goodput 1422 result ok
+done r8-s3w1-l1-r2-sim sim requested 1422 goodput 1422 result ok
+done requested 1422, goodput 1422, refused 0, connects 1137, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s3w1-l1-r2-real
+done r8-s3w1-l1-r2-simplain sim requested 1422 goodput 1422 result ok
+done r8-s3w2-l1-r2-sim sim requested 1422 goodput 1422 result ok
+done requested 1422, goodput 1422, refused 0, connects 1155, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/2-r8/r8-s3w2-l1-r2-real
+done r8-s3w2-l1-r2-simplain sim requested 1422 goodput 1422 result ok
+done r8-s6none-l15-r2-sim sim requested 21055 goodput 21055 result ok
+done requested 21055, goodput 21055, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/2-r8/r8-s6none-l15-r2-real
+done r8-s6none-l15-r2-simplain sim requested 21055 goodput 21055 result ok
+done r8-s6ra-l15-r2-sim sim requested 21055 goodput 21055 result ok
+done requested 21055, goodput 21055, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/2-r8/r8-s6ra-l15-r2-real
+done r8-s6ra-l15-r2-simplain sim requested 21055 goodput 21055 result ok
+lease-exp.sh e7: 2-r8 end 10:06:23Z exit 0
+lease-exp.sh e7: 3-r7a start 10:06:23Z
+done requested 69913, goodput 69913, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/ramp-l50
+done requested 97924, goodput 97924, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/ramp-l70
+done requested 119156, goodput 102407, refused 16749, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/ramp-l85
+done requested 140159, goodput 104952, refused 35207, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/ramp-l100
+done requested 161088, goodput 102590, refused 58498, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/ramp-l115
+done requested 182192, goodput 101961, refused 80231, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/ramp-l130
+capacity 2902.149 leases/s (median window goodput of the 4 valid saturated steps), capacity.csv written
+done requested 30303, goodput 30303, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-base-lc30-r0
+done requested 30303, goodput 30303, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-aa-lc30-r0
+done requested 30303, goodput 30303, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-ra-lc30-r0
+done requested 30303, goodput 30303, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ros-lc30-r0
+done requested 30303, goodput 30303, refused 0, connects 26, server peak 20 (procs 20), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc30-r0
+done requested 30303, goodput 30303, refused 0, connects 1502, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc30-r0
+done requested 30303, goodput 30303, refused 0, connects 24, server peak 19 (procs 19), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc30-r0
+done requested 30303, goodput 30303, refused 0, connects 47, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc30-r0
+done requested 30303, goodput 5234, refused 25069, connects 5234, server peak 4 (procs 7), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-rma-lc30-r0
+done requested 60714, goodput 60714, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-base-lc60-r0
+done requested 60714, goodput 60714, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc60-r0
+done requested 60714, goodput 60714, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc60-r0
+done requested 60714, goodput 60714, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ros-lc60-r0
+done requested 60714, goodput 60714, refused 0, connects 526, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc60-r0
+done requested 60714, goodput 60714, refused 0, connects 3194, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc60-r0
+done requested 60714, goodput 60714, refused 0, connects 72, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc60-r0
+done requested 60714, goodput 60714, refused 0, connects 129, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc60-r0
+done requested 60714, goodput 5603, refused 55111, connects 5603, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rma-lc60-r0
+done requested 81178, goodput 81178, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-base-lc80-r0
+done requested 81178, goodput 81178, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc80-r0
+done requested 81178, goodput 81178, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc80-r0
+done requested 81178, goodput 81178, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ros-lc80-r0
+done requested 81178, goodput 81178, refused 0, connects 1529, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc80-r0
+done requested 81178, goodput 81178, refused 0, connects 1901, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc80-r0
+done requested 81178, goodput 80653, refused 525, connects 924, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc80-r0
+done requested 81178, goodput 81178, refused 0, connects 1130, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd0-lc80-r0
+done requested 81178, goodput 81178, refused 0, connects 550, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc80-r0
+done requested 81178, goodput 81178, refused 0, connects 1740, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp0-lc80-r0
+done requested 81178, goodput 5532, refused 75646, connects 5532, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rma-lc80-r0
+done requested 81178, goodput 5683, refused 75495, connects 5687, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmaw-lc80-r0
+done requested 96485, goodput 96485, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-base-lc95-r0
+done requested 96485, goodput 96485, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc95-r0
+done requested 96485, goodput 96485, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc95-r0
+done requested 96485, goodput 83451, refused 13034, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-ros-lc95-r0
+done requested 96485, goodput 88400, refused 8085, connects 326, server peak 20 (procs 20), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc95-r0
+done requested 96485, goodput 96195, refused 290, connects 528, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc95-r0
+done requested 96485, goodput 93577, refused 2908, connects 227, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc95-r0
+done requested 96485, goodput 95230, refused 1255, connects 356, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc95-r0
+done requested 96485, goodput 5598, refused 90887, connects 5598, server peak 5 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rma-lc95-r0
+done requested 60615, goodput 60615, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc60-r1
+done requested 60615, goodput 60615, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc60-r1
+done requested 60615, goodput 60615, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-ros-lc60-r1
+done requested 60615, goodput 60615, refused 0, connects 538, server peak 20 (procs 20), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc60-r1
+done requested 60615, goodput 60615, refused 0, connects 2923, server peak 20 (procs 21), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc60-r1
+done requested 60615, goodput 60615, refused 0, connects 72, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc60-r1
+done requested 60615, goodput 60615, refused 0, connects 107, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc60-r1
+done requested 60615, goodput 5506, refused 55109, connects 5506, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rma-lc60-r1
+done requested 60615, goodput 60615, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-base-lc60-r1
+done requested 81032, goodput 81032, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc80-r1
+done requested 81032, goodput 78145, refused 2887, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc80-r1
+done requested 81032, goodput 81032, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ros-lc80-r1
+done requested 81032, goodput 81032, refused 0, connects 1672, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc80-r1
+done requested 81032, goodput 81032, refused 0, connects 2067, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc80-r1
+done requested 81032, goodput 81032, refused 0, connects 458, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc80-r1
+done requested 81032, goodput 81032, refused 0, connects 2041, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd0-lc80-r1
+done requested 81032, goodput 81032, refused 0, connects 606, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc80-r1
+done requested 81032, goodput 81032, refused 0, connects 1478, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp0-lc80-r1
+done requested 81032, goodput 5597, refused 75435, connects 5597, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rma-lc80-r1
+done requested 81032, goodput 5269, refused 75763, connects 5273, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmaw-lc80-r1
+done requested 81032, goodput 81032, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-base-lc80-r1
+done requested 96347, goodput 96106, refused 241, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99;late_max), run dir /root/runs/lease-r/3-r7a/r7a-aa-lc95-r1
+done requested 96347, goodput 92592, refused 3755, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc95-r1
+done requested 96347, goodput 95716, refused 631, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ros-lc95-r1
+done requested 96347, goodput 94867, refused 1480, connects 454, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc95-r1
+done requested 96347, goodput 94777, refused 1570, connects 330, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc95-r1
+done requested 96347, goodput 96347, refused 0, connects 655, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc95-r1
+done requested 96347, goodput 72214, refused 24133, connects 288, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc95-r1
+done requested 96347, goodput 5103, refused 91244, connects 5103, server peak 5 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rma-lc95-r1
+done requested 96347, goodput 96347, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-base-lc95-r1
+done requested 30249, goodput 30249, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc30-r1
+done requested 30249, goodput 30249, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc30-r1
+done requested 30249, goodput 30249, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ros-lc30-r1
+done requested 30249, goodput 30249, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc30-r1
+done requested 30249, goodput 30249, refused 0, connects 1518, server peak 20 (procs 20), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc30-r1
+done requested 30249, goodput 30249, refused 0, connects 36, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc30-r1
+done requested 30249, goodput 30249, refused 0, connects 25, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc30-r1
+done requested 30249, goodput 5432, refused 24817, connects 5432, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rma-lc30-r1
+done requested 30249, goodput 30249, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-base-lc30-r1
+done requested 81624, goodput 81624, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc80-r2
+done requested 81624, goodput 81624, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ros-lc80-r2
+done requested 81624, goodput 81624, refused 0, connects 1517, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc80-r2
+done requested 81624, goodput 81624, refused 0, connects 1894, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc80-r2
+done requested 81624, goodput 72498, refused 9126, connects 727, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc80-r2
+done requested 81624, goodput 81624, refused 0, connects 906, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd0-lc80-r2
+done requested 81624, goodput 80574, refused 1050, connects 506, server peak 20 (procs 20), quiesce 0, INVALID(late_p99;late_max), run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc80-r2
+done requested 81624, goodput 81624, refused 0, connects 1357, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp0-lc80-r2
+done requested 81624, goodput 5254, refused 76370, connects 5254, server peak 4 (procs 7), quiesce 0, INVALID(late_p99;late_max), run dir /root/runs/lease-r/3-r7a/r7a-rma-lc80-r2
+done requested 81624, goodput 4823, refused 76801, connects 4827, server peak 5 (procs 7), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-rmaw-lc80-r2
+done requested 81624, goodput 81624, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-base-lc80-r2
+done requested 81624, goodput 81624, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc80-r2
+done requested 96858, goodput 90053, refused 6805, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc95-r2
+done requested 96858, goodput 96858, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ros-lc95-r2
+done requested 96858, goodput 92133, refused 4725, connects 146, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc95-r2
+done requested 96858, goodput 93169, refused 3689, connects 287, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc95-r2
+done requested 96858, goodput 91396, refused 5462, connects 218, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc95-r2
+done requested 96858, goodput 96858, refused 0, connects 376, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc95-r2
+done requested 96858, goodput 5921, refused 90937, connects 5921, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rma-lc95-r2
+done requested 96858, goodput 94952, refused 1906, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-base-lc95-r2
+done requested 96858, goodput 96663, refused 195, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc95-r2
+done requested 30547, goodput 30547, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-ra-lc30-r2
+done requested 30547, goodput 30547, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ros-lc30-r2
+done requested 30547, goodput 30547, refused 0, connects 33, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc30-r2
+done requested 30547, goodput 30547, refused 0, connects 1583, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc30-r2
+done requested 30547, goodput 30547, refused 0, connects 34, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc30-r2
+done requested 30547, goodput 30547, refused 0, connects 31, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc30-r2
+done requested 30547, goodput 5576, refused 24971, connects 5576, server peak 5 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rma-lc30-r2
+done requested 30547, goodput 30547, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-base-lc30-r2
+done requested 30547, goodput 30547, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-aa-lc30-r2
+done requested 61243, goodput 61243, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-ra-lc60-r2
+done requested 61243, goodput 61243, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-ros-lc60-r2
+done requested 61243, goodput 61243, refused 0, connects 1030, server peak 20 (procs 20), quiesce 0, INVALID(late_p99;late_max), run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc60-r2
+done requested 61243, goodput 61243, refused 0, connects 2653, server peak 20 (procs 21), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc60-r2
+done requested 61243, goodput 61243, refused 0, connects 96, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc60-r2
+done requested 61243, goodput 61243, refused 0, connects 139, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc60-r2
+done requested 61243, goodput 5580, refused 55663, connects 5580, server peak 5 (procs 8), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rma-lc60-r2
+done requested 61243, goodput 61243, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-base-lc60-r2
+done requested 61243, goodput 61243, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc60-r2
+done requested 81006, goodput 81006, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ros-lc80-r3
+done requested 81006, goodput 81006, refused 0, connects 1613, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc80-r3
+done requested 81006, goodput 81006, refused 0, connects 1762, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc80-r3
+done requested 81006, goodput 81006, refused 0, connects 670, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc80-r3
+done requested 81006, goodput 81006, refused 0, connects 1767, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd0-lc80-r3
+done requested 81006, goodput 79580, refused 1426, connects 719, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc80-r3
+done requested 81006, goodput 81006, refused 0, connects 1717, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp0-lc80-r3
+done requested 81006, goodput 4976, refused 76030, connects 4976, server peak 5 (procs 7), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-rma-lc80-r3
+done requested 81006, goodput 5367, refused 75639, connects 5371, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmaw-lc80-r3
+done requested 81006, goodput 81006, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-base-lc80-r3
+done requested 81006, goodput 81006, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc80-r3
+done requested 81006, goodput 81006, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc80-r3
+done requested 81301, goodput 81301, refused 0, connects 1657, server peak 20 (procs 22), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc80-r4
+done requested 81301, goodput 81301, refused 0, connects 1715, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc80-r4
+done requested 81301, goodput 81301, refused 0, connects 824, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc80-r4
+done requested 81301, goodput 78424, refused 2877, connects 305, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-rmsd0-lc80-r4
+done requested 81301, goodput 81298, refused 3, connects 633, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc80-r4
+done requested 81301, goodput 81301, refused 0, connects 1319, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp0-lc80-r4
+done requested 81301, goodput 4968, refused 76333, connects 4968, server peak 5 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rma-lc80-r4
+done requested 81301, goodput 4969, refused 76332, connects 4973, server peak 4 (procs 7), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-rmaw-lc80-r4
+done requested 81301, goodput 81301, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-base-lc80-r4
+done requested 81301, goodput 81301, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc80-r4
+done requested 81301, goodput 81301, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc80-r4
+done requested 81301, goodput 79328, refused 1973, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-ros-lc80-r4
+done requested 81412, goodput 81412, refused 0, connects 979, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc80-r5
+done requested 81412, goodput 81412, refused 0, connects 855, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc80-r5
+done requested 81412, goodput 81412, refused 0, connects 1255, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd0-lc80-r5
+done requested 81412, goodput 81412, refused 0, connects 651, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc80-r5
+done requested 81412, goodput 81095, refused 317, connects 801, server peak 20 (procs 21), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-rmsdp0-lc80-r5
+done requested 81412, goodput 5334, refused 76078, connects 5334, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rma-lc80-r5
+done requested 81412, goodput 5608, refused 75804, connects 5612, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmaw-lc80-r5
+done requested 81412, goodput 72908, refused 8504, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-base-lc80-r5
+done requested 81412, goodput 81412, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc80-r5
+done requested 81412, goodput 81412, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc80-r5
+done requested 81412, goodput 81412, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ros-lc80-r5
+done requested 81412, goodput 81412, refused 0, connects 1671, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc80-r5
+done requested 81206, goodput 81206, refused 0, connects 741, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc80-r6
+done requested 81206, goodput 81206, refused 0, connects 1914, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd0-lc80-r6
+done requested 81206, goodput 81206, refused 0, connects 467, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc80-r6
+done requested 81206, goodput 80442, refused 764, connects 1239, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp0-lc80-r6
+done requested 81206, goodput 5357, refused 75849, connects 5357, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rma-lc80-r6
+done requested 81206, goodput 4935, refused 76271, connects 4939, server peak 4 (procs 8), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmaw-lc80-r6
+done requested 81206, goodput 81113, refused 93, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-base-lc80-r6
+done requested 81206, goodput 81206, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc80-r6
+done requested 81206, goodput 79219, refused 1987, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc80-r6
+done requested 81206, goodput 81206, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ros-lc80-r6
+done requested 81206, goodput 81206, refused 0, connects 950, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc80-r6
+done requested 81206, goodput 77679, refused 3527, connects 719, server peak 20 (procs 21), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc80-r6
+done requested 81368, goodput 81368, refused 0, connects 784, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd0-lc80-r7
+done requested 81368, goodput 81022, refused 346, connects 840, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc80-r7
+done requested 81368, goodput 81368, refused 0, connects 1291, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp0-lc80-r7
+done requested 81368, goodput 5625, refused 75743, connects 5625, server peak 5 (procs 7), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-rma-lc80-r7
+done requested 81368, goodput 5409, refused 75959, connects 5413, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmaw-lc80-r7
+done requested 81368, goodput 81368, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-base-lc80-r7
+done requested 81368, goodput 81368, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc80-r7
+done requested 81368, goodput 78946, refused 2422, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-ra-lc80-r7
+done requested 81368, goodput 81368, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-ros-lc80-r7
+done requested 81368, goodput 81368, refused 0, connects 1207, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc80-r7
+done requested 81368, goodput 81368, refused 0, connects 1153, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc80-r7
+done requested 81368, goodput 81368, refused 0, connects 883, server peak 20 (procs 22), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc80-r7
+done requested 81561, goodput 81561, refused 0, connects 695, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc80-r8
+done requested 81561, goodput 81561, refused 0, connects 1773, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp0-lc80-r8
+done requested 81561, goodput 5550, refused 76011, connects 5550, server peak 4 (procs 8), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/3-r7a/r7a-rma-lc80-r8
+done requested 81561, goodput 4784, refused 76777, connects 4788, server peak 4 (procs 7), quiesce 0, INVALID(late_p99;late_max), run dir /root/runs/lease-r/3-r7a/r7a-rmaw-lc80-r8
+done requested 81561, goodput 81561, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99;late_max), run dir /root/runs/lease-r/3-r7a/r7a-base-lc80-r8
+done requested 81561, goodput 81561, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc80-r8
+done requested 81561, goodput 77906, refused 3655, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-ra-lc80-r8
+done requested 81561, goodput 81561, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ros-lc80-r8
+done requested 81561, goodput 81229, refused 332, connects 1022, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc80-r8
+done requested 81561, goodput 81561, refused 0, connects 1350, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc80-r8
+done requested 81561, goodput 81561, refused 0, connects 930, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc80-r8
+done requested 81561, goodput 76993, refused 4568, connects 1033, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-rmsd0-lc80-r8
+done requested 81328, goodput 80254, refused 1074, connects 331, server peak 20 (procs 21), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-rmsdp0-lc80-r9
+done requested 81328, goodput 4569, refused 76759, connects 4569, server peak 4 (procs 7), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-rma-lc80-r9
+done requested 81328, goodput 3997, refused 77331, connects 4001, server peak 4 (procs 7), quiesce 0, INVALID(late_p99;late_max), run dir /root/runs/lease-r/3-r7a/r7a-rmaw-lc80-r9
+done requested 81328, goodput 81328, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-base-lc80-r9
+done requested 81328, goodput 81328, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-aa-lc80-r9
+done requested 81328, goodput 81328, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-ra-lc80-r9
+done requested 81328, goodput 79174, refused 2154, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-ros-lc80-r9
+done requested 81328, goodput 72317, refused 9011, connects 1335, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-rmsf-lc80-r9
+done requested 81328, goodput 80766, refused 562, connects 515, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/3-r7a/r7a-rmsf0-lc80-r9
+done requested 81328, goodput 81083, refused 245, connects 782, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd-lc80-r9
+done requested 81328, goodput 81328, refused 0, connects 1802, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsd0-lc80-r9
+done requested 81328, goodput 81328, refused 0, connects 742, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/3-r7a/r7a-rmsdp-lc80-r9
+lease-exp.sh e7: 3-r7a end 12:12:31Z exit 0
+lease-exp.sh e7: 4-r7b start 12:12:31Z
+done requested 69913, goodput 69913, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/ramp-l50
+done requested 97924, goodput 76949, refused 20975, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/4-r7b/ramp-l70
+done requested 119156, goodput 101481, refused 17675, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/ramp-l85
+done requested 140159, goodput 101740, refused 38419, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/ramp-l100
+done requested 161088, goodput 83788, refused 77300, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/4-r7b/ramp-l115
+done requested 182192, goodput 88232, refused 93960, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99;late_max), run dir /root/runs/lease-r/4-r7b/ramp-l130
+capacity 2499.966 leases/s (median window goodput of all 5 saturated steps (fewer than 3 valid)), capacity.csv written
+done requested 69892, goodput 69892, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-base-lc80-r0
+done requested 69892, goodput 69892, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99;late_max), run dir /root/runs/lease-r/4-r7b/r7b-aa-lc80-r0
+done requested 69892, goodput 69892, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-ra-lc80-r0
+done requested 69892, goodput 69892, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-ros-lc80-r0
+done requested 69892, goodput 56634, refused 13258, connects 1552, server peak 20 (procs 21), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/4-r7b/r7b-rmsf-lc80-r0
+done requested 69892, goodput 69892, refused 0, connects 2872, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rmsf0-lc80-r0
+done requested 69892, goodput 68325, refused 1567, connects 1859, server peak 20 (procs 21), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/4-r7b/r7b-rmsd-lc80-r0
+done requested 69892, goodput 5600, refused 64292, connects 5600, server peak 5 (procs 8), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/4-r7b/r7b-rma-lc80-r0
+done requested 69716, goodput 69716, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-aa-lc80-r1
+done requested 69716, goodput 69716, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-ra-lc80-r1
+done requested 69716, goodput 69716, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-ros-lc80-r1
+done requested 69716, goodput 69716, refused 0, connects 2659, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rmsf-lc80-r1
+done requested 69716, goodput 69716, refused 0, connects 2731, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rmsf0-lc80-r1
+done requested 69716, goodput 69716, refused 0, connects 2687, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rmsd-lc80-r1
+done requested 69716, goodput 5545, refused 64171, connects 5545, server peak 6 (procs 8), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rma-lc80-r1
+done requested 69716, goodput 69716, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-base-lc80-r1
+done requested 70279, goodput 70279, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-ra-lc80-r2
+done requested 70279, goodput 70279, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-ros-lc80-r2
+done requested 70279, goodput 70279, refused 0, connects 2902, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rmsf-lc80-r2
+done requested 70279, goodput 70279, refused 0, connects 2778, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rmsf0-lc80-r2
+done requested 70279, goodput 64478, refused 5801, connects 1943, server peak 20 (procs 21), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/4-r7b/r7b-rmsd-lc80-r2
+done requested 70279, goodput 4986, refused 65293, connects 4986, server peak 4 (procs 7), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rma-lc80-r2
+done requested 70279, goodput 69473, refused 806, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/4-r7b/r7b-base-lc80-r2
+done requested 70279, goodput 70279, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/4-r7b/r7b-aa-lc80-r2
+done requested 69783, goodput 69783, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-ros-lc80-r3
+done requested 69783, goodput 69783, refused 0, connects 2236, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rmsf-lc80-r3
+done requested 69783, goodput 69783, refused 0, connects 2547, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rmsf0-lc80-r3
+done requested 69783, goodput 69783, refused 0, connects 2434, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rmsd-lc80-r3
+done requested 69783, goodput 5828, refused 63955, connects 5828, server peak 5 (procs 8), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rma-lc80-r3
+done requested 69783, goodput 61078, refused 8705, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/4-r7b/r7b-base-lc80-r3
+done requested 69783, goodput 69783, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-aa-lc80-r3
+done requested 69783, goodput 69783, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-ra-lc80-r3
+done requested 69953, goodput 69953, refused 0, connects 2460, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rmsf-lc80-r4
+done requested 69953, goodput 69953, refused 0, connects 2781, server peak 20 (procs 22), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/4-r7b/r7b-rmsf0-lc80-r4
+done requested 69953, goodput 69953, refused 0, connects 2898, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rmsd-lc80-r4
+done requested 69953, goodput 5927, refused 64026, connects 5927, server peak 5 (procs 8), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rma-lc80-r4
+done requested 69953, goodput 69953, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-base-lc80-r4
+done requested 69953, goodput 69782, refused 171, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/4-r7b/r7b-aa-lc80-r4
+done requested 69953, goodput 68385, refused 1568, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_max), run dir /root/runs/lease-r/4-r7b/r7b-ra-lc80-r4
+done requested 69953, goodput 69203, refused 750, connects 20, server peak 20 (procs 20), quiesce 0, INVALID(late_p99;late_max), run dir /root/runs/lease-r/4-r7b/r7b-ros-lc80-r4
+done requested 70060, goodput 70060, refused 0, connects 1846, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rmsf0-lc80-r5
+done requested 70060, goodput 70060, refused 0, connects 2243, server peak 20 (procs 21), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-rmsd-lc80-r5
+done requested 70060, goodput 5093, refused 64967, connects 5093, server peak 4 (procs 7), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/4-r7b/r7b-rma-lc80-r5
+done requested 70060, goodput 70060, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-base-lc80-r5
+done requested 70060, goodput 70060, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-aa-lc80-r5
+done requested 70060, goodput 70060, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-ra-lc80-r5
+done requested 70060, goodput 70060, refused 0, connects 20, server peak 20 (procs 20), quiesce 0, valid, run dir /root/runs/lease-r/4-r7b/r7b-ros-lc80-r5
+done requested 70060, goodput 69774, refused 286, connects 1803, server peak 20 (procs 21), quiesce 0, INVALID(late_p99), run dir /root/runs/lease-r/4-r7b/r7b-rmsf-lc80-r5
+lease-exp.sh e7: 4-r7b end 12:45:33Z exit 0

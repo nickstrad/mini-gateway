@@ -1,0 +1,14 @@
+tier,campaign,test,workload,load,seed,rep,policy,patience,warm_mode,arm,w,misses,n,miss_rate,warm_conn_s,epsilon,holds_epsilon,hindsight_w,hindsight_warm_conn_s,ratio_to_hindsight
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,1,0,remake-on-switch,0s,fixed,rmsf0,4,64420,64420,1.0,0.02,NULL,NULL,NULL,NULL,NULL
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,2,1,remake-on-switch,0s,fixed,rmsf0,4,62828,62828,1.0,0.014,NULL,NULL,NULL,NULL,NULL
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,2,1,remake-on-switch,auto,fixed,rmsf,4,30605,30640,0.998858,1.674,0.01,false,NULL,NULL,NULL
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,2,1,remake-on-switch,auto,dynamic,rmsd,NULL,30152,30152,1.0,0.0,0.01,false,NULL,NULL,NULL
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,3,2,remake-on-switch,0s,fixed,rmsf0,4,63692,63692,1.0,0.026,NULL,NULL,NULL,NULL,NULL
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,3,2,remake-on-switch,auto,fixed,rmsf,4,32674,32675,0.999969,0.02,NULL,NULL,NULL,NULL,NULL
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,4,3,remake-on-switch,0s,fixed,rmsf0,4,62305,62305,1.0,0.056,NULL,NULL,NULL,NULL,NULL
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,4,3,remake-on-switch,auto,fixed,rmsf,4,33222,33225,0.99991,0.029,0.01,false,NULL,NULL,NULL
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,4,3,remake-on-switch,auto,dynamic,rmsd,NULL,28901,28904,0.999896,0.0,0.01,false,NULL,NULL,NULL
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,5,4,remake-on-switch,auto,fixed,rmsf,4,34391,34396,0.999855,0.038,0.01,false,NULL,NULL,NULL
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,5,4,remake-on-switch,auto,dynamic,rmsd,NULL,30812,30812,1.0,0.0,0.01,false,NULL,NULL,NULL
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,6,5,remake-on-switch,0s,fixed,rmsf0,4,55602,55602,1.0,0.033,NULL,NULL,NULL,NULL,NULL
+real,r7,r7b,skewed|tenants=10|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,49.99,6,5,remake-on-switch,auto,dynamic,rmsd,NULL,35090,35091,0.999972,0.0,0.01,false,NULL,NULL,NULL

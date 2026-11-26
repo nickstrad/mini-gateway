@@ -1,0 +1,46 @@
+tier,campaign,test,workload,policy,patience,warm_mode,arm,load,threshold,measured,threshold_value,verdict,note
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,none,,cold,s6none,all,isolation,0.0,= 0,inconclusive,no oracle row checked; invalid runs dropped 3
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,none,,cold,s6none,80,goodput,NULL,>= 0.95 x baseline; not below by > 2 x A/A,inconclusive,no run of the arm at this load
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,none,,cold,s6none,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w1,all,isolation,0.0,= 0,inconclusive,no oracle row checked; invalid runs dropped 1
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w1,80,goodput,NULL,>= 0.95 x baseline; not below by > 2 x A/A,inconclusive,no run of the arm at this load
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w1,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w2,all,isolation,0.0,= 0,inconclusive,no oracle row checked; invalid runs dropped 1
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w2,80,goodput,NULL,>= 0.95 x baseline; not below by > 2 x A/A,inconclusive,no run of the arm at this load
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w2,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w4,all,isolation,0.0,= 0,inconclusive,no oracle row checked; invalid runs dropped 1
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w4,80,goodput,NULL,>= 0.95 x baseline; not below by > 2 x A/A,inconclusive,no run of the arm at this load
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w4,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,reset-always,,cold,s6ra,all,isolation,0.0,= 0,inconclusive,no oracle row checked
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,reset-always,,cold,s6ra,80,goodput,NULL,>= 0.95 x baseline; not below by > 2 x A/A,inconclusive,no run of the arm at this load
+real,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,reset-always,,cold,s6ra,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,none,,cold,s6none,all,isolation,0.0,= 0,inconclusive,no oracle row checked
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,none,,cold,s6none,80,goodput,NULL,>= 0.95 x baseline,inconclusive,no run of the arm at this load
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,none,,cold,s6none,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w1,all,isolation,0.0,= 0,inconclusive,no oracle row checked
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w1,80,goodput,NULL,>= 0.95 x baseline,inconclusive,no run of the arm at this load
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w1,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w2,all,isolation,0.0,= 0,inconclusive,no oracle row checked
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w2,80,goodput,NULL,>= 0.95 x baseline,inconclusive,no run of the arm at this load
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w2,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w4,all,isolation,0.0,= 0,inconclusive,no oracle row checked
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w4,80,goodput,NULL,>= 0.95 x baseline,inconclusive,no run of the arm at this load
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w4,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,reset-always,,cold,s6ra,all,isolation,0.0,= 0,inconclusive,no oracle row checked
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,reset-always,,cold,s6ra,80,goodput,NULL,>= 0.95 x baseline,inconclusive,no run of the arm at this load
+sim,r8,r8,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,reset-always,,cold,s6ra,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,none,,cold,s6none,all,isolation,0.0,= 0,inconclusive,no oracle row checked
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,none,,cold,s6none,80,goodput,NULL,>= 0.95 x baseline,inconclusive,no run of the arm at this load
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,none,,cold,s6none,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w1,all,isolation,0.0,= 0,inconclusive,no oracle row checked
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w1,80,goodput,NULL,>= 0.95 x baseline,inconclusive,no run of the arm at this load
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w1,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w2,all,isolation,0.0,= 0,inconclusive,no oracle row checked
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w2,80,goodput,NULL,>= 0.95 x baseline,inconclusive,no run of the arm at this load
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w2,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w4,all,isolation,0.0,= 0,inconclusive,no oracle row checked
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w4,80,goodput,NULL,>= 0.95 x baseline,inconclusive,no run of the arm at this load
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,remake-on-switch,auto,fixed,s3w4,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,reset-always,,cold,s6ra,all,isolation,0.0,= 0,inconclusive,no oracle row checked
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,reset-always,,cold,s6ra,80,goodput,NULL,>= 0.95 x baseline,inconclusive,no run of the arm at this load
+sim,r8,r8.plain,steady|tenants=100|skew=1100|medium|pk_lookup|plain|cap=20|dur=35000000000,reset-always,,cold,s6ra,80,p99_wait,NULL,<= 2 x baseline,inconclusive,no run of the arm at this load; refused 0

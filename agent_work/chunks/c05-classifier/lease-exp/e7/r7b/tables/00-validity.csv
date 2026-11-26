@@ -1,0 +1,18 @@
+severity,dir,check,detail
+invalid,/root/runs/lease-r/4-r7b/r7b-aa-lc80-r0,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/r7b-aa-lc80-r2,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/r7b-aa-lc80-r4,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/r7b-base-lc80-r2,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/r7b-base-lc80-r3,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/r7b-ra-lc80-r4,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/r7b-rma-lc80-r0,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/r7b-rma-lc80-r5,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/r7b-rmsd-lc80-r0,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/r7b-rmsd-lc80-r2,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/r7b-rmsf-lc80-r0,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/r7b-rmsf-lc80-r5,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/r7b-rmsf0-lc80-r4,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/r7b-ros-lc80-r4,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/ramp-l115,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/ramp-l130,runner,run.valid 0
+invalid,/root/runs/lease-r/4-r7b/ramp-l70,runner,run.valid 0

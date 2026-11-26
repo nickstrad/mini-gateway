@@ -1,0 +1,13 @@
+key,value
+quantum_ns,1000000
+extra_ns,317000
+n,400
+select1_p50_ns,350448
+drawn_p50_ns,3632306
+held_p50_ns,4373538
+addr,172.17.0.2:5432
+at,2026-11-26T09:48:42Z
+residual_p50_ns.q0,834943
+residual_iqr_ns.q0,504277
+residual_p50_ns.q1000000,317395
+residual_iqr_ns.q1000000,159066

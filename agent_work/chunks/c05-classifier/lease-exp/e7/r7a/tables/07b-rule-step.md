@@ -1,0 +1,3 @@
+tier,campaign,test,arm,run_id,flush_seq,t_ns,offered_per_s,warm_target,warm,lambda_hat_milli,lead_hat_ns
+
+(no rows)

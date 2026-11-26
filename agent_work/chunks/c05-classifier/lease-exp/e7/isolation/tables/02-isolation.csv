@@ -1,0 +1,145 @@
+tier,campaign,test,policy,patience,reseed,kind,class,runs,checked,found,same_tenant,status
+real,e4isolation,r1_r5,none,,off,canary_read,canary,2,4856,3531,395,found
+real,e4isolation,r1_r5,none,,off,advisory_locks,state,2,4858,1793,190,found
+real,e4isolation,r1_r5,none,,off,cursors,state,2,4858,2174,263,found
+real,e4isolation,r1_r5,none,,off,listens,state,2,4858,2530,287,found
+real,e4isolation,r1_r5,none,,off,prepared,state,2,4858,2711,309,found
+real,e4isolation,r1_r5,none,,off,role_changed,state,2,4858,628,66,found
+real,e4isolation,r1_r5,none,,off,settings_changed,state,2,4858,3320,375,found
+real,e4isolation,r1_r5,none,,off,temp_relations,state,2,4858,2501,278,found
+real,e4isolation,r1_r5,none,,off,structural_reset,structural,2,0,0,0,not checked
+real,e4isolation,r1_r5,none,,off,probe_custom_name,residue,2,529,424,36,found
+real,e4isolation,r1_r5,none,,off,probe_seed_inherited,residue,2,533,426,36,found
+real,e4isolation,r1_r5,none,,on,canary_read,canary,2,4856,3528,398,found
+real,e4isolation,r1_r5,none,,on,advisory_locks,state,2,4858,1778,211,found
+real,e4isolation,r1_r5,none,,on,cursors,state,2,4858,2163,260,found
+real,e4isolation,r1_r5,none,,on,listens,state,2,4858,2496,281,found
+real,e4isolation,r1_r5,none,,on,prepared,state,2,4858,2707,318,found
+real,e4isolation,r1_r5,none,,on,role_changed,state,2,4858,624,70,found
+real,e4isolation,r1_r5,none,,on,settings_changed,state,2,4858,3296,375,found
+real,e4isolation,r1_r5,none,,on,temp_relations,state,2,4858,2519,287,found
+real,e4isolation,r1_r5,none,,on,structural_reset,structural,2,0,0,0,not checked
+real,e4isolation,r1_r5,none,,on,probe_custom_name,residue,2,541,415,45,found
+real,e4isolation,r1_r5,none,,on,probe_seed_inherited,residue,2,544,424,38,found
+real,e4isolation,r1_r5,remake-always,,off,canary_read,canary,2,4856,0,0,none found
+real,e4isolation,r1_r5,remake-always,,off,backend_identity,identity,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,off,connection_identity,identity,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,off,advisory_locks,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,off,cursors,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,off,listens,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,off,prepared,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,off,role_changed,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,off,settings_changed,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,off,temp_relations,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,off,structural_reset,structural,2,0,0,0,not checked
+real,e4isolation,r1_r5,remake-always,,off,probe_custom_name,residue,2,468,0,0,none found
+real,e4isolation,r1_r5,remake-always,,off,probe_seed_inherited,residue,2,455,0,0,none found
+real,e4isolation,r1_r5,remake-always,,on,canary_read,canary,2,4856,0,0,none found
+real,e4isolation,r1_r5,remake-always,,on,backend_identity,identity,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,on,connection_identity,identity,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,on,advisory_locks,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,on,cursors,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,on,listens,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,on,prepared,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,on,role_changed,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,on,settings_changed,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,on,temp_relations,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,remake-always,,on,structural_reset,structural,2,0,0,0,not checked
+real,e4isolation,r1_r5,remake-always,,on,probe_custom_name,residue,2,472,0,0,none found
+real,e4isolation,r1_r5,remake-always,,on,probe_seed_inherited,residue,2,458,0,0,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,off,canary_read,canary,2,4854,0,337,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,off,backend_identity,identity,2,4503,0,0,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,off,connection_identity,identity,2,4503,0,0,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,off,advisory_locks,state,2,4858,0,35,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,off,cursors,state,2,4858,0,65,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,off,listens,state,2,4858,0,67,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,off,prepared,state,2,4858,0,106,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,off,role_changed,state,2,4858,0,55,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,off,settings_changed,state,2,4858,0,187,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,off,temp_relations,state,2,4858,0,82,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,off,structural_reset,structural,2,355,0,0,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,off,probe_custom_name,residue,2,478,0,29,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,off,probe_seed_inherited,residue,2,455,0,30,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,on,canary_read,canary,2,4854,0,323,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,on,backend_identity,identity,2,4519,0,0,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,on,connection_identity,identity,2,4519,0,0,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,on,advisory_locks,state,2,4858,0,35,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,on,cursors,state,2,4858,0,57,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,on,listens,state,2,4858,0,59,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,on,prepared,state,2,4858,0,101,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,on,role_changed,state,2,4858,0,50,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,on,settings_changed,state,2,4858,0,175,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,on,temp_relations,state,2,4858,0,72,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,on,structural_reset,structural,2,339,0,0,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,on,probe_custom_name,residue,2,474,0,32,none found
+real,e4isolation,r1_r5,remake-on-switch,0s,on,probe_seed_inherited,residue,2,453,0,28,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,off,canary_read,canary,2,4854,0,373,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,off,backend_identity,identity,2,4462,0,0,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,off,connection_identity,identity,2,4462,0,0,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,off,advisory_locks,state,2,4858,0,48,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,off,cursors,state,2,4858,0,82,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,off,listens,state,2,4858,0,87,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,off,prepared,state,2,4858,0,131,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,off,role_changed,state,2,4858,0,63,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,off,settings_changed,state,2,4858,0,212,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,off,temp_relations,state,2,4858,0,99,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,off,structural_reset,structural,2,396,0,0,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,off,probe_custom_name,residue,2,480,0,43,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,off,probe_seed_inherited,residue,2,464,0,46,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,on,canary_read,canary,2,4855,0,402,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,on,backend_identity,identity,2,4431,0,0,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,on,connection_identity,identity,2,4431,0,0,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,on,advisory_locks,state,2,4858,0,55,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,on,cursors,state,2,4858,0,91,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,on,listens,state,2,4858,0,98,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,on,prepared,state,2,4858,0,142,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,on,role_changed,state,2,4858,0,73,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,on,settings_changed,state,2,4858,0,234,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,on,temp_relations,state,2,4858,0,113,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,on,structural_reset,structural,2,427,0,0,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,on,probe_custom_name,residue,2,488,0,47,none found
+real,e4isolation,r1_r5,remake-on-switch,auto,on,probe_seed_inherited,residue,2,466,0,51,none found
+real,e4isolation,r1_r5,reset-always,,off,canary_read,canary,2,4856,0,0,none found
+real,e4isolation,r1_r5,reset-always,,off,advisory_locks,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,off,cursors,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,off,listens,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,off,prepared,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,off,role_changed,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,off,settings_changed,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,off,temp_relations,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,off,structural_reset,structural,2,0,0,0,not checked
+real,e4isolation,r1_r5,reset-always,,off,probe_custom_name,residue,2,545,460,0,found
+real,e4isolation,r1_r5,reset-always,,off,probe_seed_inherited,residue,2,551,462,0,found
+real,e4isolation,r1_r5,reset-always,,on,canary_read,canary,2,4856,0,0,none found
+real,e4isolation,r1_r5,reset-always,,on,advisory_locks,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,on,cursors,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,on,listens,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,on,prepared,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,on,role_changed,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,on,settings_changed,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,on,temp_relations,state,2,4858,0,0,none found
+real,e4isolation,r1_r5,reset-always,,on,structural_reset,structural,2,0,0,0,not checked
+real,e4isolation,r1_r5,reset-always,,on,probe_custom_name,residue,2,539,460,0,found
+real,e4isolation,r1_r5,reset-always,,on,probe_seed_inherited,residue,2,541,0,0,none found
+real,e4isolation,r1_r5,reset-on-switch,,off,canary_read,canary,2,4856,0,409,none found
+real,e4isolation,r1_r5,reset-on-switch,,off,advisory_locks,state,2,4858,0,56,none found
+real,e4isolation,r1_r5,reset-on-switch,,off,cursors,state,2,4858,0,75,none found
+real,e4isolation,r1_r5,reset-on-switch,,off,listens,state,2,4858,0,98,none found
+real,e4isolation,r1_r5,reset-on-switch,,off,prepared,state,2,4858,0,134,none found
+real,e4isolation,r1_r5,reset-on-switch,,off,role_changed,state,2,4858,0,71,none found
+real,e4isolation,r1_r5,reset-on-switch,,off,settings_changed,state,2,4858,0,231,none found
+real,e4isolation,r1_r5,reset-on-switch,,off,temp_relations,state,2,4858,0,110,none found
+real,e4isolation,r1_r5,reset-on-switch,,off,structural_reset,structural,2,0,0,0,not checked
+real,e4isolation,r1_r5,reset-on-switch,,off,probe_custom_name,residue,2,540,420,40,found
+real,e4isolation,r1_r5,reset-on-switch,,off,probe_seed_inherited,residue,2,540,425,37,found
+real,e4isolation,r1_r5,reset-on-switch,,on,canary_read,canary,2,4856,0,389,none found
+real,e4isolation,r1_r5,reset-on-switch,,on,advisory_locks,state,2,4858,0,52,none found
+real,e4isolation,r1_r5,reset-on-switch,,on,cursors,state,2,4858,0,64,none found
+real,e4isolation,r1_r5,reset-on-switch,,on,listens,state,2,4858,0,87,none found
+real,e4isolation,r1_r5,reset-on-switch,,on,prepared,state,2,4858,0,120,none found
+real,e4isolation,r1_r5,reset-on-switch,,on,role_changed,state,2,4858,0,64,none found
+real,e4isolation,r1_r5,reset-on-switch,,on,settings_changed,state,2,4858,0,210,none found
+real,e4isolation,r1_r5,reset-on-switch,,on,temp_relations,state,2,4858,0,100,none found
+real,e4isolation,r1_r5,reset-on-switch,,on,structural_reset,structural,2,0,0,0,not checked
+real,e4isolation,r1_r5,reset-on-switch,,on,probe_custom_name,residue,2,544,426,34,found
+real,e4isolation,r1_r5,reset-on-switch,,on,probe_seed_inherited,residue,2,545,0,32,none found

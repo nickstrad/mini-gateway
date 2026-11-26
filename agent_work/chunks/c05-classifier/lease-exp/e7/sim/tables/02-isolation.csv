@@ -1,0 +1,34 @@
+tier,campaign,test,policy,patience,reseed,kind,class,runs,checked,found,same_tenant,status
+sim,e3-sim,S12/marker,none,,off,canary_read,canary,3,14398,4545,0,found
+sim,e3-sim,S12/marker,none,,off,advisory_locks,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,none,,off,cursors,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,none,,off,listens,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,none,,off,prepared,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,none,,off,role_changed,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,none,,off,settings_changed,state,3,14398,4545,9793,found
+sim,e3-sim,S12/marker,none,,off,temp_relations,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,none,,off,structural_reset,structural,3,14338,4545,9793,found
+sim,e3-sim,S12/marker,none,,off,probe_custom_name,residue,3,14398,4545,9793,found
+sim,e3-sim,S12/marker,none,,off,probe_seed_inherited,residue,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-always,,off,canary_read,canary,3,14398,0,0,none found
+sim,e3-sim,S12/marker,reset-always,,off,advisory_locks,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-always,,off,cursors,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-always,,off,listens,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-always,,off,prepared,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-always,,off,role_changed,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-always,,off,settings_changed,state,3,14398,0,0,none found
+sim,e3-sim,S12/marker,reset-always,,off,temp_relations,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-always,,off,structural_reset,structural,3,14338,0,0,none found
+sim,e3-sim,S12/marker,reset-always,,off,probe_custom_name,residue,3,14398,0,0,none found
+sim,e3-sim,S12/marker,reset-always,,off,probe_seed_inherited,residue,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-on-switch,,off,canary_read,canary,3,14398,0,0,none found
+sim,e3-sim,S12/marker,reset-on-switch,,off,advisory_locks,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-on-switch,,off,cursors,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-on-switch,,off,listens,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-on-switch,,off,prepared,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-on-switch,,off,role_changed,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-on-switch,,off,settings_changed,state,3,14398,0,9633,none found
+sim,e3-sim,S12/marker,reset-on-switch,,off,temp_relations,state,3,0,0,0,not checked
+sim,e3-sim,S12/marker,reset-on-switch,,off,structural_reset,structural,3,14338,0,9633,none found
+sim,e3-sim,S12/marker,reset-on-switch,,off,probe_custom_name,residue,3,14398,0,9633,none found
+sim,e3-sim,S12/marker,reset-on-switch,,off,probe_seed_inherited,residue,3,0,0,0,not checked

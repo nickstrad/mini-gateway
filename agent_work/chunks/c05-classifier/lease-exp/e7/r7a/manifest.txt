@@ -1,0 +1,31 @@
+# E7 step 3 — R7 head-to-head, mix A (6 tenants, Zipf 3.0: remake-on-switch fixed:4 made 41 and
+# 36 connects/s at cap:80 and cap:95 on real Postgres in the E5 smoke, inside the 20-50/s
+# budget). REVIEW-E5-1's proposed campaign: the ramp; cap:80 (the verdict load) with all 12
+# arms x 10 repetitions; cap:30, cap:60, cap:95 with 9 arms (rmsd0, rmsdp0, rmaw only at
+# cap:80) x 3 repetitions; every run 30 s measured after a 5 s warm-up (obs.warmup).
+# Capacity = the median window goodput of the saturated ramp steps (capacity.csv lists every
+# step and which were used). Interleaved: per round, per load, every arm once, arm and load
+# order rotated per round; seed = 1 + round. 201 runs + 6 ramp steps, about 2 h 10 min.
+campaign r7
+test r7a
+tier real
+reps 3
+seed 1
+common workload.profile=skewed workload.tenants=6 workload.skew=3000 workload.lease=medium pool.cap=20 run.duration=35s obs.interval=35s obs.warmup=5s oracle.rate=0
+real monitor=100ms
+ramp 50 70 85 100 115 130
+ramp_arm release.policy=none warm.mode=cold
+loads cap:30 cap:60 cap:80 cap:95
+reps_at cap:80 10
+arm base release.policy=none warm.mode=cold
+arm aa release.policy=none warm.mode=cold
+arm ra release.policy=reset-always warm.mode=cold
+arm ros release.policy=reset-on-switch warm.mode=cold
+arm rmsf release.policy=remake-on-switch warm.mode=fixed warm.size=4
+arm rmsf0 release.policy=remake-on-switch warm.mode=fixed warm.size=4 remake.patience=0
+arm rmsd release.policy=remake-on-switch warm.mode=dynamic warm.size=1
+arm rmsd0 release.policy=remake-on-switch warm.mode=dynamic warm.size=1 remake.patience=0 @loads=cap:80
+arm rmsdp release.policy=remake-on-switch warm.mode=dynamic warm.size=1 warm.prime=select1
+arm rmsdp0 release.policy=remake-on-switch warm.mode=dynamic warm.size=1 warm.prime=select1 remake.patience=0 @loads=cap:80
+arm rma release.policy=remake-always warm.mode=cold
+arm rmaw release.policy=remake-always warm.mode=fixed warm.size=4 @loads=cap:80

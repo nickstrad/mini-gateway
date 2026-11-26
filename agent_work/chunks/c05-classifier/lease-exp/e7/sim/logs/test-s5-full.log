@@ -1,0 +1,83 @@
+=== RUN   TestS5RuleAgainstHindsightFixed
+    stock_scenario_test.go:234: 
+        t_s	requested/s	switch_arrivals/s	lambda_hat/s	lead_hat_ms	warm_target	warm	miss_in_interval
+        10	26	26	28.784	18.425	4	4	7/261
+        20	24	24	24.487	18.425	4	3	2/243
+        30	29	29	26.130	18.425	4	4	2/294
+        40	28	28	28.674	18.425	4	4	3/287
+        50	105	105	96.752	22.395	7	5	21/1057
+        60	108	108	122.326	23.433	8	5	16/1087
+        70	112	112	112.176	24.509	8	6	0/1121
+        80	110	110	112.523	22.098	8	8	3/1100
+        90	25	25	56.170	18.425	5	5	0/252
+        100	24	24	36.088	18.425	4	4	0/249
+        110	27	27	31.130	18.425	4	4	0/274
+        120	26	26	28.221	18.425	4	3	1/267
+        120	0	0	28.056	18.425	4	4	0/0
+    stock_scenario_test.go:278: 
+        patience	cell	arm	seeds	whole_miss	whole_x/n	ss_miss	ss_x/n	ss_band95	verdict	ss_warm_s	ratio_to_hindsight
+        auto	steady	remake-on-switch.dynamic.pauto	5	0.540%	174/32192	0.355%	105/29528	0.293%–0.430%	holds	2260.157	1.040
+        auto	steady	remake-on-switch.fixed0.pauto	5	100.000%	20888/20888	100.000%	19117/19117	99.979%–100.000%	misses	0.000	-
+        auto	steady	remake-on-switch.fixed1.pauto	5	64.803%	20855/32182	64.770%	19119/29518	64.223%–65.313%	misses	192.189	-
+        auto	steady	remake-on-switch.fixed2.pauto	5	28.139%	9056/32182	28.037%	8276/29518	27.527%–28.552%	misses	588.085	-
+        auto	steady	remake-on-switch.fixed3.pauto	5	9.075%	2921/32186	9.027%	2665/29522	8.705%–9.359%	misses	1088.466	-
+        auto	steady	remake-on-switch.fixed4.pauto	5	2.298%	740/32189	2.289%	676/29525	2.125%–2.466%	misses	1625.795	-
+        auto	steady	remake-on-switch.fixed5.pauto	5	0.456%	147/32193	0.440%	130/29528	0.370%–0.522%	holds (hindsight)	2173.179	-
+        auto	steady	remake-on-switch.fixed6.pauto	5	0.102%	33/32195	0.071%	21/29530	0.046%–0.108%	holds	2722.762	-
+        auto	steady	remake-on-switch.fixed8.pauto	5	0.031%	10/32200	0.000%	0/29534	0.000%–0.013%	holds	3822.653	-
+        auto	steady	=> R1 holds; hindsight W=5
+        auto	step	remake-on-switch.dynamic.pauto	5	0.940%	305/32429	0.898%	279/31065	0.799%–1.009%	inconclusive	2419.806	0.646
+        auto	step	remake-on-switch.fixed0.pauto	5	100.000%	23701/23701	100.000%	23057/23057	99.983%–100.000%	misses	0.000	-
+        auto	step	remake-on-switch.fixed1.pauto	5	72.932%	23641/32415	74.245%	23054/31051	73.756%–74.728%	misses	228.357	-
+        auto	step	remake-on-switch.fixed2.pauto	5	47.528%	15407/32416	49.133%	15257/31052	48.577%–49.689%	misses	611.239	-
+        auto	step	remake-on-switch.fixed3.pauto	5	28.015%	9082/32418	29.155%	9054/31054	28.652%–29.663%	misses	1072.840	-
+        auto	step	remake-on-switch.fixed4.pauto	5	14.933%	4841/32418	15.553%	4830/31054	15.154%–15.960%	misses	1577.815	-
+        auto	step	remake-on-switch.fixed5.pauto	5	7.365%	2388/32423	7.663%	2380/31058	7.372%–7.964%	misses	2106.385	-
+        auto	step	remake-on-switch.fixed6.pauto	5	3.302%	1071/32427	3.422%	1063/31062	3.225%–3.630%	misses	2646.684	-
+        auto	step	remake-on-switch.fixed8.pauto	5	0.588%	191/32430	0.589%	183/31064	0.509%–0.680%	holds (hindsight)	3741.091	-
+        auto	step	=> R1 inconclusive; hindsight W=8
+        auto	bursty	remake-on-switch.dynamic.pauto	5	68.324%	4465/6535	67.819%	4059/5985	66.624%–68.991%	misses	1869.982	0.225
+        auto	bursty	remake-on-switch.fixed0.pauto	5	94.445%	5985/6337	94.374%	5469/5795	93.751%–94.938%	misses	299.826	-
+        auto	bursty	remake-on-switch.fixed1.pauto	5	88.041%	5993/6807	87.908%	5482/6236	87.076%–88.694%	misses	703.914	-
+        auto	bursty	remake-on-switch.fixed2.pauto	5	79.982%	5342/6679	79.686%	4876/6119	78.659%–80.675%	misses	1164.023	-
+        auto	bursty	remake-on-switch.fixed3.pauto	5	72.241%	4760/6589	71.977%	4346/6038	70.830%–73.096%	misses	1590.535	-
+        auto	bursty	remake-on-switch.fixed4.pauto	5	63.239%	4096/6477	62.902%	3732/5933	61.665%–64.122%	misses	2076.915	-
+        auto	bursty	remake-on-switch.fixed5.pauto	5	53.332%	3401/6377	52.934%	3094/5845	51.652%–54.211%	misses	2604.494	-
+        auto	bursty	remake-on-switch.fixed6.pauto	5	43.157%	2712/6284	42.693%	2460/5762	41.421%–43.975%	misses	3134.162	-
+        auto	bursty	remake-on-switch.fixed8.pauto	5	22.180%	1357/6118	21.466%	1203/5604	20.411%–22.561%	misses	4205.679	-
+        auto	bursty	remake-on-switch.fixed16.pauto	5	0.277%	59/21251	0.000%	0/19511	0.000%–0.019%	holds (hindsight)	8304.413	-
+        auto	bursty	=> R1 misses	reported, not asserted (limit 3)
+        0	steady	remake-on-switch.dynamic.p0	5	0.540%	174/32193	0.355%	105/29529	0.293%–0.430%	holds	2260.138	1.040
+        0	steady	remake-on-switch.fixed0.p0	5	99.995%	20890/20891	99.994%	19119/19120	99.970%–99.999%	misses	0.000	-
+        0	steady	remake-on-switch.fixed1.p0	5	64.795%	20853/32183	64.761%	19117/29519	64.214%–65.304%	misses	192.208	-
+        0	steady	remake-on-switch.fixed2.p0	5	28.141%	9057/32184	28.038%	8277/29520	27.529%–28.553%	misses	588.066	-
+        0	steady	remake-on-switch.fixed3.p0	5	9.075%	2921/32187	9.026%	2665/29523	8.705%–9.359%	misses	1088.446	-
+        0	steady	remake-on-switch.fixed4.p0	5	2.298%	740/32190	2.289%	676/29526	2.125%–2.466%	misses	1625.776	-
+        0	steady	remake-on-switch.fixed5.p0	5	0.456%	147/32194	0.440%	130/29529	0.370%–0.522%	holds (hindsight)	2173.160	-
+        0	steady	remake-on-switch.fixed6.p0	5	0.102%	33/32196	0.071%	21/29531	0.046%–0.108%	holds	2722.742	-
+        0	steady	remake-on-switch.fixed8.p0	5	0.031%	10/32201	0.000%	0/29535	0.000%–0.013%	holds	3822.634	-
+        0	steady	=> R1 holds; hindsight W=5
+        0	step	remake-on-switch.dynamic.p0	5	0.940%	305/32431	0.898%	279/31067	0.799%–1.009%	inconclusive	2419.874	0.646
+        0	step	remake-on-switch.fixed0.p0	5	100.000%	23705/23705	100.000%	23061/23061	99.983%–100.000%	misses	0.000	-
+        0	step	remake-on-switch.fixed1.p0	5	72.937%	23644/32417	74.250%	23057/31053	73.761%–74.733%	misses	228.351	-
+        0	step	remake-on-switch.fixed2.p0	5	47.527%	15408/32419	49.132%	15258/31055	48.576%–49.688%	misses	611.236	-
+        0	step	remake-on-switch.fixed3.p0	5	28.013%	9082/32420	29.153%	9054/31056	28.650%–29.661%	misses	1072.801	-
+        0	step	remake-on-switch.fixed4.p0	5	14.932%	4841/32420	15.552%	4830/31056	15.153%–15.959%	misses	1577.776	-
+        0	step	remake-on-switch.fixed5.p0	5	7.364%	2388/32425	7.662%	2380/31060	7.371%–7.963%	misses	2106.347	-
+        0	step	remake-on-switch.fixed6.p0	5	3.302%	1071/32429	3.421%	1063/31064	3.225%–3.629%	misses	2646.645	-
+        0	step	remake-on-switch.fixed8.p0	5	0.588%	191/32432	0.589%	183/31066	0.509%–0.680%	holds (hindsight)	3741.053	-
+        0	step	=> R1 inconclusive; hindsight W=8
+        0	bursty	remake-on-switch.dynamic.p0	5	63.799%	4644/7279	63.336%	4229/6677	62.173%–64.484%	misses	1888.259	0.228
+        0	bursty	remake-on-switch.fixed0.p0	5	90.357%	6241/6907	90.254%	5705/6321	89.498%–90.961%	misses	340.865	-
+        0	bursty	remake-on-switch.fixed1.p0	5	83.375%	6319/7579	83.182%	5782/6951	82.284%–84.043%	misses	659.837	-
+        0	bursty	remake-on-switch.fixed2.p0	5	75.268%	5600/7440	74.974%	5117/6825	73.932%–75.987%	misses	1157.415	-
+        0	bursty	remake-on-switch.fixed3.p0	5	67.226%	4921/7320	66.880%	4491/6715	65.745%–67.995%	misses	1609.915	-
+        0	bursty	remake-on-switch.fixed4.p0	5	59.222%	4280/7227	58.817%	3899/6629	57.627%–59.996%	misses	2065.059	-
+        0	bursty	remake-on-switch.fixed5.p0	5	50.281%	3578/7116	49.793%	3250/6527	48.580%–51.005%	misses	2590.576	-
+        0	bursty	remake-on-switch.fixed6.p0	5	41.235%	2903/7040	40.678%	2627/6458	39.486%–41.881%	misses	3121.961	-
+        0	bursty	remake-on-switch.fixed8.p0	5	22.199%	1540/6937	21.498%	1369/6368	20.506%–22.524%	misses	4187.039	-
+        0	bursty	remake-on-switch.fixed16.p0	5	0.268%	60/22380	0.000%	0/20561	0.000%–0.018%	holds (hindsight)	8273.504	-
+        0	bursty	=> R1 misses	reported, not asserted (limit 3)
+--- PASS: TestS5RuleAgainstHindsightFixed (243.08s)
+PASS
+ok  	github.com/nickstrad/mini-gateway/internal/lab/leaselab	243.089s

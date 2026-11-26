@@ -1,0 +1,22 @@
+| campaign | test |  arm  | load |   quantity    | sim_runs | real_runs | sim  |     real     | ratio | band_pct |  agreement  |
+|----------|------|-------|------|---------------|----------|-----------|------|--------------|-------|----------|-------------|
+| r6       | r6   | rma   | 4.0  | goodput_per_s | NULL     | 3         | NULL | 157.7        | NULL  | 25       | missing sim |
+| r6       | r6   | rma   | 4.0  | hit_rate      | NULL     | 3         | NULL | 0.0          | NULL  | 25       | missing sim |
+| r6       | r6   | rma   | 4.0  | p50_wait_ns   | NULL     | 3         | NULL | 4529848320.0 | NULL  | 25       | missing sim |
+| r6       | r6   | rma   | 4.0  | p99_wait_ns   | NULL     | 3         | NULL | 7214202880.0 | NULL  | 25       | missing sim |
+| r6       | r6   | rmsf  | 60.0 | goodput_per_s | NULL     | 2         | NULL | 2291.2       | NULL  | 25       | missing sim |
+| r6       | r6   | rmsf  | 60.0 | hit_rate      | NULL     | 2         | NULL | 0.0          | NULL  | 25       | missing sim |
+| r6       | r6   | rmsf  | 60.0 | p50_wait_ns   | NULL     | 2         | NULL | 357564416.0  | NULL  | 25       | missing sim |
+| r6       | r6   | rmsf  | 60.0 | p99_wait_ns   | NULL     | 2         | NULL | 1249902592.0 | NULL  | 25       | missing sim |
+| r6       | r6   | rmsfo | 60.0 | goodput_per_s | NULL     | 3         | NULL | 2327.0       | NULL  | 25       | missing sim |
+| r6       | r6   | rmsfo | 60.0 | hit_rate      | NULL     | 3         | NULL | 0.0          | NULL  | 25       | missing sim |
+| r6       | r6   | rmsfo | 60.0 | p50_wait_ns   | NULL     | 3         | NULL | 327155712.0  | NULL  | 25       | missing sim |
+| r6       | r6   | rmsfo | 60.0 | p99_wait_ns   | NULL     | 3         | NULL | 981467136.0  | NULL  | 25       | missing sim |
+| r6       | r6   | rmsu  | 4.0  | goodput_per_s | NULL     | 1         | NULL | 159.95       | NULL  | 25       | missing sim |
+| r6       | r6   | rmsu  | 4.0  | hit_rate      | NULL     | 1         | NULL | 0.0          | NULL  | 25       | missing sim |
+| r6       | r6   | rmsu  | 4.0  | p50_wait_ns   | NULL     | 1         | NULL | 113246208.0  | NULL  | 25       | missing sim |
+| r6       | r6   | rmsu  | 4.0  | p99_wait_ns   | NULL     | 1         | NULL | 316669952.0  | NULL  | 25       | missing sim |
+| r6       | r6   | rmsuo | 4.0  | goodput_per_s | NULL     | 1         | NULL | 159.95       | NULL  | 25       | missing sim |
+| r6       | r6   | rmsuo | 4.0  | hit_rate      | NULL     | 1         | NULL | 0.001869     | NULL  | 25       | missing sim |
+| r6       | r6   | rmsuo | 4.0  | p50_wait_ns   | NULL     | 1         | NULL | 134217728.0  | NULL  | 25       | missing sim |
+| r6       | r6   | rmsuo | 4.0  | p99_wait_ns   | NULL     | 1         | NULL | 383778816.0  | NULL  | 25       | missing sim |
