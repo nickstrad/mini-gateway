@@ -2,6 +2,7 @@ package pgwire
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"math/rand/v2"
 	"os"
@@ -19,6 +20,8 @@ type clsCase struct {
 	want   work.Unit
 	bad    bool
 	noexec bool
+	wasCo  bool
+	isNew  bool
 }
 
 func clsLoadCorpus(t testing.TB) []clsCase {
@@ -55,24 +58,24 @@ func clsLoadCorpus(t testing.TB) []clsCase {
 			case strings.HasPrefix(fl, "R:"):
 				c.want.Class = work.ClassReject
 				c.want.Reason = clsReasonByName(t, fl[2:])
-			case fl == "ro":
-				c.want.ReadOnly = true
-			case fl == "co":
-				c.want.Coalescable = true
-			case fl == "opaque":
-				c.want.Opaque = true
+			case fl == "fits":
+				c.want.SafeRead = true
+			case fl == "was-co":
+				c.wasCo = true
+			case fl == "new":
+				c.isNew = true
 			case fl == "hint":
 				c.want.Hinted = true
 			case fl == "bad":
 				c.bad = true
+				c.want.Opaque = true
 			case fl == "noexec":
 				c.noexec = true
-			case strings.HasPrefix(fl, "tx:"):
-				c.want.Tx = clsTxByName(t, fl[3:])
 			default:
 				t.Fatalf("corpus line %d: unknown flag %q", n, fl)
 			}
 		}
+		c.want.Shareable = c.want.SafeRead && c.want.Class != work.ClassReject
 		out = append(out, c)
 	}
 	if err := sc.Err(); err != nil {
@@ -91,23 +94,17 @@ func clsReasonByName(t testing.TB, s string) work.RejectReason {
 	return 0
 }
 
-func clsTxByName(t testing.TB, s string) work.TxEffect {
-	for x := work.TxNone; x < work.NumTxEffects; x++ {
-		if x.String() == s {
-			return x
-		}
-	}
-	t.Fatalf("unknown tx effect %q", s)
-	return 0
+func clsSame(a, b work.Unit) bool {
+	return a.Class == b.Class && a.Reason == b.Reason && a.SafeRead == b.SafeRead &&
+		a.Shareable == b.Shareable && a.Hinted == b.Hinted && a.Opaque == b.Opaque
 }
 
-func clsSame(a, b work.Unit) bool {
-	return a.Class == b.Class && a.Reason == b.Reason && a.Tx == b.Tx && a.ReadOnly == b.ReadOnly &&
-		a.Coalescable == b.Coalescable && a.Hinted == b.Hinted && a.Opaque == b.Opaque
+func clsSameCourtesy(a, b work.Unit) bool {
+	return a.Class == b.Class && a.Reason == b.Reason && a.Opaque == b.Opaque && a.Statements == b.Statements
 }
 
 func clsDescribe(u work.Unit) string {
-	return fmt.Sprintf("class=%s reason=%s tx=%s ro=%v co=%v hint=%v opaque=%v stmts=%d", u.Class, u.Reason, u.Tx, u.ReadOnly, u.Coalescable, u.Hinted, u.Opaque, u.Statements)
+	return fmt.Sprintf("class=%s reason=%s safe-read=%v shareable=%v hint=%v opaque=%v stmts=%d key=%v", u.Class, u.Reason, u.SafeRead, u.Shareable, u.Hinted, u.Opaque, u.Statements, u.HasKey)
 }
 
 func TestClassifierCorpus(t *testing.T) {
@@ -116,22 +113,30 @@ func TestClassifierCorpus(t *testing.T) {
 		t.Fatalf("corpus has %d statements, want at least 300", len(cases))
 	}
 	reasons := map[work.RejectReason]int{}
+	fits, wasCo, stillFit := 0, 0, 0
 	for _, c := range cases {
 		got := ClassifyQuery([]byte(c.text), false)
 		want := c.want
 		if want.Class == work.ClassReject {
-			want.Tx, want.ReadOnly, want.Coalescable, want.Opaque = got.Tx, false, false, false
 			reasons[want.Reason]++
 		}
 		if !clsSame(got, want) {
 			t.Errorf("line %d %q:\n got %s\nwant %s", c.line, c.text, clsDescribe(got), clsDescribe(want))
 		}
-		r := clsRun([]byte(c.text), false, false)
-		if r.bad != c.bad {
-			t.Errorf("line %d %q: lexer bad=%v, corpus says %v", c.line, c.text, r.bad, c.bad)
+		if c.want.SafeRead {
+			fits++
+			if !c.wasCo && !c.isNew {
+				t.Errorf("line %d %q: the first build did not coalesce it, so it must not fit the safe shape now", c.line, c.text)
+			}
+		}
+		if c.wasCo {
+			wasCo++
+			if c.want.SafeRead {
+				stillFit++
+			}
 		}
 		inTx := ClassifyQuery([]byte(c.text), true)
-		if want.Class != work.ClassReject && (inTx.Class != work.ClassContinueLease || inTx.Coalescable || inTx.ReadOnly != got.ReadOnly) {
+		if want.Class != work.ClassReject && (inTx.Class != work.ClassContinueLease || inTx.Shareable || inTx.SafeRead != got.SafeRead) {
 			t.Errorf("line %d %q: inside a transaction: %s", c.line, c.text, clsDescribe(inTx))
 		}
 	}
@@ -140,6 +145,7 @@ func TestClassifierCorpus(t *testing.T) {
 			t.Errorf("corpus has no statement rejected for %s", r)
 		}
 	}
+	t.Logf("corpus: %d records, %d fit the safe shape; %d of the first build's %d coalescable records still fit", len(cases), fits, stillFit, wasCo)
 }
 
 func TestClassifierGeneratedStatements(t *testing.T) {
@@ -149,26 +155,26 @@ func TestClassifierGeneratedStatements(t *testing.T) {
 		text string
 		want work.Unit
 	}{
-		{"long read", long, work.Unit{Class: work.ClassStartLease, ReadOnly: true, Coalescable: true}},
+		{"long read", long, work.Unit{Class: work.ClassStartLease}},
+		{"long fitting read", "SELECT " + strings.Repeat("a", ShareMaxLen-7), work.Unit{Class: work.ClassStartLease, SafeRead: true, Shareable: true}},
+		{"fitting read one byte too long", "SELECT " + strings.Repeat("a", ShareMaxLen-6), work.Unit{Class: work.ClassStartLease}},
 		{"long read then set", long + "; SET search_path = x", work.Unit{Class: work.ClassReject, Reason: work.RejectSessionSet}},
-		{"long string", "SELECT '" + strings.Repeat("x'';SET a=1;''", 20000) + "'", work.Unit{Class: work.ClassStartLease, ReadOnly: true, Coalescable: true}},
+		{"long string", "SELECT '" + strings.Repeat("x'';SET a=1;''", 20000) + "'", work.Unit{Class: work.ClassStartLease}},
 		{"long identifier", "SELECT " + strings.Repeat("pg_advisory_lock", 10) + "(1)", work.Unit{Class: work.ClassStartLease}},
 		{"long pg_temp", "CREATE TABLE pg_temp_" + strings.Repeat("9", 100) + ".t (a int)", work.Unit{Class: work.ClassReject, Reason: work.RejectTempObject}},
-		{"deep parens", "SELECT " + strings.Repeat("(", 20000) + "1" + strings.Repeat(")", 20000), work.Unit{Class: work.ClassStartLease, ReadOnly: true, Coalescable: true}},
+		{"deep parens", "SELECT " + strings.Repeat("(", 20000) + "1" + strings.Repeat(")", 20000), work.Unit{Class: work.ClassStartLease}},
+		{"deep parens that fit", "SELECT " + strings.Repeat("(", 1000) + "1" + strings.Repeat(")", 1000), work.Unit{Class: work.ClassStartLease, SafeRead: true, Shareable: true}},
 		{"nested set_config", "SELECT " + strings.Repeat("set_config('a.b', ", 5000) + "'x'" + strings.Repeat(", true)", 5000), work.Unit{Class: work.ClassStartLease}},
-		{"many statements", strings.Repeat("SELECT 1;", 20000), work.Unit{Class: work.ClassStartLease, ReadOnly: true}},
+		{"many statements", strings.Repeat("SELECT 1;", 20000), work.Unit{Class: work.ClassStartLease}},
 		{"many statements then listen", strings.Repeat("SELECT 1;", 20000) + "LISTEN x", work.Unit{Class: work.ClassReject, Reason: work.RejectListen}},
-		{"invalid utf-8 word", "SELECT a\xff FROM (SELECT 1 AS \"a\xff\") s", work.Unit{Class: work.ClassStartLease, ReadOnly: true, Coalescable: true}},
+		{"invalid utf-8 word", "SELECT a\xff FROM (SELECT 1 AS \"a\xff\") s", work.Unit{Class: work.ClassStartLease}},
 		{"invalid utf-8 then lock", "SELECT '\xff'; SELECT pg_advisory_lock(1)", work.Unit{Class: work.ClassReject, Reason: work.RejectAdvisoryLock}},
-		{"nul byte", "SELECT 1\x00; SET search_path = x", work.Unit{Class: work.ClassReject, Reason: work.RejectSessionSet}},
-		{"nul byte read", "SELECT 1\x00", work.Unit{Class: work.ClassStartLease, Tx: work.TxUnknown, Opaque: true}},
+		{"nul byte", "SELECT 1\x00; SET search_path = x", work.Unit{Class: work.ClassReject, Reason: work.RejectSessionSet, Opaque: true}},
+		{"nul byte read", "SELECT 1\x00", work.Unit{Class: work.ClassStartLease, Opaque: true}},
 	}
 	for _, c := range cases {
 		got := ClassifyQuery([]byte(c.text), false)
 		want := c.want
-		if want.Class == work.ClassReject {
-			want.Tx = got.Tx
-		}
 		if !clsSame(got, want) {
 			t.Errorf("%s: got %s want %s", c.name, clsDescribe(got), clsDescribe(want))
 		}
@@ -178,7 +184,7 @@ func TestClassifierGeneratedStatements(t *testing.T) {
 func TestClassifierEmptyMessages(t *testing.T) {
 	for _, q := range []string{"", ";", " ; ; ", "-- x", "/* x */", "/* a */;/* b */"} {
 		u := ClassifyQuery([]byte(q), false)
-		if u.Class != work.ClassStartLease || u.Statements != 0 || u.ReadOnly || u.Coalescable || u.Tx != work.TxNone || u.MayLeaveOpen() != work.No {
+		if u.Class != work.ClassStartLease || u.Statements != 0 || u.SafeRead || u.Shareable || u.Opaque {
 			t.Errorf("%q: %s", q, clsDescribe(u))
 		}
 	}
@@ -208,11 +214,32 @@ func TestClassifierShareKeyAndScope(t *testing.T) {
 	}
 	u = c.Classify("bob", []byte("SELECT now()"), false)
 	if u.HasKey || u.Key.Text != nil {
-		t.Fatalf("a statement that is not coalescable has a key: %+v", u)
+		t.Fatalf("a statement that is not shareable has a key: %+v", u)
 	}
 	u = c.Classify("bob", []byte("SELECT 1"), true)
-	if u.HasKey || u.Coalescable {
+	if u.HasKey || u.Shareable {
 		t.Fatalf("inside a transaction nothing is shared: %+v", u)
+	}
+	hinted := "/* mg:share */ SELECT now()"
+	u = c.Classify("bob", []byte(hinted), false)
+	if !u.Hinted || u.SafeRead || u.Shareable || !u.HasKey || string(u.Key.Text) != hinted || u.Key.Tenant != "bob" {
+		t.Fatalf("a hinted statement has a key but is neither safe-read nor shareable: %+v", u)
+	}
+	for _, q := range []string{hinted, "/* mg:share */ SET search_path = x"} {
+		if u := c.Classify("bob", []byte(q), true); u.HasKey {
+			t.Fatalf("%q inside a transaction has a key: %+v", q, u)
+		}
+	}
+	if u := c.Classify("bob", []byte("/* mg:share */ SET search_path = x"), false); u.HasKey || u.Class != work.ClassReject {
+		t.Fatalf("a rejected hinted statement has a key: %+v", u)
+	}
+	for _, q := range []string{" /* mg:share */ SELECT 1", "/*mg:share*/ SELECT 1", "/* MG:SHARE */ SELECT 1", "SELECT 1 /* mg:share */"} {
+		if u := c.Classify("bob", []byte(q), false); u.Hinted || u.HasKey {
+			t.Errorf("%q is not the exact hint: %+v", q, u)
+		}
+	}
+	if err := c.Snapshot().Check(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -277,11 +304,31 @@ func TestClassifierPaddingAndCaseProperty(t *testing.T) {
 			base := ClassifyQuery([]byte(c.text), false)
 			padded := clsPad([]byte(c.text), rng)
 			got := ClassifyQuery(padded, false)
-			if !clsSame(base, got) || base.Statements != got.Statements {
+			if !clsSameCourtesy(base, got) {
 				t.Errorf("seed %d line %d: %q\n padded %q\n base %s\n  got %s", seed, c.line, c.text, padded, clsDescribe(base), clsDescribe(got))
+			}
+			spaced := clsPadSpaces([]byte(c.text), rng)
+			if got := ClassifyQuery(spaced, false); !clsSameCourtesy(base, got) || (base.SafeRead && !got.SafeRead) {
+				t.Errorf("seed %d line %d: %q\n spaced %q\n base %s\n  got %s", seed, c.line, c.text, spaced, clsDescribe(base), clsDescribe(got))
 			}
 		}
 	}
+}
+
+func clsPadSpaces(src []byte, rng *rand.Rand) []byte {
+	toks, _ := LexAll(src)
+	var out []byte
+	for _, t := range toks {
+		if rng.IntN(2) == 0 {
+			out = append(out, ' ')
+		}
+		text := append([]byte(nil), t.Text(src)...)
+		if t.Kind == TokenWord {
+			clsMutateCase(rng, text)
+		}
+		out = append(out, text...)
+	}
+	return out
 }
 
 func clsMutate(rng *rand.Rand, src []byte) []byte {
@@ -331,10 +378,10 @@ func TestClassifierConservativeWhenUntokenisable(t *testing.T) {
 
 func clsCheckConservative(t testing.TB, q []byte, u work.Unit) {
 	t.Helper()
-	if u.ReadOnly || u.Coalescable || u.HasKey {
-		t.Errorf("untokenisable %q is read-only or coalescable: %s", q, clsDescribe(u))
+	if u.SafeRead || u.Shareable || (u.HasKey && !u.Hinted) {
+		t.Errorf("untokenisable %q is safe-read or shareable: %s", q, clsDescribe(u))
 	}
-	if u.Class != work.ClassReject && (!u.Opaque || u.Tx != work.TxUnknown || !u.Class.Forwards()) {
+	if !u.Opaque || (u.Class != work.ClassReject && !u.Class.Forwards()) {
 		t.Errorf("untokenisable %q is not forwarded as opaque: %s", q, clsDescribe(u))
 	}
 }
@@ -352,8 +399,12 @@ func TestClassifierInvariantsOverMutants(t *testing.T) {
 
 func clsCheckInvariants(t testing.TB, q []byte) {
 	t.Helper()
+	_, clean := LexAll(q)
+	fits := ShareFits(q)
+	hinted := bytes.HasPrefix(q, []byte(ShareHint))
+	var c Classifier
 	for _, inTx := range []bool{false, true} {
-		u := ClassifyQuery(q, inTx)
+		u := c.Classify("t", q, inTx)
 		switch {
 		case u.Class != work.ClassReject && u.Class != work.ClassStartLease && u.Class != work.ClassContinueLease:
 			t.Errorf("%q: class %s", q, u.Class)
@@ -361,15 +412,24 @@ func clsCheckInvariants(t testing.TB, q []byte) {
 			t.Errorf("%q: reject without a reason", q)
 		case u.Class != work.ClassReject && u.Reason != work.RejectNone:
 			t.Errorf("%q: reason without a reject", q)
-		case u.Coalescable && (!u.ReadOnly || u.Statements != 1 || inTx):
-			t.Errorf("%q: coalescable outside the definition: %s", q, clsDescribe(u))
-		case u.ReadOnly && (u.Opaque || u.Statements == 0 || u.Class == work.ClassReject):
-			t.Errorf("%q: read-only outside the definition: %s", q, clsDescribe(u))
-		case u.Opaque && u.Tx != work.TxUnknown:
-			t.Errorf("%q: opaque with a known transaction effect", q)
+		case u.SafeRead != fits:
+			t.Errorf("%q: safe-read %v but the recogniser says %v", q, u.SafeRead, fits)
+		case u.Shareable != (fits && !inTx && u.Class != work.ClassReject):
+			t.Errorf("%q: shareable outside the definition: %s", q, clsDescribe(u))
+		case u.SafeRead && (u.Opaque || u.Statements != 1):
+			t.Errorf("%q: safe-read but the lexer disagrees: %s", q, clsDescribe(u))
+		case u.Hinted != hinted:
+			t.Errorf("%q: hinted %v, prefix %v", q, u.Hinted, hinted)
+		case u.Opaque == clean:
+			t.Errorf("%q: opaque %v, lexer clean %v", q, u.Opaque, clean)
+		case u.HasKey != (!inTx && u.Class != work.ClassReject && (u.Shareable || u.Hinted)):
+			t.Errorf("%q: key outside the definition: %s", q, clsDescribe(u))
 		case inTx && u.Class == work.ClassStartLease, !inTx && u.Class == work.ClassContinueLease:
 			t.Errorf("%q: lease class ignores the transaction state", q)
 		}
+	}
+	if err := c.Snapshot().Check(); err != nil {
+		t.Errorf("%q: %v", q, err)
 	}
 }
 

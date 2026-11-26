@@ -129,7 +129,7 @@ var ErrorRows = [ErrRowCount]ErrorRow{
 		"mini-gateway: extended query protocol not supported", work.No, work.No, "no, change the client", ErrorRowConnUsable, work.RefusalUnsupported, 5},
 	ErrRowCancelledQueued: {"cancelled-queued", "Cancelled while queued", ErrorRowError, "57014",
 		"canceling statement due to user request", work.No, work.No, "caller's choice", ErrorRowConnUsable, work.RefusalCancelledQueued, 7},
-	ErrRowLostAfterRead: {"lost-after-read", "Database connection lost or reply timed out after a statement classified read-only was sent, outside a transaction", ErrorRowError, "08006",
+	ErrRowLostAfterRead: {"lost-after-read", "Database connection lost or reply timed out after a statement that fits the safe shape (SafeRead) was sent, outside a transaction", ErrorRowError, "08006",
 		"mini-gateway: database connection lost", work.Yes, work.No, "yes", ErrorRowConnUsable, work.RefusalNone, 6},
 	ErrRowLostAfterWrite: {"lost-after-write", "Same, but the statement could write, or was COMMIT", ErrorRowError, "08007",
 		"mini-gateway: database connection lost; the transaction may have committed", work.Yes, work.Unknown, "not without checking", ErrorRowConnUsable, work.RefusalNone, 6},

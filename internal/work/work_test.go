@@ -54,11 +54,6 @@ func TestNamesCoverEveryValue(t *testing.T) {
 		}
 		seen["r"+r.String()] = true
 	}
-	for x := TxNone; x < NumTxEffects; x++ {
-		if x.String() == "invalid" {
-			t.Errorf("tx effect %d has no name", x)
-		}
-	}
 	for e := ErrNone; e < NumErrorClasses; e++ {
 		if e.String() == "invalid" {
 			t.Errorf("error class %d has no name", e)
@@ -74,13 +69,7 @@ func TestNamesCoverEveryValue(t *testing.T) {
 	}
 }
 
-func TestMayLeaveOpen(t *testing.T) {
-	want := map[TxEffect]Tri{TxNone: No, TxBegins: Yes, TxEnds: No, TxWithin: No, TxUnknown: Unknown}
-	for tx, w := range want {
-		if got := (Unit{Tx: tx}).MayLeaveOpen(); got != w {
-			t.Errorf("%s: got %s want %s", tx, got, w)
-		}
-	}
+func TestClassForwards(t *testing.T) {
 	if !ClassStartLease.Forwards() || !ClassContinueLease.Forwards() || ClassReject.Forwards() || ClassAnswerLocally.Forwards() {
 		t.Error("Forwards is wrong")
 	}

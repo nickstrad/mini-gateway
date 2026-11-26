@@ -1,357 +1,359 @@
 # Classifier corpus: one statement (one Query message) per record.
 # Format: <flags><TAB><text>. Text that starts with a double quote is a Go quoted string.
-# Flags: R:<reason> (rejected) or F (forwarded); ro (read-only-provable); co (coalescable);
-# tx:<none|begins|ends|within|unknown>; opaque; hint; bad (the lexer cannot tokenise it);
+# Flags: R:<reason> (rejected) or F (forwarded); fits (the text fits the safe shape: SafeRead,
+# and Shareable outside a transaction unless rejected); was-co (the first build classified it
+# coalescable; a record without was-co or new must never fit); new (added by the rework);
+# hint (begins with the exact bytes /* mg:share */); bad (the lexer cannot tokenise it: Opaque);
 # noexec (tier R does not run it; the reason is in NOTES.md). Flags not named are false.
 # --- plain reads
-F ro co tx:none	SELECT 1
-F ro co tx:none	select 1
-F ro co tx:none	SeLeCt 1
-F ro co tx:none	SELECT 'a'
-F ro co tx:none	SELECT v FROM kv WHERE k = 'a'
-F ro co tx:none	SELECT k, v FROM kv ORDER BY k LIMIT 10
-F ro co tx:none	SELECT count(*) FROM kv
-F ro co tx:none	SELECT COUNT(*) FROM kv
-F ro co tx:none	SELECT pg_catalog.count(*) FROM kv
-F ro co tx:none	SELECT lower(v), upper(k) FROM kv
-F ro co tx:none	SELECT coalesce(v, 'none') FROM kv WHERE k = 'a'
-F ro co tx:none	SELECT * FROM kv
-F ro co tx:none	SELECT kv.* FROM kv
-F ro co tx:none	SELECT * FROM public.kv
-F ro co tx:none	SELECT a, b FROM t WHERE a > 1 AND b LIKE 'x%'
-F ro co tx:none	SELECT a FROM t WHERE a IN (1, 2, 3)
-F tx:none	SELECT a FROM t WHERE EXISTS (SELECT 1 FROM u WHERE u.a = 1)
-F ro co tx:none	SELECT sum(a), avg(a), max(a), min(a) FROM t GROUP BY b HAVING count(*) > 0
-F ro co tx:none	SELECT DISTINCT b FROM t
-F ro co tx:none	SELECT a FROM t UNION SELECT a FROM u
-F ro co tx:none	SELECT a FROM t UNION ALL SELECT a FROM u ORDER BY 1
-F ro co tx:none	SELECT a FROM t INTERSECT SELECT a FROM u
-F ro co tx:none	SELECT a FROM t EXCEPT SELECT a FROM u
-F ro co tx:none	SELECT CASE WHEN a > 1 THEN 'big' ELSE 'small' END FROM t
-F ro co tx:none	SELECT a::text, b::varchar(10) FROM t
-F ro co tx:none	SELECT CAST(a AS bigint) FROM t
-F ro co tx:none	SELECT row_number() OVER (ORDER BY a) FROM t
-F ro co tx:none	SELECT rank() OVER w FROM t WINDOW w AS (PARTITION BY b ORDER BY a)
-F ro co tx:none	SELECT count(*) FILTER (WHERE a > 1) FROM t
-F ro co tx:none	SELECT string_agg(b, ',' ORDER BY b) FROM t
-F ro co tx:none	SELECT x FROM (SELECT a AS x FROM t) sub
-F ro co tx:none	SELECT x, y FROM (SELECT a, b FROM t) AS sub(x, y)
-F ro co tx:none	SELECT * FROM generate_series(1, 3)
-F ro co tx:none	SELECT * FROM generate_series(1, 3) AS g(n)
-F tx:none	SELECT t.a, u.b FROM t JOIN u ON t.a = u.a
-F tx:none	SELECT t.a FROM t
-F ro co tx:none	SELECT a FROM t LEFT JOIN u USING (a)
-F ro co tx:none	SELECT length('abc'), substring('abcdef' FROM 2 FOR 3)
-F ro co tx:none	SELECT substring('abcdef', 2, 3), position('b' IN 'abc')
-F ro co tx:none	SELECT trim(both ' ' FROM ' x '), overlay('abc' PLACING 'z' FROM 2)
-F ro tx:none	SELECT extract(year FROM DATE '2020-01-02')
-F ro tx:none	SELECT date_trunc('day', TIMESTAMP '2020-01-02 03:04:05')
-F ro co tx:none	SELECT greatest(1, 2), least(1, 2), nullif(1, 1)
-F ro co tx:none	SELECT abs(-1), round(1.5), floor(1.5), ceil(1.5), mod(7, 3), power(2, 10)
-F ro co tx:none	SELECT md5('x'), to_hex(255), repeat('ab', 3), reverse('abc')
-F ro co tx:none	SELECT concat('a', 'b'), concat_ws(',', 'a', 'b'), format('%s', 1)
-F ro co tx:none	SELECT left('abc', 1), right('abc', 1)
-F ro co tx:none	SELECT jsonb_build_object('a', 1), json_build_array(1, 2)
-F ro co tx:none	SELECT array_agg(a) FROM t
-F ro co tx:none	SELECT ARRAY[1, 2, 3]
-F ro co tx:none	SELECT ARRAY(SELECT a FROM t)
-F ro co tx:none	SELECT 1 + 2 * 3 - 4 / 2 % 3
-F ro co tx:none	SELECT 'a' || 'b'
-F ro co tx:none	SELECT '{"a":1}'::jsonb -> 'a', '{"a":1}'::jsonb ->> 'a'
-F ro co tx:none	SELECT '{"a":1}'::jsonb @> '{}'::jsonb
-F ro co tx:none	SELECT 'abc' ~ 'b', 'abc' ~* 'B', 'abc' !~ 'z'
-F ro co tx:none	SELECT a FROM t WHERE b IS NOT NULL AND a BETWEEN 1 AND 5
-F ro co tx:none	SELECT a FROM t WHERE b IS DISTINCT FROM 'x'
-F ro co tx:none	SELECT 1.5e3, .5, 0x1F, 1_000
-F ro tx:none	SELECT E'it\'s', 'it''s'
-F ro co tx:none	SELECT $$dollar$$, $tag$tagged$tag$
-F ro tx:none	SELECT U&'d\0061t\+000061'
-F ro co tx:none	SELECT B'0101', X'1F', N'national'
-F ro co tx:none	SELECT "a" FROM t
-F ro co tx:none	SELECT a AS "Select" FROM t
-F ro co tx:none	SELECT 1 AS execute_count
-F ro co tx:none	SELECT a FROM t ORDER BY a DESC NULLS LAST OFFSET 1 LIMIT 2
-F ro co tx:none	SELECT a FROM t FETCH FIRST 1 ROWS ONLY
-F ro co tx:none	SELECT current_database()
-F ro co tx:none	SELECT version()
-F ro co tx:none	SELECT 1 WHERE true
-F ro tx:none	(SELECT 1)
-F ro tx:none	(SELECT a FROM t) UNION (SELECT a FROM u)
-F ro co tx:none	SELECT 1;
-F ro co tx:none	SELECT 1;;;
-F ro co tx:none	;SELECT 1
-F ro co tx:none	"SELECT\t1"
-F ro co tx:none	"SELECT\n1\n"
-F ro co tx:none	"\n\n  SELECT 1  \n"
-F ro co tx:none	"SELECT\r\n1"
-F ro co tx:none	"SELECT\f1\v"
-F ro co tx:none	SELECT/**/1
-F ro co tx:none	SELECT 1 -- trailing comment
-F ro co tx:none	"-- leading\nSELECT 1"
-F ro co tx:none	/* leading */ SELECT 1
-F ro co tx:none	/* nested /* inner */ still */ SELECT 1
-F ro co tx:none	SELECT lower /* gap */ (v) FROM kv
-F ro co tx:none	"SELECT lower\n(v) FROM kv"
-F ro co tx:none	SELECT pg_catalog . lower(v) FROM kv
-F ro co tx:none	SELECT "lower"(v) FROM kv
-F ro co tx:none	SELECT "pg_catalog"."lower"(v) FROM kv
-F ro co tx:none	SELECT a FROM t WHERE b = 'DELETE FROM t'
-F ro co tx:none	SELECT 'INSERT INTO kv VALUES (1, 2)'
-F ro co tx:none	SELECT 'SET search_path = x'
-F ro co tx:none	SELECT 'pg_advisory_lock(1)'
-F ro co tx:none	SELECT 'set_config(''a'', ''b'', false)'
-F ro co tx:none	SELECT $$ DROP TABLE kv; SET x = 1 $$
-F ro co tx:none	SELECT $q$ ; LISTEN x ; $q$
-F ro tx:none	SELECT E'\'; DROP TABLE kv; --'
-F ro co tx:none	SELECT 1 /* ; DELETE FROM kv */
-F ro co tx:none	"SELECT 1 -- ; SET search_path = x\n"
-F ro co tx:none	SELECT "update" FROM (SELECT 1 AS "update") s
-F ro co tx:none	SELECT "for" FROM (SELECT 1 AS "for") s
-F ro co tx:none	SELECT 1 AS "pg_advisory_lock"
-F ro co tx:none	SELECT 'a' AS temp
-F ro co tx:none	SELECT a AS temp_value FROM t
-F ro co tx:none	SELECT 1 FROM t AS temp
-F ro co tx:none	SELECT temp FROM (SELECT 1 AS temp) s
-F ro co tx:none hint	/* mg:share */ SELECT v FROM kv WHERE k = 'a'
-F ro co tx:none hint	/*mg:share*/SELECT 1
-F ro co tx:none hint	"  /*   mg:share   */\nSELECT 1"
-F ro co tx:none	SELECT 1 /* mg:share */
-F ro co tx:none	/* mg:shared */ SELECT 1
-F ro tx:none	WITH x AS (SELECT 1 AS a) SELECT a FROM x
-F ro tx:none	SELECT e'x\'y'
-F ro tx:none	SELECT u&'d\0061t'
-F ro co tx:none noexec	"SELECT 'caf\xe9'"
-F ro co tx:none noexec	"SELECT \xff\xfe FROM (SELECT 1 AS \"\xff\xfe\") s"
-F ro co tx:none	SELECT 'café', 'ü' AS "ä"
-F ro co tx:none	SELECT a FROM t WHERE b = 'x' AND a <> 2 AND a != 3 AND a >= 1 AND a <= 9
+F fits was-co	SELECT 1
+F fits was-co	select 1
+F fits was-co	SeLeCt 1
+F fits was-co	SELECT 'a'
+F fits was-co	SELECT v FROM kv WHERE k = 'a'
+F fits was-co	SELECT k, v FROM kv ORDER BY k LIMIT 10
+F fits was-co	SELECT count(*) FROM kv
+F fits was-co	SELECT COUNT(*) FROM kv
+F was-co	SELECT pg_catalog.count(*) FROM kv
+F fits was-co	SELECT lower(v), upper(k) FROM kv
+F fits was-co	SELECT coalesce(v, 'none') FROM kv WHERE k = 'a'
+F fits was-co	SELECT * FROM kv
+F was-co	SELECT kv.* FROM kv
+F was-co	SELECT * FROM public.kv
+F was-co	SELECT a, b FROM t WHERE a > 1 AND b LIKE 'x%'
+F fits was-co	SELECT a FROM t WHERE a IN (1, 2, 3)
+F	SELECT a FROM t WHERE EXISTS (SELECT 1 FROM u WHERE u.a = 1)
+F fits was-co	SELECT sum(a), avg(a), max(a), min(a) FROM t GROUP BY b HAVING count(*) > 0
+F fits was-co	SELECT DISTINCT b FROM t
+F fits was-co	SELECT a FROM t UNION SELECT a FROM u
+F fits was-co	SELECT a FROM t UNION ALL SELECT a FROM u ORDER BY 1
+F fits was-co	SELECT a FROM t INTERSECT SELECT a FROM u
+F fits was-co	SELECT a FROM t EXCEPT SELECT a FROM u
+F fits was-co	SELECT CASE WHEN a > 1 THEN 'big' ELSE 'small' END FROM t
+F was-co	SELECT a::text, b::varchar(10) FROM t
+F was-co	SELECT CAST(a AS bigint) FROM t
+F was-co	SELECT row_number() OVER (ORDER BY a) FROM t
+F was-co	SELECT rank() OVER w FROM t WINDOW w AS (PARTITION BY b ORDER BY a)
+F was-co	SELECT count(*) FILTER (WHERE a > 1) FROM t
+F fits was-co	SELECT string_agg(b, ',' ORDER BY b) FROM t
+F fits was-co	SELECT x FROM (SELECT a AS x FROM t) sub
+F was-co	SELECT x, y FROM (SELECT a, b FROM t) AS sub(x, y)
+F was-co	SELECT * FROM generate_series(1, 3)
+F was-co	SELECT * FROM generate_series(1, 3) AS g(n)
+F	SELECT t.a, u.b FROM t JOIN u ON t.a = u.a
+F	SELECT t.a FROM t
+F was-co	SELECT a FROM t LEFT JOIN u USING (a)
+F was-co	SELECT length('abc'), substring('abcdef' FROM 2 FOR 3)
+F was-co	SELECT substring('abcdef', 2, 3), position('b' IN 'abc')
+F was-co	SELECT trim(both ' ' FROM ' x '), overlay('abc' PLACING 'z' FROM 2)
+F	SELECT extract(year FROM DATE '2020-01-02')
+F	SELECT date_trunc('day', TIMESTAMP '2020-01-02 03:04:05')
+F fits was-co	SELECT greatest(1, 2), least(1, 2), nullif(1, 1)
+F was-co	SELECT abs(-1), round(1.5), floor(1.5), ceil(1.5), mod(7, 3), power(2, 10)
+F fits was-co	SELECT md5('x'), to_hex(255), repeat('ab', 3), reverse('abc')
+F was-co	SELECT concat('a', 'b'), concat_ws(',', 'a', 'b'), format('%s', 1)
+F fits was-co	SELECT left('abc', 1), right('abc', 1)
+F was-co	SELECT jsonb_build_object('a', 1), json_build_array(1, 2)
+F was-co	SELECT array_agg(a) FROM t
+F was-co	SELECT ARRAY[1, 2, 3]
+F was-co	SELECT ARRAY(SELECT a FROM t)
+F was-co	SELECT 1 + 2 * 3 - 4 / 2 % 3
+F was-co	SELECT 'a' || 'b'
+F was-co	SELECT '{"a":1}'::jsonb -> 'a', '{"a":1}'::jsonb ->> 'a'
+F was-co	SELECT '{"a":1}'::jsonb @> '{}'::jsonb
+F was-co	SELECT 'abc' ~ 'b', 'abc' ~* 'B', 'abc' !~ 'z'
+F fits was-co	SELECT a FROM t WHERE b IS NOT NULL AND a BETWEEN 1 AND 5
+F fits was-co	SELECT a FROM t WHERE b IS DISTINCT FROM 'x'
+F was-co	SELECT 1.5e3, .5, 0x1F, 1_000
+F	SELECT E'it\'s', 'it''s'
+F was-co	SELECT $$dollar$$, $tag$tagged$tag$
+F	SELECT U&'d\0061t\+000061'
+F was-co	SELECT B'0101', X'1F', N'national'
+F was-co	SELECT "a" FROM t
+F was-co	SELECT a AS "Select" FROM t
+F fits was-co	SELECT 1 AS execute_count
+F fits was-co	SELECT a FROM t ORDER BY a DESC NULLS LAST OFFSET 1 LIMIT 2
+F was-co	SELECT a FROM t FETCH FIRST 1 ROWS ONLY
+F was-co	SELECT current_database()
+F was-co	SELECT version()
+F fits was-co	SELECT 1 WHERE true
+F	(SELECT 1)
+F	(SELECT a FROM t) UNION (SELECT a FROM u)
+F was-co	SELECT 1;
+F was-co	SELECT 1;;;
+F was-co	;SELECT 1
+F was-co	"SELECT\t1"
+F was-co	"SELECT\n1\n"
+F was-co	"\n\n  SELECT 1  \n"
+F was-co	"SELECT\r\n1"
+F was-co	"SELECT\f1\v"
+F was-co	SELECT/**/1
+F was-co	SELECT 1 -- trailing comment
+F was-co	"-- leading\nSELECT 1"
+F was-co	/* leading */ SELECT 1
+F was-co	/* nested /* inner */ still */ SELECT 1
+F was-co	SELECT lower /* gap */ (v) FROM kv
+F was-co	"SELECT lower\n(v) FROM kv"
+F was-co	SELECT pg_catalog . lower(v) FROM kv
+F was-co	SELECT "lower"(v) FROM kv
+F was-co	SELECT "pg_catalog"."lower"(v) FROM kv
+F fits was-co	SELECT a FROM t WHERE b = 'DELETE FROM t'
+F fits was-co	SELECT 'INSERT INTO kv VALUES (1, 2)'
+F fits was-co	SELECT 'SET search_path = x'
+F fits was-co	SELECT 'pg_advisory_lock(1)'
+F fits was-co	SELECT 'set_config(''a'', ''b'', false)'
+F was-co	SELECT $$ DROP TABLE kv; SET x = 1 $$
+F was-co	SELECT $q$ ; LISTEN x ; $q$
+F	SELECT E'\'; DROP TABLE kv; --'
+F was-co	SELECT 1 /* ; DELETE FROM kv */
+F was-co	"SELECT 1 -- ; SET search_path = x\n"
+F was-co	SELECT "update" FROM (SELECT 1 AS "update") s
+F was-co	SELECT "for" FROM (SELECT 1 AS "for") s
+F was-co	SELECT 1 AS "pg_advisory_lock"
+F fits was-co	SELECT 'a' AS temp
+F fits was-co	SELECT a AS temp_value FROM t
+F fits was-co	SELECT 1 FROM t AS temp
+F fits was-co	SELECT temp FROM (SELECT 1 AS temp) s
+F was-co hint	/* mg:share */ SELECT v FROM kv WHERE k = 'a'
+F was-co	/*mg:share*/SELECT 1
+F was-co	"  /*   mg:share   */\nSELECT 1"
+F was-co	SELECT 1 /* mg:share */
+F was-co	/* mg:shared */ SELECT 1
+F	WITH x AS (SELECT 1 AS a) SELECT a FROM x
+F	SELECT e'x\'y'
+F	SELECT u&'d\0061t'
+F was-co noexec	"SELECT 'caf\xe9'"
+F was-co noexec	"SELECT \xff\xfe FROM (SELECT 1 AS \"\xff\xfe\") s"
+F was-co	SELECT 'café', 'ü' AS "ä"
+F was-co	SELECT a FROM t WHERE b = 'x' AND a <> 2 AND a != 3 AND a >= 1 AND a <= 9
 # --- read-only but not coalescable
-F ro tx:none	VALUES (1), (2)
-F ro tx:none	TABLE kv
-F ro tx:none	SHOW search_path
-F ro tx:none	SHOW ALL
-F ro tx:none	EXPLAIN SELECT 1
-F ro tx:none	EXPLAIN (COSTS false) SELECT * FROM kv
-F ro tx:none	EXPLAIN VERBOSE SELECT 1
-F ro tx:none	WITH x AS (SELECT a FROM t) SELECT * FROM x
-F ro tx:none	WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3) SELECT n FROM r
-F ro tx:none	SELECT now()
-F ro tx:none	SELECT NOW()
-F ro tx:none	SELECT pg_catalog.now()
-F ro tx:none	SELECT current_timestamp
-F ro tx:none	SELECT CURRENT_TIMESTAMP(3)
-F ro tx:none	SELECT current_date, current_time, localtime, localtimestamp
-F ro tx:none	SELECT current_user, session_user, user, current_role
-F ro tx:none	SELECT current_schema
-F ro tx:none	SELECT current_catalog
-F ro tx:none	SELECT random()
-F ro tx:none	SELECT a FROM t ORDER BY random()
-F ro tx:none	SELECT gen_random_uuid()
-F ro tx:none	SELECT clock_timestamp(), statement_timestamp(), transaction_timestamp(), timeofday()
-F ro tx:none	SELECT pg_backend_pid()
-F ro tx:none	SELECT current_setting('search_path')
-F ro tx:none	SELECT pg_sleep(0)
-F ro tx:none	SELECT v, pg_sleep(0) IS NOT NULL FROM kv WHERE k = 'a'
-F ro tx:none	SELECT age(TIMESTAMP '2020-01-01')
-F tx:none	SELECT * FROM t TABLESAMPLE BERNOULLI (50)
-F ro tx:none	SELECT 1; SELECT 2
-F ro tx:none	SELECT 1; SELECT 2; SELECT 3
-F ro tx:none	SELECT 1; VALUES (2)
+F	VALUES (1), (2)
+F	TABLE kv
+F	SHOW search_path
+F	SHOW ALL
+F	EXPLAIN SELECT 1
+F	EXPLAIN (COSTS false) SELECT * FROM kv
+F	EXPLAIN VERBOSE SELECT 1
+F	WITH x AS (SELECT a FROM t) SELECT * FROM x
+F	WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3) SELECT n FROM r
+F	SELECT now()
+F	SELECT NOW()
+F	SELECT pg_catalog.now()
+F	SELECT current_timestamp
+F	SELECT CURRENT_TIMESTAMP(3)
+F	SELECT current_date, current_time, localtime, localtimestamp
+F	SELECT current_user, session_user, user, current_role
+F	SELECT current_schema
+F	SELECT current_catalog
+F	SELECT random()
+F	SELECT a FROM t ORDER BY random()
+F	SELECT gen_random_uuid()
+F	SELECT clock_timestamp(), statement_timestamp(), transaction_timestamp(), timeofday()
+F	SELECT pg_backend_pid()
+F	SELECT current_setting('search_path')
+F	SELECT pg_sleep(0)
+F	SELECT v, pg_sleep(0) IS NOT NULL FROM kv WHERE k = 'a'
+F	SELECT age(TIMESTAMP '2020-01-01')
+F	SELECT * FROM t TABLESAMPLE BERNOULLI (50)
+F	SELECT 1; SELECT 2
+F	SELECT 1; SELECT 2; SELECT 3
+F	SELECT 1; VALUES (2)
 # --- reads that the classifier cannot prove (false negatives are allowed)
-F tx:none	SELECT my_func(1)
-F tx:none	SELECT unknown_function()
-F tx:none	SELECT public.lower(v) FROM kv
-F tx:none	SELECT myschema.f(1)
-F tx:none	SELECT "LOWER"(v) FROM kv
-F tx:none	SELECT nextval('s')
-F tx:none	SELECT NEXTVAL('s')
-F tx:none	SELECT setval('s', 1)
-F tx:none	SELECT currval('s')
-F tx:none	SELECT lastval()
-F tx:none	SELECT txid_current()
-F tx:none	SELECT txid_current() IS NOT NULL
-F tx:none	SELECT pg_notify('c', 'x')
-F tx:none	SELECT dblink('x', 'y')
-F tx:none	SELECT pg_terminate_backend(1)
-F tx:none	SELECT pg_cancel_backend(1)
-F tx:none	SELECT pg_reload_conf()
-F tx:none	SELECT lo_create(0)
-F tx:none	SELECT pg_advisory_xact_lock(1)
-F tx:none	SELECT pg_try_advisory_xact_lock(1)
-F tx:none	SELECT pg_advisory_xact_lock_shared(1)
-F tx:none	SELECT pg_try_advisory_xact_lock_shared(1)
-F tx:none	SELECT set_config('search_path', 'public', true)
-F tx:none	SELECT set_config('search_path', 'public', TRUE)
-F tx:none	SELECT pg_catalog.set_config('search_path', 'public', true)
-F tx:none	SELECT set_config('a.b', 'c', /* local */ true)
-F tx:none	SELECT setseed(0.5)
-F tx:none	SELECT a FROM t FOR UPDATE
-F tx:none	SELECT a FROM t FOR SHARE
-F tx:none	SELECT a FROM t FOR NO KEY UPDATE
-F tx:none	SELECT a FROM t FOR KEY SHARE
-F tx:none	SELECT a FROM t FOR UPDATE SKIP LOCKED
-F tx:none	SELECT a FROM t FOR UPDATE OF t NOWAIT
-F tx:none	select a from t for update
-F tx:none	SELECT * INTO newt FROM t
-F tx:none	SELECT a INTO UNLOGGED newt FROM t
-F tx:none	SELECT a INTO TABLE newt FROM t
-F tx:none	WITH d AS (DELETE FROM kv WHERE k = 'a' RETURNING *) SELECT * FROM d
-F tx:none	WITH i AS (INSERT INTO kv VALUES ('z', 'z') RETURNING k) SELECT k FROM i
-F tx:none	WITH u AS (UPDATE kv SET v = 'b' WHERE k = 'a' RETURNING v) SELECT v FROM u
-F tx:none	WITH x AS (SELECT 1) , d AS (DELETE FROM t RETURNING a) SELECT * FROM d
-F tx:none	WITH m AS MATERIALIZED (SELECT 1 AS a), d AS (delete from t returning a) SELECT * FROM m, d
-F tx:none	SELECT * FROM (WITH d AS (DELETE FROM t RETURNING a) SELECT a FROM d) s
-F tx:none	EXPLAIN ANALYZE SELECT 1
-F tx:none	EXPLAIN ANALYSE SELECT 1
-F tx:none	EXPLAIN (ANALYZE) SELECT 1
-F tx:none	EXPLAIN (ANALYZE false) SELECT 1
-F tx:none	EXPLAIN DELETE FROM t
-F tx:none	EXPLAIN ANALYZE DELETE FROM t
-F tx:none	SELECT a FROM t WHERE a = $1
-F tx:none	SELECT 1 OPERATOR(pg_catalog.+) 2
-F ro co tx:none	SELECT 1 +++ 2
-F tx:none	SELECT x.writes FROM t x
-F tx:none	SELECT (t).a FROM t
-F tx:none	SELECT a FROM t, public.u
-F tx:none	SELECT 1; INSERT INTO t VALUES (1, 'a')
-F tx:none	INSERT INTO t VALUES (1, 'a'); SELECT 1
-F tx:none	SELECT pg_catalog.pg_catalog.lower('a')
-F tx:none	SELECT lower(v) FROM kv WHERE k = (SELECT nextval('s')::text)
-F tx:none	SELECT 1 AS update
+F	SELECT my_func(1)
+F	SELECT unknown_function()
+F	SELECT public.lower(v) FROM kv
+F	SELECT myschema.f(1)
+F	SELECT "LOWER"(v) FROM kv
+F	SELECT nextval('s')
+F	SELECT NEXTVAL('s')
+F	SELECT setval('s', 1)
+F	SELECT currval('s')
+F	SELECT lastval()
+F	SELECT txid_current()
+F	SELECT txid_current() IS NOT NULL
+F	SELECT pg_notify('c', 'x')
+F	SELECT dblink('x', 'y')
+F	SELECT pg_terminate_backend(1)
+F	SELECT pg_cancel_backend(1)
+F	SELECT pg_reload_conf()
+F	SELECT lo_create(0)
+F	SELECT pg_advisory_xact_lock(1)
+F	SELECT pg_try_advisory_xact_lock(1)
+F	SELECT pg_advisory_xact_lock_shared(1)
+F	SELECT pg_try_advisory_xact_lock_shared(1)
+F	SELECT set_config('search_path', 'public', true)
+F	SELECT set_config('search_path', 'public', TRUE)
+F	SELECT pg_catalog.set_config('search_path', 'public', true)
+F	SELECT set_config('a.b', 'c', /* local */ true)
+F	SELECT setseed(0.5)
+F	SELECT a FROM t FOR UPDATE
+F	SELECT a FROM t FOR SHARE
+F	SELECT a FROM t FOR NO KEY UPDATE
+F	SELECT a FROM t FOR KEY SHARE
+F	SELECT a FROM t FOR UPDATE SKIP LOCKED
+F	SELECT a FROM t FOR UPDATE OF t NOWAIT
+F	select a from t for update
+F	SELECT * INTO newt FROM t
+F	SELECT a INTO UNLOGGED newt FROM t
+F	SELECT a INTO TABLE newt FROM t
+F	WITH d AS (DELETE FROM kv WHERE k = 'a' RETURNING *) SELECT * FROM d
+F	WITH i AS (INSERT INTO kv VALUES ('z', 'z') RETURNING k) SELECT k FROM i
+F	WITH u AS (UPDATE kv SET v = 'b' WHERE k = 'a' RETURNING v) SELECT v FROM u
+F	WITH x AS (SELECT 1) , d AS (DELETE FROM t RETURNING a) SELECT * FROM d
+F	WITH m AS MATERIALIZED (SELECT 1 AS a), d AS (delete from t returning a) SELECT * FROM m, d
+F	SELECT * FROM (WITH d AS (DELETE FROM t RETURNING a) SELECT a FROM d) s
+F	EXPLAIN ANALYZE SELECT 1
+F	EXPLAIN ANALYSE SELECT 1
+F	EXPLAIN (ANALYZE) SELECT 1
+F	EXPLAIN (ANALYZE false) SELECT 1
+F	EXPLAIN DELETE FROM t
+F	EXPLAIN ANALYZE DELETE FROM t
+F	SELECT a FROM t WHERE a = $1
+F	SELECT 1 OPERATOR(pg_catalog.+) 2
+F was-co	SELECT 1 +++ 2
+F	SELECT x.writes FROM t x
+F	SELECT (t).a FROM t
+F	SELECT a FROM t, public.u
+F	SELECT 1; INSERT INTO t VALUES (1, 'a')
+F	INSERT INTO t VALUES (1, 'a'); SELECT 1
+F	SELECT pg_catalog.pg_catalog.lower('a')
+F	SELECT lower(v) FROM kv WHERE k = (SELECT nextval('s')::text)
+F	SELECT 1 AS update
 # --- writes and other forwarded statements
-F tx:none	INSERT INTO kv VALUES ('n', 'v')
-F tx:none	INSERT INTO kv (k, v) VALUES ('n2', 'v') ON CONFLICT (k) DO NOTHING
-F tx:none	INSERT INTO kv SELECT k || 'x', v FROM kv
-F tx:none	UPDATE kv SET v = 'x' WHERE k = 'a'
-F tx:none	update kv set v = 'x'
-F tx:none	DELETE FROM kv WHERE k = 'a'
-F tx:none	MERGE INTO kv USING (SELECT 'a' AS k) s ON kv.k = s.k WHEN MATCHED THEN UPDATE SET v = 'm'
-F tx:none	TRUNCATE kv
-F tx:none	CREATE TABLE newt (a int)
-F tx:none	CREATE TABLE newt AS SELECT 1 AS a
-F tx:none	CREATE UNLOGGED TABLE newt (a int)
-F tx:none	CREATE INDEX ON t (a)
-F tx:none	CREATE VIEW v AS SELECT 1 AS a
-F tx:none	CREATE SEQUENCE s2
-F tx:none	CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$
-F tx:none	CREATE FUNCTION f2() RETURNS void LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0); END $$
-F tx:none	CREATE TABLE newt (a int) WITH (fillfactor = 70)
-F tx:none	ALTER TABLE t ADD COLUMN c int
-F tx:none	ALTER TABLE t ALTER COLUMN b SET DEFAULT 'x'
-F tx:none	ALTER TABLE t SET (fillfactor = 70)
-F tx:none	ALTER ROLE CURRENT_USER SET work_mem = '4MB'
-F tx:none	ALTER DATABASE postgres SET work_mem = '4MB'
-F tx:none	ALTER SYSTEM SET work_mem = '4MB'
-F tx:none	DROP TABLE IF EXISTS nothere
-F tx:none	GRANT SELECT ON t TO PUBLIC
-F tx:none	REVOKE SELECT ON t FROM PUBLIC
-F tx:none	COMMENT ON TABLE t IS 'c'
-F tx:none	ANALYZE t
-F tx:none	VACUUM t
-F tx:none	REINDEX TABLE t
-F tx:none	CLUSTER
-F tx:none	CHECKPOINT
-F tx:none	LOCK TABLE kv IN SHARE MODE
-F tx:none	NOTIFY jobs
-F tx:none	NOTIFY jobs, 'payload'
-F tx:none	SET LOCAL statement_timeout = '5s'
-F tx:none	set local search_path to public
-F tx:none	SET LOCAL ROLE postgres
-F tx:none	SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
-F tx:none	SET TRANSACTION READ ONLY
-F tx:none	SET CONSTRAINTS ALL DEFERRED
-F tx:none	DECLARE c CURSOR FOR SELECT 1
-F tx:none	DECLARE c CURSOR WITHOUT HOLD FOR SELECT 1
-F tx:none	DECLARE c SCROLL CURSOR FOR WITH hold AS (SELECT 1 AS a) SELECT a FROM hold
-F tx:none	FETCH NEXT FROM c
-F tx:none	MOVE NEXT FROM c
-F tx:none	CLOSE c
-F tx:none	CLOSE ALL
-F tx:none	REFRESH MATERIALIZED VIEW mv
-F tx:none	INSERT INTO temp VALUES (1)
-F tx:none	INSERT INTO "pg_advisory_lock" VALUES (1)
-F tx:none	CREATE TABLE "temp" (a int)
-F tx:none	CREATE TABLE temperature (a int)
-F ro co tx:none	SELECT 1 AS "SET"
-F tx:none	UPDATE kv SET v = 'x' WHERE k = 'a'; UPDATE kv SET v = 'y' WHERE k = 'b'
+F	INSERT INTO kv VALUES ('n', 'v')
+F	INSERT INTO kv (k, v) VALUES ('n2', 'v') ON CONFLICT (k) DO NOTHING
+F	INSERT INTO kv SELECT k || 'x', v FROM kv
+F	UPDATE kv SET v = 'x' WHERE k = 'a'
+F	update kv set v = 'x'
+F	DELETE FROM kv WHERE k = 'a'
+F	MERGE INTO kv USING (SELECT 'a' AS k) s ON kv.k = s.k WHEN MATCHED THEN UPDATE SET v = 'm'
+F	TRUNCATE kv
+F	CREATE TABLE newt (a int)
+F	CREATE TABLE newt AS SELECT 1 AS a
+F	CREATE UNLOGGED TABLE newt (a int)
+F	CREATE INDEX ON t (a)
+F	CREATE VIEW v AS SELECT 1 AS a
+F	CREATE SEQUENCE s2
+F	CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$
+F	CREATE FUNCTION f2() RETURNS void LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0); END $$
+F	CREATE TABLE newt (a int) WITH (fillfactor = 70)
+F	ALTER TABLE t ADD COLUMN c int
+F	ALTER TABLE t ALTER COLUMN b SET DEFAULT 'x'
+F	ALTER TABLE t SET (fillfactor = 70)
+F	ALTER ROLE CURRENT_USER SET work_mem = '4MB'
+F	ALTER DATABASE postgres SET work_mem = '4MB'
+F	ALTER SYSTEM SET work_mem = '4MB'
+F	DROP TABLE IF EXISTS nothere
+F	GRANT SELECT ON t TO PUBLIC
+F	REVOKE SELECT ON t FROM PUBLIC
+F	COMMENT ON TABLE t IS 'c'
+F	ANALYZE t
+F	VACUUM t
+F	REINDEX TABLE t
+F	CLUSTER
+F	CHECKPOINT
+F	LOCK TABLE kv IN SHARE MODE
+F	NOTIFY jobs
+F	NOTIFY jobs, 'payload'
+F	SET LOCAL statement_timeout = '5s'
+F	set local search_path to public
+F	SET LOCAL ROLE postgres
+F	SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
+F	SET TRANSACTION READ ONLY
+F	SET CONSTRAINTS ALL DEFERRED
+F	DECLARE c CURSOR FOR SELECT 1
+F	DECLARE c CURSOR WITHOUT HOLD FOR SELECT 1
+F	DECLARE c SCROLL CURSOR FOR WITH hold AS (SELECT 1 AS a) SELECT a FROM hold
+F	FETCH NEXT FROM c
+F	MOVE NEXT FROM c
+F	CLOSE c
+F	CLOSE ALL
+F	REFRESH MATERIALIZED VIEW mv
+F	INSERT INTO temp VALUES (1)
+F	INSERT INTO "pg_advisory_lock" VALUES (1)
+F	CREATE TABLE "temp" (a int)
+F	CREATE TABLE temperature (a int)
+F was-co	SELECT 1 AS "SET"
+F	UPDATE kv SET v = 'x' WHERE k = 'a'; UPDATE kv SET v = 'y' WHERE k = 'b'
 # --- transaction control
-F tx:begins	BEGIN
-F tx:begins	begin
-F tx:begins	BEGIN WORK
-F tx:begins	BEGIN TRANSACTION
-F tx:begins	BEGIN ISOLATION LEVEL SERIALIZABLE
-F tx:begins	BEGIN READ ONLY
-F tx:begins	START TRANSACTION
-F tx:begins	START TRANSACTION READ WRITE
-F tx:begins	BEGIN; SELECT 1
-F tx:begins	BEGIN; INSERT INTO kv VALUES ('q', 'q')
-F tx:begins	SELECT 1; BEGIN
-F tx:begins	BEGIN; COMMIT
-F tx:begins	BEGIN; SELECT 1; COMMIT
-F tx:begins	COMMIT; BEGIN
-F tx:begins	BEGIN; SELECT 1/0; COMMIT
-F tx:begins	BeGiN
-F tx:begins	/* c */ BEGIN /* d */
-F tx:begins	COMMIT AND CHAIN
-F tx:begins	ROLLBACK AND CHAIN
-F tx:begins	END AND CHAIN
-F tx:ends	COMMIT
-F tx:ends	commit
-F tx:ends	COMMIT WORK
-F tx:ends	COMMIT TRANSACTION
-F tx:ends	COMMIT AND NO CHAIN
-F tx:ends	END
-F tx:ends	END TRANSACTION
-F tx:ends	ROLLBACK
-F tx:ends	ROLLBACK WORK
-F tx:ends	ABORT
-F tx:ends	ABORT TRANSACTION
-F tx:ends	SELECT 1; COMMIT
-F tx:ends	COMMIT; SELECT 1
-F tx:ends	ROLLBACK; SELECT 1
-F tx:within	SAVEPOINT a
-F tx:within	RELEASE a
-F tx:within	RELEASE SAVEPOINT a
-F tx:within	ROLLBACK TO a
-F tx:within	ROLLBACK TO SAVEPOINT a
-F tx:within	ROLLBACK TRANSACTION TO SAVEPOINT a
-F tx:within	SELECT 1; SAVEPOINT a
-F tx:unknown opaque	COMMIT SOMETHING ELSE
-F tx:unknown opaque	START SOMETHING
-F tx:unknown opaque	CALL proc()
-F tx:unknown opaque	DO $$ BEGIN PERFORM 1; END $$
-F tx:unknown opaque	do 'BEGIN PERFORM 1; END'
-F tx:unknown opaque	CREATE FUNCTION f3() RETURNS int LANGUAGE sql BEGIN ATOMIC SELECT 1; END
-F tx:unknown opaque	IMPORT FOREIGN SCHEMA s FROM SERVER x INTO y
-F tx:unknown opaque	SECURITY LABEL ON TABLE t IS 'x'
-F tx:unknown opaque	REASSIGN OWNED BY a TO b
-F tx:unknown opaque	FOO BAR
-F tx:unknown opaque	SELECT 1; CALL proc()
-F tx:unknown opaque	BEGIN; CALL proc()
+F	BEGIN
+F	begin
+F	BEGIN WORK
+F	BEGIN TRANSACTION
+F	BEGIN ISOLATION LEVEL SERIALIZABLE
+F	BEGIN READ ONLY
+F	START TRANSACTION
+F	START TRANSACTION READ WRITE
+F	BEGIN; SELECT 1
+F	BEGIN; INSERT INTO kv VALUES ('q', 'q')
+F	SELECT 1; BEGIN
+F	BEGIN; COMMIT
+F	BEGIN; SELECT 1; COMMIT
+F	COMMIT; BEGIN
+F	BEGIN; SELECT 1/0; COMMIT
+F	BeGiN
+F	/* c */ BEGIN /* d */
+F	COMMIT AND CHAIN
+F	ROLLBACK AND CHAIN
+F	END AND CHAIN
+F	COMMIT
+F	commit
+F	COMMIT WORK
+F	COMMIT TRANSACTION
+F	COMMIT AND NO CHAIN
+F	END
+F	END TRANSACTION
+F	ROLLBACK
+F	ROLLBACK WORK
+F	ABORT
+F	ABORT TRANSACTION
+F	SELECT 1; COMMIT
+F	COMMIT; SELECT 1
+F	ROLLBACK; SELECT 1
+F	SAVEPOINT a
+F	RELEASE a
+F	RELEASE SAVEPOINT a
+F	ROLLBACK TO a
+F	ROLLBACK TO SAVEPOINT a
+F	ROLLBACK TRANSACTION TO SAVEPOINT a
+F	SELECT 1; SAVEPOINT a
+F	COMMIT SOMETHING ELSE
+F	START SOMETHING
+F	CALL proc()
+F	DO $$ BEGIN PERFORM 1; END $$
+F	do 'BEGIN PERFORM 1; END'
+F	CREATE FUNCTION f3() RETURNS int LANGUAGE sql BEGIN ATOMIC SELECT 1; END
+F	IMPORT FOREIGN SCHEMA s FROM SERVER x INTO y
+F	SECURITY LABEL ON TABLE t IS 'x'
+F	REASSIGN OWNED BY a TO b
+F	FOO BAR
+F	SELECT 1; CALL proc()
+F	BEGIN; CALL proc()
 # --- empty messages
-F tx:none	
-F tx:none	;
-F tx:none	;;
-F tx:none	"   "
-F tx:none	-- only a comment
-F tx:none	/* only a comment */
-F tx:none	"/* a */ ; -- b\n ;"
-F tx:none hint	/* mg:share */
+F	
+F	;
+F	;;
+F	"   "
+F	-- only a comment
+F	/* only a comment */
+F	"/* a */ ; -- b\n ;"
+F hint	/* mg:share */
 # --- untokenisable messages: forwarded, never read-only, never coalescable
-F tx:unknown opaque bad	SELECT 'unterminated
-F tx:unknown opaque bad	SELECT E'unterminated\'
-F tx:unknown opaque bad	SELECT "unterminated
-F tx:unknown opaque bad	SELECT $$unterminated
-F tx:unknown opaque bad	SELECT $a$ unterminated $b$
-F tx:unknown opaque bad	SELECT 1 /* unterminated
-F tx:unknown opaque bad	SELECT 1 /* nested /* unterminated */
-F tx:unknown opaque bad	SELECT 1 \ 2
-F tx:unknown opaque bad	SELECT {1}
-F tx:unknown opaque bad	SELECT $ 1
-F tx:unknown opaque bad	"SELECT 1\x01"
-F tx:unknown opaque bad	BEGIN; SELECT 'x
-F tx:unknown opaque bad hint	/* mg:share */ SELECT 'x
-F tx:unknown opaque	SELECT U&"a\00" FROM t
-F tx:unknown opaque bad	SELECT U&'unterminated
+F bad	SELECT 'unterminated
+F bad	SELECT E'unterminated\'
+F bad	SELECT "unterminated
+F bad	SELECT $$unterminated
+F bad	SELECT $a$ unterminated $b$
+F bad	SELECT 1 /* unterminated
+F bad	SELECT 1 /* nested /* unterminated */
+F bad	SELECT 1 \ 2
+F bad	SELECT {1}
+F bad	SELECT $ 1
+F bad	"SELECT 1\x01"
+F bad	BEGIN; SELECT 'x
+F bad hint	/* mg:share */ SELECT 'x
+F	SELECT U&"a\00" FROM t
+F bad	SELECT U&'unterminated
 # --- session SET and RESET
 R:session-set	SET search_path = app
 R:session-set	SET search_path TO app
@@ -409,17 +411,17 @@ R:set-config	SELECT set_config('standard_' || 'conforming_strings', 'off', true)
 R:set-config	SELECT set_config($$search_path$$, 'app', true)
 R:set-config	SELECT set_config(E'search_path', 'app', true)
 R:set-config	SELECT set_config(lower('SEARCH_PATH'), 'app', true)
-F ro co tx:none	SELECT 'standard_conforming_strings'
-F ro tx:none	SHOW standard_conforming_strings
-F ro tx:none	SHOW client_encoding
-F ro tx:none	SELECT current_setting('client_encoding')
+F fits was-co	SELECT 'standard_conforming_strings'
+F	SHOW standard_conforming_strings
+F	SHOW client_encoding
+F	SELECT current_setting('client_encoding')
 R:session-set	UPDATE pg_settings SET setting = 'x' WHERE name = 'application_name'
 R:session-set	update pg_catalog.pg_settings set setting = 'x' where name = 'search_path'
 R:session-set	UPDATE "pg_settings" SET setting = 'x' WHERE name = 'search_path'
 R:session-set	WITH u AS (UPDATE pg_settings SET setting = 'x' WHERE name = 'search_path' RETURNING 1) SELECT * FROM u
-F ro co tx:none	SELECT name, setting FROM pg_settings WHERE name = 'search_path'
-F tx:none	SET LOCAL local.w = 4
-F tx:none	SET LOCAL transaction_isolation = 'serializable'
+F fits was-co	SELECT name, setting FROM pg_settings WHERE name = 'search_path'
+F	SET LOCAL local.w = 4
+F	SET LOCAL transaction_isolation = 'serializable'
 R:reset	RESET search_path
 R:reset	RESET ALL
 R:reset	reset all
@@ -546,21 +548,21 @@ R:two-phase	COMMIT PREPARED 'tx1'
 R:two-phase	ROLLBACK PREPARED 'tx1'
 R:two-phase	BEGIN; PREPARE TRANSACTION 'tx1'
 # --- repair round 1: schema-qualified keyword-named calls (review finding 1)
-F tx:none	SELECT public.select()
-F tx:none	SELECT public.in(1)
-F tx:none	SELECT public.exists()
-F tx:none	SELECT public.current_timestamp(3)
-F tx:none	SELECT "public" . select /* c */ ()
-F ro co tx:none	SELECT (SELECT count(*) FROM public.kv)
+F	SELECT public.select()
+F	SELECT public.in(1)
+F	SELECT public.exists()
+F	SELECT public.current_timestamp(3)
+F	SELECT "public" . select /* c */ ()
+F was-co	SELECT (SELECT count(*) FROM public.kv)
 # --- repair round 1: attribute-notation calls after an expression-position FROM (review finding 2)
-F tx:none	SELECT a IS DISTINCT FROM t.evil_write FROM t
-F tx:none	SELECT a IS NOT DISTINCT FROM t.evil_write FROM t
-F tx:none	SELECT trim(FROM t.evil_write_text) FROM t
-F tx:none	SELECT substring('abc' FROM t.evil_write) FROM t
-F tx:none	SELECT extract(year FROM t.f) FROM t
-F tx:none	SELECT overlay('a' PLACING 'b' FROM t.f) FROM t
-F tx:none	SELECT a IS DISTINCT FROM t.evil_write.x FROM t
-F ro co tx:none	SELECT a IS DISTINCT FROM 1 FROM public.t
+F	SELECT a IS DISTINCT FROM t.evil_write FROM t
+F	SELECT a IS NOT DISTINCT FROM t.evil_write FROM t
+F	SELECT trim(FROM t.evil_write_text) FROM t
+F	SELECT substring('abc' FROM t.evil_write) FROM t
+F	SELECT extract(year FROM t.f) FROM t
+F	SELECT overlay('a' PLACING 'b' FROM t.f) FROM t
+F	SELECT a IS DISTINCT FROM t.evil_write.x FROM t
+F was-co	SELECT a IS DISTINCT FROM 1 FROM public.t
 # --- repair round 1: a string-literal search_path naming pg_temp (review finding 3)
 R:temp-object	SET LOCAL search_path = 'pg_temp'
 R:temp-object	SET LOCAL SCHEMA 'pg_temp'
@@ -570,19 +572,59 @@ R:temp-object	SELECT set_config('search_path', 'pg_' || 'temp', true)
 R:temp-object	BEGIN; SET LOCAL search_path = 'pg_temp'; CREATE TABLE sneaky1 (a int); COMMIT
 R:temp-object	BEGIN; SELECT set_config('search_path', 'pg_temp', true); CREATE TABLE sneaky2 (a int); COMMIT
 R:temp-object	BEGIN; SET LOCAL SCHEMA 'pg_temp'; CREATE TABLE sneaky3 (a int); COMMIT
-F tx:none	SET LOCAL search_path = 'app'
+F	SET LOCAL search_path = 'app'
 # --- repair round 1: quoted EXPLAIN option names (review finding 4)
-F tx:none	EXPLAIN ("analyze") SELECT 1
-F tx:none	EXPLAIN ("analyze" true) SELECT 1
-F tx:none	EXPLAIN (U&"analyze") SELECT 1
-F ro tx:none	EXPLAIN ("verbose") SELECT 1
+F	EXPLAIN ("analyze") SELECT 1
+F	EXPLAIN ("analyze" true) SELECT 1
+F	EXPLAIN (U&"analyze") SELECT 1
+F	EXPLAIN ("verbose") SELECT 1
 # --- repair round 1: time-dependent literals are not coalescable (adversarial claim 2)
-F ro tx:none	SELECT 'now'::timestamp
-F ro tx:none	SELECT 'now'::timestamptz
-F ro tx:none	SELECT CAST('today' AS date)
-F ro tx:none	SELECT ('n' || 'ow')::timestamptz
-F ro tx:none	SELECT date_trunc('day', 'now'::timestamptz)
+F	SELECT 'now'::timestamp
+F	SELECT 'now'::timestamptz
+F	SELECT CAST('today' AS date)
+F	SELECT ('n' || 'ow')::timestamptz
+F	SELECT date_trunc('day', 'now'::timestamptz)
 # --- repair round 1: a trailing + or - leaves an operator as in Postgres (adversarial claim 4)
-F ro co tx:none	SELECT 71+-3
-F ro co tx:none	SELECT 71+ -3
-F ro co tx:none	SELECT 1=-1
+F was-co	SELECT 71+-3
+F was-co	SELECT 71+ -3
+F was-co	SELECT 1=-1
+# --- rework: texts that fit the safe shape (added; tier R runs each)
+F fits new	  SELECT 1
+F fits new	select v from kv where k = 'b'
+F fits new	SELECT v FROM kv WHERE k = 'it''s'
+F fits new	SELECT v FROM kv WHERE k = ''
+F fits new	SELECT a FROM t WHERE EXISTS (SELECT 1 FROM u WHERE a = 1)
+F fits new	SELECT a FROM t WHERE a = ANY (SELECT a FROM u)
+F fits new	SELECT upper(concat(b, 'x')) FROM t
+F fits new	SELECT abs(a), mod(a, 2), round(a), power(a, 2) FROM t
+F fits new	SELECT length(b), char_length(b), octet_length(b) FROM t
+F fits new	SELECT count(*) FROM t WHERE NOT (a > 1) OR b <> 'y'
+F fits new	SELECT replace(b, 'x', 'y'), lpad(b, 3, '0'), rpad(b, 3, '0') FROM t
+F fits new	SELECT split_part('a b', ' ', 1), strpos('abc', 'b'), substr('abc', 2)
+F fits new	SELECT bool_and(a > 0), bool_or(a > 2), every(a > 0) FROM t
+F fits new	SELECT a FROM t WHERE a >= 1 AND a <= 2
+F fits new	SELECT count (*) FROM kv WHERE v <> 'x'
+F fits new	SELECT initcap(b), btrim(b), ltrim(b), rtrim(b) FROM t ORDER BY 1
+F fits new	SELECT a FROM t WHERE b IN (SELECT b FROM u) LIMIT 1 OFFSET 0
+F fits new	SELECT sum(a) FROM t WHERE a BETWEEN 1 AND 3 HAVING sum(a) > 0
+F fits new	SELECT pi(), sqrt(4), floor(2), ceil(2), sign(a), trunc(a) FROM t
+F fits new	SELECT gcd(a, 6), lcm(a, 6), div(a, 2), exp(0), ln(1), log(10), log10(10) FROM t
+# --- rework: forwarded texts that miss the safe shape by one rule (never shared)
+F new	SELECT v FROM kv WHERE k = 'a';
+F new	"SELECT v FROM kv\nWHERE k = 'a'"
+F new	SELECT kv.v FROM kv WHERE k = 'a'
+F new	SELECT v FROM kv WHERE k = E'a'
+F new	SELECT v FROM kv WHERE k = 'snow'
+F new	SELECT v FROM kv WHERE k = current_user
+F new	SELECT v FROM kv WHERE k = 'a' FOR SHARE
+F new	SELECT random() FROM kv
+F new	SELECT count(*) OVER () FROM kv
+F new	(SELECT 1)
+F new	SELECT a FROM t GROUP BY (a)
+# --- rework: string continuation across a newline (review 2, finding 1)
+R:session-set new	"SELECT E'ok'\n'\\' ; SELECT ' ; SET search_path = hidden ; --'"
+R:set-config new	"SELECT E'ok'\n'\\' || ' || set_config('search_path', 'hidden_1stmt', false) --'"
+R:temp-object new	"BEGIN; SET LOCAL search_path = 'pg_'\n'temp'; CREATE TABLE sneaky_c1 (a int); COMMIT"
+R:temp-object new	"BEGIN; SET LOCAL SCHEMA 'pg_'\n'temp'; CREATE TABLE sneaky_c2 (a int); COMMIT"
+F new	"SELECT 'n'\n'ow'"
+F new	"SELECT 'foo' -- c\n'bar'"

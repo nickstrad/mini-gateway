@@ -24,26 +24,6 @@ func (c Class) String() string {
 
 func (c Class) Forwards() bool { return c == ClassStartLease || c == ClassContinueLease }
 
-type TxEffect uint8
-
-const (
-	TxNone TxEffect = iota
-	TxBegins
-	TxEnds
-	TxWithin
-	TxUnknown
-	NumTxEffects
-)
-
-var txNames = [NumTxEffects]string{"none", "begins", "ends", "within", "unknown"}
-
-func (t TxEffect) String() string {
-	if t < NumTxEffects {
-		return txNames[t]
-	}
-	return "invalid"
-}
-
 type Tri uint8
 
 const (
@@ -62,16 +42,6 @@ func (t Tri) String() string {
 		return "unknown"
 	}
 	return "invalid"
-}
-
-func (t TxEffect) MayLeaveOpen() Tri {
-	switch t {
-	case TxBegins:
-		return Yes
-	case TxUnknown:
-		return Unknown
-	}
-	return No
 }
 
 type RejectReason uint8
@@ -127,20 +97,17 @@ func (k ShareKey) Equal(o ShareKey) bool {
 }
 
 type Unit struct {
-	Tenant      TenantID
-	Class       Class
-	Reason      RejectReason
-	Tx          TxEffect
-	ReadOnly    bool
-	Coalescable bool
-	Hinted      bool
-	Opaque      bool
-	Statements  int
-	Key         ShareKey
-	HasKey      bool
+	Tenant     TenantID
+	Class      Class
+	Reason     RejectReason
+	SafeRead   bool
+	Shareable  bool
+	Hinted     bool
+	Opaque     bool
+	Statements int
+	Key        ShareKey
+	HasKey     bool
 }
-
-func (u Unit) MayLeaveOpen() Tri { return u.Tx.MayLeaveOpen() }
 
 type Release uint8
 

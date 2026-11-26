@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	ClassifShareHint      = "mg:share"
 	ClassifMemoryFactor   = 80
 	ClassifMemoryConstant = 64 << 10
 )
@@ -26,36 +25,34 @@ type Classifier struct {
 }
 
 type ClassifierSnapshot struct {
-	Classified     int64
-	ByClass        [work.NumClasses]int64
-	ByReason       [work.NumRejectReasons]int64
-	Unclassifiable int64
-	Opaque         int64
-	ReadOnly       int64
-	Coalescable    int64
-	Hinted         int64
-	MayLeaveOpen   [3]int64
-	Statements     int64
+	Classified int64
+	ByClass    [work.NumClasses]int64
+	ByReason   [work.NumRejectReasons]int64
+	Opaque     int64
+	SafeRead   int64
+	Shareable  int64
+	Hinted     int64
+	Keys       int64
+	Statements int64
 }
 
 func (c *Classifier) Snapshot() ClassifierSnapshot { return c.snap }
 
 func (c *Classifier) Classify(tenant work.TenantID, text []byte, inTx bool) work.Unit {
-	r := clsRun(text, inTx, c.Config.plantSetForwardable)
-	u := r.unit
+	u := clsRun(text, inTx, c.Config.plantSetForwardable)
 	u.Tenant = tenant
-	if u.Coalescable {
+	if !inTx && u.Class != work.ClassReject && (u.Shareable || u.Hinted) {
 		u.HasKey = true
 		u.Key.Text = bytes.Clone(text)
 		if c.Config.KeyScope == work.ScopeTenant {
 			u.Key.Tenant = tenant
 		}
 	}
-	c.count(u, r.bad)
+	c.count(u)
 	return u
 }
 
-func (c *Classifier) count(u work.Unit, bad bool) {
+func (c *Classifier) count(u work.Unit) {
 	c.snap.Classified++
 	if u.Class < work.NumClasses {
 		c.snap.ByClass[u.Class]++
@@ -63,41 +60,29 @@ func (c *Classifier) count(u work.Unit, bad bool) {
 	if u.Class == work.ClassReject && u.Reason < work.NumRejectReasons {
 		c.snap.ByReason[u.Reason]++
 	}
-	if bad {
-		c.snap.Unclassifiable++
-	}
-	if u.Opaque {
-		c.snap.Opaque++
-	}
-	if u.ReadOnly {
-		c.snap.ReadOnly++
-	}
-	if u.Coalescable {
-		c.snap.Coalescable++
-	}
-	if u.Hinted {
-		c.snap.Hinted++
-	}
-	if m := u.MayLeaveOpen(); m <= work.Unknown {
-		c.snap.MayLeaveOpen[m]++
-	}
+	c.snap.Opaque += clsCount(u.Opaque)
+	c.snap.SafeRead += clsCount(u.SafeRead)
+	c.snap.Shareable += clsCount(u.Shareable)
+	c.snap.Hinted += clsCount(u.Hinted)
+	c.snap.Keys += clsCount(u.HasKey)
 	c.snap.Statements += int64(u.Statements)
 }
 
-func ClassifyQuery(text []byte, inTx bool) work.Unit {
-	return clsRun(text, inTx, false).unit
+func clsCount(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
 }
 
-type clsResult struct {
-	unit work.Unit
-	bad  bool
+func ClassifyQuery(text []byte, inTx bool) work.Unit {
+	return clsRun(text, inTx, false)
 }
 
 type clsParen struct {
 	match  int32
 	comma1 int32
 	comma2 int32
-	outer  int32
 }
 
 type clsMsg struct {
@@ -105,12 +90,11 @@ type clsMsg struct {
 	toks    []Token
 	parens  []clsParen
 	bad     bool
-	hinted  bool
 	plant   bool
 	scratch [clsNameMax]byte
 }
 
-func clsRun(text []byte, inTx, plant bool) clsResult {
+func clsRun(text []byte, inTx, plant bool) work.Unit {
 	m := clsMsg{src: text, plant: plant}
 	m.lex()
 	m.matchParens()
@@ -118,40 +102,20 @@ func clsRun(text []byte, inTx, plant bool) clsResult {
 	if inTx {
 		u.Class = work.ClassContinueLease
 	}
-	u.Hinted = m.hinted
+	u.Hinted = bytes.HasPrefix(text, []byte(ShareHint))
+	u.Opaque = m.bad
+	u.SafeRead = ShareFits(text)
 	stmts := m.split()
 	u.Statements = len(stmts)
 	for _, s := range stmts {
 		if r := m.rejectReason(s); r != work.RejectNone {
 			u.Class = work.ClassReject
 			u.Reason = r
-			return clsResult{unit: u, bad: m.bad}
+			return u
 		}
 	}
-	if m.bad {
-		u.Opaque = true
-		u.Tx = work.TxUnknown
-		return clsResult{unit: u, bad: true}
-	}
-	if !m.namesDecode() {
-		u.Opaque = true
-		u.Tx = work.TxUnknown
-		return clsResult{unit: u}
-	}
-	u.Tx = m.txEffect(stmts)
-	if u.Tx == work.TxUnknown {
-		u.Opaque = true
-		return clsResult{unit: u}
-	}
-	u.ReadOnly = len(stmts) > 0
-	for _, s := range stmts {
-		if !m.readOnly(s) {
-			u.ReadOnly = false
-			break
-		}
-	}
-	u.Coalescable = u.ReadOnly && !inTx && len(stmts) == 1 && m.coalescable(stmts[0])
-	return clsResult{unit: u}
+	u.Shareable = u.SafeRead && !inTx
+	return u
 }
 
 type clsSpan struct{ lo, hi int }
@@ -172,22 +136,15 @@ func (m *clsMsg) lex() {
 	}
 	m.toks = make([]Token, 0, n)
 	l = LexerFor(m.src)
-	seen := false
 	for {
 		t, ok := l.Next()
 		if !ok {
 			return
 		}
-		switch {
-		case t.Kind == TokenBad:
+		if t.Kind == TokenBad {
 			m.bad = true
-		case t.Kind == TokenBlockComment && !seen:
-			if string(bytes.TrimSpace(m.src[t.Start+2:t.End-2])) == ClassifShareHint {
-				m.hinted = true
-			}
 		}
 		if t.Kind.Significant() && t.Kind != TokenBad {
-			seen = true
 			m.toks = append(m.toks, t)
 		}
 	}
@@ -207,10 +164,7 @@ func (m *clsMsg) matchParens() {
 	}
 	stack := make([]int32, 0, opens)
 	for i := range m.toks {
-		m.parens[i] = clsParen{match: -1, comma1: -1, comma2: -1, outer: -1}
-		if n := len(stack); n > 0 {
-			m.parens[i].outer = stack[n-1]
-		}
+		m.parens[i] = clsParen{match: -1, comma1: -1, comma2: -1}
 		switch {
 		case m.isPunct(i, '('):
 			stack = append(stack, int32(i))
@@ -218,7 +172,6 @@ func (m *clsMsg) matchParens() {
 			if n := len(stack); n > 0 {
 				m.parens[stack[n-1]].match = int32(i)
 				m.parens[i].match = stack[n-1]
-				m.parens[i].outer = m.parens[stack[n-1]].outer
 				stack = stack[:n-1]
 			}
 		case m.isPunct(i, ','):
@@ -348,18 +301,6 @@ func clsInList(list []string, b []byte) bool {
 		}
 	}
 	return false
-}
-
-func (m *clsMsg) namesDecode() bool {
-	for i := range m.toks {
-		if m.toks[i].Kind != TokenUnicodeIdent {
-			continue
-		}
-		if _, _, ok := m.name(i, len(m.toks)); !ok {
-			return false
-		}
-	}
-	return true
 }
 
 func (m *clsMsg) lead(s clsSpan) int {
@@ -543,6 +484,9 @@ func (m *clsMsg) stringMayContain(i int, words ...string) bool {
 	}
 	t := m.toks[i]
 	raw := m.src[t.Start:t.End]
+	if t.Kind == TokenString && clsContinued(raw) {
+		return true
+	}
 	switch clsFold(raw[0]) {
 	case 'e':
 		if bytes.IndexByte(raw, '\\') >= 0 {
@@ -557,6 +501,22 @@ func (m *clsMsg) stringMayContain(i int, words ...string) bool {
 		if clsContainsFold(raw, w) {
 			return true
 		}
+	}
+	return false
+}
+
+func clsContinued(raw []byte) bool {
+	open := bytes.IndexByte(raw, '\'')
+	body := raw[open+1 : len(raw)-1]
+	for k := 0; k < len(body); k++ {
+		if body[k] != '\'' {
+			continue
+		}
+		if k+1 < len(body) && body[k+1] == '\'' {
+			k++
+			continue
+		}
+		return true
 	}
 	return false
 }
@@ -597,7 +557,7 @@ func (m *clsMsg) setConfigLocal(open int) bool {
 		return false
 	}
 	lit := m.toks[open+1]
-	if lit.Kind != TokenString || m.src[lit.Start] != '\'' {
+	if lit.Kind != TokenString || m.src[lit.Start] != '\'' || clsContinued(m.src[lit.Start:lit.End]) {
 		return false
 	}
 	setting := clsLowerASCII(lexUnquote(m.src[lit.Start+1:lit.End-1], '\''))
@@ -613,241 +573,4 @@ func clsLowerASCII(b []byte) []byte {
 		out[i] = clsFold(c)
 	}
 	return out
-}
-
-func (m *clsMsg) txEffect(stmts []clsSpan) work.TxEffect {
-	var begins, ends, within bool
-	for _, s := range stmts {
-		switch m.stmtTx(s) {
-		case work.TxUnknown:
-			return work.TxUnknown
-		case work.TxBegins:
-			begins = true
-		case work.TxEnds:
-			ends = true
-		case work.TxWithin:
-			within = true
-		}
-	}
-	switch {
-	case begins:
-		return work.TxBegins
-	case ends:
-		return work.TxEnds
-	case within:
-		return work.TxWithin
-	}
-	return work.TxNone
-}
-
-func (m *clsMsg) stmtTx(s clsSpan) work.TxEffect {
-	for i := s.lo; i+1 < s.hi; i++ {
-		if m.is(i, "begin") && m.is(i+1, "atomic") {
-			return work.TxUnknown
-		}
-	}
-	i := s.lo
-	switch {
-	case m.is(i, "begin"):
-		return work.TxBegins
-	case m.is(i, "start"):
-		if m.is(i+1, "transaction") {
-			return work.TxBegins
-		}
-		return work.TxUnknown
-	case m.isAny(i, []string{"savepoint", "release"}):
-		return work.TxWithin
-	case m.isAny(i, []string{"rollback", "abort"}) && (m.is(i+1, "to") || (m.isAny(i+1, []string{"work", "transaction"}) && m.is(i+2, "to"))):
-		return work.TxWithin
-	case m.isAny(i, []string{"commit", "end", "rollback", "abort"}):
-		return m.endTx(i+1, s.hi)
-	case m.isPunct(i, '('):
-		return work.TxNone
-	case m.isAny(i, rejModeledLeads):
-		return work.TxNone
-	}
-	return work.TxUnknown
-}
-
-func (m *clsMsg) endTx(i, hi int) work.TxEffect {
-	if m.isAny(i, []string{"work", "transaction"}) {
-		i++
-	}
-	switch {
-	case i == hi:
-		return work.TxEnds
-	case m.is(i, "and") && m.is(i+1, "chain") && i+2 == hi:
-		return work.TxBegins
-	case m.is(i, "and") && m.is(i+1, "no") && m.is(i+2, "chain") && i+3 == hi:
-		return work.TxEnds
-	}
-	return work.TxUnknown
-}
-
-func (m *clsMsg) readOnly(s clsSpan) bool {
-	if !m.readOnlyLead(s) {
-		return false
-	}
-	for i := s.lo; i < s.hi; i++ {
-		if !m.readOnlyToken(s, i) {
-			return false
-		}
-	}
-	return true
-}
-
-func (m *clsMsg) readOnlyLead(s clsSpan) bool {
-	i := s.lo
-	if m.is(i, "explain") {
-		if m.explainOptionsAnalyze(i+1, s.hi) {
-			return false
-		}
-		i = m.lead(s)
-	}
-	for m.isPunct(i, '(') {
-		i++
-	}
-	return m.isAny(i, []string{"select", "values", "table", "with", "show"})
-}
-
-func (m *clsMsg) explainOptionsAnalyze(open, hi int) bool {
-	if !m.isPunct(open, '(') {
-		return false
-	}
-	end := int(m.parens[open].match)
-	if end < 0 {
-		end = hi
-	}
-	for k := open + 1; k < end; k++ {
-		if m.nameIsAny(k, hi, "analyze", "analyse") {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *clsMsg) nameIsAny(i, hi int, words ...string) bool {
-	if !m.isName(i) {
-		return false
-	}
-	name, _, ok := m.name(i, hi)
-	if !ok {
-		return true
-	}
-	for _, w := range words {
-		if clsEqualFold(name, w) {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *clsMsg) readOnlyToken(s clsSpan, i int) bool {
-	t := m.toks[i]
-	switch t.Kind {
-	case TokenWord:
-		if m.isAny(i, rejWriteKeywords) {
-			return false
-		}
-		if m.is(i, "for") && m.isAny(i+1, rejLockStrength) {
-			return false
-		}
-	case TokenOperator:
-		return clsInList(rejOperators, m.src[t.Start:t.End])
-	case TokenParam:
-		return false
-	case TokenPunct:
-		if m.src[t.Start] == '.' && m.isName(i+1) {
-			return m.dottedOK(s, i)
-		}
-		return true
-	}
-	if !m.isName(i) {
-		return true
-	}
-	return m.callOK(s, i, false)
-}
-
-func (m *clsMsg) dottedOK(s clsSpan, dot int) bool {
-	_, next, ok := m.name(dot+1, s.hi)
-	if !ok {
-		return false
-	}
-	if m.isPunct(next, '(') {
-		return true
-	}
-	j := dot - 1
-	if !m.isName(j) || j <= s.lo {
-		return false
-	}
-	if m.isPunct(j-1, '.') {
-		return true
-	}
-	return m.isAny(j-1, []string{"from", "join", "table", "only"}) && m.tableRefPosition(s, j-1)
-}
-
-func (m *clsMsg) tableRefPosition(s clsSpan, kw int) bool {
-	if m.is(kw, "from") && m.is(kw-1, "distinct") {
-		return false
-	}
-	outer := int(m.parens[kw].outer)
-	if outer < s.lo {
-		return true
-	}
-	return m.isAny(outer+1, []string{"select", "with", "table"})
-}
-
-func (m *clsMsg) callOK(s clsSpan, i int, coalesce bool) bool {
-	name, next, ok := m.name(i, s.hi)
-	if next >= s.hi || !m.isPunct(next, '(') {
-		return true
-	}
-	if !ok {
-		return false
-	}
-	if m.toks[i].Kind == TokenWord && m.notACall(s, i, name) {
-		return true
-	}
-	e, found := AllowLookupBytes(name)
-	if !found || (coalesce && !e.Coalesce) {
-		return false
-	}
-	if !m.isPunct(i-1, '.') {
-		return true
-	}
-	q := i - 2
-	if q < s.lo || !m.isName(q) || m.isPunct(q-1, '.') {
-		return false
-	}
-	qn, _, qok := m.name(q, s.hi)
-	return qok && string(qn) == "pg_catalog"
-}
-
-func (m *clsMsg) notACall(s clsSpan, i int, name []byte) bool {
-	switch {
-	case m.isPunct(i-1, '.'):
-		return false
-	case clsInList(rejNonCallWords, name), m.isPunct(i-1, ')'), m.is(i-1, "as"), m.is(i-1, "with"):
-		return true
-	case m.is(i-1, "recursive") && m.is(i-2, "with"):
-		return true
-	case i == s.lo && m.is(i, "explain"):
-		return true
-	}
-	return false
-}
-
-func (m *clsMsg) coalescable(s clsSpan) bool {
-	if !m.is(s.lo, "select") {
-		return false
-	}
-	for i := s.lo; i < s.hi; i++ {
-		if m.isAny(i, rejPerCallKeywords) || m.nameIsAny(i, s.hi, rejTemporalTypes...) || m.stringMayContain(i, rejRelativeTimeWords...) {
-			return false
-		}
-		if m.isName(i) && !m.callOK(s, i, true) {
-			return false
-		}
-	}
-	return true
 }

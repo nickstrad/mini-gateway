@@ -117,10 +117,10 @@ func clsSpellFinish(rng *rand.Rand, q string) string {
 
 func clsNotAllowListed(rng *rand.Rand) []string {
 	var names []string
-	names = append(names, rejNonCallWords...)
-	names = append(names, rejWriteKeywords...)
+	names = append(names, clsFirstNonCallWords...)
+	names = append(names, clsFirstWriteKeywords...)
 	names = append(names, clsSpellWriters...)
-	for _, e := range AllowList {
+	for _, e := range clsFirstAllowList {
 		names = append(names, e.Name+"_x")
 	}
 	for k := 0; k < 40; k++ {
@@ -134,8 +134,8 @@ func clsCheckNeverProved(t *testing.T, q string, seen map[string]bool) {
 	seen[q] = true
 	for _, inTx := range []bool{false, true} {
 		u := ClassifyQuery([]byte(q), inTx)
-		if u.ReadOnly || u.Coalescable {
-			t.Errorf("calls a function outside the allow-list but is proved: %q (in tx %v): %s", q, inTx, clsDescribe(u))
+		if u.SafeRead || u.Shareable {
+			t.Errorf("calls a function outside the allow-list but is safe-read or shareable: %q (in tx %v): %s", q, inTx, clsDescribe(u))
 		}
 	}
 }
@@ -144,7 +144,7 @@ func TestClassifierSpellingsNeverProveUnlistedCalls(t *testing.T) {
 	rng := rand.New(rand.NewPCG(clsSpellSeed, 1))
 	seen := map[string]bool{}
 	nonCall := map[string]bool{}
-	for _, w := range rejNonCallWords {
+	for _, w := range clsFirstNonCallWords {
 		nonCall[w] = true
 	}
 	for _, name := range clsNotAllowListed(rng) {
@@ -155,7 +155,7 @@ func TestClassifierSpellingsNeverProveUnlistedCalls(t *testing.T) {
 			clsCheckNeverProved(t, clsSpellFinish(rng, clsSpellIn(rng, clsSpellExprPositions, clsSpellAttribute(rng, name))), seen)
 		}
 	}
-	for _, e := range AllowList {
+	for _, e := range clsFirstAllowList {
 		for k := 0; k < clsSpellPerName; k++ {
 			q := []string{"public.", "app.", `"public".`, "pg_catalog.pg_catalog.", "t.", `"pg_Catalog".`}[rng.IntN(6)]
 			call := clsSpellCall(rng, q+clsSpellName(rng, e.Name, false))
@@ -172,7 +172,7 @@ func TestClassifierSpellingsNeverProveUnlistedCalls(t *testing.T) {
 func TestClassifierSpellingsNeverCoalesceNonCoalescableCalls(t *testing.T) {
 	rng := rand.New(rand.NewPCG(clsSpellSeed, 2))
 	n := 0
-	for _, e := range AllowList {
+	for _, e := range clsFirstAllowList {
 		if e.Coalesce {
 			continue
 		}
@@ -180,16 +180,16 @@ func TestClassifierSpellingsNeverCoalesceNonCoalescableCalls(t *testing.T) {
 			call := clsSpellCall(rng, []string{"", "pg_catalog.", "PG_CATALOG . "}[rng.IntN(3)]+clsSpellName(rng, e.Name, false))
 			q := clsSpellFinish(rng, clsSpellIn(rng, clsSpellExprPositions, call))
 			n++
-			if u := ClassifyQuery([]byte(q), false); u.Coalescable {
-				t.Errorf("not coalescable by the list, but coalesced: %q: %s", q, clsDescribe(u))
+			if u := ClassifyQuery([]byte(q), false); u.Shareable || u.SafeRead {
+				t.Errorf("not coalescable by the list, but shareable or safe-read: %q: %s", q, clsDescribe(u))
 			}
 		}
 	}
 	temporal := map[string]bool{}
-	for _, w := range rejTemporalTypes {
+	for _, w := range clsFirstTemporalTypes {
 		temporal[w] = true
 	}
-	for _, w := range append(append([]string{}, rejPerCallKeywords...), rejTemporalTypes...) {
+	for _, w := range append(append([]string{}, clsFirstPerCallKeywords...), clsFirstTemporalTypes...) {
 		for k := 0; k < clsSpellPerName; k++ {
 			x := clsSpellCase(rng, w)
 			if temporal[w] && rng.IntN(2) == 0 {
@@ -197,17 +197,17 @@ func TestClassifierSpellingsNeverCoalesceNonCoalescableCalls(t *testing.T) {
 			}
 			q := clsSpellFinish(rng, clsSpellIn(rng, clsSpellExprPositions[:6], x))
 			n++
-			if u := ClassifyQuery([]byte(q), false); u.Coalescable {
-				t.Errorf("per-call word coalesced: %q: %s", q, clsDescribe(u))
+			if u := ClassifyQuery([]byte(q), false); u.Shareable || u.SafeRead {
+				t.Errorf("per-call word shareable or safe-read: %q: %s", q, clsDescribe(u))
 			}
 		}
 	}
-	for _, w := range rejRelativeTimeWords {
+	for _, w := range clsFirstRelativeTimeWords {
 		for _, lit := range []string{"'%s'", "' %s '", "$$%s$$", "$x$%s 10:00$x$", "'%s'::date", "N'%s'"} {
 			q := clsSpellFinish(rng, clsSpellIn(rng, clsSpellExprPositions[:6], fmt.Sprintf(lit, clsSpellCase(rng, w))))
 			n++
-			if u := ClassifyQuery([]byte(q), false); u.Coalescable {
-				t.Errorf("relative time literal coalesced: %q: %s", q, clsDescribe(u))
+			if u := ClassifyQuery([]byte(q), false); u.Shareable || u.SafeRead {
+				t.Errorf("relative time literal shareable or safe-read: %q: %s", q, clsDescribe(u))
 			}
 		}
 	}

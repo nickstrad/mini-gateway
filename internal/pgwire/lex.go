@@ -214,12 +214,41 @@ func (l *Lexer) quoted(q byte, backslash bool, kind TokenKind) TokenKind {
 				continue
 			}
 			l.pos++
+			if q == '\'' {
+				if next, ok := lexContinuation(l.src, l.pos); ok {
+					l.pos = next
+					continue
+				}
+			}
 			return kind
 		default:
 			l.pos++
 		}
 	}
 	return TokenBad
+}
+
+func lexContinuation(src []byte, i int) (int, bool) {
+	newline := false
+	for i < len(src) {
+		c := src[i]
+		switch {
+		case c == '\n' || c == '\r':
+			newline = true
+			i++
+		case lexIsSpace(c):
+			i++
+		case c == '-' && i+1 < len(src) && src[i+1] == '-':
+			for i < len(src) && src[i] != '\n' && src[i] != '\r' {
+				i++
+			}
+		case c == '\'' && newline:
+			return i + 1, true
+		default:
+			return 0, false
+		}
+	}
+	return 0, false
 }
 
 func (l *Lexer) number() {

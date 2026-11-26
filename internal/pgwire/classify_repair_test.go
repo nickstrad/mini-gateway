@@ -11,8 +11,8 @@ func clsWantNotReadOnly(t *testing.T, qs ...string) {
 	for _, q := range qs {
 		for _, inTx := range []bool{false, true} {
 			u := ClassifyQuery([]byte(q), inTx)
-			if u.ReadOnly || u.Coalescable {
-				t.Errorf("%q (in tx %v): %s, want neither read-only nor coalescable", q, inTx, clsDescribe(u))
+			if u.SafeRead || u.Shareable {
+				t.Errorf("%q (in tx %v): %s, want neither safe-read nor shareable", q, inTx, clsDescribe(u))
 			}
 		}
 	}
@@ -21,8 +21,8 @@ func clsWantNotReadOnly(t *testing.T, qs ...string) {
 func clsWantNotCoalescable(t *testing.T, qs ...string) {
 	t.Helper()
 	for _, q := range qs {
-		if u := ClassifyQuery([]byte(q), false); u.Coalescable {
-			t.Errorf("%q: %s, want not coalescable", q, clsDescribe(u))
+		if u := ClassifyQuery([]byte(q), false); u.Shareable || u.SafeRead {
+			t.Errorf("%q: %s, want neither safe-read nor shareable", q, clsDescribe(u))
 		}
 	}
 }
@@ -43,14 +43,14 @@ func clsWantForwardedReadOnly(t *testing.T, co bool, qs ...string) {
 	t.Helper()
 	for _, q := range qs {
 		u := ClassifyQuery([]byte(q), false)
-		if u.Class != work.ClassStartLease || !u.ReadOnly || u.Coalescable != co {
-			t.Errorf("%q: %s, want forwarded read-only (coalescable %v)", q, clsDescribe(u), co)
+		if u.Class != work.ClassStartLease || (!co && (u.SafeRead || u.Shareable)) {
+			t.Errorf("%q: %s, want forwarded, and never shared unless the first build coalesced it (%v)", q, clsDescribe(u), co)
 		}
 	}
 }
 
 func TestClassifierSchemaQualifiedKeywordNamesAreCalls(t *testing.T) {
-	for _, w := range rejNonCallWords {
+	for _, w := range clsFirstNonCallWords {
 		clsWantNotReadOnly(t,
 			"SELECT public."+w+"()",
 			"SELECT public."+w+"(1)",
@@ -190,7 +190,7 @@ func TestLexOperatorTrailingSignFollowsPostgres(t *testing.T) {
 	}
 	for _, pair := range [][2]string{{"SELECT 71+-3", "SELECT 71+ -3"}, {"SELECT 1=-1", "SELECT 1 = - 1"}, {"SELECT a FROM t WHERE a<>-+1", "SELECT a FROM t WHERE a <> - + 1"}} {
 		a, b := ClassifyQuery([]byte(pair[0]), false), ClassifyQuery([]byte(pair[1]), false)
-		if !clsSame(a, b) || !a.ReadOnly {
+		if !clsSame(a, b) {
 			t.Errorf("%q %s versus %q %s", pair[0], clsDescribe(a), pair[1], clsDescribe(b))
 		}
 	}

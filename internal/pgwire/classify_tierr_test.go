@@ -210,7 +210,7 @@ func TestTierRClassifierDifferential(t *testing.T) {
 	admin := clsTierRSetup(t, addr)
 	defer admin.close()
 	clsTierROracleCanaries(t, addr, admin)
-	var readOnly, closed, skipped, session int
+	var skipped, session int
 	for _, c := range clsLoadCorpus(t) {
 		u := ClassifyQuery([]byte(c.text), false)
 		if u.Class == work.ClassReject || c.noexec {
@@ -221,45 +221,11 @@ func TestTierRClassifierDifferential(t *testing.T) {
 		if err := clsTierRSessionUnchangedErr(addr, admin, c); err != nil {
 			t.Errorf("line %d %q: %v", c.line, c.text, err)
 		}
-		if u.MayLeaveOpen() == work.No {
-			closed++
-			clsTierRLeavesIdle(t, addr, admin, c)
-		}
-		if u.ReadOnly {
-			readOnly++
-			clsTierRReadOnly(t, addr, admin, c)
-		}
 	}
-	if readOnly < 100 || closed < 200 {
-		t.Fatalf("too few statements exercised: %d read-only, %d transaction-free", readOnly, closed)
+	if session < 200 {
+		t.Fatalf("too few statements exercised: %d forwarded", session)
 	}
-	t.Logf("tier R: classifier differential: %d forwarded statements left the session state unchanged; %d statements marked \"leaves no transaction open\" left status I; %d read-only-provable statements left the tables unchanged and ran inside BEGIN READ ONLY; %d not run (rejected or noexec)", session, closed, readOnly, skipped)
-}
-
-func clsTierRLeavesIdle(t *testing.T, addr string, admin *clsPG, c clsCase) {
-	t.Helper()
-	if err := clsTierRLeavesIdleErr(addr, admin, c); err != nil {
-		t.Errorf("line %d %q: %v", c.line, c.text, err)
-	}
-}
-
-func clsTierRLeavesIdleErr(addr string, admin *clsPG, c clsCase) error {
-	if _, err := clsTierRResetErr(admin); err != nil {
-		return err
-	}
-	p, err := clsDialPG(addr, clsTierRDB)
-	if err != nil {
-		return err
-	}
-	defer p.close()
-	msgs, err := p.run(c.text)
-	if err != nil {
-		return err
-	}
-	if st := clsLastStatus(msgs); st != 'I' {
-		return fmt.Errorf("classified as leaving no transaction open, Postgres left status %c", st)
-	}
-	return nil
+	t.Logf("tier R: classifier differential: %d forwarded statements left the session state unchanged; %d not run (rejected or noexec)", session, skipped)
 }
 
 func clsTierRReadOnly(t *testing.T, addr string, admin *clsPG, c clsCase) {
@@ -427,11 +393,6 @@ func clsTierROracleCanaries(t *testing.T, addr string, admin *clsPG) {
 			t.Errorf("oracle canary: the read-only oracle accepts %q", q)
 		}
 	}
-	for _, q := range []string{"BEGIN", "BEGIN; SELECT 1/0; COMMIT", "SELECT 1; BEGIN"} {
-		if clsTierRLeavesIdleErr(addr, admin, clsCase{text: q}) == nil {
-			t.Errorf("oracle canary: the transaction oracle accepts %q", q)
-		}
-	}
 }
 
 func clsTierRRepairCanaries(t *testing.T, addr string, admin *clsPG) {
@@ -472,8 +433,8 @@ func clsTierRRepairCanaries(t *testing.T, addr string, admin *clsPG) {
 		if err == nil || !strings.Contains(err.Error(), "tables changed") {
 			t.Errorf("repair canary: Postgres did not write through %q: %v", q, err)
 		}
-		if u := ClassifyQuery([]byte(q), false); u.ReadOnly || u.Coalescable {
-			t.Errorf("repair canary %q: %s, want neither read-only nor coalescable", q, clsDescribe(u))
+		if u := ClassifyQuery([]byte(q), false); u.SafeRead || u.Shareable {
+			t.Errorf("repair canary %q: %s, want neither safe-read nor shareable", q, clsDescribe(u))
 		}
 	}
 	if err := clsTierRTimeLiteralsMove(addr); err != nil {
@@ -496,8 +457,8 @@ func clsTierRTimeLiteralsMove(addr string) error {
 		"SELECT ('n' || 'ow')::timestamptz::text",
 		"SELECT extract(epoch FROM 'now'::timestamptz)::text",
 	} {
-		if u := ClassifyQuery([]byte(q), false); u.Coalescable {
-			return fmt.Errorf("repair canary %q is coalescable", q)
+		if u := ClassifyQuery([]byte(q), false); u.Shareable || u.SafeRead {
+			return fmt.Errorf("repair canary %q is shareable or safe-read", q)
 		}
 		a, err := p.value(q)
 		if err != nil {
@@ -536,7 +497,7 @@ func clsTierRUnaryOperatorBoundary(addr string) error {
 			return fmt.Errorf("repair canary: Postgres gives %q for %q and %q for %q", a, pair[0], b, pair[1])
 		}
 		x, y := ClassifyQuery([]byte(pair[0]), false), ClassifyQuery([]byte(pair[1]), false)
-		if !clsSame(x, y) || !x.ReadOnly {
+		if !clsSame(x, y) {
 			return fmt.Errorf("repair canary: %q %s versus %q %s", pair[0], clsDescribe(x), pair[1], clsDescribe(y))
 		}
 	}

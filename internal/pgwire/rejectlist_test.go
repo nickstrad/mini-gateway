@@ -3,6 +3,7 @@ package pgwire
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/nickstrad/mini-gateway/internal/work"
@@ -35,28 +36,27 @@ func TestRejectRulesExamplesClassifyAsDocumented(t *testing.T) {
 	}
 }
 
-func TestAllowListIsSortedAndCoalesceIsASubset(t *testing.T) {
-	for i := 1; i < len(AllowList); i++ {
-		if AllowList[i-1].Name >= AllowList[i].Name {
-			t.Errorf("allow-list not sorted or duplicate at %q", AllowList[i].Name)
+func TestShareAllowListIsSortedAndExcludesPerCallFunctions(t *testing.T) {
+	for i := 1; i < len(ShareAllowList); i++ {
+		if ShareAllowList[i-1] >= ShareAllowList[i] {
+			t.Errorf("allow-list not sorted or duplicate at %q", ShareAllowList[i])
 		}
 	}
-	for _, e := range AllowList {
-		if got, ok := AllowLookup(e.Name); !ok || got != e {
-			t.Errorf("lookup %q failed", e.Name)
-		}
+	for _, e := range ShareAllowList {
 		for _, bad := range append(append([]string{}, rejSessionAdvisory...), "set_config", "nextval", "setval", "currval", "lastval", "txid_current", "pg_notify", "setseed", "dblink") {
-			if e.Name == bad {
+			if e == bad {
 				t.Errorf("%q must not be on the allow-list", bad)
 			}
 		}
 	}
-	if _, ok := AllowLookup("no_such_function"); ok {
-		t.Error("lookup found a missing name")
+	for _, e := range clsFirstAllowList {
+		if !e.Coalesce && slices.Contains(ShareAllowList, e.Name) {
+			t.Errorf("%q was not coalescable in the first build and must not be on the share allow-list", e.Name)
+		}
 	}
 	for _, name := range []string{"now", "random", "pg_backend_pid", "clock_timestamp", "pg_sleep", "current_setting", "gen_random_uuid"} {
-		if e, ok := AllowLookup(name); !ok || e.Coalesce {
-			t.Errorf("%q must be read-only-provable but not coalescable", name)
+		if slices.Contains(ShareAllowList, name) {
+			t.Errorf("%q must not be on the share allow-list", name)
 		}
 	}
 }
@@ -67,6 +67,7 @@ func rejDocs() map[string]string {
 	return map[string]string{
 		"error-contract.md": ErrorRowsMarkdown(),
 		"reject-list.md":    RejectListMarkdown(),
+		"safe-shape.md":     SafeShapeMarkdown(),
 	}
 }
 

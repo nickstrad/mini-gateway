@@ -1,6 +1,6 @@
 #!/bin/bash
-# Chunk 5 part of scripts/gen-docs.sh: docs/error-contract.md and docs/reject-list.md,
-# generated from internal/pgwire (errors.go, rejectlist.go) by the test
+# Chunk 5 part of scripts/gen-docs.sh: docs/error-contract.md, docs/reject-list.md and docs/safe-shape.md,
+# generated from internal/pgwire (errors.go, rejectlist.go, share.go) by the test
 # TestClassifierWriteContractDocs. With --check the committed files must equal the output.
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd -P)
@@ -16,7 +16,7 @@ out=$(mktemp -d /tmp/gen-docs-c05.XXXXXX)
 trap 'rm -rf "$out"' EXIT
 MG_GEN_DOCS_DIR="$out" go test -count=1 -run '^TestClassifierWriteContractDocs$' ./internal/pgwire >/dev/null
 rc=0
-for f in error-contract.md reject-list.md; do
+for f in error-contract.md reject-list.md safe-shape.md; do
   [ -s "$out/$f" ] || { echo "c05-contracts.sh: $f was not generated" >&2; exit 1; }
   if [ "$check" = 1 ]; then
     if ! cmp -s "$out/$f" "docs/$f"; then
