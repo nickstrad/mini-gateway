@@ -1,9 +1,12 @@
 package work
 
 import (
+	"bytes"
+	"encoding/json"
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -79,5 +82,34 @@ func TestShareKeyEqual(t *testing.T) {
 	a := ShareKey{Tenant: "t", Text: []byte("SELECT 1")}
 	if !a.Equal(ShareKey{Tenant: "t", Text: []byte("SELECT 1")}) || a.Equal(ShareKey{Text: []byte("SELECT 1")}) || a.Equal(ShareKey{Tenant: "t", Text: []byte("SELECT  1")}) {
 		t.Error("ShareKey.Equal is wrong")
+	}
+}
+
+func TestWorkImportClosureIsTheStandardLibrary(t *testing.T) {
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("the go command is not on PATH")
+	}
+	cmd := exec.Command("go", "list", "-deps", "-json", ".")
+	b, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := json.NewDecoder(bytes.NewReader(b))
+	n := 0
+	for d.More() {
+		var v struct {
+			ImportPath string
+			Standard   bool
+		}
+		if err := d.Decode(&v); err != nil {
+			t.Fatal(err)
+		}
+		n++
+		if !v.Standard && v.ImportPath != "github.com/nickstrad/mini-gateway/internal/work" {
+			t.Errorf("nonstandard dependency %s", v.ImportPath)
+		}
+	}
+	if n == 0 {
+		t.Fatal("go list reported no package")
 	}
 }
