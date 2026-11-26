@@ -180,4 +180,8 @@ type ShellSnapshot struct {
 	HandshakesFailed int64
 	WriteDeadlines   int64
 	ReadDeadlines    int64
+	AcceptRefused    int64
+	AcceptErrors     int64
+	QueueOverflows   int64
+	StaleEvents      int64
 }

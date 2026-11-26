@@ -141,6 +141,8 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `engine` | `resets_failed` | counter | reason | count | sum | Resets that failed, by reason; the connection was closed. |
 | `engine` | `resets_started` | counter | — | count | sum | DISCARD ALL resets sent after a lease. |
 | `engine` | `retry_asked` | counter | — | count | sum | Failures the retry seam asked to retry (policy off: always 0). |
+| `engine` | `shell_accept_errors` | counter | — | count | sum | Errors returned by the client listener's Accept. |
+| `engine` | `shell_accept_refused` | counter | — | count | sum | Accepted sockets closed at once because the shell was full or closing. |
 | `engine` | `shell_accepted` | counter | — | count | sum | Client sockets accepted by the listener. |
 | `engine` | `shell_admin_requests` | counter | — | count | sum | Requests served by the admin listener. |
 | `engine` | `shell_deadlines` | counter | mode | count | sum | Socket deadlines that fired (mode: read, write). |
@@ -151,6 +153,8 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `engine` | `shell_mailbox_full` | counter | — | count | sum | Posts that found the engine mailbox full and waited. |
 | `engine` | `shell_mailbox_peak` | gauge | — | count | max | Most events waiting in the engine mailbox at once. |
 | `engine` | `shell_readers` | gauge | mode | count | sum | Socket reader goroutines now (mode: client, database). |
+| `engine` | `shell_stale_events` | counter | — | count | sum | Events dropped because their connection was already closed. |
+| `engine` | `shell_write_queue_overflows` | counter | — | count | sum | Connections closed because their write queue passed its cap. |
 | `engine` | `shell_writers` | gauge | mode | count | sum | Socket writer goroutines now (mode: client, database). |
 | `engine` | `stage_passed` | counter | mode | count | sum | Requests that passed each stage (mode). |
 | `engine` | `stage_refused` | counter | mode | count | sum | Requests refused at each stage (mode). |

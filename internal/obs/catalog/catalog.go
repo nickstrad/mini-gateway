@@ -32,7 +32,7 @@ func Registry() (*obs.Registry, error) {
 	if err := reg.Declare(obs.ComponentClassifier, clssrc.Metrics()...); err != nil {
 		return nil, err
 	}
-	if err := reg.Declare(obs.ComponentEngine, append(enginesrc.Metrics(), enginesrc.ShellMetrics()...)...); err != nil {
+	if err := reg.Declare(obs.ComponentEngine, enginesrc.AllMetrics()...); err != nil {
 		return nil, err
 	}
 	for _, d := range simsrc.All() {

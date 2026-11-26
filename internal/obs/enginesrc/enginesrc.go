@@ -101,6 +101,10 @@ func ShellMetrics() []obs.MetricDesc {
 		obs.CounterDesc("shell_admin_requests", 0, "Requests served by the admin listener."),
 		obs.CounterDesc("shell_handshakes_failed", 0, "TLS handshakes that failed in the shell."),
 		obs.CounterDesc("shell_deadlines", lm, "Socket deadlines that fired (mode: read, write)."),
+		obs.CounterDesc("shell_accept_refused", 0, "Accepted sockets closed at once because the shell was full or closing."),
+		obs.CounterDesc("shell_accept_errors", 0, "Errors returned by the client listener's Accept."),
+		obs.CounterDesc("shell_write_queue_overflows", 0, "Connections closed because their write queue passed its cap."),
+		obs.CounterDesc("shell_stale_events", 0, "Events dropped because their connection was already closed."),
 	}
 }
 
@@ -221,6 +225,10 @@ func MapShell(s proxy.ShellSnapshot, e *obs.Emitter) {
 	e.Counter("shell_handshakes_failed", none, s.HandshakesFailed)
 	e.Counter("shell_deadlines", obs.Labels{Mode: "read"}, s.ReadDeadlines)
 	e.Counter("shell_deadlines", obs.Labels{Mode: "write"}, s.WriteDeadlines)
+	e.Counter("shell_accept_refused", none, s.AcceptRefused)
+	e.Counter("shell_accept_errors", none, s.AcceptErrors)
+	e.Counter("shell_write_queue_overflows", none, s.QueueOverflows)
+	e.Counter("shell_stale_events", none, s.StaleEvents)
 }
 
 func boolInt(b bool) int64 {
@@ -230,26 +238,37 @@ func boolInt(b bool) int64 {
 	return 0
 }
 
-func Source(snapshot func() proxy.Snapshot) obs.Source {
-	return obs.NewSource(obs.ComponentEngine, Metrics(), snapshot, Map)
+type Snapshot struct {
+	Engine proxy.Snapshot
+	Shell  proxy.ShellSnapshot
 }
 
-func ShellSource(snapshot func() proxy.ShellSnapshot) obs.Source {
-	return obs.NewSource(obs.ComponentEngine, ShellMetrics(), snapshot, MapShell)
+func MapAll(s Snapshot, e *obs.Emitter) {
+	Map(s.Engine, e)
+	MapShell(s.Shell, e)
+}
+
+func AllMetrics() []obs.MetricDesc { return append(Metrics(), ShellMetrics()...) }
+
+func Source(engine func() proxy.Snapshot, shell func() proxy.ShellSnapshot) obs.Source {
+	snap := func() Snapshot {
+		s := Snapshot{Engine: engine()}
+		if shell != nil {
+			s.Shell = shell()
+		}
+		return s
+	}
+	return obs.NewSource(obs.ComponentEngine, AllMetrics(), snap, MapAll)
 }
 
 func Sources(e *proxy.Engine, shell func() proxy.ShellSnapshot) []obs.Source {
-	out := []obs.Source{
-		Source(e.Snapshot),
+	return []obs.Source{
+		Source(e.Snapshot, shell),
 		wiresrc.Source(e.WireSnapshot),
 		clssrc.Source(func() clssrc.Snapshot {
 			return clssrc.Snapshot{Classifier: e.ClassifierSnapshot(), Replies: e.ReplySnapshot(), Sync: e.SyncSnapshot()}
 		}),
 	}
-	if shell != nil {
-		out = append(out, ShellSource(shell))
-	}
-	return out
 }
 
 func Register(c *obs.Collector, e *proxy.Engine, shell func() proxy.ShellSnapshot) error {
