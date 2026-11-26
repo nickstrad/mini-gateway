@@ -1,30 +1,19 @@
--- Chunk 5, scenario classifier-reject-only (tier S): every statement the simulated clients
--- sent was rejected by the classifier. Rows returned are violations; zero rows is a pass.
--- Reads the views of test/analysis/views.sql (chunk 3) over the CSV flush of PLAN.md 7.7.
--- Metric names (proposed for the registry in docs/csv-schema.md, wired at chunk 6):
---   classifier/statements             counter, all Query messages classified
---   classifier/rejects (reason=...)   counter, one row per reject reason
---   scenario/statements_sent          counter, Query messages the simulated clients sent
-SELECT run_id, 'schema version' AS check_name, schema_version AS got, 1 AS want
-FROM runs WHERE schema_version <> 1
+-- requires: classifier.rejects classifier.statements wire.client_queries_seen
+-- claim: classifier-reject-only: every Query message the simulated clients sent (counted by the
+-- gateway's framer, wire.client_queries_seen, at least 1) was rejected by the classifier, and the
+-- classifier classified exactly those messages.
+SELECT run_id || ': schema_version ' || schema_version AS violation FROM runs WHERE schema_version <> 1
 UNION ALL
-SELECT r.run_id, 'rejects = statements sent', coalesce(rej.n, -1), coalesce(sent.n, -1)
-FROM runs r
-LEFT JOIN (SELECT run_id, sum(value) AS n FROM final
-           WHERE component = 'classifier' AND metric = 'rejects' GROUP BY run_id) rej USING (run_id)
-LEFT JOIN (SELECT run_id, sum(value) AS n FROM final
-           WHERE component = 'scenario' AND metric = 'statements_sent' GROUP BY run_id) sent USING (run_id)
+(WITH per_run AS (
+    SELECT run_id,
+           coalesce(sum(value) FILTER (WHERE component = 'classifier' AND metric = 'rejects'), 0) AS rejects,
+           coalesce(sum(value) FILTER (WHERE component = 'classifier' AND metric = 'statements'), 0) AS classified,
+           coalesce(sum(value) FILTER (WHERE component = 'wire' AND metric = 'client_queries_seen'), 0) AS sent
+    FROM final GROUP BY run_id
+)
+SELECT r.run_id || ': rejects ' || coalesce(p.rejects, -1) || ', classified ' || coalesce(p.classified, -1) || ', statements sent ' || coalesce(p.sent, -1)
+FROM runs r LEFT JOIN per_run p USING (run_id)
 WHERE r.scenario = 'classifier-reject-only'
-  AND (rej.n IS NULL OR sent.n IS NULL OR rej.n = 0 OR rej.n <> sent.n)
+  AND (p.run_id IS NULL OR p.sent < 1 OR p.rejects <> p.sent OR p.classified <> p.sent))
 UNION ALL
-SELECT r.run_id, 'classified = rejects', coalesce(cls.n, -1), coalesce(rej.n, -1)
-FROM runs r
-LEFT JOIN (SELECT run_id, sum(value) AS n FROM final
-           WHERE component = 'classifier' AND metric = 'statements' GROUP BY run_id) cls USING (run_id)
-LEFT JOIN (SELECT run_id, sum(value) AS n FROM final
-           WHERE component = 'classifier' AND metric = 'rejects' GROUP BY run_id) rej USING (run_id)
-WHERE r.scenario = 'classifier-reject-only'
-  AND (cls.n IS NULL OR rej.n IS NULL OR cls.n <> rej.n)
-UNION ALL
-SELECT NULL, 'no run of classifier-reject-only', 0, 1
-WHERE NOT EXISTS (SELECT 1 FROM runs WHERE scenario = 'classifier-reject-only');
+SELECT 'no run of classifier-reject-only' WHERE NOT EXISTS (SELECT 1 FROM runs WHERE scenario = 'classifier-reject-only');

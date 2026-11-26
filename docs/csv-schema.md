@@ -68,6 +68,21 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 
 | Component | Metric | Kind | Labels | Unit | Merge | Help |
 | --- | --- | --- | --- | --- | --- | --- |
+| `classifier` | `extended_discarded` | counter | — | count | sum | Messages dropped while discarding until Sync. |
+| `classifier` | `extended_refused` | counter | — | count | sum | Extended-protocol messages refused. |
+| `classifier` | `extended_synced` | counter | — | count | sum | Discards ended by Sync. |
+| `classifier` | `hinted` | counter | — | count | sum | Query messages that begin with the share hint. |
+| `classifier` | `opaque` | counter | — | count | sum | Query messages the lexer could not tokenise. |
+| `classifier` | `rejects` | counter | reason | count | sum | Query messages refused by the reject list, by reason. |
+| `classifier` | `replies` | counter | reason | count | sum | Replies the proxy built itself, by error-table row (reason). |
+| `classifier` | `replies_built` | counter | — | count | sum | Replies the proxy built itself, all rows. |
+| `classifier` | `reply_failures` | counter | — | count | sum | Reply builds refused for bad input. |
+| `classifier` | `safe_read` | counter | — | count | sum | Query messages that fit the safe shape. |
+| `classifier` | `share_keys` | counter | — | count | sum | Share keys produced (shareable or hinted, outside a transaction, not rejected). |
+| `classifier` | `shareable` | counter | — | count | sum | Query messages that fit the safe shape outside a transaction and were not rejected. |
+| `classifier` | `sql_statements` | counter | — | count | sum | SQL statements in the classified Query messages. |
+| `classifier` | `statements` | counter | — | count | sum | Query messages classified. |
+| `classifier` | `statements_by_class` | counter | outcome | count | sum | Query messages classified, by class (outcome). |
 | `fakepg` | `bad_hellos` | counter | — | count | sum | Handshakes refused for a bad hello. |
 | `fakepg` | `bytes_in` | counter | — | bytes | sum | Bytes read from clients. |
 | `fakepg` | `bytes_out` | counter | — | bytes | sum | Bytes written to clients. |

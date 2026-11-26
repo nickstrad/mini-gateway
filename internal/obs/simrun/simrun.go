@@ -15,6 +15,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs/jsonstats"
 	"github.com/nickstrad/mini-gateway/internal/obs/promtext"
 	"github.com/nickstrad/mini-gateway/internal/obs/simsrc"
+	"github.com/nickstrad/mini-gateway/internal/pgwire/pgwiretest/clsworld"
 	"github.com/nickstrad/mini-gateway/internal/pgwire/pgwiretest/wireworld"
 	"github.com/nickstrad/mini-gateway/internal/sim"
 	"github.com/nickstrad/mini-gateway/internal/sim/workload"
@@ -49,18 +50,19 @@ type Options struct {
 // Run captures the world result, collector, final snapshot, CSV directory, and
 // outputs of all four attached adapters after Scenario completes.
 type Run struct {
-	Result    *world.Result
-	Collector *obs.Collector
-	Final     obs.InstanceSnapshot
-	RunDir    string
-	RunID     string
-	CSV       *csvflush.Writer
-	JSON      *jsonstats.Adapter
-	Prom      *promtext.Adapter
-	Log       bytes.Buffer
-	Publishes int64
-	PublishAt []sim.Time
-	Wire      wireworld.Result
+	Result     *world.Result
+	Collector  *obs.Collector
+	Final      obs.InstanceSnapshot
+	RunDir     string
+	RunID      string
+	CSV        *csvflush.Writer
+	JSON       *jsonstats.Adapter
+	Prom       *promtext.Adapter
+	Log        bytes.Buffer
+	Publishes  int64
+	PublishAt  []sim.Time
+	Wire       wireworld.Result
+	Classifier clsworld.Result
 }
 
 // RunID formats the schema v1 simulator run identifier "<scenario>/<seed>/<arm>".
