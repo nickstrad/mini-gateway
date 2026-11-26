@@ -359,9 +359,14 @@ func escapeLabel(s string) string {
 	if !utf8.ValidString(s) {
 		s = strings.ToValidUTF8(s, "�")
 	}
-	return strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`).Replace(s)
+	return labelEscaper.Replace(s)
 }
 
+var (
+	labelEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`)
+	helpEscaper  = strings.NewReplacer(`\`, `\\`, "\n", `\n`)
+)
+
 func escapeHelp(s string) string {
-	return strings.NewReplacer(`\`, `\\`, "\n", `\n`).Replace(s)
+	return helpEscaper.Replace(s)
 }

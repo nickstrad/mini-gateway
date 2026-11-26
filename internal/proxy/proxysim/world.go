@@ -37,17 +37,19 @@ func TenantTable(n int) (*pgwire.TenantTable, error) {
 }
 
 type WorldConfig struct {
-	Seed       int64
-	Scenario   string
-	Replay     string
-	Tenants    int
-	SCRAM      bool
-	Fake       fakepg.Config
-	Engine     proxy.Config
-	Options    simnet.Options
-	DBOptions  simnet.Options
-	TLSVersion pgwire.TLSVersion
-	Tap        func(sim.Record)
+	Seed        int64
+	Scenario    string
+	Replay      string
+	Tenants     int
+	SCRAM       bool
+	Fake        fakepg.Config
+	Engine      proxy.Config
+	Options     simnet.Options
+	DBOptions   simnet.Options
+	TLSVersion  pgwire.TLSVersion
+	DBAddr      string
+	BeforeProxy func(*simnet.Net, *fakepg.Server) error
+	Tap         func(sim.Record)
 }
 
 type World struct {
@@ -82,6 +84,9 @@ func BuildWorld(cfg WorldConfig) (*World, error) {
 	net := simnet.New(s)
 	fc := cfg.Fake
 	fc.Users = append(fc.Users, BackendUser)
+	for i := 0; i < cfg.Tenants; i++ {
+		fc.Users = append(fc.Users, TenantName(i))
+	}
 	fc.Databases = append(fc.Databases, Database)
 	if cfg.SCRAM {
 		v, err := pgwire.NewVerifier(BackendPass, []byte("salt-backend-0123"), Iterations)
@@ -111,7 +116,16 @@ func BuildWorld(cfg WorldConfig) (*World, error) {
 	ec.Backend.User = BackendUser
 	ec.Backend.Database = Database
 	ec.Backend.Password = BackendPass
-	h, err := New(net, Config{DBAddr: srv.Addr(), Options: cfg.DBOptions, Engine: ec, TLSVersion: cfg.TLSVersion})
+	if cfg.BeforeProxy != nil {
+		if err := cfg.BeforeProxy(net, srv); err != nil {
+			return nil, err
+		}
+	}
+	dbAddr := srv.Addr()
+	if cfg.DBAddr != "" {
+		dbAddr = cfg.DBAddr
+	}
+	h, err := New(net, Config{DBAddr: dbAddr, Options: cfg.DBOptions, Engine: ec, TLSVersion: cfg.TLSVersion})
 	if err != nil {
 		return nil, err
 	}

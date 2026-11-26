@@ -320,6 +320,9 @@ func (c *conn) gone() {
 	}
 	c.closed = true
 	c.forget()
+	if c.end != nil {
+		_ = c.end.Close()
+	}
 	switch {
 	case c.side == sideClient:
 		c.h.post(proxy.Event{Kind: proxy.EvClientClosed, Conn: c.id})
