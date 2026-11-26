@@ -253,6 +253,7 @@ func TestAdv_1_StopListParenListAndLeadEdges(t *testing.T) {
 }
 
 func TestAdv_1_ShareableContractWithRejectAndTx(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: this test expected reads from tables named like local, temp to be refused, which the repair removed as a defect found by this same pass, TestAdv_6_PlainTableQueriesWithUnreservedAliasesNotRefused (RECONCILIATION.md R6). See agent_work/chunks/c05-classifier/ADVERSARIAL.md.")
 	rng := advRNG(t, 104)
 
 	// Inputs that fit the safe shape (SafeRead==true) YET are rejected by the courtesy check.

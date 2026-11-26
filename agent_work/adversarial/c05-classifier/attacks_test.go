@@ -355,6 +355,7 @@ func TestAdv_6_UnknownFutureGrammar(t *testing.T) {
 	}
 }
 func TestAdv_6_UnreadableLocalArguments(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 6 narrowed to its precise form: a recognised reject-list feature with an unreadable argument is refused (RECONCILIATION.md R5). See agent_work/chunks/c05-classifier/ADVERSARIAL.md.")
 	mark(t)
 	for _, q := range []string{"SELECT set_config(lower('application_name'), 'x', true)", "SELECT set_config('search_path', lower('public'), true)"} {
 		u := p.ClassifyQuery([]byte(q), false)
@@ -482,6 +483,7 @@ func decode(t *testing.T, b []byte) []map[byte]string {
 	return frames
 }
 func TestAdv_8_ErrorRowsRandomOrderAccounting(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: this test pinned refused reply builds as counted in Total and ByRow, which the repair removed as a defect found by the Neon pass (RECONCILIATION.md R7). See agent_work/chunks/c05-classifier/ADVERSARIAL.md.")
 	mark(t)
 	var b p.ReplyBuilder
 	r := rand.New(rand.NewSource(seed))

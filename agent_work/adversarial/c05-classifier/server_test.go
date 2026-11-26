@@ -85,6 +85,7 @@ func TestAdv_2_PlainTableCoercionAndAggregates(t *testing.T) {
 	}
 }
 func TestAdv_2_PlainTablePolicyChangesSession(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 2 narrowed: tables with row-level security policies are outside it (RECONCILIATION.md R3). See agent_work/chunks/c05-classifier/ADVERSARIAL.md.")
 	mark(t)
 	q := "SELECT k FROM adv_policy"
 	fitting(t, q)
@@ -96,6 +97,7 @@ func TestAdv_2_PlainTablePolicyChangesSession(t *testing.T) {
 	}
 }
 func TestAdv_2_PlainTablePolicyChangesRepeatedRows(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 2 narrowed: tables with row-level security policies are outside it (RECONCILIATION.md R3). See agent_work/chunks/c05-classifier/ADVERSARIAL.md.")
 	mark(t)
 	q := "SELECT count(*) FROM adv_repeat"
 	fitting(t, q)

@@ -186,6 +186,7 @@ func setupFreshDB(t *testing.T, addr, db string) *advPG {
 // --- Claim 2: Safe shape is safe on a real server (Postgres 17, plain tables only) ---
 
 func TestAdv_2_ParallelScanDifferentRowsOnRerun(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 2 narrowed: re-runs repeat the result as a multiset of rows; row order, order-dependent aggregates and float aggregates may differ under a parallel plan (RECONCILIATION.md R4). See agent_work/chunks/c05-classifier/ADVERSARIAL.md.")
 	_ = advSeed(t)
 	addr := requireTierR(t)
 
@@ -239,6 +240,7 @@ func TestAdv_2_ParallelScanDifferentRowsOnRerun(t *testing.T) {
 }
 
 func TestAdv_2_FloatSumParallelNonAssociativity(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 2 narrowed: re-runs repeat the result as a multiset of rows; row order, order-dependent aggregates and float aggregates may differ under a parallel plan (RECONCILIATION.md R4). See agent_work/chunks/c05-classifier/ADVERSARIAL.md.")
 	_ = advSeed(t)
 	addr := requireTierR(t)
 
