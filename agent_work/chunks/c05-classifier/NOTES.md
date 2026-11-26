@@ -602,14 +602,25 @@ reworked under ruling 9").
 
 ## Gate result
 
-`scripts/gate.sh c05-classifier` at the build stage on commit `2bf9340` (clean tree),
-2026-11-26: **overall pass, counts_for_landing true**. G0 build, G1 lints (detlint on 19
-package patterns, importlint, boundlint, paniccheck), G2 comments, G3 unit (195 s) and race,
-G4 markers and sweep (200 seeds per scenario, 398 s), G5 fuzz (14 targets, 20 s each), G6
-tier R (Postgres 17.11, 86 s), G7 csv (DuckDB 1.5.5, 52 run directories, 25 scenarios with
-SQL files, the two classifier scenarios among them), G8 gen-docs, G9 site, G10 extra (42
-reject-list runs replayed across processes with identical digests; both canaries caught;
-the classifier SQL files catch planted numbers). `result.json` was deleted, not committed.
-Only this file changed after the gated commit. Tier R counts quoted above are from a run of
-the same code against a local Postgres 17.11 container: the classifier differential ran 407
-forwarded corpus records (192 rejected or `noexec`, not run).
+**Repair round:** `scripts/gate.sh c05-classifier` at the build stage on commit `ec18a84`
+(clean tree), 2026-11-26: **overall fail, counts_for_landing false, solely because G3 unit
+runs the two adversarial packages**, whose failures the brief expects and leaves to the
+orchestrator. The G3 log (`gate/G3-unit.log`) has exactly five failing tests, all
+adversarial, all accounted for under "Repair round": Astra
+`TestAdv_2_PlainTablePolicyChangesSession`, `TestAdv_2_PlainTablePolicyChangesRepeatedRows`
+(R3, narrowed), `TestAdv_6_UnreadableLocalArguments` (R5, narrowed),
+`TestAdv_8_ErrorRowsRandomOrderAccounting` (wrong after R7); Neon
+`TestAdv_1_ShareableContractWithRejectAndTx` (wrong after R6). (Neon's two R4 attacks are
+tier R and skip in G3.) Every product package passes in G3. Every other check passes: G0
+(tools, gofmt, build, vet, tools-vet, tools-test, tidy), G1 (detlint on 19 package
+patterns, importlint, boundlint, paniccheck), G2 comments, G3 race (26 s), G4 markers and
+sweep (200 seeds per scenario, 390 s), G5 fuzz (14 targets, 20 s each), G6 tier R (Postgres
+17.11, 214 s, including the extended `TestTierRSafeShapeDifferential`), G7 csv (DuckDB
+1.5.5, 52 run directories, 25 scenarios with SQL files), G8 gen-docs, G9 site, G10 extra
+(42 reject-list runs replayed across processes with identical digests; both canaries
+caught; classifier SQL files catch planted numbers). The gate cannot be green while those
+adversarial tests stay red and unedited; `result.json` was deleted, not committed. Only this
+file changed after the gated commit.
+
+Before the repair round (commit `2bf9340`, before the adversarial packages existed): overall
+pass, counts_for_landing true.
