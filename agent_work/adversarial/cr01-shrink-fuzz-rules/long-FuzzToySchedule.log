@@ -1,0 +1,7 @@
+warning: the test binary was not built with coverage instrumentation, so fuzzing will run without coverage guidance and may be inefficient
+fuzz: elapsed: 0s, testing seed corpus: 0/3 completed
+fuzz: elapsed: 0s, testing seed corpus: 3/3 completed, now fuzzing with 2 workers
+fuzz: elapsed: 3s, execs: 5509 (1836/sec)
+fuzz: elapsed: 6s, execs: 12644 (2378/sec)
+fuzz: elapsed: 9s, execs: 19190 (2182/sec)
+fuzz: elapsed: 12s, execs: 25939 (2249/sec)

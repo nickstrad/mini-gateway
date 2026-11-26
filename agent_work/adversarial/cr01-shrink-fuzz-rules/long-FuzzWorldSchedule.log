@@ -1,0 +1,16 @@
+warning: the test binary was not built with coverage instrumentation, so fuzzing will run without coverage guidance and may be inefficient
+fuzz: elapsed: 0s, testing seed corpus: 0/2 completed
+fuzz: elapsed: 0s, testing seed corpus: 2/2 completed, now fuzzing with 2 workers
+fuzz: elapsed: 3s, execs: 1393 (464/sec)
+fuzz: elapsed: 6s, execs: 2730 (446/sec)
+fuzz: elapsed: 9s, execs: 4135 (468/sec)
+fuzz: elapsed: 12s, execs: 4910 (258/sec)
+fuzz: elapsed: 15s, execs: 5493 (194/sec)
+fuzz: elapsed: 18s, execs: 5796 (101/sec)
+fuzz: elapsed: 20s, execs: 5880 (47/sec)
+--- FAIL: FuzzWorldSchedule (19.77s)
+    fuzzing process hung or terminated unexpectedly: exit status 2
+    Failing input written to testdata/fuzz/FuzzWorldSchedule/7edb6a746e048b6e
+    To re-run:
+    go test -run=FuzzWorldSchedule/7edb6a746e048b6e
+FAIL

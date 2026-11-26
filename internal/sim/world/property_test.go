@@ -2,6 +2,7 @@ package world_test
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -17,6 +18,10 @@ const (
 	faultWindow   = sim.Time(300 * time.Millisecond)
 	clearAt       = 400 * time.Millisecond
 	scheduleBytes = 64
+
+	fuzzInputBytes       = 128
+	fuzzMaxBloatRowBytes = 256
+	fuzzStepBudget       = 100_000
 )
 
 func smallWorld() world.Setup {
@@ -98,13 +103,54 @@ func FuzzWorldSchedule(f *testing.F) {
 	f.Add([]byte{0, 1, 0, 10, 0, 0, 0, 100})
 	f.Add([]byte{14, 0, 0, 50, 0, 0, 0, 0, 22, 3, 1, 0, 0, 2, 0, 0})
 	f.Fuzz(func(t *testing.T, data []byte) {
-		if len(data) > 128 {
-			data = data[:128]
-		}
-		sched := sim.ScheduleFromBytes(data, faultSpace())
+		sched := fuzzSchedule(data)
 		r := runSchedule(1, sched, "")
 		if r.Err != nil {
 			t.Fatalf("schedule %v: %v", sched, r.Err)
 		}
 	})
+}
+
+func fuzzSchedule(data []byte) []sim.Fault {
+	if len(data) > fuzzInputBytes {
+		data = data[:fuzzInputBytes]
+	}
+	sched := sim.ScheduleFromBytes(data, faultSpace())
+	for i := range sched {
+		if sched[i].Kind == fakepg.FaultBloat {
+			sched[i].Arg2 = min(sched[i].Arg2, fuzzMaxBloatRowBytes)
+		}
+	}
+	return sched
+}
+
+func fuzzRecord(kind sim.FaultKind, target, at byte, arg1, arg2 uint16) []byte {
+	k := byte(slices.Index(faultSpace().Kinds, kind))
+	return []byte{k, target, 0, at, byte(arg1 >> 8), byte(arg1), byte(arg2 >> 8), byte(arg2)}
+}
+
+func TestFuzzWorldScheduleCostIsBounded(t *testing.T) {
+	saved := []byte("\xfb\x01\x00\n\x00\x00\xff\xff\x06\x00\x00d")
+	widest := slices.Concat(
+		fuzzRecord(fakepg.FaultBloat, 0, 0, 4, 0xffff),
+		fuzzRecord(fakepg.FaultFragment, 0, 0, 0, 1),
+	)
+	everyRecord := []byte{}
+	for i := 0; i < fuzzInputBytes/8; i++ {
+		if i%2 == 0 {
+			everyRecord = append(everyRecord, fuzzRecord(fakepg.FaultBloat, byte(i), byte(i), 4, 0xffff)...)
+		} else {
+			everyRecord = append(everyRecord, fuzzRecord(fakepg.FaultFragment, byte(i%3), byte(i), 0, 0)...)
+		}
+	}
+	for name, data := range map[string][]byte{"saved-7edb6a746e048b6e": saved, "bloat-and-one-byte-chunks-at-zero": widest, "every-record-bloat-or-fragment": everyRecord} {
+		sched := fuzzSchedule(data)
+		r := runSchedule(1, sched, "")
+		if r.Err != nil {
+			t.Fatalf("%s: %v", name, r.Err)
+		}
+		if steps := r.Sim.Snapshot().Steps; steps > fuzzStepBudget {
+			t.Errorf("%s: one execution took %d simulator steps, budget %d (schedule %v)", name, steps, fuzzStepBudget, sched)
+		}
+	}
 }
