@@ -262,6 +262,9 @@ func (e *Engine) closeDB(d *dbConn, reason CloseReason) {
 	case dpResetting:
 		e.snap.Resetting.Add(-1)
 		e.snap.DBOpen.Add(-1)
+		if reason != CloseDBResetFailed {
+			e.snap.ResetsFailed[ResetFailClosed]++
+		}
 	}
 	d.phase = dpClosed
 	e.snap.DBCloses[reason]++

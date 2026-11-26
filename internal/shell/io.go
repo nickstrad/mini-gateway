@@ -44,6 +44,7 @@ func (s *Shell) readLoop(c *conn) {
 		}
 		if n > 0 {
 			ev := proxy.Event{Kind: c.kind(proxy.EvClientData, proxy.EvDBData), Conn: c.id, Data: append([]byte(nil), buf[:n]...)}
+			c.setInflight(true)
 			if !s.post(envelope{ev: ev, conn: c}) {
 				return
 			}

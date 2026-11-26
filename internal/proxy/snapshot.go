@@ -17,11 +17,12 @@ const (
 	ResetFailDeadline
 	ResetFailConnLost
 	ResetFailSurprise
+	ResetFailClosed
 	NumResetFailures
 )
 
 var resetFailNames = [NumResetFailures]string{"error", "wrong-tag", "wrong-status", "deadline", "connection-lost",
-	"protocol-surprise"}
+	"protocol-surprise", "closed"}
 
 func (r ResetFailure) String() string {
 	if r < NumResetFailures {

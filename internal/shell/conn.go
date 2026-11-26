@@ -50,6 +50,7 @@ type conn struct {
 	mu           sync.Mutex
 	nc           net.Conn
 	mode         readMode
+	inflight     bool
 	queue        []writeItem
 	queued       int
 	aborted      bool
@@ -108,6 +109,15 @@ func (c *conn) setMode(m readMode) {
 	ring(c.readBell)
 }
 
+func (c *conn) setInflight(on bool) {
+	c.mu.Lock()
+	c.inflight = on
+	c.mu.Unlock()
+	if !on {
+		ring(c.readBell)
+	}
+}
+
 func (c *conn) firstReadDone() {
 	c.mu.Lock()
 	if c.mode == readFirst {
@@ -119,11 +129,12 @@ func (c *conn) firstReadDone() {
 func (c *conn) awaitRead() (net.Conn, int, bool) {
 	for {
 		c.mu.Lock()
-		aborted, mode, nc := c.aborted, c.mode, c.nc
+		aborted, mode, nc, inflight := c.aborted, c.mode, c.nc, c.inflight
 		c.mu.Unlock()
 		switch {
 		case aborted:
 			return nil, 0, false
+		case inflight:
 		case mode == readFirst:
 			return nc, c.first, true
 		case mode == readFree:

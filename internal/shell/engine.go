@@ -28,9 +28,17 @@ func (s *Shell) engineLoop() {
 	}
 }
 
+type stopper interface {
+	Shutdown(now proxy.Instant, out []proxy.Action) []proxy.Action
+}
+
 func (s *Shell) engineExit(ticker *time.Ticker) {
 	ticker.Stop()
 	s.wake.Stop()
+	if st, ok := s.core.(stopper); ok {
+		s.out = st.Shutdown(s.now(), s.out[:0])
+		s.execute()
+	}
 	for id, c := range s.clients {
 		c.abort()
 		delete(s.clients, id)
@@ -45,6 +53,9 @@ func (s *Shell) engineExit(ticker *time.Ticker) {
 
 func (s *Shell) deliver(env envelope) {
 	ev := env.ev
+	if (ev.Kind == proxy.EvClientData || ev.Kind == proxy.EvDBData) && env.conn != nil {
+		defer env.conn.setInflight(false)
+	}
 	switch ev.Kind {
 	case proxy.EvClientAccepted:
 		if len(s.clients) >= maxClientConns {
