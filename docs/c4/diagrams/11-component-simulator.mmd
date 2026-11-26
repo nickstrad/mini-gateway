@@ -1,9 +1,10 @@
 flowchart TB
   DEVELOPER(["Developer or reader"]):::built
   N_ENGINE["Engine"]:::planned
+  N_E2E["End-to-end suite and load generator"]:::planned
   N_PGWIRE["Wire layer"]:::planned
   PGPROTO3[["pgproto3 (from pgx/v5)"]]:::built
-  PG[("Postgres")]:::planned
+  PG[("Postgres")]:::built
   subgraph SCOPE["Simulator harness"]
     S_LOOP["Event loop"]:::built
     S_CLOCK["Virtual clock and timers"]:::built
@@ -27,7 +28,7 @@ flowchart TB
   S_SIMTEST -->|3| S_LOOP
   S_LOOP -->|4| S_CLOCK
   S_NET -->|5| S_LOOP
-  S_NET -.->|6 implements| N_ENGINE
+  N_ENGINE -->|6| S_NET
   S_WORKLOAD -->|7| S_NET
   S_FAKEPG -->|8| S_NET
   S_FAULTS -->|9| S_NET
@@ -38,8 +39,8 @@ flowchart TB
   S_FAKEPG -->|14| PGPROTO3
   S_TESTCLIENT -->|15| PGPROTO3
   S_FAKEPG -->|16| N_PGWIRE
-  N_ENGINE -.->|17| S_TRACE
-  S_INV -.->|18| N_ENGINE
+  N_ENGINE -->|17| S_TRACE
+  N_ENGINE -->|18| S_INV
   S_SIMTEST -->|19| S_TRACE
   S_TOY -->|20| S_NET
   S_NET -->|21| S_STREAMS
@@ -66,6 +67,12 @@ flowchart TB
   S_WORKLOAD -->|42| N_PGWIRE
   S_FAKEPG -->|43| S_SIMTLS
   S_WORKLOAD -->|44| S_SIMTLS
+  N_ENGINE -->|45| S_SIMTLS
+  N_ENGINE -->|46| S_FAKEPG
+  N_E2E -->|47| S_WORLD
+  N_E2E -->|48| S_FAKEPG
+  N_E2E -->|49| S_FAULTS
+  N_E2E -->|50| S_TESTCLIENT
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned

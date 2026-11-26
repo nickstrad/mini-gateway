@@ -1,11 +1,11 @@
 flowchart TB
   DEVELOPER(["Developer or reader"]):::built
   PGPROTO3[["pgproto3 (from pgx/v5)"]]:::built
-  PG[("Postgres")]:::planned
+  PG[("Postgres")]:::built
   subgraph SCOPE["mini-gateway repository"]
     C_SIM["Simulator harness<br/>internal/sim"]:::planned
     C_E2E["End-to-end suite and load generator<br/>test/e2e"]:::planned
-    C_SHELL["Shell and binary<br/>cmd/mini-gateway"]:::planned
+    C_SHELL["Shell and binary<br/>cmd/mini-gateway"]:::built
     C_ENGINE["Engine<br/>internal/proxy"]:::planned
     C_PGWIRE["Wire layer<br/>internal/pgwire"]:::planned
     C_WORK["Work vocabulary<br/>internal/work"]:::built
@@ -14,24 +14,26 @@ flowchart TB
     C_COAL["Coalescer<br/>internal/coalesce"]:::planned
     C_RETRY["Retry policy<br/>internal/retry"]:::planned
   end
-  C_SHELL -.->|1| C_ENGINE
-  C_SIM -.->|2| C_ENGINE
-  C_ENGINE -.->|3| C_PGWIRE
+  C_SHELL -->|1| C_ENGINE
+  C_ENGINE -->|2| C_SIM
+  C_ENGINE -->|3| C_PGWIRE
   C_PGWIRE -.->|4| PGPROTO3
   C_PGWIRE -.->|5| C_WORK
-  C_ADM -.->|6| C_WORK
-  C_POOL -.->|7| C_WORK
-  C_COAL -.->|8| C_WORK
-  C_RETRY -.->|9| C_WORK
-  C_SIM -->|10| PGPROTO3
-  C_E2E -.->|11| C_SIM
-  C_E2E -.->|12| C_SHELL
-  C_E2E -.->|13| PG
-  DEVELOPER -->|14| C_SIM
-  DEVELOPER -.->|15| C_E2E
-  C_SIM -.->|16| C_WORK
-  C_SHELL -.->|17| PG
-  C_SIM -->|18| PG
+  C_ENGINE -->|6| C_WORK
+  C_ADM -.->|7| C_WORK
+  C_POOL -.->|8| C_WORK
+  C_COAL -.->|9| C_WORK
+  C_RETRY -.->|10| C_WORK
+  C_SIM -->|11| PGPROTO3
+  C_E2E -->|12| C_SIM
+  C_E2E -->|13| C_ENGINE
+  C_E2E -->|14| C_SHELL
+  C_E2E -->|15| PG
+  DEVELOPER -->|16| C_SIM
+  DEVELOPER -.->|17| C_E2E
+  C_SIM -.->|18| C_WORK
+  C_SHELL -->|19| PG
+  C_SIM -->|20| PG
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned
