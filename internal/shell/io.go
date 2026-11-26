@@ -60,13 +60,20 @@ func (s *Shell) readLoop(c *conn) {
 
 func (s *Shell) readerExit(c *conn) {
 	c.abort()
+	if c.side == sideDB {
+		<-c.writerDone
+	}
 	if c.claimClosed() {
+		if c.side == sideDB && c.stoppedWriting() {
+			s.post(envelope{ev: proxy.Event{Kind: proxy.EvDBWriteRefused, Conn: c.id}, conn: c})
+		}
 		s.post(envelope{ev: proxy.Event{Kind: c.kind(proxy.EvClientClosed, proxy.EvDBClosed), Conn: c.id}, conn: c})
 	}
 	s.unregister(c)
 }
 
 func (s *Shell) writeLoop(c *conn) {
+	defer close(c.writerDone)
 	defer c.abort()
 	for {
 		it, ok := c.next()
@@ -90,11 +97,18 @@ func (s *Shell) writeLoop(c *conn) {
 
 func (s *Shell) writeOut(c *conn, data []byte) bool {
 	nc := c.current()
-	if nc == nil || len(data) == 0 {
+	if len(data) == 0 {
 		return nc != nil
+	}
+	if nc == nil {
+		c.writeStopped()
+		return false
 	}
 	_ = nc.SetWriteDeadline(time.Now().Add(s.cfg.Timeouts.ClientWrite))
 	n, err := nc.Write(data)
+	if n < len(data) {
+		c.writeStopped()
+	}
 	if n > 0 {
 		ev := proxy.Event{Kind: c.kind(proxy.EvClientWrote, proxy.EvDBWrote), Conn: c.id, N: n}
 		if !s.post(envelope{ev: ev, conn: c}) {

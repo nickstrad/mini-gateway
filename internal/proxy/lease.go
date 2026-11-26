@@ -336,10 +336,7 @@ func (e *Engine) statementLost(c *client, d *dbConn) {
 	c.req = nil
 	e.snap.InFlight.Add(-1)
 	e.snap.Failed++
-	reached := work.No
-	if d.acked > req.start || req.relayed > 0 {
-		reached = work.Yes
-	}
+	reached := reachedFor(d, req)
 	e.reached(reached)
 	row := lostRow(req, reached)
 	if e.seams.Retry.Retry(e.now, Failure{Request: req.id, Tenant: c.tenant, Reached: reached, Row: uint8(row), InTx: req.inTx}) {
@@ -351,6 +348,13 @@ func (e *Engine) statementLost(c *client, d *dbConn) {
 	if c.phase != cpClosed {
 		e.pump(c)
 	}
+}
+
+func reachedFor(d *dbConn, req *request) work.Tri {
+	if req.relayed > 0 || d == nil || !d.refused || d.refusedAt > req.start {
+		return work.Yes
+	}
+	return work.No
 }
 
 func lostRow(req *request, reached work.Tri) pgwire.ErrRowID {

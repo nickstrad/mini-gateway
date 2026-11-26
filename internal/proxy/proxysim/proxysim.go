@@ -323,6 +323,11 @@ func (c *conn) gone() {
 	if c.end != nil {
 		_ = c.end.Close()
 	}
+	unwritten := len(c.out) > 0
+	c.out = nil
+	if unwritten && c.side == sideDB && c.connected {
+		c.h.post(proxy.Event{Kind: proxy.EvDBWriteRefused, Conn: c.id})
+	}
 	switch {
 	case c.side == sideClient:
 		c.h.post(proxy.Event{Kind: proxy.EvClientClosed, Conn: c.id})
@@ -450,11 +455,6 @@ func (c *conn) flush() {
 		return
 	}
 	n, err := c.end.Write(c.out)
-	if err != nil {
-		c.out = nil
-		c.gone()
-		return
-	}
 	if n > 0 {
 		c.out = c.out[n:]
 		kind := proxy.EvClientWrote
@@ -462,6 +462,10 @@ func (c *conn) flush() {
 			kind = proxy.EvDBWrote
 		}
 		c.h.post(proxy.Event{Kind: kind, Conn: c.id, N: n})
+	}
+	if err != nil {
+		c.gone()
+		return
 	}
 	if len(c.out) > 0 {
 		c.end.WaitWritable()

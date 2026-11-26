@@ -158,7 +158,11 @@ func (e *Engine) Step(now Instant, ev Event, out []Action) []Action {
 		}
 	case EvDBWrote:
 		if d := e.dbs[ev.Conn]; d != nil {
-			d.acked += int64(ev.N)
+			d.wrote(ev.N)
+		}
+	case EvDBWriteRefused:
+		if d := e.dbs[ev.Conn]; d != nil {
+			d.writeRefused()
 		}
 	case EvDBTLS:
 		if d := e.dbs[ev.Conn]; d != nil {

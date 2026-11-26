@@ -23,12 +23,13 @@ const (
 	EvTimer
 	EvPublish
 	EvDraining
+	EvDBWriteRefused
 	numEventKinds
 )
 
 var eventNames = [numEventKinds]string{"?", "client-accepted", "client-data", "client-closed", "client-wrote",
 	"client-tls", "db-opened", "db-dial-failed", "db-data", "db-closed", "db-wrote", "db-tls", "timer", "publish",
-	"draining"}
+	"draining", "db-write-refused"}
 
 func (k EventKind) String() string {
 	if k < numEventKinds {

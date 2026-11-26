@@ -43,9 +43,10 @@ type conn struct {
 	start time.Time
 	first int
 
-	readBell  chan struct{}
-	writeBell chan struct{}
-	done      chan struct{}
+	readBell   chan struct{}
+	writeBell  chan struct{}
+	done       chan struct{}
+	writerDone chan struct{}
 
 	mu           sync.Mutex
 	nc           net.Conn
@@ -56,12 +57,14 @@ type conn struct {
 	aborted      bool
 	engineClosed bool
 	closePosted  bool
+	unwritten    bool
 	cancelDial   context.CancelFunc
 }
 
 func newConn(s side, id proxy.ConnID, start time.Time, first int) *conn {
 	c := &conn{side: s, id: id, start: start, first: first,
-		readBell: make(chan struct{}, bellCap), writeBell: make(chan struct{}, bellCap), done: make(chan struct{}, bellCap)}
+		readBell: make(chan struct{}, bellCap), writeBell: make(chan struct{}, bellCap), done: make(chan struct{}, bellCap),
+		writerDone: make(chan struct{})}
 	if first == 0 {
 		c.mode = readFree
 	}
@@ -211,6 +214,11 @@ func (c *conn) abort() {
 		return
 	}
 	c.aborted = true
+	for _, it := range c.queue {
+		if it.kind == itemWrite && len(it.data) > 0 {
+			c.unwritten = true
+		}
+	}
 	nc, cancel := c.nc, c.cancelDial
 	c.queue, c.queued, c.cancelDial = nil, 0, nil
 	close(c.done)
@@ -231,6 +239,18 @@ func (c *conn) claimClosed() bool {
 	}
 	c.closePosted = true
 	return true
+}
+
+func (c *conn) writeStopped() {
+	c.mu.Lock()
+	c.unwritten = true
+	c.mu.Unlock()
+}
+
+func (c *conn) stoppedWriting() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.unwritten
 }
 
 func (c *conn) closedByEngine() bool {

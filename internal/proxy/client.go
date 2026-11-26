@@ -452,11 +452,7 @@ func (e *Engine) activeGone(c *client) {
 		return
 	}
 	e.snap.InFlight.Add(-1)
-	reached := work.No
-	if d != nil && d.acked > req.start {
-		reached = work.Yes
-	}
-	e.failNoReply(req, reached)
+	e.failNoReply(req, reachedFor(d, req))
 	c.req = nil
 }
 

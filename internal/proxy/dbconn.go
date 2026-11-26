@@ -41,6 +41,8 @@ type dbConn struct {
 	lastTenant work.TenantID
 	queued     int64
 	acked      int64
+	refused    bool
+	refusedAt  int64
 	paused     bool
 	resetAt    Instant
 	judge      resetJudge
@@ -193,6 +195,18 @@ func (e *Engine) dbData(d *dbConn, b []byte) {
 			return
 		}
 	}
+}
+
+func (d *dbConn) wrote(n int) {
+	if n > 0 {
+		d.acked += int64(n)
+		d.refused = false
+	}
+}
+
+func (d *dbConn) writeRefused() {
+	d.refused = true
+	d.refusedAt = d.acked
 }
 
 func (e *Engine) dbClosed(d *dbConn) {
