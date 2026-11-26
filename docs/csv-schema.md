@@ -91,18 +91,24 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `engine` | `clients_connected_peak` | gauge | — | count | max | Most client connections open at once. |
 | `engine` | `clients_dropped` | counter | — | count | sum | Clients dropped because their writes stalled past the deadline. |
 | `engine` | `clients_in_startup` | gauge | — | count | sum | Client connections in startup now. |
+| `engine` | `clients_in_startup_peak` | gauge | — | count | max | Most client connections in startup at once. |
 | `engine` | `clients_in_transaction` | gauge | — | count | sum | Clients holding a lease inside a transaction now. |
+| `engine` | `clients_in_transaction_peak` | gauge | — | count | max | Most clients inside a transaction at once. |
 | `engine` | `clients_refused` | counter | — | count | sum | Client connections refused at the client or startup cap. |
 | `engine` | `connections_resetting` | gauge | — | count | sum | Database connections being reset now. |
+| `engine` | `connections_resetting_peak` | gauge | — | count | max | Most database connections being reset at once. |
 | `engine` | `database_capacity` | gauge | — | count | sum | Size of the fixed set of database connections. |
 | `engine` | `database_closes` | counter | reason | count | sum | Database connections closed, by reason. |
 | `engine` | `database_connect_failures` | counter | reason | count | sum | Database connects that failed, by class (reason). |
 | `engine` | `database_connecting` | gauge | — | count | sum | Database connections being opened now. |
+| `engine` | `database_connecting_peak` | gauge | — | count | max | Most database connections being opened at once. |
 | `engine` | `database_dial_failures` | counter | — | count | sum | Dials that failed before the connection opened. |
 | `engine` | `database_dials` | counter | — | count | sum | Database connections dialled. |
 | `engine` | `database_down` | gauge | — | count | sum | 1 while no database connection is usable and the last dial failed. |
 | `engine` | `database_idle` | gauge | — | count | sum | Database connections idle now. |
+| `engine` | `database_idle_peak` | gauge | — | count | max | Most database connections idle at once. |
 | `engine` | `database_lent` | gauge | — | count | sum | Database connections lent now. |
+| `engine` | `database_lent_peak` | gauge | — | count | max | Most database connections lent at once. |
 | `engine` | `database_open` | gauge | — | count | sum | Database connections open now (idle, lent or resetting). |
 | `engine` | `database_open_peak` | gauge | — | count | max | Most database connections open at once. |
 | `engine` | `database_ready` | counter | — | count | sum | Database connections that finished startup. |
@@ -129,6 +135,7 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `engine` | `requests_completed` | counter | — | count | sum | Requests whose reply reached its end marker. |
 | `engine` | `requests_failed` | counter | — | count | sum | Accepted requests that failed after acceptance. |
 | `engine` | `requests_in_flight` | gauge | — | count | sum | Requests forwarded and not yet answered. |
+| `engine` | `requests_in_flight_peak` | gauge | — | count | max | Most requests in flight at once. |
 | `engine` | `requests_queued` | gauge | — | count | sum | Requests waiting in the queue now. |
 | `engine` | `requests_queued_peak` | gauge | — | count | max | Most requests waiting in the queue at once. |
 | `engine` | `requests_received` | counter | — | count | sum | Query messages received after startup. |
@@ -147,21 +154,25 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `engine` | `shell_admin_requests` | counter | — | count | sum | Requests served by the admin listener. |
 | `engine` | `shell_deadlines` | counter | mode | count | sum | Socket deadlines that fired (mode: read, write). |
 | `engine` | `shell_goroutines` | gauge | — | count | sum | Shell goroutines running now. |
+| `engine` | `shell_goroutines_peak` | gauge | — | count | max | Most shell goroutines at once. |
 | `engine` | `shell_handshakes_failed` | counter | — | count | sum | TLS handshakes that failed in the shell. |
 | `engine` | `shell_mailbox_capacity` | gauge | — | count | sum | Capacity of the engine mailbox. |
 | `engine` | `shell_mailbox_depth` | gauge | — | count | sum | Events waiting in the engine mailbox now. |
 | `engine` | `shell_mailbox_full` | counter | — | count | sum | Posts that found the engine mailbox full and waited. |
 | `engine` | `shell_mailbox_peak` | gauge | — | count | max | Most events waiting in the engine mailbox at once. |
 | `engine` | `shell_readers` | gauge | mode | count | sum | Socket reader goroutines now (mode: client, database). |
+| `engine` | `shell_readers_peak` | gauge | mode | count | max | Most socket reader goroutines at once (mode: client, database). |
 | `engine` | `shell_stale_events` | counter | — | count | sum | Events dropped because their connection was already closed. |
 | `engine` | `shell_write_queue_overflows` | counter | — | count | sum | Connections closed because their write queue passed its cap. |
 | `engine` | `shell_writers` | gauge | mode | count | sum | Socket writer goroutines now (mode: client, database). |
+| `engine` | `shell_writers_peak` | gauge | mode | count | max | Most socket writer goroutines at once (mode: client, database). |
 | `engine` | `stage_passed` | counter | mode | count | sum | Requests that passed each stage (mode). |
 | `engine` | `stage_refused` | counter | mode | count | sum | Requests refused at each stage (mode). |
 | `engine` | `statement_time` | histogram | — | ns | by bucket | Database statement time, from send to end of reply. |
 | `engine` | `statement_time_clamped_high` | counter | — | count | sum | Values recorded into statement_time above its range, clamped to the highest bucket. |
 | `engine` | `statement_time_clamped_low` | counter | — | count | sum | Values recorded into statement_time below its range, clamped to the lowest bucket. |
 | `engine` | `timers_pending` | gauge | — | count | sum | Engine deadlines armed now. |
+| `engine` | `timers_pending_peak` | gauge | — | count | max | Most engine deadlines armed at once. |
 | `fakepg` | `bad_hellos` | counter | — | count | sum | Handshakes refused for a bad hello. |
 | `fakepg` | `bytes_in` | counter | — | bytes | sum | Bytes read from clients. |
 | `fakepg` | `bytes_out` | counter | — | bytes | sum | Bytes written to clients. |

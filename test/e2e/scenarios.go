@@ -195,8 +195,8 @@ func resetTamperSpec(t Tamper) Spec {
 }
 
 func vanishSpec() Spec {
-	sp := Spec{Name: "e2e-client-vanish", Tenants: 2, Conns: 2, QueueCap: 16, Rows: clientRows(4), Duration: 3 * time.Second,
-		Service: fakepg.Service{PerKey: []fakepg.KeyTime{{Key: key(1, "a"), Time: 200 * time.Millisecond}}}}
+	sp := Spec{Name: "e2e-client-vanish", Tenants: 2, Conns: 3, QueueCap: 16, Rows: clientRows(5), Duration: 3 * time.Second,
+		Service: fakepg.Service{PerKey: []fakepg.KeyTime{{Key: key(1, "a"), Time: 200 * time.Millisecond}, {Key: key(4, "a"), Time: 200 * time.Millisecond}}}}
 	sp.Clients = []Script{
 		{Tenant: 0, Steps: []Step{{SQL: "BEGIN"}, {SQL: "UPDATE kv SET v = 'dirty' WHERE k = 'shared'", Delay: stepGap, Vanish: VanishAfterReply}}},
 		{Tenant: 1, Start: time.Millisecond, Steps: []Step{{SQL: "BEGIN"}, {SQL: update(1, "a", "dirty"), Delay: stepGap, Vanish: VanishAfterSend}}},
@@ -205,6 +205,7 @@ func vanishSpec() Spec {
 		sp.Clients = append(sp.Clients, Script{Tenant: c % 2, Start: 500 * time.Millisecond,
 			Steps: steps("SELECT v FROM kv WHERE k = 'shared'", read(1, "a"), "BEGIN", "SELECT 1", "COMMIT")})
 	}
+	sp.Clients = append(sp.Clients, Script{Tenant: 0, Start: 2 * time.Millisecond, Steps: []Step{{SQL: update(4, "a", "applied"), Vanish: VanishAfterSend}}})
 	return sp
 }
 

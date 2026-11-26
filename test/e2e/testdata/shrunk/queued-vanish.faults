@@ -1,0 +1,7 @@
+faults 6
+at=0ns kind=slow-read target=0 arg1=0 arg2=0
+at=0ns kind=disconnect target=0 arg1=0 arg2=0
+at=0ns kind=slow-read target=0 arg1=0 arg2=0
+at=0ns kind=disconnect target=0 arg1=0 arg2=0
+at=0ns kind=slow-read target=0 arg1=0 arg2=0
+at=0ns kind=vanish target=0 arg1=0 arg2=0

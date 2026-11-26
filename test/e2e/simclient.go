@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 	"github.com/nickstrad/mini-gateway/internal/proxy/proxysim"
@@ -12,7 +13,10 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/testclient"
 )
 
-const maxTokens = 1 << 16
+const (
+	maxTokens   = 1 << 16
+	vanishDelay = 10 * time.Millisecond
+)
 
 type simClient struct {
 	s        *sim.Sim
@@ -215,7 +219,12 @@ func (c *simClient) sendStep() {
 	}
 	if st.Vanish == VanishAfterSend {
 		c.res.Steps = append(c.res.Steps, append(c.cur, "vanished"))
-		c.vanish()
+		c.done = true
+		c.res.Closed = true
+		c.timer = c.s.After(vanishDelay, func() {
+			_ = c.end.Reset()
+			c.complete()
+		})
 	}
 }
 

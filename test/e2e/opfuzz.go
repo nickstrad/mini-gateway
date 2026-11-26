@@ -192,9 +192,11 @@ func (ow *opWorld) apply(op sim.Fault) {
 			ow.clients[op.Target] = newOpClient(ow, int(op.Target))
 		}
 	case OpRead, OpWrite, OpBegin, OpCommit, OpRollback, OpReject, OpExtended, OpSlowRead, OpBigRead:
-		if c != nil {
-			c.query(op.Kind)
+		if c == nil || c.done {
+			c = newOpClient(ow, int(op.Target))
+			ow.clients[op.Target] = c
 		}
+		c.query(op.Kind)
 	case OpDisconnect:
 		if c != nil {
 			c.closeNow()
@@ -255,18 +257,19 @@ func (ow *opWorld) cancel(c *opClient) {
 }
 
 type opClient struct {
-	ow     *opWorld
-	idx    int
-	end    *simnet.End
-	sess   testclient.Session
-	out    []byte
-	ready  bool
-	busy   bool
-	kind   sim.FaultKind
-	tokens []string
-	noRead bool
-	done   bool
-	buf    [proxy.MaxRead]byte
+	ow      *opWorld
+	idx     int
+	end     *simnet.End
+	sess    testclient.Session
+	out     []byte
+	ready   bool
+	busy    bool
+	kind    sim.FaultKind
+	tokens  []string
+	noRead  bool
+	pending sim.FaultKind
+	done    bool
+	buf     [proxy.MaxRead]byte
 }
 
 func newOpClient(ow *opWorld, idx int) *opClient {
@@ -347,6 +350,10 @@ func (c *opClient) message(m testclient.Msg) {
 	if !c.ready {
 		if m.Type == testclient.MsgReady {
 			c.ready = true
+			if k := c.pending; k != 0 {
+				c.pending = 0
+				c.query(k)
+			}
 		}
 		return
 	}
@@ -388,7 +395,11 @@ func tagFits(k sim.FaultKind, tag string) bool {
 }
 
 func (c *opClient) query(k sim.FaultKind) {
-	if c.done || !c.ready || c.busy {
+	if c.done || c.busy {
+		return
+	}
+	if !c.ready {
+		c.pending = k
 		return
 	}
 	c.busy, c.kind = true, k

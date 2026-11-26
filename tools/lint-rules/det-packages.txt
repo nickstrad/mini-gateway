@@ -32,3 +32,7 @@ internal/obs/clssrc
 internal/pgwire/pgwiretest/wireworld
 internal/pgwire/pgwiretest/clsworld
 internal/work
+# Chunk 6: the engine, its simulator harness and its snapshot mapping.
+internal/proxy
+internal/proxy/proxysim
+internal/obs/enginesrc

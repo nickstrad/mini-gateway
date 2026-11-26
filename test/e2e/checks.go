@@ -287,8 +287,8 @@ func checkVanish(r *SimRun) error {
 			return err
 		}
 	}
-	if n := r.Engine.DBCloses[proxy.CloseDBClientVanished]; n != 2 {
-		return failf("%d connections closed for a vanished client, want 2", n)
+	if n := r.Engine.DBCloses[proxy.CloseDBClientVanished]; n != 3 {
+		return failf("%d connections closed for a vanished client, want 3", n)
 	}
 	lost := 0
 	for _, t := range r.World.Fake.TransactionLog() {

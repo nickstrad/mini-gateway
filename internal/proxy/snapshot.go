@@ -87,7 +87,6 @@ type Snapshot struct {
 	RelayPauses     int64
 	ClientsDropped  int64
 	ParamStatusTurn int64
-	FrontQueued     int64
 
 	LeasesStarted    int64
 	LeasesEnded      int64

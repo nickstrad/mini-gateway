@@ -152,10 +152,8 @@ func (h *Harness) quiesce() error {
 	if n := len(h.clients); n != 0 {
 		errs = append(errs, fmt.Errorf("%d client sockets open in the harness", n))
 	}
-	for _, c := range h.dbs {
-		if len(c.out) > 0 {
-			errs = append(errs, fmt.Errorf("database connection %d has %d unsent bytes", c.id, len(c.out)))
-		}
+	if n := len(h.dbs); n != 0 {
+		errs = append(errs, fmt.Errorf("%d database sockets open in the harness", n))
 	}
 	if h.overrun != 0 {
 		errs = append(errs, fmt.Errorf("event queue overran %d times", h.overrun))

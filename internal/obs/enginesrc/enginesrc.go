@@ -31,6 +31,8 @@ func Metrics() []obs.MetricDesc {
 		obs.HighWaterDesc("clients_connected_peak", 0, "Most client connections open at once."),
 		obs.GaugeDesc("clients_in_startup", 0, "Client connections in startup now."),
 		obs.GaugeDesc("clients_in_transaction", 0, "Clients holding a lease inside a transaction now."),
+		obs.HighWaterDesc("clients_in_startup_peak", 0, "Most client connections in startup at once."),
+		obs.HighWaterDesc("clients_in_transaction_peak", 0, "Most clients inside a transaction at once."),
 		obs.GaugeDesc("clients_by_tls", lm, "Ready client connections by TLS version (mode: plain, 1.2, 1.3)."),
 		obs.CounterDesc("clients_accepted", 0, "Client connections accepted."),
 		obs.CounterDesc("clients_refused", 0, "Client connections refused at the client or startup cap."),
@@ -45,6 +47,7 @@ func Metrics() []obs.MetricDesc {
 		obs.GaugeDesc("requests_queued", 0, "Requests waiting in the queue now."),
 		obs.HighWaterDesc("requests_queued_peak", 0, "Most requests waiting in the queue at once."),
 		obs.GaugeDesc("requests_in_flight", 0, "Requests forwarded and not yet answered."),
+		obs.HighWaterDesc("requests_in_flight_peak", 0, "Most requests in flight at once."),
 		obs.CounterDesc("replies", lr, "Proxy-made replies by error-contract row (reason)."),
 		obs.CounterDesc("stage_passed", lm, "Requests that passed each stage (mode)."),
 		obs.CounterDesc("stage_refused", lm, "Requests refused at each stage (mode)."),
@@ -67,6 +70,7 @@ func Metrics() []obs.MetricDesc {
 		obs.CounterDesc("resets_completed", 0, "Resets answered with the DISCARD ALL tag and status I."),
 		obs.CounterDesc("resets_failed", lr, "Resets that failed, by reason; the connection was closed."),
 		obs.GaugeDesc("connections_resetting", 0, "Database connections being reset now."),
+		obs.HighWaterDesc("connections_resetting_peak", 0, "Most database connections being reset at once."),
 		obs.HistogramDesc("reset_time", 0, obs.UnitNs, "Time from sending DISCARD ALL to its ReadyForQuery."),
 		obs.CounterDesc("ignored_database_data", 0, "Bytes events from database connections already closed."),
 		obs.GaugeDesc("database_open", 0, "Database connections open now (idle, lent or resetting)."),
@@ -74,6 +78,9 @@ func Metrics() []obs.MetricDesc {
 		obs.GaugeDesc("database_connecting", 0, "Database connections being opened now."),
 		obs.GaugeDesc("database_lent", 0, "Database connections lent now."),
 		obs.GaugeDesc("database_idle", 0, "Database connections idle now."),
+		obs.HighWaterDesc("database_connecting_peak", 0, "Most database connections being opened at once."),
+		obs.HighWaterDesc("database_lent_peak", 0, "Most database connections lent at once."),
+		obs.HighWaterDesc("database_idle_peak", 0, "Most database connections idle at once."),
 		obs.GaugeDesc("database_capacity", 0, "Size of the fixed set of database connections."),
 		obs.GaugeDesc(MetricDatabaseDown, 0, "1 while no database connection is usable and the last dial failed."),
 		obs.CounterDesc("database_dials", 0, "Database connections dialled."),
@@ -82,6 +89,7 @@ func Metrics() []obs.MetricDesc {
 		obs.CounterDesc("database_closes", lr, "Database connections closed, by reason."),
 		obs.CounterDesc("database_connect_failures", lr, "Database connects that failed, by class (reason)."),
 		obs.GaugeDesc("timers_pending", 0, "Engine deadlines armed now."),
+		obs.HighWaterDesc("timers_pending_peak", 0, "Most engine deadlines armed at once."),
 		obs.CounterDesc("publishes", 0, "Publish ticks handled by the engine."),
 		obs.GaugeDesc("draining", 0, "1 while the draining input is set."),
 		obs.CounterDesc("events", 0, "Events handled by the engine."),
@@ -95,8 +103,11 @@ func ShellMetrics() []obs.MetricDesc {
 		obs.GaugeDesc("shell_mailbox_capacity", 0, "Capacity of the engine mailbox."),
 		obs.CounterDesc("shell_mailbox_full", 0, "Posts that found the engine mailbox full and waited."),
 		obs.GaugeDesc("shell_goroutines", 0, "Shell goroutines running now."),
+		obs.HighWaterDesc("shell_goroutines_peak", 0, "Most shell goroutines at once."),
 		obs.GaugeDesc("shell_readers", lm, "Socket reader goroutines now (mode: client, database)."),
+		obs.HighWaterDesc("shell_readers_peak", lm, "Most socket reader goroutines at once (mode: client, database)."),
 		obs.GaugeDesc("shell_writers", lm, "Socket writer goroutines now (mode: client, database)."),
+		obs.HighWaterDesc("shell_writers_peak", lm, "Most socket writer goroutines at once (mode: client, database)."),
 		obs.CounterDesc("shell_accepted", 0, "Client sockets accepted by the listener."),
 		obs.CounterDesc("shell_admin_requests", 0, "Requests served by the admin listener."),
 		obs.CounterDesc("shell_handshakes_failed", 0, "TLS handshakes that failed in the shell."),
@@ -114,6 +125,7 @@ func Map(s proxy.Snapshot, e *obs.Emitter) {
 	mapLeases(s, e)
 	mapDatabase(s, e)
 	e.Gauge("timers_pending", none, s.TimersPending.Value)
+	e.Gauge("timers_pending_peak", none, s.TimersPending.Peak)
 	e.Counter("publishes", none, s.Publishes)
 	e.Gauge("draining", none, boolInt(s.Draining))
 	e.Counter("events", none, s.Events)
@@ -124,6 +136,8 @@ func mapClients(s proxy.Snapshot, e *obs.Emitter) {
 	e.Gauge("clients_connected_peak", none, s.ClientsConnected.Peak)
 	e.Gauge("clients_in_startup", none, s.ClientsInStartup.Value)
 	e.Gauge("clients_in_transaction", none, s.ClientsInTx.Value)
+	e.Gauge("clients_in_startup_peak", none, s.ClientsInStartup.Peak)
+	e.Gauge("clients_in_transaction_peak", none, s.ClientsInTx.Peak)
 	for i, v := range s.ClientsByTLS {
 		e.Gauge("clients_by_tls", obs.Labels{Mode: tlsModes[i]}, v)
 	}
@@ -148,6 +162,7 @@ func mapRequests(s proxy.Snapshot, e *obs.Emitter) {
 	e.Gauge("requests_queued", none, s.Queued.Value)
 	e.Gauge("requests_queued_peak", none, s.Queued.Peak)
 	e.Gauge("requests_in_flight", none, s.InFlight.Value)
+	e.Gauge("requests_in_flight_peak", none, s.InFlight.Peak)
 	for i, v := range s.ByRow {
 		e.Counter("replies", obs.Labels{Reason: pgwire.ErrRowID(i).Row().ID}, v)
 	}
@@ -184,6 +199,7 @@ func mapLeases(s proxy.Snapshot, e *obs.Emitter) {
 		e.Counter("resets_failed", obs.Labels{Reason: proxy.ResetFailure(i).String()}, v)
 	}
 	e.Gauge("connections_resetting", none, s.Resetting.Value)
+	e.Gauge("connections_resetting_peak", none, s.Resetting.Peak)
 	e.Counter("ignored_database_data", none, s.IgnoredDBData)
 }
 
@@ -193,6 +209,9 @@ func mapDatabase(s proxy.Snapshot, e *obs.Emitter) {
 	e.Gauge("database_connecting", none, s.DBConnecting.Value)
 	e.Gauge("database_lent", none, s.DBLent.Value)
 	e.Gauge("database_idle", none, s.DBIdle.Value)
+	e.Gauge("database_connecting_peak", none, s.DBConnecting.Peak)
+	e.Gauge("database_lent_peak", none, s.DBLent.Peak)
+	e.Gauge("database_idle_peak", none, s.DBIdle.Peak)
 	e.Gauge("database_capacity", none, s.DBCap)
 	e.Gauge(MetricDatabaseDown, none, boolInt(s.DBDown))
 	e.Counter("database_dials", none, s.DBDials)
@@ -216,10 +235,15 @@ func MapShell(s proxy.ShellSnapshot, e *obs.Emitter) {
 	e.Gauge("shell_mailbox_capacity", none, s.MailboxCap)
 	e.Counter("shell_mailbox_full", none, s.MailboxFull)
 	e.Gauge("shell_goroutines", none, s.Goroutines.Value)
+	e.Gauge("shell_goroutines_peak", none, s.Goroutines.Peak)
 	e.Gauge("shell_readers", obs.Labels{Mode: "client"}, s.ClientReaders.Value)
 	e.Gauge("shell_readers", obs.Labels{Mode: "database"}, s.DBReaders.Value)
+	e.Gauge("shell_readers_peak", obs.Labels{Mode: "client"}, s.ClientReaders.Peak)
+	e.Gauge("shell_readers_peak", obs.Labels{Mode: "database"}, s.DBReaders.Peak)
 	e.Gauge("shell_writers", obs.Labels{Mode: "client"}, s.ClientWriters.Value)
 	e.Gauge("shell_writers", obs.Labels{Mode: "database"}, s.DBWriters.Value)
+	e.Gauge("shell_writers_peak", obs.Labels{Mode: "client"}, s.ClientWriters.Peak)
+	e.Gauge("shell_writers_peak", obs.Labels{Mode: "database"}, s.DBWriters.Peak)
 	e.Counter("shell_accepted", none, s.Accepted)
 	e.Counter("shell_admin_requests", none, s.AdminRequests)
 	e.Counter("shell_handshakes_failed", none, s.HandshakesFailed)
