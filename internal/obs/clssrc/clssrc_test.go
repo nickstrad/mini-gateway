@@ -101,13 +101,30 @@ func TestZeroSnapshotEmitsEveryLabelValue(t *testing.T) {
 
 func TestReplyMetricsCoverEveryRow(t *testing.T) {
 	var b pgwire.ReplyBuilder
-	_, _, _ = b.Build(nil, pgwire.ErrRowShed, 'I')
-	snap := collect(t, clssrc.Snapshot{Replies: b.Snapshot()})
-	if got := snap.Value(obs.ComponentClassifier, "replies", obs.Labels{Reason: "shed"}); got != 1 {
-		t.Fatalf("replies{shed} = %d, want 1", got)
+	var built, failed int64
+	want := map[string]int64{}
+	for id := pgwire.ErrRowID(0); id < pgwire.ErrRowCount; id++ {
+		row := pgwire.ErrorRows[id]
+		for k := 0; k <= int(id); k++ {
+			if _, _, err := b.Build(nil, id, 'I'); err != nil {
+				failed++
+				continue
+			}
+			built++
+			want[row.ID]++
+		}
 	}
-	if got := snap.Value(obs.ComponentClassifier, "replies_built", obs.Labels{}); got != 1 {
-		t.Fatalf("replies_built = %d, want 1", got)
+	snap := collect(t, clssrc.Snapshot{Replies: b.Snapshot()})
+	for _, row := range pgwire.ErrorRows {
+		if got := snap.Value(obs.ComponentClassifier, "replies", obs.Labels{Reason: row.ID}); got != want[row.ID] {
+			t.Errorf("replies{%s} = %d, want %d", row.ID, got, want[row.ID])
+		}
+	}
+	if got := snap.Value(obs.ComponentClassifier, "replies_built", obs.Labels{}); got != built {
+		t.Errorf("replies_built = %d, want %d", got, built)
+	}
+	if got := snap.Value(obs.ComponentClassifier, "reply_failures", obs.Labels{}); got != failed || failed == 0 {
+		t.Errorf("reply_failures = %d, want %d and above zero", got, failed)
 	}
 }
 
