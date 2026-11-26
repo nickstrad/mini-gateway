@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -27,12 +28,25 @@ var shrTierRSchema = []string{
 	"INSERT INTO t VALUES (1, 'x'), (2, 'y'), (3, 'z'), (4, NULL)",
 	"CREATE TABLE u (a int, b text)",
 	"INSERT INTO u VALUES (1, 'x'), (5, 'q')",
+	"CREATE TABLE big (a int, b text)",
+	"INSERT INTO big SELECT g, md5(g::text) FROM generate_series(1, 200000) g",
+	"ANALYZE big",
+}
+
+var shrTierRBigTexts = []string{
+	"SELECT a FROM big WHERE mod(a, 50000) = 0",
+	"SELECT a, b FROM big WHERE mod(a, 20000) = 7",
+	"SELECT count(*) FROM big WHERE b > 'f'",
+	"SELECT sum(a) FROM big WHERE a > 10",
+	"SELECT max(b), min(a), count(b) FROM big",
+	"SELECT length(b), count(*) FROM big WHERE a < 150000 GROUP BY length(b)",
 }
 
 const shrTierRChecksum = `SELECT md5(concat_ws('|',
  (SELECT string_agg(k || '=' || coalesce(v, ''), ',' ORDER BY k) FROM kv),
  (SELECT string_agg(a || ':' || coalesce(b, ''), ',' ORDER BY a, b) FROM t),
  (SELECT string_agg(a || ':' || coalesce(b, ''), ',' ORDER BY a, b) FROM u),
+ (SELECT count(*) || ':' || sum(a) || ':' || max(b) FROM big),
  (SELECT count(*)::text FROM pg_class WHERE relnamespace = 'public'::regnamespace),
  (SELECT count(*)::text FROM pg_largeobject_metadata),
  (SELECT count(*)::text FROM pg_prepared_xacts)))`
@@ -65,6 +79,19 @@ func shrOutcome(msgs []testclient.Msg) string {
 		}
 	}
 	return b.String()
+}
+
+func shrRowMultiset(outcome string) string {
+	var rows, rest []string
+	for _, part := range strings.Split(outcome, ";") {
+		if strings.HasPrefix(part, "D") {
+			rows = append(rows, part)
+			continue
+		}
+		rest = append(rest, part)
+	}
+	slices.Sort(rows)
+	return strings.Join(rows, ";") + "#" + strings.Join(rest, ";")
 }
 
 func (r *shrTierR) outcome(q string) (string, error) {
@@ -103,8 +130,8 @@ func (r *shrTierR) checkErr(q string) error {
 	if err != nil {
 		return err
 	}
-	if first != second {
-		return fmt.Errorf("(d) two runs differ:\n %s\n %s", first, second)
+	if shrRowMultiset(first) != shrRowMultiset(second) {
+		return fmt.Errorf("(d) two runs differ as multisets of rows:\n %s\n %s", first, second)
 	}
 	if _, err := r.p.must("BEGIN READ ONLY"); err != nil {
 		return err
@@ -119,7 +146,7 @@ func (r *shrTierR) checkErr(q string) error {
 	if strings.Contains(inside, "E:25006;") {
 		return errors.New("(a) refused inside BEGIN READ ONLY with 25006")
 	}
-	if inside != first {
+	if shrRowMultiset(inside) != shrRowMultiset(first) {
 		return fmt.Errorf("(a) outcome inside BEGIN READ ONLY differs:\n %s\n %s", first, inside)
 	}
 	after, err := r.admin.value(shrTierRChecksum)
@@ -178,8 +205,9 @@ func TestTierRSafeShapeDifferential(t *testing.T) {
 		t.Fatal(err)
 	}
 	corpus, generated := shrTierRTexts(t)
+	shrTierRParallelPlan(t, r)
 	errored := 0
-	for _, set := range [][]string{corpus, generated} {
+	for _, set := range [][]string{corpus, generated, shrTierRBigTexts} {
 		for _, q := range set {
 			if !ShareFits([]byte(q)) {
 				t.Fatalf("%q does not fit the safe shape", q)
@@ -195,7 +223,25 @@ func TestTierRSafeShapeDifferential(t *testing.T) {
 	if len(corpus) < 50 || len(generated) < shrTierRGenerated {
 		t.Fatalf("too few texts: %d corpus, %d generated", len(corpus), len(generated))
 	}
-	t.Logf("tier R: safe shape differential: %d corpus and %d generated texts that fit the safe shape gave the same outcome inside BEGIN READ ONLY (never 25006), left the tables and the session clean, and returned the same rows twice; %d of them end in a Postgres error, the same each time", len(corpus), len(generated), errored)
+	t.Logf("tier R: safe shape differential: %d corpus, %d generated and %d parallel-plan texts that fit the safe shape gave the same outcome inside BEGIN READ ONLY (never 25006), left the tables and the session clean, and returned the same multiset of rows twice; %d of them end in a Postgres error, the same each time", len(corpus), len(generated), len(shrTierRBigTexts), errored)
+}
+
+func shrTierRParallelPlan(t *testing.T, r *shrTierR) {
+	t.Helper()
+	parallel := 0
+	for _, q := range shrTierRBigTexts {
+		msgs, err := r.p.must("EXPLAIN " + q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(shrOutcome(msgs), "Parallel Seq Scan") {
+			parallel++
+		}
+	}
+	if parallel == 0 {
+		t.Fatalf("no text on table big gets a parallel plan: the oracle does not see parallel scans")
+	}
+	t.Logf("tier R: %d of %d texts on table big get a parallel plan", parallel, len(shrTierRBigTexts))
 }
 
 func shrTierRSetup(t *testing.T, addr string) *clsPG {
