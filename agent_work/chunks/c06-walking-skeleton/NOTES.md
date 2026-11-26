@@ -41,7 +41,7 @@ out)`; `Shutdown(now, out)` (plain stop: closes every client and connection);
 
 Events: `EvClientAccepted`, `EvClientData`, `EvClientClosed`, `EvClientWrote{N}`,
 `EvClientTLS{TLS}`, `EvDBOpened`, `EvDBDialFailed`, `EvDBData`, `EvDBClosed`,
-`EvDBWrote{N}`, `EvDBTLS{TLS}`, `EvTimer`, `EvPublish`, `EvDraining{On}`. Client ids come
+`EvDBWrote{N}`, `EvDBWriteRefused`, `EvDBTLS{TLS}`, `EvTimer`, `EvPublish`, `EvDraining{On}`. Client ids come
 from the driver, database ids from the engine. Events for an unknown or closed id are
 ignored (counted for database data).
 
@@ -56,6 +56,19 @@ exactly `FirstDBTLSRead` (1) byte of a database connection, then wait the same w
 most `MaxRead` bytes at a time and **never post a second read of a connection before the
 engine has taken the first** (the shell: `conn.inflight`; the harness: one reader queue).
 `StartTLS` runs only after every write queued before it.
+
+Write reports the driver must keep (rule G8, repair round): every `EvDBWrote` of a
+database connection is posted before its `EvDBClosed`; when a write stopped with bytes not
+accepted (an error after fewer bytes than given, or queued writes dropped at the close), the
+driver posts `EvDBWriteRefused` — "no byte at or past the acknowledged offset was accepted"
+— before `EvDBClosed`. The shell's database reader waits for its writer to exit before it
+posts the close; `proxysim` reports the bytes a failing write accepted and refuses the
+unwritten rest at the close.
+
+Deadline rule (repair round): time passes before the event. `Step(now, ev)` first fires
+every timer due at or before `now`, then processes `ev`, so a reply, a byte or a freed
+connection that arrives at the very instant of its deadline is late. One rule for every
+engine deadline; stated in `docs/timeout-budget.md`.
 
 ## Seam contracts (`internal/proxy/seams.go`)
 
@@ -92,7 +105,11 @@ exactly one `CommandComplete` whose tag is `DISCARD ALL`, then `ReadyForQuery` `
 or `ReadyForQuery` before the tag), `wrong-status`, `deadline`, `connection-lost`,
 `protocol-surprise` (any other message or a framing error), `closed` (the proxy closed it,
 at shutdown). Nothing of the reply reaches a client. Bytes arriving on an idle connection
-close it (`unsolicited-bytes`). A connection closed at its reset deadline is gone: a late
+close it (`unsolicited-bytes`). Unread bytes (repair round): bytes in the same read after
+the `ReadyForQuery` that ends a lease make the release input `Unread` (the policy closes
+the connection, `release-dirty`, no reset is started); bytes in the same read after the
+reset's own `ReadyForQuery` fail the reset as `protocol-surprise`. No leftover byte is
+ever given to the reset judge or to the next lease. A connection closed at its reset deadline is gone: a late
 reply cannot be read. `lease.reset` accepts only `always`; the no-reset arm is
 `proxy.PlantNoReset`, reachable from tests only.
 
@@ -117,9 +134,13 @@ reply cannot be read. `lease.reset` accepts only `always`; the no-reset arm is
    transaction and nothing reached → `FATAL 08006` (`lost-in-transaction`); inside a
    transaction and reached → `08007`; outside, nothing reached or `SafeRead` → `08006`;
    outside, reached and not `SafeRead` → `08007` (COMMIT included). Between statements
-   inside a transaction → `FATAL 08006`, client closed. "Reached" is "the shell reported at
-   least one byte of this request's Query written" (`EvDBWrote` after the request's start
-   offset) or any byte of the reply relayed.
+   inside a transaction → `FATAL 08006`, client closed. "Reached" (rule G8, repair round):
+   once a request's `ActDBWrite` has been handed to the driver the request may have
+   reached the database (`work.Yes`); it is `No` only when the driver reported
+   `EvDBWriteRefused` at an acknowledged offset at or before the request's first byte (the
+   first write was refused with zero bytes accepted) and nothing of the reply was relayed
+   (`reachedFor` in `lease.go`). A close that arrives before any write report is "may have
+   reached".
 7. **A failure with nothing reached outside a transaction** uses `08006` (lost-after-read):
    the true facts are "nothing was applied, safe to retry"; the row's "Reached: Yes" column
    is the general case. The engine's own `failures_reached{outcome=no}` counter records
@@ -203,20 +224,20 @@ has 62 failing cases.
 
 | # | Claim | Tests |
 | --- | --- | --- |
-| 1 | Results through the proxy equal direct, under any fragmentation | `test/e2e`: `e2e-results`, `e2e-fragment` (one-byte chunks both sides) via `TestScenarioE2E` + `checkResults` (compares with a direct run of the same spec and seed); `TestResultsThroughTheProxyEqualDirectOnEveryPinnedSeed`; `TestScenarioChunk2BaselineThroughTheProxy` (chunk 2's `direct-mixed-transactions` behind `world.Driver`); tier R `TestTierRResultsThroughTheProxyEqualDirect`, `TestTierRFragmentationChangesNothing` (client writes byte by byte) |
+| 1 | Results through the proxy equal direct, under any fragmentation | `internal/proxy`: `TestFragmentedQueryOutlivesTheMidMessageDeadline` (repair); `test/e2e`: `e2e-results`, `e2e-fragment` (one-byte chunks both sides) via `TestScenarioE2E` + `checkResults` (compares with a direct run of the same spec and seed); `TestResultsThroughTheProxyEqualDirectOnEveryPinnedSeed`; `TestScenarioChunk2BaselineThroughTheProxy` (chunk 2's `direct-mixed-transactions` behind `world.Driver`); tier R `TestTierRResultsThroughTheProxyEqualDirect`, `TestTierRFragmentationChangesNothing` (client writes byte by byte) |
 | 2 | No statement runs inside another client's transaction; release only at `I` | `e2e-tx-integrity` (`TxCrossings` over the fake's statement log); canary `TestCanaryReleaseOnAnyReadyBreaksTransactionIntegrity` (132 crossings); tier R `TestTierRTransactionIntegrity` (markers per transaction); invariant "each lent connection has exactly one client" |
-| 3 | Lent again only after a completed reset; every other ending closes | `e2e-session-state` (`resets completed = leases ended`), the six `e2e-reset-*` tamper scenarios (`checkTamper`: one failure of the right reason, the backend runs nothing after it), `e2e-client-vanish`, `e2e-kill-*`; canary `TestCanaryLendBeforeResetReplyIsCaught`; `resets.sql` in every scenario |
+| 3 | Lent again only after a completed reset; every other ending closes | `internal/proxy`: `TestBytesAfterReadyForQueryEndingALeaseCloseTheConnection`, `TestBytesAfterTheResetReplyCloseTheConnection`, `TestResetReplyAtItsDeadlineIsLate` (repair); `e2e-session-state` (`resets completed = leases ended`), the six `e2e-reset-*` tamper scenarios (`checkTamper`: one failure of the right reason, the backend runs nothing after it), `e2e-client-vanish`, `e2e-kill-*`; canary `TestCanaryLendBeforeResetReplyIsCaught`; `resets.sql` in every scenario |
 | 3b | Session state never crosses clients | `e2e-session-state` (`SessionCrossings` = 0: statement-log replay + observers' SHOW); ablation `TestAblationWithoutResetSessionStateCrosses` (138 crossings); tier R `TestTierRSessionStateNeverCrossesClients` (hidden SET, temp table, advisory lock, PREPARE, LISTEN in functions; `test/oracles/dirty-check.sql` after every lease: 0 dirty) and ablation `TestTierRSessionAblationWithoutResetCrosses` (32 dirty) |
-| 4 | Every proxy-made refusal or failure is its row, with a correct end marker; never a short reply that looks complete | `checkKill`, `checkQueueFull`, `checkSilent*`, `checkRejects`; `rows.sql` (rows = codes the clients saw); `TestTierRDatabaseKilled`; `FuzzEngineOps` (every reply ends with exactly one end marker; tags match the statement) |
-| 5 | "Reached: No" only when no byte was accepted | `statementLost`/`activeGone` (`d.acked > req.start`); `checkKill` (reached Yes for kills after the Query was read); `failures_reached` exported |
-| 6 | Bounded memory | `e2e-slow-reader`, `TestTierRSlowReader` (high-water ≤ cap; before the shell's read credit it reached 1.4 MB against a 64 KiB cap — found and fixed); invariant "relay high-water ≤ cap"; shell `TestMailboxNeverExceedsItsCap`, `TestWriteQueueOverflowClosesTheConnection`; `docs/capacity-table.md` |
-| 7 | Every wait has a deadline; nesting holds; silent peers end at the deadline | `e2e-silent-db-startup`, `e2e-silent-db-query` (elapsed checked against the budget), `e2e-reset-silent`, `e2e-reset-late`; `TestTierRSilentDatabase`; `TestConfigValidationNamesTheKey`, `TestDefaultTimeoutsNest`, config `TestValidationFailsClosedNamingTheKey`; shell `TestClientStalledMidHandshakeIsClosedAtTheStartupDeadline`, `TestStuckWriterIsBoundedByTheWriteDeadline`; `docs/timeout-budget.md` |
-| 8 | No goroutine leak; admin answers while the data path is blocked | shell `TestTeardownLeavesNoGoroutine` (8 teardown paths, `synctest`), `TestAdminAnswersWhileTheEngineIsBlocked`; `-race` (`internal/shell`, `internal/config` added to the race list) |
+| 4 | Every proxy-made refusal or failure is its row, with a correct end marker; never a short reply that looks complete | `TestInputOverflowAfterAPartialReplyClosesWithoutSplicingAnError` (repair); `checkKill`, `checkQueueFull`, `checkSilent*`, `checkRejects`; `rows.sql` (rows = codes the clients saw); `TestTierRDatabaseKilled`; `FuzzEngineOps` (every reply ends with exactly one end marker; tags match the statement) |
+| 5 | "Reached: No" only when no byte was accepted | `reachedFor` (repair: No only on an explicit zero-byte refusal); `internal/proxy`: `TestDatabaseClosedBeforeTheWriteReportIsMayHaveReached`, `TestWriteRefusedWithZeroBytesIsNotReached`, `TestWriteRefusedAfterPartBytesIsMayHaveReached`, `TestClientVanishedBeforeTheWriteReportIsMayHaveReached`; `proxysim`: `TestWriteRefusedByAResetSocketIsReportedBeforeTheClose`; shell: `TestDatabaseCloseIsPostedAfterTheWriterReports`, `TestDatabaseWriteRefusedWithZeroBytesIsReportedBeforeTheClose`; `checkKill` (reached Yes for kills after the Query was read); `failures_reached` exported |
+| 6 | Bounded memory | `e2e-slow-reader`, `TestTierRSlowReader` (high-water ≤ cap; before the shell's read credit it reached 1.4 MB against a 64 KiB cap — found and fixed); shell `TestReaderPostsNoSecondReadBeforeTheEngineTakesTheFirst` (repair: the read credit, fast); invariant "relay high-water ≤ cap"; shell `TestMailboxNeverExceedsItsCap`, `TestWriteQueueOverflowClosesTheConnection`; `docs/capacity-table.md` |
+| 7 | Every wait has a deadline; nesting holds; silent peers end at the deadline | `internal/proxy` (repair, deadline at equality): `TestResetReplyAtItsDeadlineIsLate`, `TestResetReplyJustBeforeItsDeadlineCompletes`, `TestStatementReplyAtItsDeadlineIsLate`, `TestMessageRestAtTheMidMessageDeadlineIsLate`, `TestConnectionFreedAtTheQueueDeadlineDoesNotServeTheExpiredRequest`; shell `TestEngineCloseCancelsADialInProgress`; `e2e-silent-db-startup`, `e2e-silent-db-query` (elapsed checked against the budget), `e2e-reset-silent`, `e2e-reset-late`; `TestTierRSilentDatabase`; `TestConfigValidationNamesTheKey`, `TestDefaultTimeoutsNest`, config `TestValidationFailsClosedNamingTheKey`; shell `TestClientStalledMidHandshakeIsClosedAtTheStartupDeadline`, `TestStuckWriterIsBoundedByTheWriteDeadline`; `docs/timeout-budget.md` |
+| 8 | No goroutine leak; admin answers while the data path is blocked | shell `TestCloseShutsTheEngineDownBeforeTheFinalFlush` (repair: plain stop before the final flush), `TestTeardownLeavesNoGoroutine` (8 teardown paths, `synctest`), `TestAdminAnswersWhileTheEngineIsBlocked`; `-race` (`internal/shell`, `internal/config` added to the race list) |
 | 9 | TLS: nothing buffered across the upgrade; `require` never serves plaintext; `verify-full` never connects unverified | shell `TestExactlyEightBytesAreReadBeforeTheDecision`, `TestSmuggledPlaintextAfterTheTLSRequestClosesTheConnection`, `TestClientTLSLeg`, `TestDatabaseTLSModes`; `TestPlaintextStartupUnderRequireGets28000`; tier R `TestTierRTLS` (psql require / verify-full, disable refused with 28000, smuggled bytes, stall closed at the startup deadline, cancel after the upgrade recognised), `TestTierRDatabaseLegTLSModes` (`pg_stat_ssl` per mode; wrong CA → `failed-verification`, connect failure class `tls-failed`) |
 | 10 | Every documented reject-list statement is refused end to end; extended clients refused cleanly | `e2e-reject-list` (fake ran only the SELECTs), `TestTierRRejectListAndExtendedProtocol` (pg_stat_statements moved by 2 for 15 refusals and one SELECT) |
-| 11 | Flushed numbers equal the snapshot; tier S files byte-identical per seed; conservation from the files | `runScenario` (`Flush.Check` round trip + byte-identical files of two runs); `conservation.sql`, `completed.sql`, `rows.sql`, `resets.sql` per scenario; tier R `stopAndRead` (`csvflush.RoundTrip` + conservation from the file) and `tierr-*/*.sql` |
+| 11 | Flushed numbers equal the snapshot; tier S files byte-identical per seed; conservation from the files | `cmd/mini-gateway` `TestEveryMetricTheBinaryExportsIsInTheCatalog` (repair); `runScenario` (`Flush.Check` round trip + byte-identical files of two runs); `conservation.sql`, `completed.sql`, `rows.sql`, `resets.sql` per scenario; tier R `stopAndRead` (`csvflush.RoundTrip` + conservation from the file) and `tierr-*/*.sql` |
 | 12 | Deterministic, sans-I/O; replay law | detlint over `internal/proxy`, `proxysim`, `enginesrc`; `runScenario` compares trace and state digests of two runs of every seed |
-| 13 | Config validation fails closed | `TestValidationFailsClosedNamingTheKey`, `TestNoConfigOrCommandFileMentionsThePlantSwitch` |
+| 13 | Config validation fails closed (narrowed, see "Narrowed claims") | `TestValidationFailsClosedNamingTheKey`, `TestZeroCapMeansTheDefaultAndANegativeCapIsRefused` (repair), `TestNoConfigOrCommandFileMentionsThePlantSwitch` |
 | 14 | The fuzz target: no seed from a hash, total and local decoding, finds the planted bug | `OpSeed` constant; `TestOpDecodingIsTotalBoundedAndLocal`; `TestFuzzEngineOpsCostIsBounded`; `scripts/fuzz-plant.sh` (found in 1–4 s, 5 of 5 runs); `TestShrunkQueuedVanishScenarioReplays` |
 
 ## Canaries and ablations (all test-only `proxy.Plant` bits)
@@ -330,6 +351,14 @@ and zero backends in the fake. `timers_pending` is zero after `Shutdown`.
 7. **Idle inside a transaction** is bounded by `timeouts.client_idle` (10 min) until chunk 7.
 8. **One dial at a time**, no breaker: with the database down every queued request waits
    for `timeouts.queue_wait` (chunk 7 adds the breaker's fast refusal).
+9. **Close on doubt after `ReadyForQuery`** (repair round): an asynchronous message the
+   database sends in the same read right after the `ReadyForQuery` that ends a lease or a
+   reset (a `NoticeResponse`, `ParameterStatus` or `NotificationResponse`) closes the
+   connection; in a later read on an idle connection it closes it as `unsolicited-bytes`.
+10. **"Reached: No" needs the driver's word** (repair round): a request whose write was
+   still queued when the connection closed is "may have reached" unless the driver posts
+   `EvDBWriteRefused`; the shell and `proxysim` do so when they dropped or failed a write,
+   so a false "Yes" can only come from a driver that does not report.
 
 ## Deviations
 
@@ -379,7 +408,7 @@ SQLSTATE constants the database side reads.
 | 3.1 `Registry.Declare` all-or-nothing | stages onto a clone, commits on success (`metric.go`) | `TestDeclareIsAllOrNothing` |
 | 3.2 zero-flush `Close` with failing `open` counts a flush error | `csvflush/writer.go` | `TestZeroFlushCloseCountsAFailedOpen` |
 | 3.3 `selfView` shares no histogram slice | starts from `c.last.Clone()` (`self.go`) | `TestSelfViewDoesNotShareHistogramsWithTheLastSnapshot` |
-| 3.x every source the binary registers is in the catalog | engine metrics declared in `catalog.Registry()`; e2e runs feed the simrun registry test | `TestEveryDeclaredMetricIsEmittedAndEveryEmittedOneDocumented`, `TestMappingMovesEveryMetricAndExportsEveryField` |
+| 3.x every source the binary registers is in the catalog | engine metrics declared in `catalog.Registry()`; e2e runs feed the simrun registry test; the binary's own path (`shellConfig` → `shell.New` → a real flush) is checked in the repair round | `cmd/mini-gateway` `TestEveryMetricTheBinaryExportsIsInTheCatalog`, `TestEveryDeclaredMetricIsEmittedAndEveryEmittedOneDocumented`, `TestMappingMovesEveryMetricAndExportsEveryField` |
 | 4.1 salt longer than the mock cap refused | `NewTenantTable` | `TestNewTenantTableRefusesAnOversizedSalt` |
 | 4.2 stale `TLSFailed[HandshakeViolation]` skip removed | `snapshot_wire_test.go` | `TestWireCountersMoveAndConserve` |
 | 4.3 mixed iteration counts or salt lengths refused | `NewTenantTable` (and so config validation) | `TestNewTenantTableRefusesMixedShapes`, config cases |
@@ -410,6 +439,64 @@ scripts/csv-assert.sh <run dir of one scenario> test/analysis/<scenario>/*.sql
 scripts/gen-docs.sh --check
 scripts/gate.sh c06-walking-skeleton
 ```
+
+## Narrowed claims
+
+- **Claim 13** (attack `TestAdv_13_ExplicitZeroCapacity`, orchestrator's ruling: the behaviour
+  stays). Narrowed wording: "Config validation fails closed on every invalid setting it
+  documents. A cap (`pool.connections`, `queue.capacity`, `limits.max_clients`,
+  `limits.max_startup`, `limits.reply_buffer`) that is zero or omitted takes its default —
+  zero is not an invalid setting; a negative cap, or one outside its documented range, is
+  refused with an error naming the key." The generated `docs/capacity-table.md` says "zero
+  means the default" for each of those caps; `TestZeroCapMeansTheDefaultAndANegativeCapIsRefused`
+  holds both halves per key. Durations follow the same rule (decision 12: zero = default).
+
+## Adversarial tests that assert against a ruling
+
+- **`TestAdv_5_ZeroAcceptedBytes`** (claim 5) now fails, by design. It hands an `UPDATE` to
+  the driver (`ActDBWrite` emitted), posts `EvDBClosed` with no write report at all, and
+  asserts `reached_no = 1`. That is exactly review 1 finding 3's reproduction
+  (`TestRepro_DBClosedBeforeDBWroteClaimsReachedNoOnWrite`), and the orchestrator's ruling
+  for this round says the opposite: once a write is handed to the driver the request "may
+  have reached" unless the driver reports zero bytes accepted. In the shell a close can
+  overtake the writer's report, so silence is not evidence of zero bytes. The engine now
+  claims No only on the driver's explicit `EvDBWriteRefused`
+  (`TestWriteRefusedWithZeroBytesIsNotReached` is the corrected form of the attack). The
+  attack's two siblings, `TestAdv_5_FirstByteAccepted` and `TestAdv_5_ResponseBeforeWriteAck`,
+  still hold.
+- **`TestAdv_13_ExplicitZeroCapacity`** stays red: it asserts the literal "caps are
+  positive" against an explicit zero, which the ruling keeps as "zero means the default"
+  (see "Narrowed claims").
+
+## Repair round
+
+Repair builder: Opus (`claude-opus-5-5`), 2026-11-26, one round on review 1 (FAIL) and the
+adversarial pass (43 held, 3 broken). Every finding was reproduced first: each regression
+test below was run and seen to fail before its fix (the shell tests also against the
+review's mutations M1 and M2).
+
+| Finding / attack | Outcome | Commit | Regression test(s) |
+| --- | --- | --- | --- |
+| R1-1 BLOCKER mid-message timer left armed | fixed: cancelled whenever the cursor is at a message boundary, whatever the phase; the timer acts only while a message is incomplete | `1f12441` | `TestFragmentedQueryOutlivesTheMidMessageDeadline` |
+| R1-2 BLOCKER bytes after `ReadyForQuery 'I'` not unread | fixed: lease end with leftover bytes → `Unread` → closed `release-dirty`, no reset | `06ef106` | `TestBytesAfterReadyForQueryEndingALeaseCloseTheConnection` |
+| `TestAdv_3_ResetWithTrailingReply` (same family) | fixed: leftover bytes after the reset's `ReadyForQuery` fail the reset (`protocol-surprise`), connection closed, never lent | `06ef106` | `TestBytesAfterTheResetReplyCloseTheConnection`; the attack now holds |
+| `TestAdv_3_ResetDeadlineTie` | fixed: one rule for every deadline — `Step` fires timers due at or before the event's time first; stated here and in `docs/timeout-budget.md`'s source | `f7f59f3` | `TestResetReplyAtItsDeadlineIsLate`, `TestResetReplyJustBeforeItsDeadlineCompletes`, `TestStatementReplyAtItsDeadlineIsLate`, `TestMessageRestAtTheMidMessageDeadlineIsLate`, `TestConnectionFreedAtTheQueueDeadlineDoesNotServeTheExpiredRequest`; the attack now holds |
+| R1-3 MAJOR "reached: No" after a close overtook the write report | fixed at three levels: engine (`reachedFor`: may have reached unless `EvDBWriteRefused` at or before the request's first byte), shell (database reader posts the close only after the writer exits, `EvDBWriteRefused` first when a write stopped short or queued writes were dropped), `proxysim.flush` (bytes accepted with an error reported; unwritten bytes refused before the close) | `8077048` | engine: `TestDatabaseClosedBeforeTheWriteReportIsMayHaveReached`, `TestWriteRefusedWithZeroBytesIsNotReached`, `TestWriteRefusedAfterPartBytesIsMayHaveReached`, `TestClientVanishedBeforeTheWriteReportIsMayHaveReached`; shell: `TestDatabaseCloseIsPostedAfterTheWriterReports`, `TestDatabaseWriteRefusedWithZeroBytesIsReportedBeforeTheClose`; proxysim: `TestWriteRefusedByAResetSocketIsReportedBeforeTheClose` |
+| R1-4 MAJOR shell fixes without regression tests | fixed (tests added; both fail under the review's mutations M1 and M2) | `7a66e55` | `TestReaderPostsNoSecondReadBeforeTheEngineTakesTheFirst`, `TestCloseShutsTheEngineDownBeforeTheFinalFlush` |
+| R1-5 MAJOR no catalog test on the binary's registration path | fixed | `ab08320` | `TestEveryMetricTheBinaryExportsIsInTheCatalog` (fails when an engine metric is dropped from the catalog) |
+| R1-6 MINOR importlint reverse rule missing `enginesrc` | fixed | `cdaedac` | `importlint`, `TestOneRawExportImportRule` |
+| R1-7 MINOR safe-shape / RLS limit missing from the error contract's source | fixed (also words "Reached? no" as rule G8) | `d2cb674` | `TestClassifierWriteContractDocs` / `scripts/gen-docs.sh --check` |
+| R1-8.1 MINOR FATAL 08P01 spliced after a partial reply | fixed: closed with nothing more written | `adc3f06` | `TestInputOverflowAfterAPartialReplyClosesWithoutSplicingAnError` |
+| R1-8.2 MINOR `ActDBClose` during a dial waited for the connect deadline | fixed: `closeByEngine` cancels the dial (and still queues the close item) | `7d2b323` | `TestEngineCloseCancelsADialInProgress` |
+| `TestAdv_13_ExplicitZeroCapacity` | narrowed (claim 13, see "Narrowed claims"); capacity document says "zero means the default" per cap | `269bcff` | `TestZeroCapMeansTheDefaultAndANegativeCapIsRefused`, `TestContractDocumentsAreGeneratedFromTheCode` |
+| `TestAdv_5_ZeroAcceptedBytes` (was held) | disputed: now red by the R1-3 ruling (see "Adversarial tests that assert against a ruling") | `8077048` | `TestWriteRefusedWithZeroBytesIsNotReached` |
+
+Scenario digests: no trace or state digest is pinned in the repository (the replay law
+compares two runs of the same seed), so none needed re-recording. The deadline rule and the
+write reports change the event order of some tier S runs (for example a timer due at a data
+event's instant now fires inside that event's `Step`); every scenario still replays
+bit-identically per seed. The fuzz corpus and the shrunk scenario file are unchanged and
+pass.
 
 ## Gate result
 
