@@ -1,4 +1,4 @@
-HELD: 39  BROKEN: 3
+HELD: 43  BROKEN: 3
 
 | Claim | Attack | Result |
 | --- | --- | --- |
@@ -41,21 +41,26 @@ HELD: 39  BROKEN: 3
 | 14 | `TestAdv_14_AllByteValuesAndLengths` | held |
 | 14 | `TestAdv_14_OneByteCannotReseedWorld` | held |
 | 14 | `TestAdv_14_SeededPlantCampaign` | held |
-| 14 | `TestAdv_14_LongUnplantedCampaign` | pending (ADV_LONG) |
+| 14 | `TestAdv_14_LongUnplantedCampaign` | held |
 | 8 | `TestAdv_8_AdminWhileMailboxBackedUp` | held |
 | 8 | `TestAdv_8_ConcurrentCloseDuringDial` | held |
 | 8 | `TestAdv_8_HalfStartupDisconnectStorm` | held |
-| 3b | `TestAdv_3b_AbortedLeaseSettings` | pending (ADV_LONG) |
-| 3b | `TestAdv_3b_DynamicTempPreparedListener` | pending (ADV_LONG) |
-| 3b | `TestAdv_3b_ReentrantAdvisoryLocks` | pending (ADV_LONG) |
+| 3b | `TestAdv_3b_AbortedLeaseSettings` | held |
+| 3b | `TestAdv_3b_DynamicTempPreparedListener` | held |
+| 3b | `TestAdv_3b_ReentrantAdvisoryLocks` | held |
 
 Seed: `6062026` throughout (logged by the tests); deterministic boundary cases use no randomness.
 Counts are attacks, not claims. All 15 claim identifiers (1–14 and 3b) have at least
 three distinct named tests. No claim is wholly unattacked.
 
-Checkpoint: the default run completed in 2.054 seconds: 39 held, 3 broken, 4 skipped.
-The `ADV_LONG=1` invocation is in progress, including the 3,000-input campaign and the
-three real-Postgres isolation attacks. Pending tests are not counted as held.
+Completed: the default run took 2.054 seconds: 39 held, 3 broken, 4 skipped.
+The `ADV_LONG=1` run took 302.273 seconds: 43 held, 3 broken, zero skipped. Its
+3,000-input unplanted campaign passed, as did all three real-Postgres isolation attacks.
+The planted ordering fault was caught on sample 0 in 0.81 seconds. Counts above use
+the complete long run, without double-counting the default run. The default is well
+within the three-minute budget on this machine; longer work is gated by `ADV_LONG=1`.
+The real attacks shared one throwaway Postgres 17 cluster; its fixture waits with a
+TCP client on 127.0.0.1 and TestMain closes the cluster after the suite.
 
 Commands, from this worktree:
 
@@ -140,3 +145,8 @@ No VM knowledge entry or separate reusable script is needed.
 The initial kb invocations failed before producing a search ID. The existing VM kb binary
 then completed search 839; feedback was recorded as none useful because the brief already
 specified Go's path and the hits did not describe this project's real-server fixture.
+
+Final checkpoint: all requested campaigns completed; every claim has at least three
+named attacks, so no additional attacks were needed. Failing tests are unchanged.
+No product repair, push or merge was performed. Hand off these three findings for
+reconciliation; this adversarial task has no remaining run to resume.
