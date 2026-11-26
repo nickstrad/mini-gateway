@@ -507,6 +507,10 @@ func TestLexOperatorRunsGrowLinearly(t *testing.T) {
 	clsCheckLinearShapes(t, []string{"+", "-", "+-", "*+", "=-", "<+-", "+ ", "1+"})
 }
 
+func TestClassifierSpanKeywordChecksGrowLinearly(t *testing.T) {
+	clsCheckLinearShapes(t, []string{"pg_settings ", "standard_conforming_strings ", "client_encoding ", `"pg_settings" `, "pg_settings, ", "SELECT pg_settings "})
+}
+
 func clsCheckLinearShapes(t *testing.T, units []string) {
 	t.Helper()
 	if testing.Short() {

@@ -325,8 +325,9 @@ func (m *clsMsg) rejectReason(s clsSpan) work.RejectReason {
 	if r := m.leadReject(s); r != work.RejectNone {
 		return r
 	}
+	w := m.spanWords(s)
 	for i := s.lo; i < s.hi; i++ {
-		if r := m.tokenReject(s, i); r != work.RejectNone {
+		if r := m.tokenReject(s, w, i); r != work.RejectNone {
 			return r
 		}
 	}
@@ -399,7 +400,7 @@ func (m *clsMsg) declareReject(i, hi int) work.RejectReason {
 	return work.RejectNone
 }
 
-func (m *clsMsg) tokenReject(s clsSpan, i int) work.RejectReason {
+func (m *clsMsg) tokenReject(s clsSpan, w clsSpanWords, i int) work.RejectReason {
 	switch {
 	case i > s.lo && m.isAny(i, []string{"temp", "temporary"}) && m.isAny(i-1, []string{"create", "global", "local", "into", "replace"}):
 		if m.is(i-1, "into") && m.isAny(i-2, []string{"insert", "merge"}) {
@@ -418,10 +419,10 @@ func (m *clsMsg) tokenReject(s clsSpan, i int) work.RejectReason {
 	if string(name) == "pg_temp" || bytes.HasPrefix(name, []byte("pg_temp_")) {
 		return work.RejectTempObject
 	}
-	if string(name) == "pg_settings" && m.spanHas(s, "update") {
+	if string(name) == "pg_settings" && w.update {
 		return work.RejectSessionSet
 	}
-	if clsInList(rejLexingSettings, clsLowerASCII(name)) && (m.spanHas(s, "set") || m.spanHas(s, "reset")) {
+	if clsInList(rejLexingSettings, clsLowerASCII(name)) && w.setOrReset {
 		return work.RejectSessionSet
 	}
 	if next >= s.hi || !m.isPunct(next, '(') {
@@ -542,13 +543,18 @@ func clsEqualFold(b []byte, w string) bool {
 	return true
 }
 
-func (m *clsMsg) spanHas(s clsSpan, kw string) bool {
+type clsSpanWords struct {
+	update     bool
+	setOrReset bool
+}
+
+func (m *clsMsg) spanWords(s clsSpan) clsSpanWords {
+	var w clsSpanWords
 	for i := s.lo; i < s.hi; i++ {
-		if m.is(i, kw) {
-			return true
-		}
+		w.update = w.update || m.is(i, "update")
+		w.setOrReset = w.setOrReset || m.is(i, "set") || m.is(i, "reset")
 	}
-	return false
+	return w
 }
 
 func (m *clsMsg) setConfigLocal(open int) bool {
