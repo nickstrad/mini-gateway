@@ -246,7 +246,7 @@ the builders keep no per-message state.
 | --- | --- | --- |
 | Memory per classification | at most `ClassifMemoryFactor` (80) bytes per input byte + `ClassifMemoryConstant` (64 KiB); measured worst 52 B/byte at 1 MiB | `TestClassifierMemoryIsBounded`, `TestClassifierAllocationStaysUnderTheCeiling` |
 | Safe-shape recogniser | allocates nothing; reads at most `ShareMaxLen` bytes past the length check | `TestSafeShapeAllocatesNothing` |
-| Time | linear: 16 times the input takes at most 96 times as long (measured 13–29) over nine adversarial shapes | `TestClassifierTimeGrowsLinearly` |
+| Time | linear: 16 times the input takes at most 96 times as long (measured 13–29) over nine adversarial shapes, and over eight operator-run and six repeated-name shapes (measured 9–29 after the repair round; 117–252 before it) | `TestClassifierTimeGrowsLinearly`, `TestLexOperatorRunsGrowLinearly`, `TestClassifierSpanKeywordChecksGrowLinearly` |
 | Scenario gateway buffers | `clsworld.MaxBuffer` (1 MiB) per direction, then the connection is closed and the run fails | `clsworld` |
 
 ## Claims and the tests that prove them
@@ -254,20 +254,60 @@ the builders keep no per-message state.
 | # | Claim | Tests (file: function) |
 | --- | --- | --- |
 | 1 | Safe shape is exact | `share_test.go`: `TestSafeShapeTable` (each rule violated alone), `TestSafeShapePropertyFitsAgreesWithTheReferenceChecker` (200,000 seeded texts, 15,817 fit: `ShareFits` equals an independent reference checker in both directions), `TestSafeShapePropertyAnyByteOutsideTheAlphabetBreaksAFit`, `TestSafeShapePropertyGrammarTextsFit` (5,000 texts from a grammar over the allow-list), `TestSafeShapeEveryStopWordAndUnlistedCallBreaksAFit`, `FuzzSafeShape`; `classify_test.go`: `clsCheckInvariants` in `TestClassifierInvariantsOverMutants` and `FuzzClassify` (`SafeRead` = `ShareFits`; `Shareable` = fits ∧ ¬inTx ∧ ¬rejected; key only by the rule), `TestClassifierCorpus` |
-| 2 | Safe shape is safe on a real server | `share_tierr_test.go: TestTierRSafeShapeDifferential` — Postgres 17, plain tables only: 81 corpus/table texts and 400 generated texts that fit give the same outcome inside `BEGIN READ ONLY` (never `25006`), leave the tables' checksum unchanged, leave the session clean by `test/oracles/dirty-check.sql`, and return identical rows twice (37 end in the same Postgres error each time, such as `to_hex(numeric)`). Canaries: each oracle catches its hazard (`SET`, `LISTEN`, advisory lock → dirty check; `PREPARE`, temp table, holdable cursor, `INSERT`, `random()`, `clock_timestamp()`, `'now'` → re-run; `DELETE`, `UPDATE` → read-only; an `UPDATE` moves the checksum), and none fits; Postgres resolves `'now'`/`'today'` to the current time; every parenthesis keyword is category `R` or `C` on Postgres 17 |
+| 2 | Safe shape is safe on a real server (narrowed form under "Narrowed claims") | `share_tierr_test.go: TestTierRSafeShapeDifferential` — Postgres 17, plain tables without row-level security policies: 81 corpus/table texts, 400 generated texts and 6 texts on a 200,000-row table `big` (5 of 6 get a `Parallel Seq Scan` plan, checked by `shrTierRParallelPlan`, which fails if none does) that fit give the same outcome inside `BEGIN READ ONLY` (never `25006`), leave the tables' checksum unchanged, leave the session clean by `test/oracles/dirty-check.sql`, and return the same multiset of rows twice (`shrRowMultiset`) (37 end in the same Postgres error each time, such as `to_hex(numeric)`). Canaries: each oracle catches its hazard (`SET`, `LISTEN`, advisory lock → dirty check; `PREPARE`, temp table, holdable cursor, `INSERT`, `random()`, `clock_timestamp()`, `'now'` → re-run; `DELETE`, `UPDATE` → read-only; an `UPDATE` moves the checksum), and none fits; Postgres resolves `'now'`/`'today'` to the current time; every parenthesis keyword is category `R` or `C` on Postgres 17 |
 | 3 | The recogniser does not depend on the lexer | `share_test.go: TestSafeShapeRecogniserReferencesNothingFromTheLexerOrClassifier` (go/ast: `share.go` imports nothing, references no identifier declared in `lex.go`, `classify.go`, `rejectlist.go`, nor any package-level identifier it does not declare). A lexer bug cannot widen: `SafeRead` is `ShareFits(text)` and `Shareable` requires it; the lexer can only add a reject, which removes `Shareable` (`clsCheckInvariants`); the property "fits ⇒ the lexer tokenises it as one statement" holds (`shrCheckLexerAgrees` in the property, grammar and fuzz tests) |
 | 4 | The hint never widens | `classify_test.go: TestClassifierShareKeyAndScope` (exact prefix only; hinted `SELECT now()` has a key but is neither safe-read nor shareable; no key inside a transaction or when rejected), `clsCheckInvariants` (`Hinted` = prefix), `share_test.go: TestSafeShapeTable` ("2 alphabet: hint"), `classify_attacks_test.go: TestClassifierShareKeyIsACopyAndScoped` |
-| 5 | No panic, bounded work | `FuzzLex`, `FuzzClassify`, `FuzzSafeShape` (gate G5, 20 s each), `classify_attacks_test.go: TestClassifierEveryBytePairNeverPanicsAndCoversTheInput`, `TestClassifierSeededHostileBytesNeverPanic`, `TestClassifierAllocationStaysUnderTheCeiling`; `classify_test.go: TestClassifierMemoryIsBounded`, `TestClassifierTimeGrowsLinearly`, `TestClassifierGeneratedStatements`; `share_test.go: TestSafeShapeAllocatesNothing` |
-| 6 | Nothing is refused for being unknown (precise form under "Deviations") | `classify_test.go: TestClassifierConservativeWhenUntokenisable` (mutants the lexer cannot tokenise: opaque, forwarded unless a reject-list feature was read, never safe-read or shareable), `classify_attacks_test.go: TestClassifierForwardsTruncatedMessagesAsOpaque`, `TestClassifierForwardsBadBytesBetweenStatementsAsOpaque`, `TestClassifierRejectWinsOverUntokenisable`; corpus `bad` records |
+| 5 | No panic, bounded work | `FuzzLex`, `FuzzClassify`, `FuzzSafeShape` (gate G5, 20 s each), `classify_attacks_test.go: TestClassifierEveryBytePairNeverPanicsAndCoversTheInput`, `TestClassifierSeededHostileBytesNeverPanic`, `TestClassifierAllocationStaysUnderTheCeiling`; `classify_test.go: TestClassifierMemoryIsBounded`, `TestClassifierTimeGrowsLinearly`, `TestLexOperatorRunsGrowLinearly` (eight operator-run shapes), `TestClassifierSpanKeywordChecksGrowLinearly` (six repeated-name shapes), `TestClassifierGeneratedStatements`; `share_test.go: TestSafeShapeAllocatesNothing` |
+| 6 | Nothing is refused for being unknown (precise form under "Narrowed claims") | `classify_repair_test.go: TestClassifierTempWordsRejectOnlyWhereATemporaryObjectIsMade` (`temp`/`temporary` used as names are forwarded; every temporary-object form is refused); `classify_test.go: TestClassifierConservativeWhenUntokenisable` (mutants the lexer cannot tokenise: opaque, forwarded unless a reject-list feature was read, never safe-read or shareable), `classify_attacks_test.go: TestClassifierForwardsTruncatedMessagesAsOpaque`, `TestClassifierForwardsBadBytesBetweenStatementsAsOpaque`, `TestClassifierRejectWinsOverUntokenisable`; corpus `bad` records |
 | 7 | The courtesy list refuses what it documents | `rejectlist_test.go: TestRejectRulesExamplesClassifyAsDocumented`; `classify_test.go: TestClassifierCorpus` (190 reject records, exact reason), `TestClassifierPaddingAndCaseProperty` (6 seeds × every record: class, reason, opaque and statement count invariant under whitespace, comments and keyword case); `classify_spellings_test.go: TestClassifierSpellingsAlwaysRejectTheRejectList`; `classify_attacks_test.go: TestClassifierRejectsUnicodeAndQuotedAdvisoryLockNames`, `TestClassifierRejectsTheWholeMessageForOneRejectedStatement`, `TestClassifierPaddingInvariant*`; `lex_continue_test.go: TestClassifierRejectsWhatHidesBehindAStringContinuation` |
-| 8 | Every proxy-made reply is well formed | `errors_test.go`: `TestErrorRowsAreWellFormed`, `TestReplyGoldenBytes`, `TestReplyBytesMatchAHandEncoding`, `TestReplyEveryRowIsWellFormedWithTheRightMarker`, `TestReplyRefusesBadInput`, `TestSyncDiscardRule`, `TestSyncDiscardRepliesEndWithReadyAfterSync`; `classify_attacks_test.go: TestReplyEveryRowWithPrefixAndStatusIsWellFormed`, `TestReplyInvalidInputsDoNotPoisonReuse`, `TestSyncDiscardDropsEveryByteUntilSyncAndRecovers` |
+| 8 | Every proxy-made reply is well formed | `errors_test.go`: `TestErrorRowsAreWellFormed`, `TestReplyGoldenBytes`, `TestReplyBytesMatchAHandEncoding`, `TestReplyEveryRowIsWellFormedWithTheRightMarker`, `TestReplyRefusesBadInput` (a refused build counts in `Failed` only, never in `Total` or `ByRow`), `TestSyncDiscardRule`, `TestSyncDiscardRepliesEndWithReadyAfterSync`; `classify_attacks_test.go: TestReplyEveryRowWithPrefixAndStatusIsWellFormed`, `TestReplyInvalidInputsDoNotPoisonReuse`, `TestSyncDiscardDropsEveryByteUntilSyncAndRecovers` |
 | 9 | Generated documents cannot drift | `rejectlist_test.go: TestClassifierContractDocsMatchTheCode` (`error-contract.md`, `reject-list.md`, `safe-shape.md`), gate G8 `scripts/gen-docs.sh --check`, `classify_attacks_test.go: TestContractGeneratorsTrackTableMutation` |
 | 10 | `internal/work` imports only the standard library; output in its types | `work_test.go: TestWorkImportsOnlyTheStandardLibrary`, `TestWorkImportClosureIsTheStandardLibrary`; `classify_attacks_test.go: TestClassifierOutputIsExpressedInWorkTypesOnly`; gate G1 importlint and detlint |
 | 11 | Refused statements never reach the database, and the flushed files say so | `classify_e2e_test.go: TestScenarioClassifierRejectList`, `TestScenarioClassifierRejectOnly` (sweep, replay), `TestClassifierPlantedSetForwardableIsCaught` (canary: with `SET` forwardable the scenario fails with "a rejected statement reached the database" and "session state changed"), `TestClassifierRejectOnlyReachesNothing`; `classify_attacks_test.go: TestClassifier*NeverReachesTheFake` (with ablation); `simrun/classifier_test.go: TestScenarioClassifierFlush`, `TestClassifierSQLCatchesPlantedNumbers`; the three SQL files in G7 |
 
+## Narrowed claims
+
+Three claims of the brief were broader than the code and than what any reader of query text
+can promise. The code is right in each; the claim is narrowed here (repair round, rows R3,
+R4, R5 of `RECONCILIATION.md`). The orchestrator decides whether to accept each.
+
+- **Claim 2, narrowed for row-level security (R3).** On Postgres 17, for a schema of plain
+  tables *without row-level security policies* (no `CREATE POLICY` on a table the text
+  reads, or row-level security not enabled on it, or the reading role bypasses it), no text
+  that fits the safe shape writes, changes session state, or returns a different multiset
+  of rows on an immediate re-run. A policy expression runs on every read and may call
+  `set_config` or anything else a policy may call; it is not visible in the query text, so
+  no recogniser of text can exclude it. A database whose tables carry policies should run
+  `coalesce: off` or `hinted`. (PLAN.md states this limit since `3881f72`.)
+- **Claim 2, narrowed for valid re-runs (R4).** What repeats is the result *as a multiset
+  of rows*, and only for queries whose value SQL defines. Two valid runs of the same
+  safe-shape text may differ in: row order where the text has no `ORDER BY` (on a table
+  past `min_parallel_table_scan_size`, 8 MB by default, Postgres 17 plans `Gather` over a
+  parallel scan and returns blocks in worker order); the value of an aggregate that depends
+  on input order (`string_agg`, `array_agg` without `ORDER BY` inside the call); and the
+  value of a floating-point aggregate (`sum`, `avg` over `real`/`double precision`: IEEE-754
+  addition is not associative across worker completion order). Each run is a valid
+  evaluation of the query, so handing one valid result to all identical reads in flight is
+  correct; the safe shape is not changed. The tier R oracle now holds a 200,000-row table
+  and compares re-runs as multisets of rows, on texts with exact types only.
+- **Claim 6, precise form (R5).** A message is never refused because it is untokenisable,
+  unmodelled or unknown, with three exceptions where a reject-list feature *is* recognised
+  but part of it cannot be read: (a) a reject-list feature in the readable part of an
+  untokenisable message is refused (`DISCARD ALL; SELECT 'unfinished`); (b) a
+  `set_config(name, value, is_local)` call whose setting name is not one plain `'…'` string
+  literal (an expression, a parameter, an `E'…'`/`U&'…'`/dollar string, or a string
+  continued across a newline) is refused as `set-config`, because it might name a lexing
+  setting (`SELECT set_config(lower('application_name'), 'x', true)`); (c) a
+  transaction-local `search_path` value that the classifier cannot read is refused as
+  `temp-object`, because it might name `pg_temp`: `SET LOCAL search_path`/`SET LOCAL
+  SCHEMA` with an `E'…'` value holding a backslash, a `U&'…'` value with an escape or
+  `UESCAPE`, or a continued string; and `set_config('search_path', value, true)` whose value
+  is not one plain `'…'` string literal (`SELECT set_config('search_path', lower('public'),
+  true)`). These are deliberate (kept from the first build) and listed under "Deviations".
+
 ## Deviations
 
-- **Claim 6, precise form.** "Nothing is refused for being unknown" holds in this form: a
+- **Claim 6, precise form** (stated in full under "Narrowed claims"). "Nothing is refused for being unknown" holds in this form: a
   message is never refused because it is untokenisable or unmodelled. Three first-build
   behaviours, kept as the brief asks ("keep the first build's behaviour"), refuse a message
   in which a reject-list feature *is* recognised but some part cannot be read: (a) a
@@ -304,6 +344,9 @@ the builders keep no per-message state.
    argument type in the search path (`public.lower(integer)`), a foreign table, or a table
    with rules can hide a side effect or a per-call result. Claim 2 is over plain tables only.
    `coalesce: off` and `hinted` exist for databases where that matters.
+   A **row-level security policy** on an ordinary table is in the same class: its
+   expression runs on every read and can change session state or the rows of a re-run;
+   claim 2 excludes tables with policies (see "Narrowed claims").
 2. Values that depend on session settings (`TimeZone`, `DateStyle`, `lc_*`,
    `extra_float_digits`) are assumed equal across the pool's connections: every lease ends
    with a reset to the pool's defaults.
@@ -313,7 +356,12 @@ the builders keep no per-message state.
    constants.
 4. A text that fits may still be invalid SQL; Postgres then answers with the same error every
    time, which is a shareable outcome.
-5. The benchmark's hot-key read `SELECT v FROM kv WHERE k = '…'` fits for any key made of
+5. Re-runs repeat the result as a **multiset of rows**. Row order without `ORDER BY`,
+   aggregates that depend on input order (`string_agg`, `array_agg` without an inner
+   `ORDER BY`) and floating-point aggregates (`sum`/`avg` over `double precision`) may
+   differ between two valid runs once Postgres picks a parallel plan (a table past 8 MB by
+   default). Sharing hands every identical read in flight one of those valid results.
+6. The benchmark's hot-key read `SELECT v FROM kv WHERE k = '…'` fits for any key made of
    letters, digits, spaces and `_ , * = < > ( )` that holds none of the four time words.
    Qualified names (`kv.v`, `public.kv`), casts (`::`), comments, multi-line text, `$1`
    parameters, `IN`-lists of strings with `'now'`-like words, window functions and `JOIN (…)`
@@ -346,6 +394,11 @@ session safety):
   (transaction-scoped anyway); `ALTER ROLE/DATABASE/SYSTEM … SET` (persistent).
 - `SELECT set_config(…)` reached through a view or a rule.
 - Any reject-list spelling not covered by the corpus or `classify_spellings_test.go`.
+- A `UESCAPE` literal continued across a newline in a Unicode-escaped name:
+  `SELECT U&"pg_advisory_!006cock" UESCAPE '!'\n'' (1)` takes a session advisory lock and is
+  forwarded. The classifier reads the escape character from the raw `UESCAPE` token (three
+  bytes `'!'`), and a continued literal is longer, so the name is not decoded (Neon's
+  courtesy gap 1; claim 7; no new reject rule in this chunk, RECONCILIATION R11).
 
 ## Test ledger
 
@@ -360,7 +413,7 @@ their file unless a new location is given.
 | `TestClassifierPlantedSetForwardableIsCaught` | `classify_e2e_test.go` | kept | same | plant through `PlantSetForwardable` |
 | `TestClassifierRejectOnlyFlushNumbers` | `classify_e2e_test.go` | kept, renamed `TestClassifierRejectOnlyReachesNothing` | same | `ClassifierMetrics` is gone; the flushed-number half is the SQL files, run by `TestCSVAssertBaselineCountsFromFlushedFiles` and G7 |
 | `TestClassifierSnapshotCountersMoveAndConserve` | `classify_obs_test.go` | kept | same | may-leave-open, read-only and coalescable assertions cut; safe-read, shareable, keys added |
-| `TestReplyMetricsCoverEveryRow` | `classify_obs_test.go` | kept, moved | `internal/obs/clssrc/clssrc_test.go` | `ReplyMetrics` replaced by the `clssrc` mapping |
+| `TestReplyMetricsCoverEveryRow` | `classify_obs_test.go` | kept, moved | `internal/obs/clssrc/clssrc_test.go` | `ReplyMetrics` replaced by the `clssrc` mapping; since the repair round it builds every row (row k, k+1 times) and checks `replies{reason}` for every row, `replies_built` and `reply_failures` (before, it built one row only) |
 | `TestClassifierReadOnlyCorpusLeavesTheFakeUnchanged` | `classify_obs_test.go` | kept, renamed `TestClassifierSafeReadCorpusLeavesTheFakeUnchanged` | `classify_obs_ext_test.go` | re-aimed at `SafeRead`; external for the import cycle |
 | `TestClassifierSchemaQualifiedKeywordNamesAreCalls` | `classify_repair_test.go` | kept | same | restated: never safe-read/shareable; the positive half asserts "forwarded" only |
 | `TestClassifierAttributeCallAfterExpressionFrom` | `classify_repair_test.go` | kept | same | restated as above |
@@ -401,7 +454,7 @@ their file unless a new location is given.
 | `TestNamesCoverEveryValue` | `work_test.go` | kept | same | transaction-effect loop cut |
 | `TestMayLeaveOpen` | `work_test.go` | kept, renamed `TestClassForwards` | same | the `MayLeaveOpen` half retired with the flag; the `Forwards` half kept |
 | `TestShareKeyEqual` | `work_test.go` | kept | same | |
-| `TestClassifierArbProbe` | `parked/arbprobe_test.go.txt` | hoisted | `lex_continue_test.go`: `TestLexStringContinuesAcrossANewline`, `TestClassifierRejectsWhatHidesBehindAStringContinuation` | a logging probe; its inputs became assertions (B1–B8 rejected or never shared, E0–E9 and M1–M9 never shared; `'a' 'b'` dropped: it fits and is a plain syntax error) |
+| `TestClassifierArbProbe` | `parked/arbprobe_test.go.txt` | hoisted | `lex_continue_test.go`: `TestLexStringContinuesAcrossANewline`, `TestClassifierRejectsWhatHidesBehindAStringContinuation` | a logging probe; its inputs became assertions: B1–B4 and B6–B8 rejected or never shared, B5 (`SELECT E'ok'\n'\' ; SELECT ' ; BEGIN ; --'`) never shared (since `5356992`); E1–E3 rejected, E4 (`SET LOCAL search_path = 'pg_'\n'temp'`) rejected as its own case (since `5356992`) and inside B6; E0 and E5–E9 and M1–M9 never shared; `'a' 'b'` dropped: it fits and is a plain syntax error |
 | `TestAdv_1_UnicodeFunctionNames` | `attacks_test.go` | hoisted | `classify_attacks_test.go: TestClassifierRejectsUnicodeAndQuotedAdvisoryLockNames` | |
 | `TestAdv_1_WholeMessageRejection` | `attacks_test.go` | hoisted | `TestClassifierRejectsTheWholeMessageForOneRejectedStatement` | |
 | `TestAdv_1_EscapeContinuation` | `attacks_test.go` | hoisted | `TestClassifierEscapeContinuationFollowsPostgres` + tier R `shrTierRContinuation` | restated, see Deviations |
@@ -472,6 +525,75 @@ MG_TIER_R=1 MG_PG_ADDR=127.0.0.1:<port> go test -count=1 -run 'TestTierR(Classif
 agent_work/chunks/c05-classifier/gate/extra.sh
 scripts/gate.sh c05-classifier
 ```
+
+## Repair round
+
+Opus, 2026-11-26, from `/root/briefs/zgateway-p2-c05r-repair.md`, bound by
+`RECONCILIATION.md` (rows R1–R11), `REVIEW-1.md` (NITS) and the two adversarial reports
+(Astra: `agent_work/adversarial/c05-classifier/`, Neon:
+`agent_work/adversarial/c05-classifier-neon/`). Every finding was reproduced first.
+
+| Row | Finding / attack | Outcome |
+| --- | --- | --- |
+| R1 | Whole-span rescans per `pg_settings`/`client_encoding`/`standard_conforming_strings` (Astra `TestAdv_5_WholeSpanRescanning`, Neon `TestAdv_5_QuadraticSpanScanDoS`) | **fixed** `205a75f`: the span's `update`/`set`/`reset` words are read once (`spanWords`). Regression test `classify_test.go: TestClassifierSpanKeywordChecksGrowLinearly` (from `parked/c05r-repair-stopped`): ratios 117–249 before, 9–21 after. Both attacks pass. |
+| R2 | Operator-run suffix rescans (Astra `TestAdv_5_OperatorSuffixRescanning`) | **fixed** `a6341d8`: the lexer scans an operator run once (`lexOpRun`: end, last keep-sign byte, start of the trailing sign run) and cuts every operator from it in O(1); `lexOperatorLen` removed. Tokens unchanged: `TestLexOperatorRunsMatchTheOneRunAtATimeRule` and `TestLexOperatorTrailingSignFollowsPostgres` pass. Regression test `classify_test.go: TestLexOperatorRunsGrowLinearly` (from the parked branch): `+` 222 and `+-` 252 before (34 s and 36 s at 64 KiB), 15 and 29 after. The attack passes. |
+| R3 | RLS policy changes session / re-run rows (Astra `TestAdv_2_PlainTablePolicyChangesSession`, `…ChangesRepeatedRows`) | **narrowed** (claim 2 excludes tables with row-level security policies; "Narrowed claims", "Stated limits" 1). No code change. Both attacks still fail against the old wording, as expected. |
+| R4 | Parallel plan: order, `string_agg`, float `sum` differ on re-run (Neon `TestAdv_2_ParallelScanDifferentRowsOnRerun`, `TestAdv_2_FloatSumParallelNonAssociativity`) | **narrowed** (multiset of rows, defined values only; "Narrowed claims", "Stated limits" 5). Safe shape unchanged. Tier R oracle extended `cba8dd3`: table `big` (200,000 rows, 5 of 6 texts get `Parallel Seq Scan`, asserted), re-runs compared as multisets (`shrRowMultiset`), exact types only; `TestTierRSafeShapeDifferential` passes on Postgres 17 (81 + 400 + 6 texts). Order varying between runs confirmed by hand (`SELECT a FROM big WHERE mod(a, 50000) = 0`, 6 runs, 3 orders). Both attacks still fail against the old wording, as expected. `docs/safe-shape.md` lists no limits, so its generator is unchanged (the brief's condition). |
+| R5 | `set_config` with unreadable name/path refused (Astra `TestAdv_6_UnreadableLocalArguments`) | **narrowed** (claim 6 precise form, "Narrowed claims"). No code change. The attack still fails against the old wording, as expected. |
+| R6 | `SELECT a FROM local temp` and three like it refused as `temp-object` (Neon `TestAdv_6_PlainTableQueriesWithUnreservedAliasesNotRefused`) | **fixed** `c3d8417`: `temp`/`temporary` refuse only after `CREATE`, `CREATE OR REPLACE` or `INTO` (not `INSERT`/`MERGE INTO`), with an optional `GLOBAL`/`LOCAL` between (`makesTemp`). Regression test `classify_repair_test.go: TestClassifierTempWordsRejectOnlyWhereATemporaryObjectIsMade` (16 refused forms, 8 forwarded reads). Corpus (190 reject records), documented examples and spellings still refused. The attack passes. |
+| R7 | Refused `Build` counted in `Total`/`ByRow` (Neon `TestAdv_8_FailedBuildDoesNotInflateBuiltCounts`) | **fixed** `da290fe`: `Build` counts `ByRow`/`Total` only for a reply it built; every refusal counts in `Failed` only. Regression test `errors_test.go: TestReplyRefusesBadInput` (it pinned `ByRow[shed] == 3` before; now asserts zero, and one count for a real build). Product tests pinning the old count corrected: `classify_attacks_test.go: TestReplyEveryRowWithPrefixAndStatusIsWellFormed` (`da290fe`), `errors_test.go: TestReplyEveryRowIsWellFormedWithTheRightMarker` (`62ee8e3`). The attack passes. |
+| R8 | Review 1 finding 1: ledger row for `TestClassifierArbProbe` | **fixed** (this file): the row now says B5 and E4 are asserted (since `5356992`), E1–E3 rejected. |
+| R9 | Review 1 finding 2: dead `clsTierRReadOnly` | **fixed** `066ac76`: deleted. |
+| R10 | `TestReplyMetricsCoverEveryRow` exercises one row | **fixed** `d1ecdf6`: builds every row (row k, k+1 times), checks `replies{reason}` per row, `replies_built` and `reply_failures` (> 0); ledger row corrected. It also fails under the old R7 counting. |
+| R11 | `UESCAPE` literal continued across a newline hides an advisory-lock call | **listed** under "Courtesy gaps known". No new reject rule. |
+
+**Adversarial tests that are now wrong** (they assert something the reconciliation ruled a
+defect; not edited, per the brief):
+
+- Astra `TestAdv_8_ErrorRowsRandomOrderAccounting` (held before) now fails: it expects
+  `ByRow[pass-through] == 9` and `Total == 9 × ErrRowCount` after nine refused pass-through
+  builds, i.e. the old counting that R7 corrects. Neon's
+  `TestAdv_8_FailedBuildDoesNotInflateBuiltCounts` asserts the opposite and now passes; the
+  two cannot both pass. No claim says a refused build is a built reply (`replies_built`:
+  "Replies the proxy built itself").
+- Neon `TestAdv_1_ShareableContractWithRejectAndTx` (held before) now fails: its
+  "safe yet rejected" precondition list includes `SELECT local temp`, `SELECT global temp`,
+  `SELECT local temporary`, `SELECT global temporary`, `SELECT replace temp`,
+  `SELECT replace temporary` and asserts they are refused. That is the over-rejection R6
+  removes (Neon's own `TestAdv_6_PlainTableQueriesWithUnreservedAliasesNotRefused` asserts
+  the opposite). The claim it tests (claim 1: a rejected text is never shareable or keyed)
+  still holds for its other inputs (`pg_temp`, `pg_temp_1`, …) and in its random part,
+  which pass.
+
+**Adversarial runs after the repair** (Go 1.26.8, Postgres 17 `postgres:17`):
+
+- Astra, `go test -count=1 -v ./agent_work/adversarial/c05-classifier/` (starts its own
+  Postgres): 32 pass, 4 fail — `TestAdv_2_PlainTablePolicyChangesSession`,
+  `TestAdv_2_PlainTablePolicyChangesRepeatedRows` (R3, narrowed), `TestAdv_6_UnreadableLocalArguments`
+  (R5, narrowed), `TestAdv_8_ErrorRowsRandomOrderAccounting` (wrong after R7, above).
+  `TestAdv_5_OperatorSuffixRescanning` and `TestAdv_5_WholeSpanRescanning` pass. (In one run
+  under the whole-tree `go test ./...`, `TestAdv_2_PlainTableCoercionAndAggregates` failed
+  with "the database system is starting up" from its own container; it passes alone.)
+- Neon default, `go test -count=1 -v ./agent_work/adversarial/c05-classifier-neon/`: 33
+  pass, 1 fail (`TestAdv_1_ShareableContractWithRejectAndTx`, wrong after R6, above), 4 tier
+  R attacks skipped. `TestAdv_5_QuadraticSpanScanDoS`, `TestAdv_6_PlainTable…NotRefused`,
+  `TestAdv_8_FailedBuildDoesNotInflateBuiltCounts` pass.
+- Neon tier R, `ADV_TIER_R=1 ADV_PG_ADDR=… go test -run '^TestAdv_2' …`: 2 pass, 2 fail
+  (`TestAdv_2_ParallelScanDifferentRowsOnRerun`, `TestAdv_2_FloatSumParallelNonAssociativity`:
+  R4, narrowed).
+
+**Test counts after the repair round** (ledger): test and fuzz functions in
+`internal/pgwire`, `internal/work`, `internal/obs/clssrc` and
+`internal/obs/simrun/classifier_test.go` 173 → 176 (+3: `TestLexOperatorRunsGrowLinearly`,
+`TestClassifierSpanKeywordChecksGrowLinearly`,
+`TestClassifierTempWordsRejectOnlyWhereATemporaryObjectIsMade`); test lines in those areas
+7,954 → 8,084. Ledger rows above are unchanged in count (kept 46, hoisted 30, retired 3);
+the three new tests are additions, not ledger rows. Product Go changed: `lex.go` +34/−18,
+`classify.go` +32/−13, `reply.go` +11/−6.
+
+**Timing note.** In one whole-tree `go test ./...` run, `TestClassifierTimeGrowsLinearly`
+measured 104 for the `'a'\n` shape (0.43 ms → 45 ms, under load from parallel packages);
+alone it measures 16. The shape's code was not touched in this round.
 
 ## Index rows
 
