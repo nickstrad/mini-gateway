@@ -1,0 +1,50 @@
+package pgwire
+
+import "testing"
+
+func clsArbProbe(t *testing.T, label, q string) {
+	t.Helper()
+	u := ClassifyQuery([]byte(q), false)
+	kinds, clean := lexKinds(q)
+	t.Logf("%s %q => %s clean=%v toks=[%s]", label, q, clsDescribe(u), clean, kinds)
+}
+
+func TestClassifierArbProbe(t *testing.T) {
+	clsArbProbe(t, "B1", "SELECT E'ok'\n'\\' ; SELECT ' ; SET search_path = hidden ; --'")
+	clsArbProbe(t, "B2", "SELECT E'ok'\n'\\' || ' || set_config('search_path', 'hidden_1stmt', false) --'")
+	clsArbProbe(t, "B3", "SELECT E'ok'\n'\\' ; SELECT ' ; INSERT INTO w VALUES (42) ; --'")
+	clsArbProbe(t, "B4", "SELECT E'ok'\n'\\' || ' || nextval('s')::text --'")
+	clsArbProbe(t, "B5", "SELECT E'ok'\n'\\' ; SELECT ' ; BEGIN ; --'")
+	clsArbProbe(t, "B6", "BEGIN; SET LOCAL search_path = 'pg_'\n'temp'; CREATE TABLE sneaky_c1 (a int); COMMIT")
+	clsArbProbe(t, "B7", "BEGIN; SET LOCAL SCHEMA 'pg_'\n'temp'; CREATE TABLE sneaky_c2 (a int); COMMIT")
+	clsArbProbe(t, "B8", "SELECT a FROM t_ts WHERE ts < 'n'\n'ow'")
+	clsArbProbe(t, "B8s", "SELECT 'n'\n'ow'")
+	clsArbProbe(t, "E0", "SELECT 'foo'\n'bar'")
+	clsArbProbe(t, "E0b", "SELECT 'foo' --c\n'bar'")
+	clsArbProbe(t, "E0c", "SELECT 'foo' /*\n*/ 'bar'")
+	clsArbProbe(t, "E0d", "SELECT 'n'\r'ow'")
+	clsArbProbe(t, "E0e", "SELECT 'a' 'b'")
+	clsArbProbe(t, "E1", "SELECT set_config('search_'\n'path', 'pg_temp', true)")
+	clsArbProbe(t, "E2", "SELECT set_config('search_path', 'pg_'\n'temp', true)")
+	clsArbProbe(t, "E3", "SELECT set_config('standard_conforming_'\n'strings', 'off', true)")
+	clsArbProbe(t, "E4", "SET LOCAL search_path = 'pg_'\n'temp'")
+	clsArbProbe(t, "E5", "SELECT U&'n'\n'ow'")
+	clsArbProbe(t, "E6", "SELECT E'n'\n'ow'")
+	clsArbProbe(t, "E7", "SELECT a FROM t_ts WHERE ts < ('n' || 'ow')")
+	clsArbProbe(t, "E8", "SELECT B'01'\n'10'")
+	clsArbProbe(t, "E9", "SELECT 'a'\nE'b'")
+	clsArbProbe(t, "M1", "SELECT ('[' || 'n' || 'ow,)')::tstzrange::text")
+	clsArbProbe(t, "M2", "SELECT ('[' || 'n' || 'ow,)')::tsrange::text")
+	clsArbProbe(t, "M3", "SELECT ('{[' || 'n' || 'ow,)}')::tstzmultirange::text")
+	clsArbProbe(t, "M4", "SELECT ('{' || 'n' || 'ow}')::_timestamptz::text")
+	clsArbProbe(t, "M5", "SELECT ('{' || 'n' || 'ow}')::_timestamp::text")
+	clsArbProbe(t, "M6", "SELECT ('{' || 'n' || 'ow}')::_time::text")
+	clsArbProbe(t, "M7", "SELECT ('{' || 'n' || 'ow}')::_timetz::text")
+	clsArbProbe(t, "M8", "SELECT ('[' || 't' || 'oday,)')::daterange::text")
+	clsArbProbe(t, "M9", "SELECT ('{' || 't' || 'oday}')::_date::text")
+	for _, name := range []string{"date", "time", "timetz", "timestamp", "timestamptz", "daterange", "tsrange", "tstzrange", "datemultirange", "tsmultirange", "tstzmultirange", "_date", "_time", "_timetz", "_timestamp", "_timestamptz", "_daterange", "_tsrange", "_tstzrange", "_datemultirange", "_tsmultirange", "_tstzmultirange", "text", "int4range"} {
+		q := "SELECT 'x'::" + name
+		u := ClassifyQuery([]byte(q), false)
+		t.Logf("TYPE %s %q => %s", name, q, clsDescribe(u))
+	}
+}
