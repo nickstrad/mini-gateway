@@ -18,6 +18,9 @@ read with `git show` and `git ls-tree` only.
 | `8d21be2` | knowledge: add the lease experiment's method facts and index the kept records |
 | `1563c68` | e2e: fail the per-policy tier R test when a hostile call errors |
 | (this file) | lease-port: add the port's notes |
+| `d3e8d4b` | e2e: observe each check in one lease and credit only complete dirty-check rows (repair) |
+| `4307437` | lease-port: point REPORT.md's review-file line at lab-records (repair) |
+| (this file) | lease-port: record the repair round |
 
 ## What was built (deliverable 1)
 
@@ -37,24 +40,32 @@ read with `git show` and `git ls-tree` only.
     `dirty-check.sql` column of the observations where that column differed from its clean
     value, and the number of secrets read back. Column names are read from the `AS <name>`
     aliases of `test/oracles/dirty-check.sql` (`dirtyColumns`), so a column added there is
-    covered without a test edit. After every hostile lease the checker runs the catalog
-    query, `SHOW search_path`, and the read-back of the newest secret planted so far; a
-    secret read back is one more dirty observation.
+    covered without a test edit. After every hostile lease the checker runs, in one
+    transaction (one lease), the read-back of the newest secret planted so far, the catalog
+    query and `SHOW search_path`; a secret read back is one more dirty observation. A column
+    is credited only when a complete row of the right width was read and its value differs
+    from the clean value; an errored, closed or wrong-width check is counted as unreadable
+    (and dirty) instead.
   - `TestTierRSessionStateNeverCrossesClients`: unchanged rule (0 dirty), its failure message
     now prints the per-column counts and the secret count.
   - `TestTierRSessionAblationWithoutResetCrosses`: besides "some dirt", every column must
     have moved at least once (`dirty-check column <name> never differed from its clean value
     with the reset switched off: the hostile set leaves it blind`) and the secret must have
     been read back at least once (`the custom setting mg_hostile.secret was never read back
-    with the reset switched off: the read-back cannot fail`).
+    with the reset switched off: the read-back cannot fail`), and no check may be unreadable (`N dirty-check
+    observations were unreadable with the reset switched off: an unread column proves
+    nothing`).
 - `test/e2e/c07_tierr_test.go` `policyRun`: each hostile lease gets its per-lease secret; the
-  observer reads the newest secret back after the catalog query, and a read-back counts
+  observer reads the newest secret back and runs the catalog query in one transaction (the
+  lease right after the hostile lease), and a read-back counts
   exactly like a catalog difference (a crossing when the observer is tenant 1, a same-tenant
   carry-over when it is tenant 2), so the existing rules of
   `TestTierRPoolSessionStateUnderEachReleasePolicy` apply unchanged for always and
-  on-switch, re-seed on and off. A hostile call that returns an error is counted
-  (`hostileErrors`) and fails the test (`<arm>: N hostile calls failed, so their state was
-  never planted`).
+  on-switch, re-seed on and off. A hostile call that returns an error, ends in a closed
+  connection or returns no row is counted (`hostileErrors`) and fails the test (`<arm>: N
+  hostile calls failed, so their state was never planted`); an unreadable observer lease
+  fails it too (`<arm>: N observer leases were unreadable, so their state was never
+  checked`).
 
 ## Decisions the brief left open
 
@@ -75,10 +86,14 @@ read with `git show` and `git ls-tree` only.
 3. **Which secret is read back.** The newest secret planted in the run, after every lease,
    not only after the custom-setting lease. This is stricter (a secret that survives several
    leases is still caught) and costs one statement per observation.
-4. **Read-back position in `policyRun`.** After the catalog query, on the same client. Every
-   statement outside a transaction is its own lease, so under `always` a reset runs between
-   the two; the read-back therefore checks what survives a reset, which is the property
-   under test. The session-state test does the same with its existing `SHOW search_path`.
+4. **Read-back position (changed in the repair round, `d3e8d4b`).** Every observation is one
+   transaction on the observer: `BEGIN`, the secret read-back, `dirty-check.sql`,
+   `SHOW search_path`, `COMMIT` (`observeOneLease` in `test/e2e/tierr_test.go`). The whole
+   check is the single lease right after the hostile lease, so no reset runs between the
+   hostile call and any part of the check. The clean baseline is taken the same way (through
+   the proxy in `sessionRun`, on a direct connection in `policyRun`), so its `ReadyForQuery`
+   status (`ZT`) matches. The first build ran the read-back as a separate statement after
+   the catalog query, which put a reset in between (review 1, finding 1).
 5. **Observer tenant in `policyRun`.** Main chose tenant 2 for odd `i`. With eight kinds that
    would have put the custom-setting kind (index 7) in front of tenant 2 only, so it could
    never be a crossing. The observer is now tenant 2 when `round + i` is odd, so every kind
@@ -201,6 +216,98 @@ in the worktree, load average 15–20 on 4 cores (three other builds running):
 - at `1563c68` (the final test code): exit 0, 60 PASS, 0 FAIL in 112.0 s, load average about
   15; the same counts every run, no hostile call failed, same-tenant carry-over 0 under
   always and 8 under on-switch in all 40 runs of each.
+
+## Repair round
+
+Repair builder: Opus, 2026-11-27, one round against `REVIEW-1.md` (FAIL: 2 major, 2 minor)
+and `agent_work/adversarial/lease-lab-port/RESULTS.md` (33 held, 3 broken), under the
+orchestrator decisions in `/root/briefs/zgateway-p2-lease-port-repair.md`. Still no product
+code: `git diff --stat main -- internal cmd go.mod go.sum` prints nothing.
+
+| Item | Outcome |
+| --- | --- |
+| Review finding 1 (MAJOR, read-back two or three leases late) | fixed, `d3e8d4b`; regression: mutation M7 now fails `TestTierRSessionStateNeverCrossesClients` and the `always/off` and `always/on` arms of `TestTierRPoolSessionStateUnderEachReleasePolicy` (below) |
+| Review finding 2 (MAJOR, unreadable check credits every column) | fixed, `d3e8d4b`; regression: `test/e2e/sessionoracle_test.go` `TestSessionOracleCreditsOnlyCompleteDifferingRows`, `TestSessionOracleCountsABrokenLeaseAsDirtyAndUnreadable`; mutation M6 now fails `TestTierRSessionAblationWithoutResetCrosses` |
+| Review finding 3 (MINOR, third stale pointer `REPORT.md:255`) | fixed, `4307437` ("Review files are in [lab-records/](lab-records/).") |
+| Review finding 4 (MINOR, closed hostile call not counted) | fixed, `d3e8d4b`; regression: `TestHostileCallFailsUnlessItAnsweredCleanly` (`hostileFailed`: an `E:` token, a `closed:` token, no `ReadyForQuery` or no data row is a failure) |
+| `TestAdv_3_ErrorIsNotMovement` (BROKEN) | fixed, `d3e8d4b` (same root cause as finding 2); passes now |
+| `TestAdv_3_EmptyIsNotMovement` (BROKEN) | fixed, `d3e8d4b`; passes now |
+| `TestAdv_3_TruncatedIsNotMovement` (BROKEN) | fixed, `d3e8d4b`; passes now |
+
+No claim was narrowed and nothing is disputed. The adversary's three C3 tests assert exactly
+what C3 and deliverable 1c say; their probe still compiles against the repaired code because
+`sessionResult{columns, moved}` and `observe(clean, got)` kept their shapes.
+
+### What changed in `test/e2e`
+
+- `observeOneLease(c, check, secret)`: `BEGIN`; secret read-back (when a secret has been
+  planted); `dirty-check.sql`; `SHOW search_path`; `COMMIT`. A reply with an `E:` or
+  `closed:` token or without `ReadyForQuery` marks the observation `broken`.
+- `sessionResult.observe` credits column `i` only when `completeRow` returned a row (clean
+  reply, data row exactly as wide as `moved`) and `row[i] != clean[i]`; otherwise it adds one
+  to `unreadable` and credits nothing. `sessionResult.record` counts a broken observation as
+  dirty and unreadable and credits nothing.
+- `TestTierRSessionAblationWithoutResetCrosses` fails on any unreadable check
+  (`N dirty-check observations were unreadable with the reset switched off: an unread
+  column proves nothing`). `TestTierRSessionStateNeverCrossesClients` counts one as dirty.
+- `policyRun` uses `observeOneLease` for the observer and for the direct clean baseline
+  (`directBaseline`), counts a broken observer lease in `unreadable`, and the policy test
+  fails on it. Hostile calls in both runs use `hostileFailed`.
+- Count changes from the one-lease check: `always-reseed` reseeds 36 instead of 45 (16
+  hostile + 16 observer + 4 seed leases; the separate read-back lease is gone), and the
+  session string gains `unreadable checks 0`. Every other count is unchanged (C3's per-column
+  counts, on-switch same-tenant carry-over 8).
+
+### Reproduced before the fix
+
+Scratch `/tmp/zgw-lease-lab-port/` (deleted at the end). Mutated trees were `git archive` of
+the named commit plus the mutation, run with `GOFLAGS=-buildvcs=false MG_TIER_R=1 go test
+-count=1 -timeout 15m ./test/e2e/ -run <tests> -v`.
+
+- **TestAdv_3_\*** at `2c70d83`: `go test -count=1 -v ./agent_work/adversarial/lease-lab-port/...
+  -run '^TestAdv_3_'` exit 1, all three FAIL (`column prepared falsely counted as exercised
+  (1) by invalid observation`, and so on for all seven columns, four for Truncated).
+- **M7** (skip the reset only after the custom-setting lease). The mutation, in
+  `internal/proxy/dbconn.go` `writeDB`: remember per connection that the last write
+  contained `do_custom`; when the next write is the `DISCARD ALL` query, send
+  `DO $$BEGIN END$$` instead; in `internal/proxy/lease.go` `resetJudge.expect` accept the
+  tag `DO` as well. (A first try sent `SELECT 1`; its row made the reset judge fail and
+  close the connection, which wipes the state, so that version proves nothing.) At
+  `2c70d83`: exit 1, but `TestTierRSessionStateNeverCrossesClients` PASS (`tier R: 0 dirty
+  observations over 24 hostile leases`), `always/off` and `always/on` PASS (`crossings 0,
+  same-tenant carry-over 0`); only `on-switch/off` and `on-switch/on` FAIL (`2
+  session-state crossings between tenants`). This is the review's result.
+- **M6** (remove `do_cursor()` and `do_role()` from `hostileCalls`, and replace the first
+  check reply, `round == 0 && i == 0`, with `E:ERROR:42501`, `ZI`). At `2c70d83`: exit 0,
+  `TestTierRSessionAblationWithoutResetCrosses` PASS (`51 dirty observations ... cursors 1,
+  ... role_changed 1, secret read back 13`). This is the review's result.
+
+### After the fix
+
+- **TestAdv_3_\*** at `d3e8d4b`: exit 0, all three PASS.
+- **M7** on `d3e8d4b`: exit 1.
+  - `TestTierRSessionStateNeverCrossesClients` FAIL: `3 dirty observations through the
+    proxy (prepared 0, cursors 0, listens 0, adv_locks 0, session_gucs 0, temp_rels 0,
+    role_changed 0, secret read back 3, unreadable checks 0)`.
+  - `always/off` FAIL: `1 session-state crossings between tenants`, `same-tenant
+    carry-over 1 (present only under on-switch)`.
+  - `always/on` FAIL: `1 session-state crossings between tenants`, `same-tenant
+    carry-over 1 (present only under on-switch)`.
+  - `on-switch/off` and `on-switch/on` FAIL as before (`2 session-state crossings`).
+- **M6** on `d3e8d4b` (the injected reply replaces the catalog reply of the first
+  observation, which is then broken, as a real error reply makes it): exit 1,
+  `TestTierRSessionAblationWithoutResetCrosses` FAIL: `1 dirty-check observations were
+  unreadable with the reset switched off: an unread column proves nothing`, `dirty-check
+  column cursors never differed ...`, `dirty-check column role_changed never differed ...`
+  (`cursors 0`, `role_changed 0`, `unreadable checks 1`).
+- **Stability**, on the final code: `MG_TIER_R=1 go test -count=20 -timeout 40m ./test/e2e/
+  -run 'TestTierRSessionStateNeverCrossesClients|TestTierRSessionAblationWithoutResetCrosses|TestTierRPoolSessionStateUnderEachReleasePolicy' -v`:
+  exit 0, 60 PASS, 0 FAIL, 298.9 s under load average about 25. Identical counts in all 20
+  runs: session `0 dirty observations over 24 hostile leases`; ablation `69 dirty
+  observations ... (prepared 21, cursors 19, listens 20, adv_locks 22, session_gucs 24,
+  temp_rels 23, role_changed 18, secret read back 17, unreadable checks 0)`; policy
+  always crossings 0 / carry-over 0, on-switch crossings 0 / carry-over 8, re-seed on and
+  off.
 
 ## Records (deliverable 2)
 
@@ -360,8 +467,8 @@ equals it (44 of 44).
   placeholder settings a client might create. `pg_settings` cannot list placeholders, so a
   placeholder of another name with the reset broken would be seen only if the hostile set
   plants it.
-- Under `always`, the observer's read-back is the second statement of its client, so a reset
-  runs between the catalog query and the read-back (decision 4).
+- The check is one transaction, so it sees the state left for the next lease, not state that
+  only appears outside a transaction block.
 - `mg_hostile_role` has no privileges of its own; after `do_role` with the reset off, later
   hostile calls rely on PUBLIC's default `EXECUTE` and `TEMPORARY` grants, which the
   `postgres:17` image keeps.
