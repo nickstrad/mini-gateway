@@ -11,15 +11,16 @@ import (
 )
 
 const (
-	plantEnv       = "MG_FUZZ_PLANT"
-	plantWithdraw  = "retry-withdraw-first"
-	fuzzMaxOps     = 256
-	fuzzOpBytes    = 3
-	fuzzMaxStep    = 255 * Millisecond
-	Millisecond    = Time(1_000_000)
-	propertyRuns   = 200
-	propertyOps    = 400
-	smallCapTokens = 3
+	plantEnv          = "MG_FUZZ_PLANT"
+	plantWithdraw     = "retry-withdraw-first"
+	fuzzMaxOps        = 256
+	fuzzOpBytes       = 3
+	fuzzMaxStep       = 255 * Millisecond
+	Millisecond       = Time(1_000_000)
+	propertyRuns      = 200
+	shortPropertyRuns = 30
+	propertyOps       = 400
+	smallCapTokens    = 3
 )
 
 func smallConfig(kind Kind) Config {
@@ -46,8 +47,12 @@ func randomOps(r *rand.Rand, n int, failShare int) []op {
 }
 
 func TestPropertyBudgetAgreesWithTheReferenceModel(t *testing.T) {
+	runs := propertyRuns
+	if testing.Short() {
+		runs = shortPropertyRuns
+	}
 	for _, cfg := range []Config{smallConfig(KindPreForwardOnce), smallConfig(KindOff), {Kind: KindPreForwardOnce}} {
-		for seed := range propertyRuns {
+		for seed := range runs {
 			for _, share := range []int{10, 50, 100} {
 				r := rand.New(rand.NewPCG(uint64(seed), uint64(share)))
 				if trail, err := runOps(cfg, randomOps(r, propertyOps, share)); err != nil {
