@@ -273,52 +273,6 @@ Unplanted fuzzing found one real harness bug (the fuzz client reported a legitim
 
 ---
 
-## Reviews, Astra's attack, and the two rules that came out of repair
-
-Chunk 6 went through Review 1 (FAIL), Astra's adversarial pass, one repair round, and Review 2 (PASS). Every defect found was reproduced before fixing and locked down with a regression test.
-
-### Review 1's two blockers ([`REVIEW-1.md`](../../agent_work/chunks/c06-walking-skeleton/REVIEW-1.md))
-
-1. **Fragmented queries killed by a mid-message timer that was never cancelled (`internal/proxy/client.go`).** `c.midT` (`timeouts.client_mid_message`, 5 s) was armed whenever a client query arrived across multiple reads (`c.cur.mid()`), but once the final byte completed the message, `startRequest()` moved `c.phase` to `cpQueued` or `cpActive` and `pump()` returned early before reaching `e.t.cancel(&c.midT)`. Worse, `clientTimer()` fired `clientViolation(c)` without checking `c.cur.mid()`. Any fragmented query whose queue wait plus database execution exceeded 5 s (well inside `timeouts.statement` = 30 s) was killed mid-flight with `FATAL 08P01` spliced onto any already-relayed bytes, and its database connection was closed. `e2e-fragment` missed it because its fake statements ran in milliseconds. **Fix (`1f12441`):** cancel `c.midT` whenever `!c.cur.mid()` regardless of phase, and guard `tClientMid` on `c.cur.mid()`. Regression test: `TestFragmentedQueryOutlivesTheMidMessageDeadline`.
-2. **Leftover bytes after `ReadyForQuery 'I'` letting a connection count as reset before `DISCARD ALL` ran (`internal/proxy/lease.go`).** When `relay()` consumed a lease-ending `ReadyForQuery 'I'`, any trailing bytes left in the same `EvDBData` slice stayed in local variable `b` and were not reported in `ReleaseInput.Unread`. `ResetAlwaysPolicy` therefore returned `ReleaseReset`, `startReset()` moved the connection to `dpResetting`, and `dbData()`'s `for len(b) > 0` loop immediately fed those pre-reset bytes into `judgeReset()`. Trailing bytes carrying `CommandComplete "DISCARD ALL"` + `ReadyForQuery 'I'` marked the connection `dpIdle` before `DISCARD ALL` had even reached Postgres. (Astra's `TestAdv_3_ResetWithTrailingReply` found the sister defect at the end of a reset reply: trailing bytes after the reset's `ReadyForQuery` were left for the next lease.) **Fix (`06ef106`):** pass `d.trailing = len(b) > 0` into `ReleaseInput.Unread` so leftover bytes after a lease close the connection dirty (`release-dirty`, no reset), and fail a reset as `protocol-surprise` if `n < len(b)` after the reset's `ReadyForQuery`. Regression tests: `TestBytesAfterReadyForQueryEndingALeaseCloseTheConnection` and `TestBytesAfterTheResetReplyCloseTheConnection`.
-
-Review 1 also caught three major findings (unsynchronised write/close ordering in `internal/shell` — see Rule 2 below; the two missing shell unit tests; and a missing catalog check on `cmd/mini-gateway`'s actual collector wiring, now `TestEveryMetricTheBinaryExportsIsInTheCatalog`) and three minor findings (the reverse `importlint` rule for `enginesrc`, the safe-shape/RLS note in `docs/error-contract.md`'s source text, preventing `FATAL 08P01` splicing on pipelining overflow after partial reply, and cancelling an in-progress dial immediately on `ActDBClose`).
-
-### Two rules established by the repair round
-
-Two engine-wide invariants came directly out of Review 1 and Astra's attacks:
-
-1. **Deadline rule — time passes before the event (`f7f59f3`).** `Engine.Step(now, ev, out)` fires every timer due at or before `now` *before* dispatching `ev`. Previously, `Step` handled data before `finish()` fired timers, so Astra's `TestAdv_3_ResetDeadlineTie` showed a reset reply arriving at the exact instant of its 1 s deadline still succeeded and dispatched queued work. Under the single rule — now documented in [`docs/timeout-budget.md`](../../docs/timeout-budget.md) and proved at equality across five tests in [`internal/proxy/deadline_test.go`](../../internal/proxy/deadline_test.go) — a reply, byte, or freed connection arriving at the exact instant of its deadline is late.
-2. **"Did not reach the database" only on an explicit zero-byte refusal (rule G8, `8077048`).** In the first build, `statementLost()` defaulted `Reached` to `work.No` whenever `d.acked == req.start`. Review 1 Finding 3 showed that because `internal/shell` runs `readLoop` and `writeLoop` in separate goroutines, a database close/reset after executing an `INSERT` or `COMMIT` could post `EvDBClosed` before `writeLoop` posted `EvDBWrote`, causing the proxy to report `Reached: No` and `ERROR 08006` ("safe to retry") for a write — which would compound with Chunk 12's retries into duplicate writes. The repair fixed all three layers:
-   - **Engine (`reachedFor` in `lease.go`):** once `ActDBWrite` is emitted, the request is `work.Yes` ("may have reached") unless the driver explicitly posted `EvDBWriteRefused` at or before `req.start` and `req.relayed == 0`.
-   - **Shell (`io.go`):** on the database leg, `readerExit` calls `c.abort()`, waits on `<-c.writerDone` so every `EvDBWrote` precedes close, and posts `EvDBWriteRefused` before `EvDBClosed` whenever a write stopped short or queued writes were dropped.
-   - **Simulator (`proxysim.go`):** `flush()` posts `EvDBWrote` for any partial `n > 0` before `gone()`, which posts `EvDBWriteRefused` if buffered unwritten bytes remain.
-
-```go
-func reachedFor(d *dbConn, req *request) work.Tri {
-	if req.relayed > 0 || d == nil || !d.refused || d.refusedAt > req.start {
-		return work.Yes
-	}
-	return work.No
-}
-```
-
-### Astra's adversarial pass and Review 2 ([`ADVERSARIAL.md`](../../agent_work/chunks/c06-walking-skeleton/ADVERSARIAL.md), [`RESULTS.md`](../../agent_work/adversarial/c06-walking-skeleton/RESULTS.md))
-
-Astra (`gpt-6-astra`) attacked all 15 claim identifiers (Claims 1–14 and 3b, at least three distinct attacks per claim, seed `6062026`). Its first dispatch was cut by its provider's content filter; the one re-dispatch finished the full harness (including the `ADV_LONG=1` 3,000-input fuzz campaign and three real Postgres 17 isolation attacks in 302.273 s) and recorded **43 held, 3 broken**:
-
-- **Broken 1 & 2 (product defects, both fixed):** `TestAdv_3_ResetWithTrailingReply` and `TestAdv_3_ResetDeadlineTie`. Both now pass.
-- **Broken 3 (specification mismatch, settled by narrowing Claim 13):** `TestAdv_13_ExplicitZeroCapacity` supplied `"capacity": 0` expecting validation to fail under "caps are positive", whereas config defaults replace zero with the documented positive default. The orchestrator kept zero-means-default and narrowed Claim 13 (below).
-- **One previously held attack settled after repair:** `TestAdv_5_ZeroAcceptedBytes` posted `EvDBClosed` with no write report after `ActDBWrite` and expected `Reached: No`. That directly contradicted the rule G8 ruling from Review 1 Finding 3; the orchestrator settled it, and `TestWriteRefusedWithZeroBytesIsNotReached` tests the corrected contract.
-
-Final adversarial tally after the repair round: **44 pass, 2 settled**. Review 2 ([`REVIEW-2.md`](../../agent_work/chunks/c06-walking-skeleton/REVIEW-2.md)) verified all 13 repair mutations (M1–M8b) were caught by their regression tests, ran all 38 test packages cleanly, and returned **VERDICT: PASS**.
-
-### Gate record
-
-There is no `gate/result.json` committed after the repair round. The last full build-stage gate run (commit `dbc896b`, 2026-11-26, 2,222 s, recorded in [`NOTES.md`](../../agent_work/chunks/c06-walking-skeleton/NOTES.md)) passed G0 (tools, gofmt, build, vet, tidy), G1 (detlint, importlint, boundlint, paniccheck), G2 (comments), G3 race, G4 (markers and 200-seed sweep: 9,073 seed runs in 304 s), G5 (16 fuzz targets, 0 seed sweeps; `FuzzEngineOps` 2,947 execs at 140/s), G6 (tier R: 23 tests on Postgres 17.11 in 203 s), G7 (DuckDB CSV assertions: 4,269 run directories, 59 scenarios, 195 SQL files, 0 failures), G8 (gen-docs), G9 (site), and G10 (`fuzz-plant.sh` found the planted bug in 2 s). Its only red check was G3 unit on the two unedited adversarial tests (`TestAdv_5_ZeroAcceptedBytes` and `TestAdv_13_ExplicitZeroCapacity`) before the orchestrator settled them in `9e3460f`. The final-stage gate runs after this prose pass.
-
----
-
 ## Narrowed claim and stated limits
 
 ### Narrowed Claim 13

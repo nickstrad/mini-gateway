@@ -274,47 +274,6 @@ Chunk 3 adds 4,170 lines of non-test Go (before prose comments; about 3,100 excl
 
 ---
 
-## Reviews, adversarial attacks, and narrowed claims
-
-Chunk 3 went through one review-and-repair cycle, one adversarial pass, and a second review that closed with three minor items carried forward to Chunk 6.
-
-### Initial adversarial pass and Review 1
-
-Against the initial build (`085c617`), the black-box adversarial suite (Astra seat, [`RESULTS.md`](../../agent_work/adversarial/c03-obs-spine/RESULTS.md)) ran 36 named attacks (three per claim) and reported **HELD: 22, BROKEN: 14** (10 product defects and 4 over-broad claims). In parallel, [`REVIEW-1.md`](../../agent_work/chunks/c03-obs-spine/REVIEW-1.md) (Neon seat) returned **VERDICT: FAIL** with 1 three-part blocker, 5 majors, 4 minors, and 3 surviving mutations out of 9 (`M5`, `M7a`, `M8`).
-
-Together, the review and adversarial pass found ten concrete product defects:
-
-1. **`scripts/csv-assert.sh` multi-run and CSV gaps (Blocker):** `-- requires:` summed across all runs rather than per run (letting an empty second run pass silently), line-oriented `awk` broke on RFC 4180 quoted newlines, `-- requires:` ignored `final_hist`, and empty numeric cells became `NULL` in DuckDB so `value <> 7` returned no violation rows.
-2. **`obs.Merge` validation and overflow (Major):** `Merge(nil, ...)` panicked, singleton undeclared points and all undeclared histograms bypassed registry checks, and `int64` counter sums wrapped silently.
-3. **First-flush header cap (Major):** `csvflush` checked `MaxBytes` on body bytes without counting the 222-byte headers written by `open()` (or zero-flush `Close()`).
-4. **Counter monotonicity on `Close()` (Major):** Async `Close()` decremented `csv_flush_errors` and `csv_rows_dropped` when re-writing a dropped last snapshot.
-5. **Untested `Emitter.Histogram` detail-off guard (Major / M5):** Every test source guarded `e.Histogram` with `if e.Detail()`, leaving the emitter's own `!e.detail` check unexercised.
-6. **Health rule lag and latching (Major):** `adapterSlot.failed` was unused, `CollectorRule` checked cumulative `export_errors` (never recovering after a transient error), and `Collector.Health` lagged by one publish.
-7. **`csvflush.RoundTrip` row integrity and CRLF (Minor / M8):** `RoundTrip` accepted duplicate final scalar rows, out-of-order rows, and fabricated extra tenant rows, and `encoding/csv` stripped `\r` inside quoted `\r\n` labels.
-8. **Prometheus exposition edge cases (Minor + Adv 8):** `promtext.Check` accepted negative histogram bucket counts, and clashing declarations (counter `x` + gauge `x_total`, or histogram `wait` + gauge `wait_count`) produced invalid or duplicate exposition series.
-9. **Headline conformance gap (Minor / M7a):** `obstest`'s `Headline` check passed an adapter that dropped headline metrics after the first one.
-10. **Presence of non-tenant labelled metrics and minor writer nits (Minor + Adv 3):** Non-tenant metrics with `reason`/`outcome`/`mode` labels could omit all rows silently; `plantStaleValue` indexed `prevVal[0]` instead of `prevVal[i]`, and multi-snapshot `Flush` sorted by `Instance` alone rather than `(Seq, Instance)`.
-
-Separately, two Chunk 1 adversarial tests initially failed because Chunk 1's determinism file-walker walked `internal/obs/csvflush`, which intentionally performs file I/O and runs an async goroutine; the orchestrator excluded `csvflush` from that walk ([`c01-sim-kernel/ADVERSARIAL.md`](../../agent_work/chunks/c01-sim-kernel/ADVERSARIAL.md)).
-
-### Repair round, settled attacks, and two narrowed claims
-
-One repair round fixed all 10 Review 1 findings and all 10 product-defect adversarial breaks with regression tests. On the final adversarial run ([`ADVERSARIAL.md`](../../agent_work/chunks/c03-obs-spine/ADVERSARIAL.md)), **32 of the 36 named attacks pass** (33 passing tests including the `TestReplayWorker` helper), **0 fail**, and **4 are settled by the orchestrator** (`t.Skip`):
-
-- **`TestAdv_8_CounterGaugeFamilyCollision` and `TestAdv_8_HistogramGaugeSeriesCollision` (fixed another way):** `Registry.Declare` now refuses declarations whose Prometheus series names would collide, and `promtext` skips wrong-kind points. Both attacks fail only in their setup when attempting to declare clashing metrics; the claim that Prometheus output always parses for accepted declarations holds.
-- **Claim 2 narrowed (`TestAdv_2_PrometheusHistoryIndependence`):** Originally stated that equal instance snapshots always produce byte-identical adapter output. As narrowed: **every adapter's output is a deterministic function of its configuration and the full sequence of snapshots it has exported so far**; two adapters with equal configuration fed equal snapshot sequences give byte-identical output. `jsonstats` and `logline` depend on the current snapshot only, whereas `promtext` (quiet-tenant eviction) and `csvflush` (persisted rows and flush count) carry history by design.
-- **Claim 12 narrowed (`TestAdv_12_RuntimeDeclarationDocumentationGap`):** Originally stated that no metric can be exported without being declared and documented in `docs/csv-schema.md`. As narrowed: **no metric can be exported without being declared** (enforced by `Emitter` and `Merge`), and **documentation in `docs/csv-schema.md` is enforced for every source in `internal/obs/catalog.Registry()`** (held by the catalog test, `simrun`'s registry test, and Gate G8). Because `internal/obs` cannot import `catalog`, a source registered ad hoc at runtime without adding itself to `catalog` is declared but undocumented. Chunk 6 adds a follow-up test confirming every source registered by the real binary is in `catalog`.
-
-### Review 2 (NITS, carried to Chunk 6)
-
-[`REVIEW-2.md`](../../agent_work/chunks/c03-obs-spine/REVIEW-2.md) verified all 9 repair-group revert-to-fail checks and 8 property mutations and issued **VERDICT: NITS**, noting three minor issues that falsify no claim. Because the chunk's single repair round had been used, the orchestrator closed them as required fixes carried into the Chunk 6 brief:
-
-1. `Registry.Declare` inserts descriptors into `r.descs` inside its loop before validating later arguments in the same variadic call (leaving earlier descriptors registered if a direct caller passes a mix of valid and invalid descriptors; `Collector.Register` is unaffected because it clones `c.reg` first).
-2. On a zero-flush `Close()`, if `w.open()` fails, `w.stopped` is set and `run.csv` is withheld, but `w.flushErrors` is not incremented.
-3. `Collector.selfView()` builds a fresh `Points` slice while still aliasing `c.last.Hists`; no current health rule mutates histograms, but cloning `Hists` will prevent any future custom rule from mutating `c.last`.
-
----
-
 ## Stated limits
 
 - **No locks inside `internal/obs`.** `Collector.Last()` and `Collector.Health()` are safe on the owner's goroutine only; the process shell in Chunk 6 hands copies across to the admin listener.

@@ -4,16 +4,7 @@ Operational document for Nick's steering. Written by the Fable orchestrator, 202
 Nothing past this document is authorized: no PLAN.md, no C4 diagrams, no product code until
 Nick steers on section 5.
 
-**How this was made.** Four fresh research agents (one per bucket) read the sources and wrote
-notes; the notes are in `agent_work/phase0/research/` (b1–b4) with a verification log of every
-URL and path tried. This document is the orchestrator's merge: duplicates removed, cross-bucket
-disagreements resolved or turned into steering questions. The orchestrator re-fetched five
-high-impact claims directly (the ZGateway post and its "roughly 19x" wording, folly's `Codel.h`
-rule, Tailscale's `DoChanContext`, Twemproxy's `server_connections` default, the SRE book's 10%
-retry ratio) and re-ran the two probe scripts in `agent_work/phase0/probes/`. Everything else
-carries the research agent's label.
-
-**Addendum, 2026-11-24.** Three directions from Nick arrived while the merge above was being
+**Addendum, 2026-11-24.** Three directions from Nick arrived while this document was being
 written and are added here without reopening Phase 0: the component-snapshot metrics pattern
 (F29), *Release It!* (F30), and horizontal scale of the proxy tier as a design constraint (I36),
 with steering questions 13 and 14. The orchestrator wrote these three entries itself from sources
