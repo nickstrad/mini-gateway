@@ -189,7 +189,17 @@ tenants (1 failure).
 
 ## Sweeps (200 distinct seeds)
 
-SWEEP-RESULTS-PLACEHOLDER
+All on 2026-11-27 at load average 11-20 (other builds and gates on vm-1).
+
+| Scenario | How | Result |
+| --- | --- | --- |
+| `TestScenarioFairNoisyNeighbour`, `TestScenarioFairManyTenants`, `TestScenarioFairHeldTransactions` | one test binary built at `a578722` (scenario code as at HEAD), run once per seed with `-seed=N` for N = 1 to 200 (so no seed repeats and no per-call cap applies), three processes at a time, `RUN_DIR` set; each seed runs every arm twice (replay law and byte-identical files) | **200 of 200 distinct seeds pass** (`/tmp/zgw-c09/sweep/result.txt`, 200 lines, 0 FAIL) |
+| `TestScenarioFairResultsEqualDirect` (`fair-results`) | `DST_SEEDS=200` (seeds 1 to 200; `simtest.Sweep`, no cap), `RUN_DIR` set | pass (1,275 s) |
+| `TestScenarioFairNoisyNeighbourAblation` | seeds 1-3 (cap `fairAblationSeeds`), in `go test ./...` and the gate's sweep | pass: the quiet tenant fails its check and its p99 is above 10x alone on each |
+| SQL over the sweeps' flushed files | `scripts/csv-assert.sh <sweep root>/<scenario> test/analysis/<scenario>/*.sql` | every SQL file 0 failures over all 200 seeds: noisy neighbour 3 files over 400 runs, held transactions over 200, `fair-results` over 200, many-tenants `flooder-shedding.sql` over 400; `per-tenant.sql` was killed by memory (DuckDB exit 137) over all 400 runs of 41 tenants at once on the shared host, so it ran in ten windows of 20 seeds (both arms of each seed in one window): 0 failures in every window. Stated limit: that file needs windows of about 20 seeds on vm-1 |
+
+The gate's own G4 sweep (`DST_SEEDS=200`) runs each fairness scenario on 10 seeds per call (the
+cap) and passed.
 
 ## Observability (PLAN.md 7.6)
 
@@ -321,4 +331,21 @@ scripts/gate.sh c09-fairness
 
 ## Gate result
 
-GATE-RESULT-PLACEHOLDER
+`scripts/gate.sh c09-fairness` (build stage), run once on a clean committed tree at `9561cc9`,
+2026-11-27, load average 11-20: **overall fail, counts_for_landing false, red only in G2 and G5,
+neither in this chunk's code.** `result.json` deleted (not committed).
+
+| Check | Result |
+| --- | --- |
+| G0 tools, gofmt, build, vet, tools-vet, tools-test, tidy | pass |
+| G1 detlint (27 patterns), importlint, boundlint, paniccheck | pass |
+| G2 comments | **fail** against baseline `99c7ef1` (the gate's merge base with the local `main`): every line listed is a doc comment in chunk 7's `test/e2e/c07_scenarios.go` and `c07_tierr_test.go`, added by chunk 7's prose commit, which this branch inherits. Re-run alone with the brief's base, `GATE_BASE=389ec01 GATE_ONLY=G2`: **pass** (this chunk adds no comment) |
+| G3 unit (1,487 s), counted, race | pass |
+| G4 markers, sweep (200 seeds, 3,625 s) | pass |
+| G5 fuzz | **fail**: 17 of 19 targets pass (`FuzzFairnessOps` 1,800 executions, 85/s on the loaded host, classified fuzz); `internal/pgwire` `FuzzClassify` and `FuzzLex` "unreadable": their seed corpora (1,101 and 821 inputs) were still loading baseline coverage when the 20 s budget ended, so no rate was printed. This branch does not touch `internal/pgwire`. Run alone afterwards for 20 s each: both **pass** (`FuzzLex` 6,116/s; `FuzzClassify` 44,065 executions). No `context deadline exceeded` occurred |
+| G6 tier R (406 s) | pass, including `TestTierRFairNoisyNeighbour` |
+| G7 csv (5,710 s) | pass: 5,326 run directories, 93 scenarios with SQL files |
+| G8 gen-docs, G9 site | pass |
+| G10 extra | pass: every planted fuzz bug found (`FuzzFairnessOps` after 4 s), fairness canaries green |
+
+`go test -count=1 ./...` before the gate (at `e58a128`): all 56 packages pass.
