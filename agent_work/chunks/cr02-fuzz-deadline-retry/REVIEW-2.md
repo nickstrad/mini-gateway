@@ -272,3 +272,5 @@ Not run:
 - The full gate.
 - Extra seeds / `scripts/sweep.sh`: the change touches no simulator scenario.
 - The parked branch `work/cr02-fuzz-deadline-retry` was not read.
+
+NITS CLOSED by the orchestrator (2026-11-27): findings 1 and 2 written as stated limits in the header of scripts/fuzz.sh and in NOTES.md; finding 4 corrected in NOTES.md ("After review 2"); finding 3 (one test gap, the code is right) carried in STATE.md.
