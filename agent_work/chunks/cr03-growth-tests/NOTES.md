@@ -462,3 +462,217 @@ patterns)/importlint/boundlint/paniccheck pass; G2 comments pass (baseline `ac91
 unit pass (630 s, includes `agent_work/adversarial/...`, so `TestAdv_5_*` passed this time),
 G3 race pass (34 s). `gate/result.json` was not committed, and the `gate/` directory was
 removed. The only change after the gate run is this paragraph.
+
+## Repair round
+
+Repair builder: Opus, 2026-11-27, from `/root/briefs/zgateway-p2-cr03-repair.md`, against
+`REVIEW-1.md` (Neon, FAIL: two major, three minor) and Astra's harness
+(`agent_work/adversarial/cr03-growth-tests/RESULTS.md`: 31 held, 0 broken). Work starts at
+`e6e1306`.
+
+### One line per finding
+
+| Finding | Outcome |
+| --- | --- |
+| 1 MAJOR: `'x'` and `-- c\n` (and `-`) move no counter; M5, M6 pass | **Fixed** in `1c9bca3` (refined in `702c187`). Every lexer loop counts its steps under `-tags clscount`. `TestCountedWorkGrowsLinearly` requires every shape of the three tests to move the lexer-read and token-step counters. M5 and M6 now fail it (table below) |
+| 2 MAJOR: `scanOpRun`, `lexContinuation` counted by endpoints; `clsMsg.lex` uncounted; the counted lexer was a side run | **Fixed** in `1c9bca3`. Loop steps are counted inside `scanOpRun`, `lexContinuation` and `lexHasPrefix`, and every loop of `(*clsMsg).lex` counts a token step. The tagged counts come from the two lexer passes `ClassifyQuery` makes (`countPass`), not from a side run. M7, M8 and M9 now fail `TestCountedWorkGrowsLinearly` |
+| 3 MINOR: `setConfigLocal` skipped `literalBytes` on a continued literal | **Fixed** in `95f9996`. It now reads the token through `isString` and counts the bytes before `clsContinued` scans them. Regression test `TestClassifierCountsTheSetConfigLiteralItScans` fails on the old order: 16 literal bytes for `set_config('ab'\n'c', 'x', false)` against 24 for the plain literal of the same length |
+| 4 MINOR: the `dollar()` lookahead counter is never exercised; M11 passes | **Fixed** in `1c9bca3`. Shapes `$a$x$a$ ` and `$a ` were added to `TestClassifierWorkGrowsLinearly`. M11 now fails it in the default build, and fails `TestCountedWorkGrowsLinearly` under the tag |
+| 5 MINOR: wrong path in a skip message | Already fixed by the orchestrator in `e6e1306`. Nothing to do |
+| Review 1's ratification of the three skipped chunk 5 wall-clock attacks | Its condition, closing finding 2, is met under `-tags clscount`, which the gate's G3 runs. The skips stay as they are |
+| Astra's attacks | None broken. The 31 still hold on the repaired tree: `go test -count=1 ./agent_work/adversarial/cr03-growth-tests/...` passes (55 s) |
+
+### The form chosen: (B), counting compiled in under the tag `clscount`
+
+**Why not (A).** I measured a prototype of always-on counting first: one increment per byte
+read, through an accessor. I ran interleaved benchmarks against `main`, 6 rounds of
+`-benchtime 200ms`, pinned to CPU 3 with load average 12 to 14. `LexAll` on a 15 KB
+statement mix and on a 10 KB identifier list ran **38% and 60% slower** at the best time
+of each side (`big` 324,910 against 449,593 ns/op; `idents` 67,964 against 108,618 ns/op).
+That is measurable, so (A) fails the cost rule.
+
+**How (B) works.**
+
+- `internal/pgwire/count_off.go` (`//go:build !clscount`) has `const clsCounting = false`.
+  `workTally` and `workRef` are empty structs there, and their methods do nothing.
+- `count_on.go` (`//go:build clscount`) has the constant set to true. `workTally` holds an
+  `int`, and `workRef` holds a `*workTally`.
+- Every count is one statement, `if clsCounting { l.reads.bump() }` (or `reads.bump()` with
+  a `workRef`, or `m.counts.lex.steps.bump()`). When the constant is false the compiler
+  drops the block before it inlines anything, so the default build has no call and no
+  inline mark.
+- `Lexer.reads` is a zero-size field placed **first**, so no field offset moves.
+  `lexContinuation` and `lexHasPrefix` take a `workRef` by value. A zero-size argument
+  takes no register, so their ABI is unchanged.
+- The classifier's tagged counts sit in one nested field, `clsCounts.lex`
+  (`clsLexCounts`: reads, steps, opRuns, ahead). With them as four separate fields,
+  `clsCounts` had seven fields. Go keeps only structs of up to four fields in registers,
+  so the result went through memory and `ClassifyQuery`'s frame grew by 80 bytes. Fixed in
+  `702c187`.
+
+**The compiled code.** I compared `go build -gcflags=<pgwire>=-S` output at the machine-code
+byte level: the hex dump and the relocations of each function. The script is in
+`/tmp/zgw-cr03-growth-tests/fnbytes.py`, deleted at the end.
+
+- **Default build at HEAD against `e6e1306`:** every pgwire function is byte-identical
+  except `(*clsMsg).setConfigLocal`, which changed on purpose (finding 3). That covers all
+  32 lexer functions, including `scan`, `quoted`, `blockComment`, `number`, `digits`,
+  `dollar`, `scanOpRun`, `lexContinuation`, `lexHasPrefix`, `(*clsMsg).lex`, `LexAll` and
+  `Next`. The same holds for `ClassifyQuery`, `clsRun` and `clsRunCounted`.
+- **New functions in the default build:** `countPass` and the tally methods. Nothing calls
+  them, so the linker drops them.
+- **Default build against `main`:** the only differing lexer functions are `quoted`,
+  `lexContinuation`, `dollar`, `operator`, `(*clsMsg).lex`, `LexAll` and `LexerFor`. All of
+  these differences come from the first two CR-3 builds' always-on counters
+  (`opRunBytes`, `lookahead`, and `lexContinuation` returning `i` instead of `0`), which
+  review 1 accepted. At the instruction level, the additions in `quoted` are five
+  instructions on the closing-quote path (`SUBQ`, `ADDQ`, `72(DX)`), one per string, not
+  per byte. In `lexContinuation`, `XORL AX, AX` becomes `MOVQ DI, AX` on its two `return`
+  paths. Every per-byte path (`default: l.pos++`, the space, word, comment and digit
+  loops) has the same instructions as on `main`. Only the jump displacements of branches
+  that jump past the added block differ.
+- So the default build pays nothing for this repair. A benchmark of HEAD against
+  `e6e1306` would time identical machine code, so I did not run one.
+- These counters could not move under the tag. Astra's harness, which I may not edit,
+  reads `l.opRunBytes`, `l.lookahead` and `clsRunCounted`'s `keywordChecks`,
+  `tokenVisits` and `literalBytes` from a **default** build. It also requires them to move
+  (`TestAdv_1_*`, `TestAdv_6_*`, `TestAdv_7_*`, `TestAdv_8_*`) and to catch its mutations
+  (`TestAdv_5_*`, `TestAdv_8_*`).
+
+**What runs where.**
+
+- Default build: the three original tests run unchanged in kind, on the always-on
+  counters, and `TestClassifierWorkGrowsLinearly` has the two `$` shapes. They catch the
+  first builds' mutations (M1a, M2, M3, M10, M12) and now M11.
+- Tagged build: `internal/pgwire/classify_count_test.go` (`//go:build clscount`) adds
+  `TestCountedWorkGrowsLinearly`, which runs all 26 shapes of the three tests, and its
+  canary `TestCountedCheckRejectsWorkThatDoesNotGrowLinearly`.
+- The rule for `TestCountedWorkGrowsLinearly`: lexer reads and token steps must be
+  non-zero for every shape. Lexer reads must grow **at least 15 and at most 17** times
+  for 16 times the input. All seven counters must stay within 17 times. The lower bound
+  is what makes "a counter that grows with the input" a checked fact, not just "a
+  counter that moved".
+- Gate: `scripts/counted-growth.sh` runs
+  `go test -tags clscount -count=1 -run Linearly -v ./internal/pgwire/`. It is red when the
+  run fails, and red when any of the five growth tests did not pass in it, so "no tests to
+  run" is red.
+- `scripts/gate.sh` runs it as check **G3 counted**, between `unit` and `race`.
+  `scripts/ci-fast.sh` runs G3, so CI gets it too.
+- `scripts/counted_growth_test.go` holds all of this with a stub `go`. It checks the exact
+  arguments, red on a failing run, red on "no tests to run", and red on each missing test.
+  It also checks that the gate's G3 block calls `check G3 counted g3_counted` and that
+  `ci-fast.sh` includes G3.
+- `docs/knowledge/foundation-gates.md` has a new section on the G3 counted check, and
+  `classifier.md` states the loop rule.
+
+**The structural rule that makes "every byte" checkable.** A counter only counts what goes
+through it. A new loop written without a count would escape any counter, timed or not. So
+the counting is a rule over the source, enforced by AST tests that run in both builds:
+
+- `TestLexLoopsCountTheirSteps`: in lex.go, every `for` or `range` loop in a `*Lexer`
+  method or in a function taking a `workRef` must start with the count statement, and
+  `scan` must start with one for the byte it reads first. Such code may call only lex.go
+  functions that take a `workRef` or contain no loop (the `lexIs*` predicates, `cut`), the
+  tally methods, and `len`, `max`, `min`, `make` and `append`.
+- `TestClassifierLexLoopsCountTheirSteps`: the same loop rule for `(*clsMsg).lex`.
+- `TestLexLoopGuardRejectsUncountedWork`: the guard's own canary. It plants four
+  violations in a copy of lex.go and requires the guard to reject each: a loop without a
+  count, a call to the looping helper `lexUnquote`, a call to `bytes.IndexByte`, and
+  `scan` without its first count.
+
+### The mutations
+
+Each mutation was applied with `go test -overlay` to a copy of lex.go or classify.go at
+HEAD. Each was run with `-run 'Linearly|CountTheirSteps|Corpus|^TestLex'` in the default
+build and under `-tags clscount`. The scripts are `/tmp/zgw-cr03-growth-tests/mutate.py`
+and `runmut.sh`, deleted at the end.
+
+I wrote each one as the review describes it, in two forms:
+
+- **counted**: in the code's own idiom, with the count statement the loop rule requires;
+- **raw**: without that statement.
+
+The raw forms were also run in a scratch copy of the whole tree, because the AST guard
+reads lex.go from disk and an overlay does not change what it reads.
+
+| ID | Planted defect | Counted form, default build | Counted form, `-tags clscount` | Raw form |
+| --- | --- | --- | --- | --- |
+| M5 | `quoted`: on every quote byte, scan from the string's start to `l.pos` | passes (no per-byte counter by design) | **FAILS** `TestCountedWorkGrowsLinearly` (and its canary, whose healthy sample is `'x'`) | passes both counted runs; **FAILS** `TestLexLoopsCountTheirSteps` ("quoted: a loop does not start by counting its step") |
+| M6 | `scan`: on every `--`, scan `0..l.pos` | passes | **FAILS** `TestCountedWorkGrowsLinearly` | **FAILS** `TestLexLoopsCountTheirSteps` (scan) |
+| M7 | `lexContinuation`: before returning `(i+1, true)`, scan to `len(src)` | passes | **FAILS** `TestCountedWorkGrowsLinearly` | **FAILS** `TestLexLoopsCountTheirSteps` (lexContinuation) |
+| M8 | `scanOpRun`: inner loop `r.start..k` inside the `lastKeep` loop, O(run²) | passes | **FAILS** `TestCountedWorkGrowsLinearly` (216 s) | **FAILS** `TestLexLoopsCountTheirSteps` (scanOpRun) |
+| M9 | `clsMsg.lex`: after each append, scan all of `m.toks` | passes | **FAILS** `TestCountedWorkGrowsLinearly` (257 s) | **FAILS** `TestClassifierLexLoopsCountTheirSteps` (lex) |
+| M11 | `dollar`: tag loop becomes `for end < len(l.src) { end++ }` (body kept, so it counts) | **FAILS** `TestClassifierWorkGrowsLinearly` (lookahead on `$a$x$a$ ` and `$a `) | **FAILS** `TestCountedWorkGrowsLinearly` and `TestClassifierWorkGrowsLinearly` | n/a (the loop body keeps its count) |
+
+M11 also changes the lexer's output (`TestLexTokenKinds` and `TestClassifierCorpus` fail
+with it), as the review's form does. M5 to M9 change no output: `TestClassifierCorpus` and
+`TestLex*` pass with each of them.
+
+### Claims added or changed in this round
+
+| # | Claim | Test |
+| --- | --- | --- |
+| 6 (narrowed) | **Default build:** for each shape of the whole-call test (now with `$a$x$a$ ` and `$a `), the five always-on counters on 64 KiB stay within 17 times their 4 KiB counts. Token visits are non-zero wherever the input has a significant token. String bodies and line comments are **not** counted in the default build. | `TestClassifierWorkGrowsLinearly` |
+| 11 | **Under `-tags clscount`:** for every shape of all three tests (26 shapes), `ClassifyQuery`'s own lexer passes read at least 15 and at most 17 times as many bytes, and take at most 17 times as many token steps, for 16 times the input. Both counters are non-zero. All seven counters stay within 17 times. | `classify_count_test.go: TestCountedWorkGrowsLinearly` |
+| 12 | That check rejects dead, non-growing and quadratic counts | `TestCountedCheckRejectsWorkThatDoesNotGrowLinearly` |
+| 13 | Every loop in lexer code and in `(*clsMsg).lex` counts its step, and lexer code calls no uncounted looping helper. The guard rejects planted violations. | `count_guard_test.go: TestLexLoopsCountTheirSteps`, `TestClassifierLexLoopsCountTheirSteps`, `TestLexLoopGuardRejectsUncountedWork` |
+| 14 | M5, M6, M7, M8, M9 and M11 each fail a counted test | the mutation table above |
+| 15 | The default build's compiled pgwire code is byte-identical to `e6e1306` except `setConfigLocal` | the compiled-code comparison above |
+| 16 | Gate G3 and `ci-fast.sh` run the tagged tests. The check is red when that run fails or a growth test did not run. | `scripts/counted_growth_test.go` (five tests) |
+| 17 | `setConfigLocal` counts the setting literal it scans | `TestClassifierCountsTheSetConfigLiteralItScans` |
+| 18 | The tagged verdict does not depend on load | `go test -tags clscount -c`, then `pgwire.test -test.count=50 -test.v -test.run Linearly` with four `yes > /dev/null` on top of the shared load (load average 12.4 to 15.2 on 4 cores): 250 PASS, 0 FAIL, 52 distinct measurement lines, each repeated exactly 50 times |
+
+### Narrowed claims
+
+- **Claim 6** holds as first written ("every listed shape … linear work") only under
+  `-tags clscount` (claim 11). In the default build, string bodies and line comments move
+  no counter. That is by design: counting them in the default build costs 38% to 60% on
+  `LexAll` (see "Why not (A)" above).
+
+### Deviations in this round
+
+- **The three original tests stay in the default build.** The brief's form (B) puts "the
+  three tests in a file built under that tag". I left them in `classify_test.go` and put
+  the full counted check in a new tagged test, `TestCountedWorkGrowsLinearly`, that runs
+  all their shapes.
+  - Why: Astra's harness, which I may not edit, runs
+    `go test -run ^TestLexOperatorRunsGrowLinearly$` (and the other two) on a **default**
+    build with a counter line removed. It requires each to fail with "measured path did no
+    work" (`TestAdv_3_*`). Moved behind the tag, those three attacks would turn red with no
+    defect in the product.
+  - The tagged run executes all four tests, and the gate requires all five tests to pass in
+    it, so nothing the brief asks of the tagged run is lost.
+- **No new canary in `scripts/gate-canaries.sh` for G3 counted.** Its result
+  (`chunks/c00-foundation/gate/canaries.json`) is a committed record from a full gate run
+  at chunk 0. A new canary would need that run again, which the brief rules out on this
+  shared machine. The stub tests in `scripts/counted_growth_test.go` show the check going
+  red instead.
+- **Counts per loop step, not per byte.** A loop whose condition reads two bytes (`c ==
+  '-' && next == '-'`) counts one step. Each step reads a bounded number of bytes, so the
+  growth ratio is the same; the mutations above show the count follows rescans.
+
+### Limits of the repaired counting
+
+- The loop rule is syntactic. Repeated work without a `for` or `range` loop in the guarded
+  functions (recursion, `goto`, a call through a function value) is not counted. Neither
+  is work in a function the guard does not cover. The guard covers `*Lexer` methods, lex.go
+  functions with a `workRef` parameter, and `(*clsMsg).lex`. It does not cover the rest of
+  classify.go: there the always-on accessor counters (`tokenVisits`, `keywordChecks`,
+  `literalBytes`) remain the measure, with the limits listed under "Limits of the
+  whole-call count".
+- The decoders `lexUnquote`, `lexDecodeUnicode` and `lexHexValue` (called by the
+  classifier, not the lexer) are not counted per byte. `name()` and `stringMayContain`
+  count their input in `literalBytes`.
+- `ShareFits` is still not counted (see "Limits").
+
+### Repair-round commands
+
+```
+export PATH=$PATH:/usr/local/go/bin
+go test -count=1 ./internal/pgwire/                       # default build, includes the guard
+go test -tags clscount -count=1 ./internal/pgwire/        # whole package with counting compiled in
+scripts/counted-growth.sh                                 # what gate G3 counted runs
+go test -count=1 -run Counted -v ./scripts/
+go test -count=1 ./agent_work/adversarial/cr03-growth-tests/...
+GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh cr03-growth-tests
+```
