@@ -289,6 +289,8 @@ func (p *Pool) Allow(now Instant) bool {
 	if !p.brk.allow() {
 		p.brk.wanted = true
 	}
+	p.snap.Breaker = int64(p.brk.state)
+	p.snap.BreakerTransitions = p.brk.trans
 	return p.brk.state != BreakerOpen
 }
 
