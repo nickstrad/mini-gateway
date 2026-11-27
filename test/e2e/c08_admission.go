@@ -262,7 +262,28 @@ func CheckFirstBurst(r *SimRun) error {
 
 var RelaxedQueue = map[string]any{"interval": "5s", "target": "1s"}
 
-func AdmissionBaseline(dir string) ([]obs.InstanceSnapshot, error) {
+func admissionOverloadSpecs() []AdmSpec {
+	var out []AdmSpec
+	for _, load := range HeadToHeadLoads() {
+		for _, arm := range AdmArms() {
+			out = append(out, HeadToHeadSpec(arm, load))
+		}
+	}
+	for _, arm := range AntiBloatArms() {
+		out = append(out, AntiBloatSpec(arm))
+	}
+	return out
+}
+
+func AdmissionOverloadScenarios() []string {
+	var out []string
+	for _, load := range HeadToHeadLoads() {
+		out = append(out, HeadToHeadSpec(ArmTimeout, load).Scenario)
+	}
+	return append(out, AntiBloatSpec(ArmTimeout).Scenario)
+}
+
+func AdmissionBaseline(dir string, overload bool) ([]obs.InstanceSnapshot, error) {
 	var out []obs.InstanceSnapshot
 	add := func(r *AdmRun, err error) error {
 		if err != nil {
@@ -274,15 +295,12 @@ func AdmissionBaseline(dir string) ([]obs.InstanceSnapshot, error) {
 		out = append(out, r.Flush.Final)
 		return nil
 	}
-	for _, load := range HeadToHeadLoads() {
-		for _, arm := range AdmArms() {
-			if err := add(RunAdmission(HeadToHeadSpec(arm, load), 1, dir, "")); err != nil {
-				return nil, err
-			}
-		}
+	var specs []AdmSpec
+	if overload {
+		specs = admissionOverloadSpecs()
 	}
-	for _, arm := range AntiBloatArms() {
-		if err := add(RunAdmission(AntiBloatSpec(arm), 1, dir, "")); err != nil {
+	for _, sp := range specs {
+		if err := add(RunAdmission(sp, 1, dir, "")); err != nil {
 			return nil, err
 		}
 	}

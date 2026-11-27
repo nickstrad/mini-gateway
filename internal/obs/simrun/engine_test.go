@@ -1,6 +1,8 @@
 package simrun_test
 
 import (
+	"testing"
+
 	"github.com/nickstrad/mini-gateway/test/e2e"
 )
 
@@ -18,7 +20,7 @@ func engineRuns(dir string) error {
 		}
 		baselineFinals = append(baselineFinals, r.Final)
 	}
-	adm, err := e2e.AdmissionBaseline(dir)
+	adm, err := e2e.AdmissionBaseline(dir, !testing.Short())
 	baselineFinals = append(baselineFinals, adm...)
 	return err
 }
