@@ -265,11 +265,15 @@ func checkCancel(r *SimRun) error {
 func lentAt(*SimRun) int64 { return pathLoopers }
 
 func checkMassDeath(r *SimRun) error {
-	s := poolSnap(r)
 	errs := int64(anyClientErrors(r))
 	if errs > lentAt(r) {
 		return failf("%d client errors after the mass death, at most the %d connections that could be lent", errs, lentAt(r))
 	}
+	return checkDeathRecovers(r)
+}
+
+func checkDeathRecovers(r *SimRun) error {
+	s := poolSnap(r)
 	if r.Path.stats.Blackholed+r.Path.stats.Forgot == 0 {
 		return failf("the fault never fired: %s", r.Path)
 	}
@@ -311,7 +315,15 @@ func checkCheckHangs(r *SimRun) error {
 }
 
 func checkSlotsHeld(r *SimRun) error {
-	if err := checkMassDeath(r); err != nil {
+	refused := int64(clientErrors(r, "53M03"))
+	if other := int64(anyClientErrors(r)) - refused; other > lentAt(r) {
+		return failf("%d client errors other than 53M03 after the mass death, at most the %d connections that could be lent", other, lentAt(r))
+	}
+	s := poolSnap(r)
+	if refused > 0 && (s.DialFailures == 0 || s.BreakerTransitions[pool.TransClosedOpen] == 0) {
+		return failf("%d 53M03 refusals without the breaker opening on refused dials (dial failures %d)", refused, s.DialFailures)
+	}
+	if err := checkDeathRecovers(r); err != nil {
 		return err
 	}
 	f := r.World.Fake.Snapshot()

@@ -159,9 +159,11 @@ func PolicySpec(reset proxy.ResetPolicy, reseed bool, plant pool.Plant) Spec {
 }
 
 const (
-	pathLoopers   = 2
-	pathLoopStart = time.Second
-	pathDeath     = 1500 * time.Millisecond
+	pathLoopers     = 2
+	pathLoopStart   = time.Second
+	pathDeath       = 1500 * time.Millisecond
+	slotsReap       = 4 * time.Second
+	slotsLateClient = pathDeath + slotsReap + 2*time.Second
 )
 
 func pathSpec(name string, plan PathPlan, edit func(*pool.Config)) Spec {
@@ -205,9 +207,10 @@ func CheckHangsSpec(plant pool.Plant) Spec {
 
 func SlotsHeldSpec() Spec {
 	ev := PathEvent{At: pathDeath, Fault: PathBlackhole}
-	sp := pathSpec("pool-slots-held", PathPlan{Events: []PathEvent{ev}, ReapAfter: 4 * time.Second}, func(c *pool.Config) { c.RatePerSec = 10 })
+	sp := pathSpec("pool-slots-held", PathPlan{Events: []PathEvent{ev}, ReapAfter: slotsReap}, func(c *pool.Config) { c.RatePerSec = 10 })
 	sp.FakeConns = 5
 	sp.Duration = 20 * time.Second
+	sp.Clients = append(sp.Clients, Script{Tenant: 0, Start: slotsLateClient, Steps: steps(read(0, "a"), read(0, "a"), read(0, "a"))})
 	return sp
 }
 
