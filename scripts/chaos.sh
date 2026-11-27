@@ -25,11 +25,11 @@ failed=0
 show() { if [ "$verbose" = 1 ]; then cat "$1"; fi; }
 
 slog="$dir/tier-s.log"
-DST_SEEDS=$seeds RUN_DIR="$dir/sweep" go test -count=1 -timeout 60m -v -run '^TestScenarioE2E$' ./test/e2e >"$slog" 2>&1
+DST_SEEDS=$seeds RUN_DIR="$dir/sweep" go test -count=1 -timeout 60m -v -run '^TestScenario(E2E|Pool)$' ./test/e2e >"$slog" 2>&1
 show "$slog"
-for sc in $(grep -oE -- '--- (PASS|FAIL): TestScenarioE2E/[a-z0-9-]+ ' "$slog" | awk '{print $3}' | sed 's|TestScenarioE2E/||' | sort -u); do
-  pass=$(grep -cE -- "--- PASS: TestScenarioE2E/$sc/seed=" "$slog" || true)
-  fail=$(grep -cE -- "--- FAIL: TestScenarioE2E/$sc/seed=" "$slog" || true)
+for sc in $(grep -oE -- '--- (PASS|FAIL): TestScenario(E2E|Pool)/[a-z0-9-]+ ' "$slog" | awk '{print $3}' | sed -E 's#TestScenario(E2E|Pool)/##' | sort -u); do
+  pass=$(grep -cE -- "--- PASS: TestScenario(E2E|Pool)/$sc/seed=" "$slog" || true)
+  fail=$(grep -cE -- "--- FAIL: TestScenario(E2E|Pool)/$sc/seed=" "$slog" || true)
   verdict=pass
   if [ "$fail" != 0 ]; then verdict=FAIL; failed=$((failed + 1)); fi
   if [ "$verdict" = pass ] && [ -d "$dir/sweep/$sc" ] && [ -d "test/analysis/$sc" ]; then
