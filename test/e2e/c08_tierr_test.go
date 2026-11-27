@@ -79,6 +79,7 @@ func tierRAdmRun(t *testing.T, env *RealEnv, scenario string, steps int, queue m
 	return out
 }
 
+// TestTierRAdmissionOverloadWithPgSleep proves both product rules shed under real Postgres pg_sleep overload without idling the database or breaking client usability.
 func TestTierRAdmissionOverloadWithPgSleep(t *testing.T) {
 	env := tierR(t)
 	base := tierRAdmRun(t, env, "tierr-admission-overload", tierRAdmBaseSteps, map[string]any{"rule": "timeout", "tenant_capacity": 64, "interval": "60s", "target": "30s"})

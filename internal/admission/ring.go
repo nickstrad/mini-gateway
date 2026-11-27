@@ -6,6 +6,9 @@ type entry struct {
 	seq int64
 }
 
+// ring is a fixed-capacity circular deque storing queued entries in arrival
+// order (oldest at index 0, newest at n-1) so head sweeps and FIFO/LIFO pops
+// all operate without reallocating.
 type ring struct {
 	items []entry
 	head  int
@@ -69,6 +72,8 @@ func (r *ring) index(id int64) int {
 	return -1
 }
 
+// removeAt shifts subsequent entries down to preserve arrival order so the
+// ring front remains the oldest queued request.
 func (r *ring) removeAt(i int) entry {
 	e := *r.at(i)
 	for j := i; j < r.n-1; j++ {
@@ -79,6 +84,8 @@ func (r *ring) removeAt(i int) entry {
 	return e
 }
 
+// removeSwapTail is the planted bug for PlantRemoveSwapsTail: swapping the
+// tail into slot i corrupts arrival order and is caught by FuzzAdmissionOps.
 func (r *ring) removeSwapTail(i int) entry {
 	e := *r.at(i)
 	*r.at(i) = *r.at(r.n - 1)

@@ -85,6 +85,7 @@ func trail(w *world) string {
 	return strings.Join(w.log[start:], " ")
 }
 
+// TestCoreAgreesWithTheReferenceModelForEveryRule proves Queues matches the independent reference model step-for-step across all four rules and configs.
 func TestCoreAgreesWithTheReferenceModelForEveryRule(t *testing.T) {
 	configs := []func(RuleKind) Config{
 		smallConfig,
@@ -117,6 +118,7 @@ func TestCoreAgreesWithTheReferenceModelForEveryRule(t *testing.T) {
 	}
 }
 
+// TestPropertyRunsExerciseEveryShedReasonAndLIFO proves the random operation generator actually covers every reachable shed reason and LIFO switch.
 func TestPropertyRunsExerciseEveryShedReasonAndLIFO(t *testing.T) {
 	var shed [NumReasons]int64
 	var lifoOn, served int64

@@ -115,6 +115,7 @@ func checkHeadToHead(r *AdmRun, fifo *AdmRun) error {
 	return checkModerateConvergence(r, fifo)
 }
 
+// TestScenarioAdmissionHeadToHead proves both product rules and both comparison arms across 1.2x, 2x, and 10x load, including replay, conservation, rule shedding, and 1.2x control-law convergence.
 func TestScenarioAdmissionHeadToHead(t *testing.T) {
 	if testing.Short() {
 		t.Skip("overload scenarios run in the full suite and the sweep")
@@ -194,6 +195,7 @@ func checkRecovery(r *AdmRun) error {
 	return nil
 }
 
+// TestScenarioAdmissionAntiBloat proves peak depth stays flat from T to 4T and recovers after overload under both rules while the FIFO control backlog grows without bound.
 func TestScenarioAdmissionAntiBloat(t *testing.T) {
 	if testing.Short() {
 		t.Skip("overload scenarios run in the full suite and the sweep")
@@ -211,6 +213,7 @@ func TestScenarioAdmissionAntiBloat(t *testing.T) {
 	}
 }
 
+// TestCanaryAdmissionWithoutTheHeadSweepServesLate proves disabling the head sweep fails the timeout rule's served-wait bound while the unplanted run passes.
 func TestCanaryAdmissionWithoutTheHeadSweepServesLate(t *testing.T) {
 	if testing.Short() {
 		t.Skip("overload scenarios run in the full suite and the sweep")
@@ -236,6 +239,7 @@ func TestCanaryAdmissionWithoutTheHeadSweepServesLate(t *testing.T) {
 	}
 }
 
+// TestScenarioAdmissionFirstBurst proves across swept seeds that a first burst after idle gets the full interval under both rules.
 func TestScenarioAdmissionFirstBurst(t *testing.T) {
 	for _, rule := range []admission.RuleKind{admission.RuleTimeout, admission.RuleControlLaw} {
 		t.Run(rule.String(), func(t *testing.T) {
@@ -247,6 +251,7 @@ func TestScenarioAdmissionFirstBurst(t *testing.T) {
 	}
 }
 
+// TestCanaryAdmissionFirstBurstBugShedsTheBurst proves PlantFirstBurst causes the first-burst scenario to shed and fail CheckFirstBurst.
 func TestCanaryAdmissionFirstBurstBugShedsTheBurst(t *testing.T) {
 	r, err := RunSim(FirstBurstSpec(admission.RuleTimeout, admission.PlantFirstBurst), 1, SimOptions{})
 	if err != nil {

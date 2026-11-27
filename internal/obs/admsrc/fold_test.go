@@ -7,6 +7,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/admission"
 )
 
+// TestARealTenantNamedOtherPublishesOnceAfterTheFold proves a real "other" tenant shares the
+// fold-over bucket past MaxTenantStats without triggering duplicate points in obs.Collector.
 func TestARealTenantNamedOtherPublishesOnceAfterTheFold(t *testing.T) {
 	q, err := admission.New(admission.Config{Rule: admission.RuleTimeout, Capacity: 64, TenantCapacity: 1, MaxTenants: 8, Detail: true})
 	if err != nil {

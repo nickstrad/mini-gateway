@@ -31,6 +31,7 @@ func shutdownAccounting(t *testing.T, r *rig) (proxy.Snapshot, admission.Snapsho
 	return s, as
 }
 
+// TestAdmissionShutdownInTheQuietWindowCancelsTheTimer proves Shutdown removes empty tenant queues and cancels tAdmission so Quiesce passes.
 func TestAdmissionShutdownInTheQuietWindowCancelsTheTimer(t *testing.T) {
 	for _, rule := range []admission.RuleKind{admission.RuleTimeout, admission.RuleControlLaw} {
 		r := admissionRig(t, 4, admission.Config{Rule: rule, LIFO: admission.LIFOOff})
@@ -49,6 +50,7 @@ func TestAdmissionShutdownInTheQuietWindowCancelsTheTimer(t *testing.T) {
 	}
 }
 
+// TestAdmissionShutdownAtTheDeadlineShedsTheExpiredAndRemovesTheRest proves Shutdown sweeps due sheds before removing remaining queued clients so engine and admission counts agree.
 func TestAdmissionShutdownAtTheDeadlineShedsTheExpiredAndRemovesTheRest(t *testing.T) {
 	r := admissionRig(t, 4, admission.Config{Rule: admission.RuleTimeout, LIFO: admission.LIFOOff})
 	r.client(11)

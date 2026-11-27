@@ -69,6 +69,8 @@ func (e *Engine) gates(c *client) bool {
 
 func (e *Engine) enqueue(c *client) {
 	req := c.req
+	// Skip the direct-lend fast path for ShedQueue so the rule and load gauge
+	// observe zero-wait requests as well as queued ones.
 	if e.shedQ == nil && e.seams.Queue.Len() == 0 && e.seams.Pool.Idle() > 0 {
 		if id, ok := e.seams.Pool.Checkout(e.now, c.tenant); ok {
 			e.snap.StagePassed[StageQueue]++

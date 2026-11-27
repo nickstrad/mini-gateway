@@ -33,6 +33,8 @@ func wakeAt(a []proxy.Action) proxy.Instant {
 	return at
 }
 
+// TestAdmissionShedByTheRuleIsAnsweredAtOnceWithItsRowAndEndMarker proves a rule
+// shed replies immediately at its exact deadline with 53M01 and ReadyForQuery without touching the database.
 func TestAdmissionShedByTheRuleIsAnsweredAtOnceWithItsRowAndEndMarker(t *testing.T) {
 	r := admissionRig(t, 4, admission.Config{Rule: admission.RuleTimeout, LIFO: admission.LIFOOff})
 	r.client(11)
@@ -59,6 +61,7 @@ func TestAdmissionShedByTheRuleIsAnsweredAtOnceWithItsRowAndEndMarker(t *testing
 	}
 }
 
+// TestAdmissionArmsItsNextDeadline proves pushing a request into AdmissionQueue arms ActWake at its allowed wait.
 func TestAdmissionArmsItsNextDeadline(t *testing.T) {
 	r := admissionRig(t, 4, admission.Config{Rule: admission.RuleTimeout, LIFO: admission.LIFOOff})
 	r.client(11)
@@ -70,6 +73,7 @@ func TestAdmissionArmsItsNextDeadline(t *testing.T) {
 	}
 }
 
+// TestAdmissionOverflowShedsTheQueuedHeadNotTheArrival proves full-queue overflow answers the oldest queued client with 53M01 and keeps the new arrival.
 func TestAdmissionOverflowShedsTheQueuedHeadNotTheArrival(t *testing.T) {
 	r := admissionRig(t, 2, admission.Config{Rule: admission.RuleControlLaw})
 	for id := proxy.ConnID(11); id <= 14; id++ {
@@ -87,6 +91,7 @@ func TestAdmissionOverflowShedsTheQueuedHeadNotTheArrival(t *testing.T) {
 	}
 }
 
+// TestAdmissionConservesOnEveryExitPath proves pushes equal served + removed + deadline sheds across mixed client exits.
 func TestAdmissionConservesOnEveryExitPath(t *testing.T) {
 	r := admissionRig(t, 8, admission.Config{Rule: admission.RuleFIFO})
 	for id := proxy.ConnID(11); id <= 14; id++ {
@@ -110,6 +115,7 @@ func TestAdmissionConservesOnEveryExitPath(t *testing.T) {
 	}
 }
 
+// TestAdmissionComparisonArmsAreReachableOnlyThroughTheEngineConfig proves simulator arms construct via proxy.Config while bad admission settings fail validation.
 func TestAdmissionComparisonArmsAreReachableOnlyThroughTheEngineConfig(t *testing.T) {
 	r := admissionRig(t, 4, admission.Config{Rule: admission.RuleFolly})
 	if r.e.AdmissionSnapshot().Rule != admission.RuleFolly {
