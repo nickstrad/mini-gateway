@@ -148,7 +148,52 @@ until the orchestrator re-pins.
 
 ## G9 results
 
-GATE-RESULTS-PLACEHOLDER
+Tier S unless noted; seed 1; full per-seed checks in the tests named.
+
+| G9 test | Scenario / test | Result |
+| --- | --- | --- |
+| 1 night trickle, remedies on | `pool-night-keepalive-idle-check` (idle_drop 1 h, a read every 5 s for 2 h, then 8 clients × 20 reads) | 0 client errors, `backend_no_reply` 0 (also `test/analysis/pool-night-keepalive-idle-check/no-reply.sql`) |
+| 1 ablation, every remedy off | `TestAblationNightTrickleWithEveryRemedyOffHangsTheRamp` | the middlebox dropped 9 idle connections; the ramp hit 4 of them: 4 client errors (`08006` after the statement deadline), 4 no-reply deadlines — the invariant fails as required |
+| 1 each remedy alone | `TestNightTrickleEachRemedyAloneCarriesTheRamp` | **keepalive alone**: no drop, 0 errors. **idle timeout alone** (180 s): the idle connections are closed long before the middlebox's hour (10 idle closes), the ramp is a cold start, 0 errors. **check alone**: 8 connections dropped, the checks catch them (0 statement hangs, 0 `08006`/`08007`), but the failed checks are connection-class failures and open the breaker, so the ramp sees 53M03 refusals (123 client errors on seed 1) until the breaker's trial succeeds. Keepalive or the idle timeout carries the ramp; the check bounds the damage (no hang) but not the refusals (stated limit 4). |
+| 2 silent mass death | `pool-mass-blackhole` | client errors ≤ 2 (the connections lent at the death); idle ones caught by suspect checks with no client error; goodput back within 0.5 s + 0.3 s + 1 s; dials per second ≤ rate + 1; canary `PlantNoSuspect`: 6 errors |
+| 3 failover | `pool-mass-peer-forgot` | same assertions; errors arrive one network delay after the write |
+| 4 polite idle close | `pool-polite-close` | 0 client errors; closes counted `peer_closed_idle` |
+| 5 the check hangs | `pool-check-hangs` | check ends at 250 ms (`check_failed`, result `timeout`), the queued request served by a new dial within the check deadline + 100 ms, no client error, quiesce clean; canary `PlantNoCheckDeadline` |
+| 6 server slots held | `pool-slots-held` (fake `max_connections` 5, slots held 4 s) | re-dials refused with `53300` while the slots are held, dials ≤ 10/s (the configured rate) throughout, recovery after the reap |
+| 7 tier R | `TestTierRPoolEmptyQueryCheckAndServerKeepalive` | the empty query against Postgres 17 returns exactly `EmptyQueryResponse` + `ReadyForQuery(I)`; `SHOW tcp_keepalives_idle/interval/count` on a pooled connection = 30/10/3; `ss -tnoi` shows a keepalive timer on the gateway's database sockets. The packet-drop rule (optional, root) was not built. The socket options are also read back with `getsockopt` in the fast test `TestKeepAliveDialerSetsTheDatabaseSocketOptions` (SO_KEEPALIVE 1, TCP_KEEPIDLE 30, TCP_KEEPINTVL 10, TCP_KEEPCNT 3; off → SO_KEEPALIVE 0). |
+| 8 harness self-test | `TestPathFaultOnOneConnectionLeavesTheOtherUnchangedAndClearingRestores` | a blackhole on one connection leaves the other's replies identical to a never-faulted run; clearing idle_drop (and a keepalive shorter than the drop) gives a run identical to a never-faulted one |
+
+Tier R (Postgres 17, the binary, client TLS on):
+
+| Test | Result |
+| --- | --- |
+| Headline benchmark 1 (`TestTierRPoolHeadlineDatabaseConnectionsDirectAgainstProxy`) | **500 clients direct: 197 connected, 303 refused (`53300`: max_connections 200 less the 3 superuser-reserved slots), 197 database backends. Through the proxy: 500 connected, 0 refused, 16 database backends (pool 16; open+connecting peak 16), 500 queries ok.** |
+| Reconnection storm with client TLS (`TestTierRPoolReconnectionStormWithClientTLS`) | 500 TLS clients dropped (reset) and reconnected: database backends peak 12 (pool 16), clients in startup peak 64 = `limits.max_startup`, 0 refused, 500 queries ok |
+| Release policies (`TestTierRPoolSessionStateUnderEachReleasePolicy`, `test/oracles/dirty-check.sql` after each hostile lease) | always: 0 crossings, 0 same-tenant carry-over, seed residue present (other tenant and same tenant). on-switch: 0 crossings, 4 same-tenant carry-overs, residue present, 14 tenant switches. always + re-seed: 0 crossings, no carry-over, **residue gone**, 24 re-seeds. on-switch + re-seed: 0 crossings, 4 same-tenant carry-overs, residue gone across tenants and present within the tenant (lent as is, no reset, no re-seed), 14 switches = 14 re-seeds |
+| Cancel (`TestTierRPoolCancelReachesTheRightStatementOnly`) | the cancelled `pg_sleep(10)` ended with `57014` in under 1 s; the other client's concurrent `pg_sleep(1.5)` completed; one cancel forwarded |
+
+## Fault × path matrix: rows added (G5)
+
+| Fault | Where | Client gets | Budget | Then the connection | Test |
+| --- | --- | --- | --- | --- | --- |
+| `blackhole` | statement outside a transaction, a safe read | `08006`, usable | `timeouts.statement` | cancel on a second connection, drain until `timeouts.cleanup`, closed `no_reply`; every connection suspect | `pool-mass-blackhole`, engine `TestCoreStatementDeadlineWithNoReplyCancelsDrainsAndReuses` |
+| `blackhole` | a statement that could write, or `COMMIT` | `08007` | `timeouts.statement` | same | `TestCoreLossMidStatementInsideATransactionIsFatal08006UnlessItMayCommit` (the row choice) |
+| `blackhole` / loss | inside a transaction, mid-statement, no `COMMIT`/`END`/`PREPARE` in the message | `FATAL 08006` (`lost-mid-statement-in-transaction`), closed | `timeouts.statement` (loss: at once) | dirty table or closed | same test |
+| `blackhole` / loss | inside a transaction, mid-statement, the message may end it | `08007` | same | same | same test |
+| `peer_forgot` | any of the three above | the same rows, one network delay after the write | — | closed (`error`), siblings suspect | `pool-mass-peer-forgot` |
+| any death | idle ≥ `check_after_idle`, or suspect | nothing; the check absorbs it | `pool.check_timeout` | closed `check_failed` | `pool-check-hangs`, `pool-mass-*` |
+| polite close (FIN) | idle | nothing | — | closed `peer_closed_idle` | `pool-polite-close` |
+| client gone | mid-statement | — | `timeouts.cleanup` | cancel, drain, rollback if in a transaction, reset, reuse | `pool-vanish`, `TestCoreClientVanishedMidStatementCancelsTheStatement` |
+| client gone | between statements inside a transaction | — | `timeouts.cleanup` | `ROLLBACK`, reset, reuse | `TestCoreClientVanishedInsideATransactionIsRolledBackAndReused` |
+| client idle inside a transaction | between statements | `FATAL 25P03`, closed | `timeouts.idle_in_transaction` | `ROLLBACK`, reset, reuse | `pool-idle-in-tx`, `TestCoreIdleInTransactionIsRolledBackWith25P03` |
+| client cancel | its statement running | `57014` from Postgres | — | normal release after the reply; not lent again before the cancel connection finished | `pool-cancel`, tier R cancel |
+| client cancel | its request queued | `57014` (`cancelled-queued`), usable | — | — | `TestCoreCancelWhileQueuedAnswers57014` |
+| database down | gate | `53M03` at once, no dial | — | breaker open; queued work answered `53M03` when nothing is usable | `pool-db-restart`, `TestCoreBreakerRefusesAtOnceWithNoDial` |
+
+For the prose seat: `docs/extension-seams.md` still says "chunk 7" for the pool, breaker and
+release rows and "recognised and counted only" for cancels; the facts are in
+`docs/knowledge/pool-core.md` (new transport action `ActDBCancel`, event `EvDBCancelDone`, the
+`CorePool` / `CoreBreaker` / `CorePolicy` seam implementations).
 
 ## Stated limits
 
@@ -180,7 +225,33 @@ GATE-RESULTS-PLACEHOLDER
 
 ## Deviations
 
-DEVIATIONS-PLACEHOLDER
+- **Chunk 6 tests changed for the intended new behaviour of the binary** (the binary now runs the
+  pool core): `TestTierRClientVanishes` asserts the two vanished leases went through the
+  dirty-connection table (rolled back, reset, reused) instead of "2 connections closed";
+  `TestTierRQueueFull` warms the pool with one query first (the core opens connections on
+  demand, so the first request otherwise queues too); `TestTierRDatabaseLegTLSModes` accepts
+  `53M03` as well as `53M01` for the wrong CA (the breaker opens after five connect failures
+  inside the queue wait); `realConservation` and the thirteen `test/analysis/tierr-*/resets.sql`
+  use the core's lease accounting (dirty outcome, resets not at release). The config test case
+  "fleet remainder" became "fleet total below instances" and "fleet rate below instances"
+  (rounding down, brief section on fleet division). `proxy.PlantNoReset` on the core path maps to
+  `on-switch` with the tag ignored (lend as is, never reset), so the tier R ablation still works.
+- **The chunk 6 tier S scenarios still run the fixed set**; their pool re-runs are
+  `pool-results`, `pool-tx-integrity`, `pool-slow-reader`, `pool-vanish`.
+- **"Database restart" in tier R** is not built (stopping the shared container mid-run would
+  break the other tier R packages); the breaker is shown in tier S (`pool-db-restart`) and at
+  engine level.
+- **Synchronized lifetimes, cold start and slow consumer in tier R** are not separate tier R
+  tests: the cold start is part of every tier R test (the pool starts empty), the slow reader
+  is chunk 6's `TestTierRSlowReader` (now on the core), lifetimes are tier S only.
+- **`idle_age_at_lend` and `lease_time` histograms** are exported only with `obs.detail` (as
+  chunk 6's histograms).
+- **G9 test 7's packet-drop rule** (optional) is not built.
+- **Sweep**: pool scenarios run at most 20 seeds in a sweep, heavy ones 3 (stated limit 7);
+  in `-short` heavy ones are skipped and the others run one seed.
+- **`TestAdv_6_GateSeedSweepCounts` / `TestAdv_7_InventoryAndHiddenHashImports`** stayed green:
+  `FuzzPoolOps` is not simulation-level (no `internal/sim` dependency), so the pinned
+  simulator-level inventory did not change.
 
 ## Commands
 
@@ -205,7 +276,10 @@ Added to `agent_work/INDEX.md` under "Phase 2, chunk 7 — pool".
 
 ## Size
 
-SIZE-PLACEHOLDER
+Product Go (non-test files outside `test/`): +3,051 / −74 lines (`internal/pool` 1,498; the
+engine's core path `internal/proxy/corepool.go` 653 plus 330 lines of hooks; config 197; obs
+186; shell 55; proxysim 28; cmd 9). E2E harness (non-test files under `test/e2e`): +1,243.
+Tests: +2,563. Inside the brief's 2,500–3,000 estimate for product code; no split.
 
 ## Gate result
 
