@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -151,6 +152,29 @@ func TestLateSendsAloneExitThreeWithTheShortfallLine(t *testing.T) {
 	var out, errb bytes.Buffer
 	code := summarize(&out, &errb, loadgen.Plan{Seed: 1, Profile: loadgen.ProfileSimple}, live.Result{Snapshot: s}, nil)
 	if code != exitShortfall || !strings.Contains(out.String(), "SHORTFALL: achieved 6.0/s of target 10/s: 4 late, 0 could not send") {
+		t.Fatalf("exit %d\n%s\n%s", code, out.String(), errb.String())
+	}
+}
+
+func TestACSVFlushErrorIsReportedAndFailsTheRun(t *testing.T) {
+	s := loadgen.Snapshot{Planned: 10, TargetRate: 10, Intended: 10, Sent: 10, Completed: [4]int64{10, 0, 0, 0}}
+	for _, res := range []live.Result{{Snapshot: s, FlushErrs: 2}, {Snapshot: s, FlushErr: errors.New("disk full")}} {
+		var out, errb bytes.Buffer
+		code := summarize(&out, &errb, loadgen.Plan{Seed: 1}, res, nil)
+		if code != exitRuntime || !strings.Contains(errb.String(), "loadgen: CSV flush failed") {
+			t.Fatalf("exit %d\nstdout:\n%s\nstderr:\n%s", code, out.String(), errb.String())
+		}
+	}
+}
+
+func TestAPlanWithNoOperationAndAnOverLongPasswordAreUsageErrors(t *testing.T) {
+	if code, _, errs := runCmd(t, "-rate", "1", "-duration", "500ms"); code != exitUsage || !strings.Contains(errs, "-duration") {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	var out, errb bytes.Buffer
+	long := strings.Repeat("x", 1025)
+	code := run([]string{"-addr", "127.0.0.1:1", "-password", "-", "-duration", "1s"}, strings.NewReader(long+"\n"), &out, &errb, background)
+	if code != exitUsage || !strings.Contains(errb.String(), "longer than") || strings.Contains(out.String()+errb.String(), long) {
 		t.Fatalf("exit %d\n%s\n%s", code, out.String(), errb.String())
 	}
 }

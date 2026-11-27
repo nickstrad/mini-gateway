@@ -2,6 +2,7 @@ package loadgen_test
 
 import (
 	"errors"
+	"math"
 	"strings"
 	"testing"
 
@@ -156,5 +157,32 @@ func TestValidateRefusesOutOfRangePlans(t *testing.T) {
 	}
 	if _, err := loadgen.ParseProfile("bogus"); err == nil {
 		t.Fatal("bogus profile accepted")
+	}
+}
+
+func TestAPlanWithNoOperationIsRefusedNamingTheFlags(t *testing.T) {
+	for _, p := range []loadgen.Plan{plan(1, 500), {Seed: 1, Rate: 37, DurationNs: 1, Tenants: 1, Keys: 1}} {
+		err := p.Validate()
+		if !errors.Is(err, loadgen.ErrPlan) || !strings.Contains(err.Error(), "-rate") || !strings.Contains(err.Error(), "-duration") {
+			t.Fatalf("rate %d duration %dns (%d operations): %v", p.Rate, p.DurationNs, p.Count(), err)
+		}
+		if _, err := loadgen.NewTracker(p, loadgen.TrackerConfig{Conns: p.Tenants}); !errors.Is(err, loadgen.ErrPlan) {
+			t.Fatalf("the tracker accepted a plan with no operation: %v", err)
+		}
+	}
+	if err := plan(1, 1000).Validate(); err != nil {
+		t.Fatalf("one operation: %v", err)
+	}
+}
+
+func TestTheLargestDurationFormatsWithoutOverflow(t *testing.T) {
+	cases := map[int64]string{math.MaxInt64: "9223372036.8s", loadgen.MaxDurationNs: "86400.0s", 1_500_000: "1.5ms", 999: "999ns"}
+	for ns, want := range cases {
+		if got := loadgen.FormatNs(ns); got != want {
+			t.Fatalf("FormatNs(%d) = %q, want %q", ns, got, want)
+		}
+	}
+	if got := loadgen.StatusLine(math.MaxInt64, loadgen.Snapshot{}, loadgen.Latencies{}); !strings.HasPrefix(got, "t=9223372036.8s ") {
+		t.Fatal(got)
 	}
 }

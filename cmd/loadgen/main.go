@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
-	"strings"
 	"syscall"
 	"time"
 
@@ -150,7 +149,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, ctxFn func() 
 		return printPlan(plan, f.plan, stdout)
 	}
 	if f.password == "-" {
-		line, err := readLine(stdin)
+		line, err := mgctl.ReadPasswordLine(stdin)
 		if err != nil {
 			fmt.Fprintf(stderr, "loadgen: reading the password: %v\n", err)
 			return exitUsage
@@ -204,6 +203,10 @@ func summarize(stdout, stderr io.Writer, plan loadgen.Plan, res live.Result, err
 		fmt.Fprintf(stderr, "loadgen: %v\n", err)
 		return exitRuntime
 	}
+	if res.FlushErr != nil || res.FlushErrs > 0 {
+		fmt.Fprintf(stderr, "loadgen: CSV flush failed (%d flush errors): %v\n", res.FlushErrs, res.FlushErr)
+		return exitRuntime
+	}
 	if s.Shortfall() {
 		return exitShortfall
 	}
@@ -219,28 +222,6 @@ func printPlan(plan loadgen.Plan, n int64, stdout io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "digest %016x\n", plan.Digest(n))
 	return exitOK
-}
-
-func readLine(r io.Reader) (string, error) {
-	var b strings.Builder
-	one := make([]byte, 1)
-	for b.Len() < 1024 {
-		n, err := r.Read(one)
-		if n == 1 {
-			if one[0] == '\n' {
-				break
-			}
-			b.WriteByte(one[0])
-			continue
-		}
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return "", err
-		}
-	}
-	return strings.TrimRight(b.String(), "\r"), nil
 }
 
 func build() string {
