@@ -195,8 +195,14 @@ it (a renamed test or a lost build tag turns red; it cannot pass with "no tests 
 and they check that gate.sh's G3 block calls it.
 
 Why a tag: the lexer and classifier count their work per byte and per token step only when
-`clsCounting` is true (`internal/pgwire/count_on.go`, tag `clscount`). In the default build
-the constant is false and every `if clsCounting { … }` block is removed at compile time.
+`clscount.On` is true (`internal/pgwire/clscount/on.go`, tag `clscount`). In the default build
+the constant is false and every `if clscount.On { … }` block is removed at compile time.
+The switch lives in its own package, `internal/pgwire/clscount`, because detlint's
+`[buildtag]` rule rejects any `//go:build` line in a package on `det-packages.txt` (test
+files included), and it type-checks both files of a tag pair together. For that reason the
+package is deliberately not on `det-packages.txt`. It imports nothing and holds only a
+constant and integer tallies. The counted tests in `internal/pgwire` skip when the
+constant is false.
 So a plain `go test ./...` cannot check per-byte work. Run the tagged run by hand with
 `scripts/counted-growth.sh`.
 
