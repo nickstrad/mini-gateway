@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -761,4 +762,10 @@ func (sc CoalesceScenario) AblationArm() *Spec {
 		return nil
 	}
 	return &ab
+}
+
+const CoalesceHeavyEnv = "MG_C11_HEAVY"
+
+func CoalesceHeavyRuns(short bool) bool {
+	return !short && (os.Getenv("RUN_DIR") != "" || os.Getenv(CoalesceHeavyEnv) == "1")
 }

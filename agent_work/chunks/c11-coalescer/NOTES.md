@@ -240,8 +240,11 @@ the p99 values are indicative only; the read counts are the headline.
 cores (other builds running); it was not measurable alone. This chunk adds about 6 s of tier S
 scenarios under `-short` (21 light scenarios, one seed; the 1,000-client ones skip), about 1 s of
 core and `coalsrc` tests, and 21 short baseline runs in `internal/obs/simrun` (each under a
-second). The hot-key scenarios and the numbers test skip under `-short` everywhere and run in
-the gate's extra.
+second). The 1,000-client hot-key scenarios run only where their files are kept (the sweep, with
+`RUN_DIR` set, one seed) or with `MG_C11_HEAVY=1` (the gate's extra, three seeds; my sweeps),
+never under `-short`; `TestCoalesceHotKeyNumbers` runs only with `MG_C11_HEAVY=1`. This was
+tightened after the fourth gate run, whose G3 unit stage hit the 30-minute package timeout in
+`test/e2e` at a load average of about 36 while those tests were running.
 
 ## Fleet row (PLAN 8.2, 12.3 item 10)
 
@@ -362,8 +365,8 @@ flight `cancelled`), overflows by cap. Health rule: open point 10.
 ```
 go test ./internal/coalesce/ ./internal/proxy/ ./internal/obs/coalsrc/ ./internal/config/
 go test -short -run TestScenarioCoalesce ./test/e2e/                       # 21 light scenarios, 1 seed
-go test -run 'TestScenarioCoalesce/coalesce-hot-key|TestCoalesceHotKeyNumbers' ./test/e2e/
-MG_C11_FULL_SWEEP=1 DST_SEEDS=200 RUN_DIR=<dir> go test -run '^TestScenarioCoalesce$' ./test/e2e/
+MG_C11_HEAVY=1 go test -run 'TestScenarioCoalesce/coalesce-hot-key|TestCoalesceHotKeyNumbers' ./test/e2e/
+MG_C11_HEAVY=1 MG_C11_FULL_SWEEP=1 DST_SEEDS=200 RUN_DIR=<dir> go test -run '^TestScenarioCoalesce$' ./test/e2e/
 scripts/csv-assert.sh <dir>                                               # SQL over the sweep
 MG_TIER_R=1 go test -run '^TestTierRCoalesce' ./test/e2e/                 # needs Docker
 go test -run '^$' -fuzz '^FuzzCoalesceOps$' -fuzztime 30s ./internal/coalesce/

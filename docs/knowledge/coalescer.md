@@ -51,7 +51,8 @@ coalesce stage or the coalescer scenarios. Full record: `agent_work/chunks/c11-c
 
 - `test/e2e/c11_coalesce.go`: `CoalesceScenarios()` (both join modes), each with replay, and an
   ablation that must fail the check (coalescer off, or a core plant). `TestScenarioCoalesce`
-  caps seeds at 10 (1 for the 1,000-client hot key; the gate extra runs it on the 3 pinned seeds) unless `MG_C11_FULL_SWEEP=1`.
+  caps seeds at 10 (1 for the 1,000-client hot key; the gate extra runs it on the 3 pinned seeds) unless `MG_C11_FULL_SWEEP=1`; the 1,000-client hot key runs only with `RUN_DIR` set (the
+  sweep) or `MG_C11_HEAVY=1`.
 - Count database reads from `Fake.StatementLog()` (`KindRead`, exact `Text`); overlap of
   `[Start, End)` gives reads running at once. The fake reads a row's value when service starts,
   so the relaxed read-your-write window is visible in tier S.

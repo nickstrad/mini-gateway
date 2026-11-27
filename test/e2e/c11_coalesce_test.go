@@ -69,8 +69,8 @@ func TestScenarioCoalesce(t *testing.T) {
 	for _, sc := range CoalesceScenarios() {
 		t.Run(sc.Spec.Name, func(t *testing.T) {
 			t.Parallel()
-			if sc.Heavy && testing.Short() {
-				t.Skip("1,000-client scenario: runs without -short (sweep, gate)")
+			if sc.Heavy && !CoalesceHeavyRuns(testing.Short()) {
+				t.Skip("1,000-client scenario: runs in the sweep (RUN_DIR set) or with " + CoalesceHeavyEnv + "=1, never under -short")
 			}
 			seeds := simtest.Seeds(t)
 			full := os.Getenv(coalFullSweepEnv) == "1"
@@ -91,8 +91,8 @@ func TestScenarioCoalesce(t *testing.T) {
 }
 
 func TestCoalesceHotKeyNumbers(t *testing.T) {
-	if testing.Short() {
-		t.Skip("1,000 clients per arm: runs without -short")
+	if testing.Short() || os.Getenv(CoalesceHeavyEnv) != "1" {
+		t.Skip("1,000 clients per arm: runs with " + CoalesceHeavyEnv + "=1 (the gate's extra)")
 	}
 	report := func(name string, r *SimRun) {
 		el := firstStepTimes(r)

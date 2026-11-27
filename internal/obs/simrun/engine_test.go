@@ -52,7 +52,7 @@ func engineJobs(dir string) []engineRun {
 		})
 	}
 	for _, sc := range e2e.CoalesceScenarios() {
-		if sc.Heavy && testing.Short() {
+		if sc.Heavy && !e2e.CoalesceHeavyRuns(testing.Short()) {
 			continue
 		}
 		jobs = append(jobs, func() (obs.InstanceSnapshot, error) {
@@ -77,15 +77,15 @@ func engineJobs(dir string) []engineRun {
 
 func shortSkipped() []string {
 	var out []string
+	for _, sc := range e2e.CoalesceScenarios() {
+		if sc.Heavy && !e2e.CoalesceHeavyRuns(testing.Short()) {
+			out = append(out, sc.Spec.Name)
+		}
+	}
 	if !testing.Short() {
 		return out
 	}
 	for _, sc := range e2e.PoolScenarios() {
-		if sc.Heavy {
-			out = append(out, sc.Spec.Name)
-		}
-	}
-	for _, sc := range e2e.CoalesceScenarios() {
 		if sc.Heavy {
 			out = append(out, sc.Spec.Name)
 		}
