@@ -1,3 +1,5 @@
+// Property and regression tests for integer histogram bucket boundaries,
+// merge associativity, clamp accounting, and zero-allocation recording.
 package obs_test
 
 import (

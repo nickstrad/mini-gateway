@@ -2,6 +2,7 @@ package loadgen
 
 import "github.com/nickstrad/mini-gateway/internal/obs"
 
+// Metrics declares every scalar and histogram exported by component "loadgen".
 func Metrics() []obs.MetricDesc {
 	lo, lr := obs.LabelOutcome, obs.LabelReason
 	return []obs.MetricDesc{
@@ -22,6 +23,7 @@ func Metrics() []obs.MetricDesc {
 	}
 }
 
+// Map emits every loadgen metric from Snapshot s into e, including zero rows for all four outcomes.
 func Map(s Snapshot, e *obs.Emitter) {
 	var none obs.Labels
 	e.Gauge("planned", none, s.Planned)
@@ -44,6 +46,7 @@ func Map(s Snapshot, e *obs.Emitter) {
 	e.Histogram("latency_from_send", none, s.LatencyFromSend)
 }
 
+// Source wraps a snapshot callback as an obs.Source for component "loadgen".
 func Source(snapshot func() Snapshot) obs.Source {
 	return obs.NewSource(obs.ComponentLoadgen, Metrics(), snapshot, Map)
 }

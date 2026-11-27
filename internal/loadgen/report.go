@@ -16,6 +16,8 @@ const (
 	percentBase = 100
 )
 
+// AchievedTenths returns the on-schedule throughput in tenths of a request per second
+// using integer arithmetic only so this package remains determinism-lint clean.
 func AchievedTenths(s Snapshot) int64 {
 	if s.Intended == 0 {
 		return 0
@@ -23,14 +25,17 @@ func AchievedTenths(s Snapshot) int64 {
 	return s.TargetRate * tenths * s.OnTime() / s.Intended
 }
 
+// FormatTenths formats a non-negative tenths value v as "<whole>.<tenth>".
 func FormatTenths(v int64) string {
 	return strconv.FormatInt(v/tenths, 10) + "." + strconv.FormatInt(v%tenths, 10)
 }
 
+// tenthsOf divides before multiplying by 10 so even math.MaxInt64 nanoseconds never overflows.
 func tenthsOf(ns, unit int64) int64 {
 	return ns/unit*tenths + ns%unit*tenths/unit
 }
 
+// FormatNs formats a nanosecond duration into s, ms, µs, or ns with one decimal place.
 func FormatNs(ns int64) string {
 	switch {
 	case ns >= NsPerSecond:
@@ -43,6 +48,7 @@ func FormatNs(ns int64) string {
 	return strconv.FormatInt(ns, 10) + "ns"
 }
 
+// SnapshotLatencies extracts upper-bound p50, p99, and exact max from a histogram snapshot.
 func SnapshotLatencies(h obs.HistogramSnapshot) Latencies {
 	return Latencies{P50: quantile(h, p50), P99: quantile(h, p99), Max: h.Max}
 }
@@ -74,10 +80,12 @@ func classes(s Snapshot) string {
 	return strings.Join(parts, " ")
 }
 
+// Latencies holds formatted summary quantiles (nanoseconds) for status and summary output.
 type Latencies struct {
 	P50, P99, Max int64
 }
 
+// StatusLine formats the once-a-second progress line printed during a live load run.
 func StatusLine(elapsedNs int64, s Snapshot, l Latencies) string {
 	var b strings.Builder
 	b.WriteString("t=" + FormatTenths(tenthsOf(elapsedNs, NsPerSecond)) + "s")
@@ -90,6 +98,8 @@ func StatusLine(elapsedNs int64, s Snapshot, l Latencies) string {
 	return b.String()
 }
 
+// Summary formats the end-of-run summary lines, appending a SHORTFALL line whenever
+// any request was late or could not be sent.
 func Summary(s Snapshot, l Latencies, lfs Latencies) []string {
 	i := func(v int64) string { return strconv.FormatInt(v, 10) }
 	lines := []string{

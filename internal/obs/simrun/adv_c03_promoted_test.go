@@ -1,3 +1,5 @@
+// Cross-process replay and DuckDB SQL regression tests for simulated
+// observability runs.
 package simrun_test
 
 import (

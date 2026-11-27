@@ -341,6 +341,8 @@ func plantedCheck(t *testing.T, env []string, write bool) error {
 	return golden(t, "planted.golden", r.out, write)
 }
 
+// TestReportRecordedRunsGolden proves report.sh is stable across paths, emits no
+// absolute paths, passes every check over recorded runs, and matches recorded.golden.
 func TestReportRecordedRunsGolden(t *testing.T) {
 	requireDuckDB(t)
 	if testing.Short() {
@@ -380,6 +382,8 @@ func TestReportRecordedRunsGolden(t *testing.T) {
 	}
 }
 
+// TestReportPlantedFailureAppearsInFull proves a planted counter mismatch fails
+// both assertion and oracle checks in full, exits 1, and matches planted.golden.
 func TestReportPlantedFailureAppearsInFull(t *testing.T) {
 	requireDuckDB(t)
 	heavy(t)
@@ -389,6 +393,8 @@ func TestReportPlantedFailureAppearsInFull(t *testing.T) {
 	}
 }
 
+// TestReportPlantCanaryIsCaught proves the planted-failure test fails when
+// REPORT_PLANT=ignore-failures masks violating rows.
 func TestReportPlantCanaryIsCaught(t *testing.T) {
 	requireDuckDB(t)
 	heavy(t)
@@ -400,6 +406,8 @@ func TestReportPlantCanaryIsCaught(t *testing.T) {
 	t.Logf("the planted bug was caught: %v", strings.SplitN(err.Error(), "\n", 2)[0])
 }
 
+// TestReportEmptyDirectoryFails proves an empty run directory fails closed
+// with exit 1 and matches empty.golden.
 func TestReportEmptyDirectoryFails(t *testing.T) {
 	requireDuckDB(t)
 	t.Parallel()
@@ -418,6 +426,8 @@ func TestReportEmptyDirectoryFails(t *testing.T) {
 	}
 }
 
+// TestReportTruncatedRunFails proves a run missing run.csv fails closed
+// with exit 1 and matches truncated.golden.
 func TestReportTruncatedRunFails(t *testing.T) {
 	requireDuckDB(t)
 	heavy(t)
@@ -443,6 +453,8 @@ func TestReportTruncatedRunFails(t *testing.T) {
 	}
 }
 
+// TestReportFailsClosed proves missing histograms, unknown headers, schema v2 rows,
+// missing required metrics, and non-directory arguments each fail the report.
 func TestReportFailsClosed(t *testing.T) {
 	requireDuckDB(t)
 	heavy(t)
@@ -512,6 +524,8 @@ func TestReportFailsClosed(t *testing.T) {
 	}
 }
 
+// TestReportPrintsEveryViolatingRow proves section 5 prints all 25 failing runs
+// without truncating at csv-assert's 20-row limit.
 func TestReportPrintsEveryViolatingRow(t *testing.T) {
 	requireDuckDB(t)
 	heavy(t)
@@ -577,6 +591,8 @@ func shape(out string) (int, []string) {
 	return strings.Count(out, "\n"), keys
 }
 
+// TestReportReadsTheSameAt3And300Seeds proves the report keeps the same line count,
+// headings, and verdict rows at 3 seeds and 300 seeds.
 func TestReportReadsTheSameAt3And300Seeds(t *testing.T) {
 	requireDuckDB(t)
 	if testing.Short() {
@@ -604,6 +620,8 @@ func TestReportReadsTheSameAt3And300Seeds(t *testing.T) {
 	}
 }
 
+// TestReportWithoutDuckDBFails proves a missing duckdb binary still emits a
+// full report ending in VERDICT: FAIL and exits 1.
 func TestReportWithoutDuckDBFails(t *testing.T) {
 	t.Parallel()
 	r := runReport(t, []string{"PATH=/usr/bin:/bin", "HOME=" + t.TempDir()}, t.TempDir())
@@ -615,6 +633,8 @@ func TestReportWithoutDuckDBFails(t *testing.T) {
 	}
 }
 
+// TestReportWrongDuckDBVersionFails proves any DuckDB version outside 1.5.x
+// fails the DuckDB structural check with exit 1.
 func TestReportWrongDuckDBVersionFails(t *testing.T) {
 	t.Parallel()
 	bin := t.TempDir()
@@ -628,6 +648,7 @@ func TestReportWrongDuckDBVersionFails(t *testing.T) {
 	}
 }
 
+// TestReportUsageErrors proves missing arguments and unknown flags exit 2 with usage text.
 func TestReportUsageErrors(t *testing.T) {
 	t.Parallel()
 	for _, args := range [][]string{nil, {"-x"}, {t.TempDir(), "--bogus"}} {
@@ -638,6 +659,8 @@ func TestReportUsageErrors(t *testing.T) {
 	}
 }
 
+// TestMakeReport proves make report validates arguments, matches scripts/report.sh
+// byte for byte with RUNS=, and runs tier S e2e to VERDICT: PASS with SEEDS=1.
 func TestMakeReport(t *testing.T) {
 	requireDuckDB(t)
 	if _, err := exec.LookPath("make"); err != nil {
@@ -719,6 +742,8 @@ func wantFailure(t *testing.T, r result, check, detail string) {
 	}
 }
 
+// TestReportLoadLabelsAcceptOtherAndRefuseMalformedClasses proves the bounded
+// overflow label "other" passes while malformed SQLSTATE class labels fail.
 func TestReportLoadLabelsAcceptOtherAndRefuseMalformedClasses(t *testing.T) {
 	requireDuckDB(t)
 	t.Parallel()
@@ -733,6 +758,8 @@ func TestReportLoadLabelsAcceptOtherAndRefuseMalformedClasses(t *testing.T) {
 	wantFailure(t, runReport(t, nil, bad), "load-errors/report:loadgen-labels", "errors_by_class reason '2x' is not a two-character SQLSTATE class or other")
 }
 
+// TestReportEmptyArgumentBesideAGoodRunFails proves an empty directory argument
+// fails structure: runs even when another argument holds a valid run.
 func TestReportEmptyArgumentBesideAGoodRunFails(t *testing.T) {
 	requireDuckDB(t)
 	t.Parallel()
@@ -741,6 +768,8 @@ func TestReportEmptyArgumentBesideAGoodRunFails(t *testing.T) {
 	wantFailure(t, r, "structure: runs", "argument 2 (root2/): no metrics.csv, histograms.csv or run.csv at or below it")
 }
 
+// TestReportMissingWholeFlushFails proves dropping either flush 0 or flush 1
+// fails the schema guard when run.csv declares two flushes.
 func TestReportMissingWholeFlushFails(t *testing.T) {
 	requireDuckDB(t)
 	t.Parallel()

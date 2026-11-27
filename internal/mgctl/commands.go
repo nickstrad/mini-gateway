@@ -1,3 +1,9 @@
+// Package mgctl implements the command logic, Postgres SCRAM/TLS client
+// session, and error-contract lookup behind cmd/mgctl.
+//
+// It imports neither flag nor net/http so every command can run in process
+// against the simulator's virtual network and collector as well as against a
+// live gateway binary.
 package mgctl
 
 import (
@@ -16,6 +22,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
 )
 
+// Process exit codes, read-only admin endpoint paths, and watch-loop bounds.
 const (
 	ExitOK       = 0
 	ExitRuntime  = 1
@@ -31,12 +38,15 @@ const (
 	statusFailed = 503
 )
 
+// Admin abstracts read-only GET access to a gateway's admin endpoints.
 type Admin interface {
 	Get(path string) (int, []byte, error)
 }
 
+// Dialer opens a byte stream to a gateway's Postgres listener (real TCP or simnet).
 type Dialer func() (io.ReadWriteCloser, error)
 
+// Env supplies all I/O, networking, randomness, and pacing dependencies for mgctl commands.
 type Env struct {
 	Admin    Admin
 	Dial     Dialer
@@ -74,6 +84,8 @@ type healthDoc struct {
 	} `json:"checks"`
 }
 
+// Health queries /healthz, prints overall state and every check, and returns
+// ExitOK for "ok" or ExitAnswered for "degraded" and "failed".
 func Health(e Env) int {
 	body, code, err := e.get(PathHealth)
 	if err != nil {
@@ -109,6 +121,7 @@ func (e Env) snapshot() (obs.InstanceSnapshot, error) {
 	return jsonstats.Decode(body)
 }
 
+// StatsOptions controls filtering and repeated polling for Stats.
 type StatsOptions struct {
 	Component string
 	Match     string
@@ -172,6 +185,8 @@ func signed(v int64) string {
 	return strconv.FormatInt(v, 10)
 }
 
+// Stats fetches /stats once, or repeatedly when o.Watch is true, printing
+// delta columns against the previous sample.
 func Stats(e Env, o StatsOptions) int {
 	if o.Count < 0 || o.Count > MaxWatch {
 		return e.failf(ExitUsage, "stats: -count %d out of range", o.Count)
@@ -204,6 +219,7 @@ func Stats(e Env, o StatsOptions) int {
 	return ExitOK
 }
 
+// Metrics fetches /metrics and writes the gateway's Prometheus exposition text verbatim.
 func Metrics(e Env) int {
 	body, code, err := e.get(PathMetrics)
 	if err != nil {
@@ -216,6 +232,8 @@ func Metrics(e Env) int {
 	return ExitOK
 }
 
+// Tenants prints every tenant-labelled metric point reported by /stats and,
+// when configPath is non-empty, cross-checks configured tenant users from disk.
 func Tenants(e Env, configPath string) int {
 	s, err := e.snapshot()
 	if err != nil {
@@ -270,6 +288,9 @@ var capacityGauges = []struct{ metric, key string }{
 	{"shell_mailbox_capacity", "(shell mailbox, fixed)"},
 }
 
+// ConfigShow prints the running instance's metadata, config fingerprint, and
+// capacity gauges from /stats. With configPath, it also loads that file, masks
+// database.password, and reports whether its fingerprint matches the running gateway.
 func ConfigShow(e Env, configPath string) int {
 	s, err := e.snapshot()
 	if err != nil {
@@ -306,6 +327,8 @@ func ConfigShow(e Env, configPath string) int {
 	return ExitOK
 }
 
+// ConfigCheck validates path offline using config.Load—the same path as
+// mini-gateway -check—and prints the config fingerprint on success.
 func ConfigCheck(e Env, path string) int {
 	f, err := config.Load(path)
 	if err != nil {
@@ -316,6 +339,9 @@ func ConfigCheck(e Env, path string) int {
 	return ExitOK
 }
 
+// Verifier derives a SCRAM-SHA-256 verifier string for the gateway's tenant
+// table, reading the password from e.Stdin when password is "-" and never
+// echoing the plaintext password to stdout or stderr.
 func Verifier(e Env, password string, iterations int) int {
 	if password == "-" {
 		line, err := ReadPasswordLine(e.Stdin)
@@ -340,6 +366,8 @@ func Verifier(e Env, password string, iterations int) int {
 	return ExitOK
 }
 
+// Query dials the gateway, logs in as c, executes one simple-protocol statement,
+// and prints either the result rows or the error with its error-contract row.
 func Query(e Env, c Credentials, sql string) int {
 	if e.Dial == nil {
 		return e.failf(ExitUsage, "query: no gateway address")
@@ -377,6 +405,8 @@ func hide(s, secret string) string {
 	return strings.ReplaceAll(s, secret, "(password)")
 }
 
+// PrintReply formats a query Reply as a tab-aligned table or as a SQLSTATE plus
+// error-contract explanation, returning ExitOK or ExitAnswered.
 func PrintReply(w io.Writer, r Reply) int {
 	if r.Err != nil {
 		fmt.Fprintf(w, "%s %s: %s\n%s\n", r.Err.Severity, r.Err.Code, r.Err.Message, ContractLine(r.Err))
@@ -398,6 +428,8 @@ func PrintReply(w io.Writer, r Reply) int {
 	return ExitOK
 }
 
+// Transcript appends one command invocation, its indented stdout/stderr, and
+// its exit code to w in a readable log format.
 func Transcript(w io.Writer, args []string, stdout, stderr string, code int) {
 	fmt.Fprintf(w, "$ mgctl %s\n", strings.Join(args, " "))
 	if stdout != "" {

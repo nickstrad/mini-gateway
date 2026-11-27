@@ -1,3 +1,5 @@
+// Property and regression tests for simulator kernel determinism, stream
+// isolation, timer ordering, shrinking, quiescence, and determinism-lint boundaries.
 package sim_test
 
 import (

@@ -1,3 +1,5 @@
+// Regression test proving Prometheus text export bounds tenant label
+// cardinality under hostile tenant churn.
 package promtext_test
 
 import (

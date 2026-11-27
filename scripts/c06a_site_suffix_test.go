@@ -74,6 +74,8 @@ func siteEntry(number int, suffix any, file, status string) siteChapter {
 	return ch
 }
 
+// TestSiteBookSuffixedChapterIsOrderedAndLabelled proves suffixed chapters sort
+// after their base number and get matching TOC and prev/next links.
 func TestSiteBookSuffixedChapterIsOrderedAndLabelled(t *testing.T) {
 	got := siteBookOf(t, []string{"06-skeleton.md", "06a-operator-tools.md", "06b-more.md"},
 		siteEntry(7, nil, "07-pool.md", "planned"),
@@ -103,6 +105,8 @@ book/06b-more.html <nav class="chapter"><a href="06a-operator-tools.html">Previo
 	}
 }
 
+// TestSiteBookSuffixErrors proves build_site.py refuses malformed, mismatched,
+// duplicate, missing-live, or present-planned suffixed manifest entries.
 func TestSiteBookSuffixErrors(t *testing.T) {
 	const where = "error: book/manifest.json: chapter entry 2: "
 	six := siteEntry(6, nil, "06-skeleton.md", "planned")
@@ -141,6 +145,8 @@ func TestSiteBookSuffixErrors(t *testing.T) {
 	}
 }
 
+// TestSiteBookManifestListsChapter6aBetween6And7 proves book/manifest.json
+// places chapter 6a immediately between chapters 6 and 7.
 func TestSiteBookManifestListsChapter6aBetween6And7(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {

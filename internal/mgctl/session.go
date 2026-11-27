@@ -9,33 +9,41 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/testclient"
 )
 
+// Wire read buffer size and retained row cap for a single query Reply.
 const (
 	readChunk = 32 << 10
 	MaxRows   = 10_000
 )
 
+// Sentinel errors returned by Login, Session.Query, and Session.Receive.
 var (
 	ErrLogin    = errors.New("mgctl: login refused")
 	ErrProtocol = errors.New("mgctl: protocol error")
 	ErrClosed   = errors.New("mgctl: connection closed")
 )
 
+// Credentials holds the Postgres startup user, password, and database name.
 type Credentials struct {
 	User     string
 	Password string
 	Database string
 }
 
+// StartTLS upgrades rw to TLS after the server answers 'S' to an SSLRequest.
 type StartTLS func(rw io.ReadWriter) (io.ReadWriter, error)
 
+// ServerError holds the severity, SQLSTATE code, and message from a Postgres ErrorResponse.
 type ServerError struct {
 	Severity string
 	Code     string
 	Message  string
 }
 
+// Error formats the server error as "<Severity> <Code>: <Message>".
 func (e *ServerError) Error() string { return e.Severity + " " + e.Code + ": " + e.Message }
 
+// Reply holds the decoded columns, bounded rows, command tag, error, and
+// transaction status from one simple-protocol query exchange.
 type Reply struct {
 	Columns   []string
 	Rows      [][]string
@@ -45,6 +53,8 @@ type Reply struct {
 	Status    byte
 }
 
+// Session manages an authenticated Postgres simple-protocol connection over any
+// io.ReadWriter, shared by mgctl query and loadgen's live runner.
 type Session struct {
 	rw   io.ReadWriter
 	sess testclient.Session
@@ -53,6 +63,8 @@ type Session struct {
 	PID  uint32
 }
 
+// Login performs optional TLS negotiation, sends the Postgres StartupMessage,
+// completes trust or SCRAM-SHA-256 authentication, and waits for ReadyForQuery.
 func Login(rw io.ReadWriter, c Credentials, startTLS StartTLS, nonce string) (*Session, error) {
 	s := &Session{rw: rw, buf: make([]byte, readChunk)}
 	if startTLS != nil {
@@ -71,6 +83,7 @@ func (s *Session) upgrade(startTLS StartTLS) error {
 	if err := s.Write(testclient.EncodeSSLRequest(nil)); err != nil {
 		return err
 	}
+	// Read exactly one byte unbuffered so no TLS handshake bytes are ever consumed into s.buf.
 	var answer [1]byte
 	if _, err := io.ReadFull(s.rw, answer[:]); err != nil {
 		return err
@@ -133,11 +146,13 @@ func (s *Session) authStep(m testclient.Msg, scram **pgwire.ScramClient, c Crede
 	return fmt.Errorf("%w: authentication method %d is not supported (SCRAM-SHA-256 or trust only)", ErrLogin, m.Auth)
 }
 
+// Write writes encoded wire bytes directly to the underlying stream.
 func (s *Session) Write(b []byte) error {
 	_, err := s.rw.Write(b)
 	return err
 }
 
+// Conn returns the active underlying stream (upgraded to TLS when StartTLS succeeded).
 func (s *Session) Conn() io.ReadWriter { return s.rw }
 
 func (s *Session) next() (testclient.Msg, error) {
@@ -163,6 +178,7 @@ func (s *Session) next() (testclient.Msg, error) {
 	}
 }
 
+// Query encodes sql as a Postgres simple Query message, sends it, and reads its reply.
 func (s *Session) Query(sql string) (Reply, error) {
 	if err := s.Write(testclient.EncodeQuery(nil, sql)); err != nil {
 		return Reply{}, fmt.Errorf("%w: %v", ErrClosed, err)
@@ -170,6 +186,8 @@ func (s *Session) Query(sql string) (Reply, error) {
 	return s.Receive()
 }
 
+// Receive reads wire messages until ReadyForQuery (or a FATAL/PANIC ErrorResponse,
+// after which Postgres closes the connection without sending ReadyForQuery).
 func (s *Session) Receive() (Reply, error) {
 	var r Reply
 	for {
@@ -214,4 +232,5 @@ func (r *Reply) addRow(vals [][]byte) {
 	r.Rows = append(r.Rows, row)
 }
 
+// Terminate sends a Postgres Terminate ('X') message to close the session cleanly.
 func (s *Session) Terminate() error { return s.Write(testclient.EncodeTerminate(nil)) }

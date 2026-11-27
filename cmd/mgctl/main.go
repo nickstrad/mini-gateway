@@ -1,3 +1,6 @@
+// Command mgctl inspects a running mini-gateway and runs single statements
+// through it. Every admin subcommand is strictly read-only (HTTP GET against
+// /healthz, /stats, or /metrics); config check and verifier run offline.
 package main
 
 import (
@@ -70,6 +73,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return code
 }
 
+// redact replaces literal -password arguments before writing a transcript while keeping "-".
 func redact(args []string) []string {
 	out := append([]string(nil), args...)
 	for i := range out {
@@ -286,6 +290,7 @@ func nonce() string {
 	return base64.StdEncoding.EncodeToString(b)
 }
 
+// httpAdmin implements mgctl.Admin with GET-only requests and a bounded response body read.
 type httpAdmin struct {
 	addr   string
 	client *http.Client

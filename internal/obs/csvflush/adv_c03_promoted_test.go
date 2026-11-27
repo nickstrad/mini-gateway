@@ -1,3 +1,5 @@
+// Property and regression tests for CSV flush encoding, round-trip corruption
+// detection, async back pressure, and DuckDB assertion failure handling.
 package csvflush_test
 
 import (

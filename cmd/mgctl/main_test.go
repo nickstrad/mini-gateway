@@ -59,6 +59,8 @@ func call(args ...string) (int, string, string) {
 	return code, out.String(), errb.String()
 }
 
+// TestNoSubcommandSendsAnythingButAGet proves every admin subcommand uses only
+// HTTP GET on /healthz, /stats, or /metrics.
 func TestNoSubcommandSendsAnythingButAGet(t *testing.T) {
 	srv, rec := adminServer(t)
 	admin := strings.TrimPrefix(srv.URL, "http://")
@@ -84,6 +86,8 @@ func TestNoSubcommandSendsAnythingButAGet(t *testing.T) {
 	}
 }
 
+// TestTranscriptLogsEachCommandAndHidesThePassword proves MGCTL_TRANSCRIPT
+// logs each invocation and exit code while redacting -password arguments.
 func TestTranscriptLogsEachCommandAndHidesThePassword(t *testing.T) {
 	srv, _ := adminServer(t)
 	path := filepath.Join(t.TempDir(), "transcript.txt")
@@ -107,6 +111,7 @@ func TestTranscriptLogsEachCommandAndHidesThePassword(t *testing.T) {
 	}
 }
 
+// TestUsage proves invalid subcommands and flags exit 2 and help exits 0.
 func TestUsage(t *testing.T) {
 	for _, args := range [][]string{{}, {"bogus"}, {"health", "extra"}, {"config"}, {"config", "check"}, {"config", "nope"},
 		{"query", "SELECT 1"}, {"query", "-user", "u"}, {"stats", "-interval", "0s"}, {"query", "-user", "u", "-tls", "x", "SELECT 1"}} {
@@ -169,6 +174,8 @@ func mutate(r *rand.Rand, base map[string]any) map[string]any {
 	return m
 }
 
+// TestConfigCheckAgreesWithTheGatewayBinaryOnGeneratedConfigs proves mgctl
+// config check matches mini-gateway -check on exit code, stdout, and errors.
 func TestConfigCheckAgreesWithTheGatewayBinaryOnGeneratedConfigs(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the gateway and mgctl binaries")
@@ -221,6 +228,8 @@ func runBin(t *testing.T, bin string, args ...string) (string, string, int) {
 	return out.String(), errb.String(), 0
 }
 
+// TestQueryRefusesAnOverLongStdinPassword proves mgctl query -password -
+// rejects lines over 1,024 bytes with exit 2 and never echoes the input.
 func TestQueryRefusesAnOverLongStdinPassword(t *testing.T) {
 	var out, errb bytes.Buffer
 	long := strings.Repeat("y", 1025)

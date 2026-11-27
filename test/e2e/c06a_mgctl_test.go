@@ -303,6 +303,9 @@ func runMgctlModel(t *testing.T, seed int64) string {
 	return transcript.String()
 }
 
+// TestMgctlSeededModelAgainstTheSimulatedGateway drives a seeded sequence of
+// mgctl admin and query commands against the simulated gateway, checking every
+// reply against an independent model and verifying replayable transcripts.
 func TestMgctlSeededModelAgainstTheSimulatedGateway(t *testing.T) {
 	seeds := []int64{1, 2, 3, 4}
 	if testing.Short() {
@@ -332,6 +335,8 @@ func TestMgctlSeededModelAgainstTheSimulatedGateway(t *testing.T) {
 	}
 }
 
+// TestMgctlQueryMovesTheSimulatedGatewaysStats proves a single proxied query
+// through mgctl increments engine.requests_completed in the simulated stats.
 func TestMgctlQueryMovesTheSimulatedGatewaysStats(t *testing.T) {
 	sw := newSimWorld(t, 9)
 	var out bytes.Buffer

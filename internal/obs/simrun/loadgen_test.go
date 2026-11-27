@@ -7,6 +7,8 @@ import (
 
 const loadgenStepNs = 1_000_000
 
+// loadgenRuns exercises loadgen.Tracker and publishes a snapshot into
+// baselineFinals so the catalog emission test covers every loadgen metric.
 func loadgenRuns() error {
 	p := loadgen.Plan{Seed: 1, Rate: 200, DurationNs: 500 * loadgenStepNs, Tenants: 2, Keys: 10, Profile: loadgen.ProfileErrors}
 	tr, err := loadgen.NewTracker(p, loadgen.TrackerConfig{Conns: 2, MaxOutstanding: 1, LateAfterNs: 1})

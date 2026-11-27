@@ -70,6 +70,8 @@ func snap(seq int64, completed int64) obs.InstanceSnapshot {
 	return s
 }
 
+// TestHealthPrintsEveryCheckAndExitsByState proves Health prints all checks
+// and exits 0 for ok, 3 for degraded/failed, and 1 when unreachable.
 func TestHealthPrintsEveryCheckAndExitsByState(t *testing.T) {
 	for _, c := range []struct {
 		state string
@@ -93,6 +95,8 @@ func TestHealthPrintsEveryCheckAndExitsByState(t *testing.T) {
 	}
 }
 
+// TestStatsWatchPrintsEverySampleWithChanges proves watch mode polls /stats,
+// applies -match, and prints signed deltas between samples.
 func TestStatsWatchPrintsEverySampleWithChanges(t *testing.T) {
 	a := &fakeAdmin{snaps: []obs.InstanceSnapshot{snap(1, 10), snap(2, 15), snap(3, 15)}}
 	e, out, _ := env(a)
@@ -113,6 +117,8 @@ func TestStatsWatchPrintsEverySampleWithChanges(t *testing.T) {
 	}
 }
 
+// TestStatsFiltersByComponentAndSaysWhenNothingMatches proves component/match
+// filters, the empty-match notice, and negative -count rejection.
 func TestStatsFiltersByComponentAndSaysWhenNothingMatches(t *testing.T) {
 	e, out, _ := env(&fakeAdmin{snaps: []obs.InstanceSnapshot{snap(1, 1)}})
 	mgctl.Stats(e, mgctl.StatsOptions{Component: "wire"})
@@ -129,6 +135,8 @@ func TestStatsFiltersByComponentAndSaysWhenNothingMatches(t *testing.T) {
 	}
 }
 
+// TestTenantsSaysWhenTheStatsCarryNoTenantAndListsTheConfiguredOnes proves
+// Tenants reports absent tenant labels, renders tenant points when present, and lists config users.
 func TestTenantsSaysWhenTheStatsCarryNoTenantAndListsTheConfiguredOnes(t *testing.T) {
 	e, out, _ := env(&fakeAdmin{snaps: []obs.InstanceSnapshot{snap(1, 1)}})
 	path := writeConfig(t, exampleConfig(t))
@@ -176,6 +184,8 @@ func writeConfig(t *testing.T, m map[string]any) string {
 	return p
 }
 
+// TestConfigShowComparesTheFileWithTheRunningFingerprint proves ConfigShow
+// reports matching vs differing fingerprints and redacts database.password.
 func TestConfigShowComparesTheFileWithTheRunningFingerprint(t *testing.T) {
 	path := writeConfig(t, exampleConfig(t))
 	f, err := config.Load(path)
@@ -202,6 +212,8 @@ func TestConfigShowComparesTheFileWithTheRunningFingerprint(t *testing.T) {
 	}
 }
 
+// TestConfigCheckAcceptsExactlyWhatTheGatewayValidationAccepts proves
+// ConfigCheck matches config.Load across 300 mutated configs.
 func TestConfigCheckAcceptsExactlyWhatTheGatewayValidationAccepts(t *testing.T) {
 	base := exampleConfig(t)
 	r := rand.New(rand.NewPCG(6, 6))
@@ -277,6 +289,8 @@ func slicesSort(s []string) {
 	}
 }
 
+// TestVerifierIsAcceptedByTheGatewaysSCRAMAndNeverPrintsThePassword proves
+// Verifier output authenticates against pgwire.ScramServer and hides the secret.
 func TestVerifierIsAcceptedByTheGatewaysSCRAMAndNeverPrintsThePassword(t *testing.T) {
 	const password = "correct horse battery staple"
 	e, out, errb := env(nil)
@@ -327,6 +341,8 @@ func TestVerifierIsAcceptedByTheGatewaysSCRAMAndNeverPrintsThePassword(t *testin
 	}
 }
 
+// TestEveryProxyMadeRowIsNamedFromItsCodeAndMessage proves every messaged row
+// of pgwire.ErrorRows resolves to its own ID and database errors map to pass-through.
 func TestEveryProxyMadeRowIsNamedFromItsCodeAndMessage(t *testing.T) {
 	for _, r := range pgwire.ErrorRows {
 		if !r.HasMessage() {
@@ -353,6 +369,8 @@ func dialer(addr string) mgctl.Dialer {
 	return func() (io.ReadWriteCloser, error) { return net.Dial("tcp", addr) }
 }
 
+// TestQueryPrintsRowsOrTheSQLStateWithItsContractRow proves Query prints rows,
+// proxy-refusal contract rows, and pass-through database errors without echoing passwords.
 func TestQueryPrintsRowsOrTheSQLStateWithItsContractRow(t *testing.T) {
 	f := loadgentest.Start(t, loadgentest.Options{})
 	cases := []struct {
@@ -388,6 +406,8 @@ func TestQueryPrintsRowsOrTheSQLStateWithItsContractRow(t *testing.T) {
 	}
 }
 
+// TestEveryAdminRequestIsARead proves Admin only exposes Get and every admin
+// command requests only /healthz, /stats, or /metrics.
 func TestEveryAdminRequestIsARead(t *testing.T) {
 	var _ interface {
 		Get(string) (int, []byte, error)
@@ -410,6 +430,7 @@ func TestEveryAdminRequestIsARead(t *testing.T) {
 	}
 }
 
+// TestTranscriptIsReadable proves Transcript indents command output and appends the exit code.
 func TestTranscriptIsReadable(t *testing.T) {
 	var b bytes.Buffer
 	mgctl.Transcript(&b, []string{"health"}, "health: ok\n  listener ok\n", "", 0)
@@ -418,6 +439,8 @@ func TestTranscriptIsReadable(t *testing.T) {
 	}
 }
 
+// TestTheProxysOwnFatalTextsAreNamedByTheirRow proves FATAL replies whose text
+// carries dynamic names or varies from the table template resolve to the right row.
 func TestTheProxysOwnFatalTextsAreNamedByTheirRow(t *testing.T) {
 	cases := map[string][2]string{
 		"tls-required":       {"28000", "TLS is required for this connection: SSL off"},
@@ -439,6 +462,8 @@ func TestTheProxysOwnFatalTextsAreNamedByTheirRow(t *testing.T) {
 	}
 }
 
+// TestALongerRowMessageWinsOverItsPrefixAndSeverityDecides proves FATAL 08006
+// lost-in-transaction beats the shorter prefix lost-after-read.
 func TestALongerRowMessageWinsOverItsPrefixAndSeverityDecides(t *testing.T) {
 	inTx := pgwire.ErrorRows[pgwire.ErrRowLostInTransaction]
 	afterRead := pgwire.ErrorRows[pgwire.ErrRowLostAfterRead]
@@ -462,6 +487,8 @@ func TestALongerRowMessageWinsOverItsPrefixAndSeverityDecides(t *testing.T) {
 	}
 }
 
+// TestAPasswordLineLongerThanTheLimitIsRefusedNotCut proves ReadPasswordLine
+// accepts exactly MaxPassword bytes and refuses longer lines with ErrPasswordTooLong.
 func TestAPasswordLineLongerThanTheLimitIsRefusedNotCut(t *testing.T) {
 	exact := strings.Repeat("p", mgctl.MaxPassword)
 	if got, err := mgctl.ReadPasswordLine(strings.NewReader(exact + "\r\nrest")); err != nil || got != exact {

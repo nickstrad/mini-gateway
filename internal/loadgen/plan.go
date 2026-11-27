@@ -1,3 +1,11 @@
+// Package loadgen implements the deterministic, sans-I/O scheduling and
+// accounting core of the open-loop load generator.
+//
+// A Plan maps a seed, rate, duration, and profile to exact intended send times
+// and SQL operations without touching clocks or sockets. A Tracker advances
+// along that schedule, tracks per-connection pipelined slots, measures latency
+// from both intended and actual send times, and enforces strict conservation
+// across every exit path.
 package loadgen
 
 import (
@@ -7,6 +15,8 @@ import (
 	"strconv"
 )
 
+// Plan bounds and statement-generation constants. Caps prevent runaway
+// allocation or int64 overflow in intended-time arithmetic.
 const (
 	NsPerSecond    = int64(1_000_000_000)
 	MaxRate        = int64(1_000_000)
@@ -27,15 +37,19 @@ const (
 	splitmixGolden = 0x9E3779B97F4A7C15
 )
 
+// ErrPlan is wrapped by validation errors for invalid load plans or profile names.
 var ErrPlan = errors.New("loadgen: invalid plan")
 
+// Profile selects the weighted mix of SQL operation kinds drawn by a Plan.
 type Profile uint8
 
+// Supported load profiles.
 const (
 	ProfileSimple Profile = iota
 	ProfileErrors
 )
 
+// String returns the CLI name of the profile ("simple" or "errors").
 func (p Profile) String() string {
 	if p == ProfileErrors {
 		return "errors"
@@ -43,6 +57,7 @@ func (p Profile) String() string {
 	return "simple"
 }
 
+// ParseProfile parses a profile flag value; the empty string defaults to ProfileSimple.
 func ParseProfile(s string) (Profile, error) {
 	switch s {
 	case "simple", "":
@@ -53,8 +68,10 @@ func ParseProfile(s string) (Profile, error) {
 	return 0, fmt.Errorf("%w: profile %q (want simple or errors)", ErrPlan, s)
 }
 
+// Kind identifies the category of SQL statement generated for an operation.
 type Kind uint8
 
+// Operation kinds across the simple and errors profiles.
 const (
 	KindRead Kind = iota
 	KindWrite
@@ -65,6 +82,7 @@ const (
 	kindCount
 )
 
+// String returns a human-readable label for the operation kind.
 func (k Kind) String() string {
 	switch k {
 	case KindRead:
@@ -83,6 +101,8 @@ func (k Kind) String() string {
 	return "unknown"
 }
 
+// ExpectedClass returns the two-character SQLSTATE class expected for error
+// kinds, or the empty string for normal reads and writes.
 func (k Kind) ExpectedClass() string {
 	switch k {
 	case KindUnique:
@@ -114,6 +134,7 @@ func (p Profile) mix() []weight {
 	return simpleMix
 }
 
+// Kinds returns the operation kinds that can be drawn under p.
 func (p Profile) Kinds() []Kind {
 	var ks []Kind
 	for _, w := range p.mix() {
@@ -122,6 +143,7 @@ func (p Profile) Kinds() []Kind {
 	return ks
 }
 
+// Plan defines a deterministic open-loop sequence of requests at a constant rate.
 type Plan struct {
 	Seed       int64
 	Rate       int64
@@ -131,6 +153,7 @@ type Plan struct {
 	Profile    Profile
 }
 
+// Validate checks every field bound and refuses plans that schedule zero operations.
 func (p Plan) Validate() error {
 	switch {
 	case p.Rate < 1 || p.Rate > MaxRate:
@@ -149,21 +172,28 @@ func (p Plan) Validate() error {
 	return nil
 }
 
+// Count returns the total number of requests scheduled over DurationNs at Rate.
+// Splitting whole seconds from the remainder avoids int64 overflow up to MaxRate * MaxDurationNs.
 func (p Plan) Count() int64 {
 	whole, part := p.DurationNs/NsPerSecond, p.DurationNs%NsPerSecond
 	return whole*p.Rate + part*p.Rate/NsPerSecond
 }
 
+// At returns the intended send time in nanoseconds from run start for operation index i.
+// Whole seconds and remainder are computed separately so i * NsPerSecond cannot overflow.
 func (p Plan) At(i int64) int64 {
 	return (i/p.Rate)*NsPerSecond + (i%p.Rate)*NsPerSecond/p.Rate
 }
 
+// Due returns the number of operations whose intended send time is at or before now.
+// An operation whose At(i) equals now is due immediately (time passes before the event).
 func (p Plan) Due(now int64) int64 {
 	if now < 0 {
 		return 0
 	}
 	whole, part := now/NsPerSecond, now%NsPerSecond
 	n := whole*p.Rate + part*p.Rate/NsPerSecond + 1
+	// Correct for integer truncation in the estimate so At(n-1) <= now < At(n) holds exactly.
 	for n > 0 && p.At(n-1) > now {
 		n--
 	}
@@ -173,6 +203,7 @@ func (p Plan) Due(now int64) int64 {
 	return min(n, p.Count())
 }
 
+// Op is a single deterministic request produced by Plan.Op.
 type Op struct {
 	Index   int64
 	At      int64
@@ -187,6 +218,7 @@ type draws struct {
 	state uint64
 }
 
+// next advances a SplitMix64 generator, giving an independent deterministic stream per op index.
 func (d *draws) next() uint64 {
 	d.state += splitmixGolden
 	z := d.state
@@ -205,6 +237,8 @@ func (p Plan) stream(i int64) draws {
 	return d
 }
 
+// Op returns operation i as a pure function of Seed, Tenants, Keys, Profile, and i.
+// Rate and DurationNs affect only Op.At, never the chosen tenant, kind, key, or payload.
 func (p Plan) Op(i int64) Op {
 	d := p.stream(i)
 	op := Op{Index: i, At: p.At(i), Tenant: int(d.below(int64(p.Tenants))), Key: 1 + d.below(p.Keys)}
@@ -229,8 +263,10 @@ func pick(mix []weight, roll int64) Kind {
 	return mix[len(mix)-1].kind
 }
 
+// KeyName formats numeric key k as "k<k>", matching the kv table used by fakepg and deploy/dev.
 func KeyName(k int64) string { return "k" + strconv.FormatInt(k, 10) }
 
+// statement builds SQL in the subset understood by both fakepg and real Postgres.
 func statement(op Op) string {
 	key := "'" + KeyName(op.Key) + "'"
 	switch op.Kind {
@@ -248,6 +284,8 @@ func statement(op Op) string {
 	return "SELECT v FROM kv WHERE k = " + key
 }
 
+// Digest returns an FNV-64a digest over the first min(n, Count()) operations'
+// intended times, tenants, and SQL strings for cross-process repeatability checks.
 func (p Plan) Digest(n int64) uint64 {
 	h := fnv.New64a()
 	var buf []byte
@@ -264,6 +302,7 @@ func (p Plan) Digest(n int64) uint64 {
 	return h.Sum64()
 }
 
+// Fingerprint returns a hex FNV-64a digest of the plan's parameters for CSV run metadata.
 func (p Plan) Fingerprint() string {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(fmt.Sprintf("seed=%d rate=%d duration=%d tenants=%d keys=%d profile=%s",
@@ -271,8 +310,10 @@ func (p Plan) Fingerprint() string {
 	return strconv.FormatUint(h.Sum64(), 16)
 }
 
+// TenantUser returns the startup user name for tenant index i under prefix.
 func TenantUser(prefix string, i int) string { return prefix + strconv.Itoa(i) }
 
+// ValidTenantPrefix rejects empty prefixes or prefixes that could exceed PostgreSQL's 63-byte identifier budget.
 func ValidTenantPrefix(s string) error {
 	if s == "" || len(s) > maxTenantName-4 {
 		return fmt.Errorf("%w: tenant prefix %q", ErrPlan, s)

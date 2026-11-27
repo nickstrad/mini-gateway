@@ -10,6 +10,8 @@ import (
 	"testing"
 )
 
+// TestTheLogicPackagesImportNoFlagOrHTTPFramework proves internal/mgctl and
+// internal/loadgen stay free of CLI flag and HTTP framework dependencies.
 func TestTheLogicPackagesImportNoFlagOrHTTPFramework(t *testing.T) {
 	banned := func(p string) bool {
 		return p == "flag" || p == "net/http" || strings.HasPrefix(p, "net/http/") || strings.HasPrefix(p, "github.com/spf13/") ||
@@ -47,6 +49,8 @@ func TestTheLogicPackagesImportNoFlagOrHTTPFramework(t *testing.T) {
 	}
 }
 
+// TestNoConfigOrCommandSetsTheLoadToolsPlant proves the test-only closed-loop
+// plant switch is unreachable from live runners and CLI commands.
 func TestNoConfigOrCommandSetsTheLoadToolsPlant(t *testing.T) {
 	for _, dir := range []string{filepath.Join("..", "loadgen", "live"), filepath.Join("..", "..", "cmd", "loadgen"), filepath.Join("..", "..", "cmd", "mgctl")} {
 		files, err := filepath.Glob(filepath.Join(dir, "*.go"))

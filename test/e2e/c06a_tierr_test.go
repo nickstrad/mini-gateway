@@ -121,6 +121,9 @@ func adminStats(t *testing.T, admin string) obs.InstanceSnapshot {
 	return s
 }
 
+// TestTierRMgctlSeededModelAgainstTheRealBinary runs the compiled mgctl binary
+// against a live mini-gateway and Postgres 17 with TLS on, proving admin
+// commands never move request counters and query/verifier/config check match the model.
 func TestTierRMgctlSeededModelAgainstTheRealBinary(t *testing.T) {
 	env := tierR(t)
 	bin := buildCmd(t, "mgctl")
@@ -326,6 +329,9 @@ func loadgenCompleted(t *testing.T, dir string) (int64, int64) {
 	return reached, final.Value(obs.ComponentLoadgen, "intended", obs.Labels{})
 }
 
+// TestTierRRunTargetsUpLoadDown runs make run-up, make load, and make run-down
+// end to end, verifying loopback-only bindings, exact Prometheus vs CSV counts,
+// and complete container/network/volume/process cleanup.
 func TestTierRRunTargetsUpLoadDown(t *testing.T) {
 	tierR(t)
 	if _, err := exec.LookPath("make"); err != nil {
