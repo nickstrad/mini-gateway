@@ -205,9 +205,19 @@ func TestTierRMgctlSeededModelAgainstTheRealBinary(t *testing.T) {
 	if got := engineCounter(t, g.Admin, "requests_received"); got != received {
 		t.Fatalf("requests_received %d, model %d", got, received)
 	}
-	_, code = m.run("wrong\n", append(append([]string{"query", "-user", tenant0, "-password", "-"}, tls...), "SELECT 1")...)
-	if code != 3 {
-		t.Fatalf("a wrong password: exit %d", code)
+	for _, c := range []struct {
+		stdin string
+		args  []string
+		want  string
+	}{
+		{"wrong\n", append(append([]string{"query", "-user", tenant0, "-password", "-"}, tls...), "SELECT 1"), "error-contract row: auth-failed"},
+		{password + "\n", []string{"query", "-user", tenant0, "-password", "-", "-tls", "off", "SELECT 1"}, "error-contract row: tls-required"},
+		{password + "\n", append(append([]string{"query", "-user", tenant0, "-password", "-", "-database", "nope"}, tls...), "SELECT 1"), "error-contract row: unknown-database"},
+	} {
+		out, code := m.run(c.stdin, c.args...)
+		if code != 3 || !strings.Contains(out, c.want) {
+			t.Fatalf("%v: exit %d\n%s", c.args, code, out)
+		}
 	}
 	if b, err := os.ReadFile(m.transcript); err != nil || !strings.Contains(string(b), "$ mgctl -admin") || strings.Contains(string(b), password) {
 		t.Fatalf("transcript %s: %v", m.transcript, err)
