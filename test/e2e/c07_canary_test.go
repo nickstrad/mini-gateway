@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,6 +59,16 @@ func TestCanaryPoolOnSwitchIgnoringTheTagCrossesTenants(t *testing.T) {
 
 func TestAblationRestartWithoutTheBreakerAnswersNo53M03(t *testing.T) {
 	t.Logf("caught: %s", mustFail(t, RestartSpec(false), checkRestart))
+}
+
+func TestCanaryJoinBreakerFlushThroughPopBreaksTheAdmissionCount(t *testing.T) {
+	sp := AdmissionRestartSpec()
+	sp.Plant |= proxy.PlantBreakerFlushPops
+	got := mustFail(t, sp, checkAdmissionRestart)
+	if !strings.Contains(got, "admission") {
+		t.Fatalf("the plant was caught by something other than the admission accounting: %s", got)
+	}
+	t.Logf("caught: %s", got)
 }
 
 func TestAblationLifetimesWithoutJitterExpireTogether(t *testing.T) {

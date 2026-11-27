@@ -5,11 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nickstrad/mini-gateway/internal/admission"
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
 	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 	"github.com/nickstrad/mini-gateway/internal/proxy/proxysim"
 )
+
+var coreAdmission admission.Config
 
 type coreRig struct {
 	*rig
@@ -28,6 +31,7 @@ func newCoreRig(t *testing.T, edit func(*proxy.Config)) *coreRig {
 	c.QueueCap = 4
 	c.ReplyBufferCap = proxy.MinReplyBufferCap
 	c.Pool = &pool.Config{RatePerSec: 1000, NoJitter: true}
+	c.Admission = coreAdmission
 	if edit != nil {
 		edit(&c)
 	}

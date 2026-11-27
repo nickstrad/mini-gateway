@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nickstrad/mini-gateway/internal/admission"
 	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 	"github.com/nickstrad/mini-gateway/internal/sim"
@@ -124,6 +125,13 @@ func RestartSpec(breaker bool) Spec {
 			c.BreakerFailures = pool.MaxBreakerFailures
 		}
 	})
+}
+
+func AdmissionRestartSpec() Spec {
+	sp := RestartSpec(true)
+	sp.Name = "pool-admission-restart"
+	sp.Admission = admission.Config{Rule: admission.RuleTimeout, LIFO: admission.LIFOAdaptive}
+	return sp
 }
 
 func IdleInTxSpec() Spec {
@@ -285,6 +293,7 @@ func PoolScenarios() []PoolScenario {
 		{Spec: ColdStartSpec(0), Check: checkColdStart},
 		{Spec: LifetimesSpec(false), Heavy: true, Check: checkLifetimes},
 		{Spec: RestartSpec(true), Check: checkRestart},
+		{Spec: AdmissionRestartSpec(), Check: checkAdmissionRestart},
 		{Spec: IdleInTxSpec(), Check: checkIdleInTx},
 		{Spec: CancelSpec(), Check: checkCancel},
 		{Spec: MassDeathSpec(PathBlackhole, 0), Check: checkMassDeath},

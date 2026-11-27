@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nickstrad/mini-gateway/internal/admission"
 	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 	"github.com/nickstrad/mini-gateway/internal/sim"
@@ -435,4 +436,22 @@ func checkPolicy(reset proxy.ResetPolicy, reseed bool) func(r *SimRun) error {
 		}
 		return quietPool(r)
 	}
+}
+
+func checkAdmissionRestart(r *SimRun) error {
+	if err := checkRestart(r); err != nil {
+		return err
+	}
+	a, e := r.World.Proxy.Engine.AdmissionSnapshot(), r.Engine
+	if a.Pushes == 0 || a.Served == 0 || a.Shed[admission.ReasonBreaker] == 0 {
+		return failf("the admission queue saw %d pushes, served %d, refused %d for the breaker", a.Pushes, a.Served, a.Shed[admission.ReasonBreaker])
+	}
+	if a.ShedTotal() != e.Shed || a.Shed[admission.ReasonBreaker] != e.BreakerFlushed {
+		return failf("engine shed %d (breaker %d), admission shed %d (breaker %d)", e.Shed, e.BreakerFlushed, a.ShedTotal(), a.Shed[admission.ReasonBreaker])
+	}
+	if a.Pushes != a.Served+a.ShedTotal()+a.Removed+a.Queued.Value || a.Queued.Value != 0 || a.Tenants.Value != 0 {
+		return failf("admission at the end: pushes %d served %d shed %d removed %d queued %d tenants %d", a.Pushes, a.Served, a.ShedTotal(),
+			a.Removed, a.Queued.Value, a.Tenants.Value)
+	}
+	return a.Check()
 }
