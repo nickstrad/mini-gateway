@@ -51,6 +51,27 @@ func engineJobs(dir string) []engineRun {
 			return r.Final, nil
 		})
 	}
+	for _, sc := range e2e.CoalesceScenarios() {
+		if sc.Heavy && testing.Short() {
+			continue
+		}
+		jobs = append(jobs, func() (obs.InstanceSnapshot, error) {
+			r, err := e2e.RunSim(sc.Spec, 1, e2e.SimOptions{Dir: dir})
+			if err == nil {
+				err = sc.Check(r)
+			}
+			if err == nil {
+				err = r.Flush.Check()
+			}
+			if ab := sc.AblationArm(); err == nil && ab != nil {
+				_, err = e2e.RunSim(*ab, 1, e2e.SimOptions{Dir: dir, Arm: "ablation"})
+			}
+			if err != nil {
+				return obs.InstanceSnapshot{}, err
+			}
+			return r.Final, nil
+		})
+	}
 	return jobs
 }
 
@@ -60,6 +81,11 @@ func shortSkipped() []string {
 		return out
 	}
 	for _, sc := range e2e.PoolScenarios() {
+		if sc.Heavy {
+			out = append(out, sc.Spec.Name)
+		}
+	}
+	for _, sc := range e2e.CoalesceScenarios() {
 		if sc.Heavy {
 			out = append(out, sc.Spec.Name)
 		}

@@ -3,6 +3,7 @@ package proxy
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/coalesce"
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
@@ -116,12 +117,13 @@ func (c Config) coalesceErrors() []error {
 		return nil
 	}
 	var errs []error
-	if err := c.Coalesce.Validate(); err != nil {
+	cc := c.coalesceDefaults()
+	if err := cc.Validate(); err != nil {
 		errs = append(errs, err)
 	}
-	if c.Coalesce.MaxReplyBytes > int64(c.ReplyBufferCap)/2 {
+	if cc.MaxReplyBytes > int64(c.ReplyBufferCap)/2 {
 		errs = append(errs, fmt.Errorf("%w: coalesce.max_reply_bytes: %d is more than half of limits.reply_buffer (%d)", ErrConfig,
-			c.Coalesce.MaxReplyBytes, c.ReplyBufferCap))
+			cc.MaxReplyBytes, c.ReplyBufferCap))
 	}
 	return errs
 }
@@ -500,11 +502,9 @@ func (e *Engine) coalCancel(c *client) bool {
 	if e.coal == nil || c == nil || c.phase == cpClosed || c.fl == 0 {
 		return false
 	}
-	if c.phase != cpCoalesced && e.coal.Followers(c.fl) == 0 {
-		e.coalLeave(c, coalesce.LeaveCancel)
+	if !e.coalLeave(c, coalesce.LeaveCancel) {
 		return false
 	}
-	e.coalLeave(c, coalesce.LeaveCancel)
 	e.snap.Failed++
 	e.reached(work.No)
 	e.snap.CancelsCoalesced++
@@ -585,4 +585,24 @@ func (e *Engine) coalCheck() error {
 			e.coal.Counters().Waiting.Value)
 	}
 	return nil
+}
+
+func coalesceTimeoutRows(t Timeouts) []TimeoutRow {
+	c := coalesce.Config{}.WithDefaults()
+	return []TimeoutRow{
+		{"Coalesced flight, from the request that starts it (independent of every waiter)", "coalescer, flight table (swept at the deadline)", "timeouts.statement", t.Statement, "Every waiter gets one shared error: ERROR 53M01 if the flight never reached the database, else the statement's 08006 or 08007 (the connection goes to the dirty-connection table); a reply at the deadline is late"},
+		{"No-share list: a key whose reply passed coalesce.max_reply_bytes is not shared again for this long", "coalescer, no-share list (swept at the expiry)", "coalesce.no_share_for", time.Duration(c.NoShareFor), "The key is shared again"},
+	}
+}
+
+func coalesceCapacityRows(c Config) []CapacityRow {
+	cc := c.coalesceDefaults()
+	return []CapacityRow{
+		{"Coalescer flights (keys with a flight; each key has at most a running flight and one waiting behind it)", "proxy memory", configured(itoa(cc.MaxFlights)), "coalesce.max_flights", "The request passes on unshared (overflow flights)", "timeouts.statement", "coalescer.table_size"},
+		{"Waiters per flight, the request that started it included", "proxy memory; one flight's fan-out", configured(itoa(cc.MaxWaiters)), "coalesce.max_waiters", "ERROR 53M04 (coalesce-cap) at once; nothing reached the database for that request", "timeouts.statement", "coalescer.waiting"},
+		{"Shared-reply bytes of one flight (stored once, written to every waiter)", "proxy memory under a large shared reply", configured(itoa(int(cc.MaxReplyBytes)) + " bytes, at most half of limits.reply_buffer"), "coalesce.max_reply_bytes", "The flight stops sharing: its waiters get ERROR 53M04, the request that started it gets the reply streamed, and the key goes on the no-share list", "timeouts.statement", "coalescer.stored_bytes"},
+		{"No-share list", "proxy memory", configured(itoa(cc.NoShareMax)), "coalesce.no_share_max", "The oldest listed key is dropped (no_share_ends evicted)", "coalesce.no_share_for", "coalescer.no_share"},
+		{"Per-key hotness slots (opt-in diagnostics)", "proxy memory and hot-path cost", "0 (off); at most " + itoa(coalesce.MaxHotKeys), "coalesce.hot_keys", "The least offered tracked key is replaced", "-", "coalescer.hot_key_hits"},
+		{"Per-tenant coalescer counters kept for export", "proxy memory", itoa(coalesce.MaxTenantStats), "(constant)", "Further tenants are counted under the tenant label other", "-", "coalescer.tenant_hits"},
+	}
 }

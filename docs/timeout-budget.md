@@ -32,6 +32,8 @@ One rule holds for every deadline: time passes before the event. When an event a
 | Control law: sojourn above target before dropping starts; then the next drop after interval/sqrt(count) | admission, tenant queue (head sweep at the drop time) | `queue.target, queue.interval` | 100ms | ERROR 53M01 (shed, reason rule) for the oldest request at each drop; no per-request bound (timeouts.queue_wait and the capacity bound it) |
 | Adaptive LIFO hold: newest-first service ends only after the rule reported no overload for this long | admission, tenant queue | `queue.lifo_hold` | 1s | Service returns to oldest first |
 | Quiet tenant queue removal (16 intervals empty) | admission | `16 x queue.interval` | 1.6s | The tenant queue and its rule state are removed |
+| Coalesced flight, from the request that starts it (independent of every waiter) | coalescer, flight table (swept at the deadline) | `timeouts.statement` | 30s | Every waiter gets one shared error: ERROR 53M01 if the flight never reached the database, else the statement's 08006 or 08007 (the connection goes to the dirty-connection table); a reply at the deadline is late |
+| No-share list: a key whose reply passed coalesce.max_reply_bytes is not shared again for this long | coalescer, no-share list (swept at the expiry) | `coalesce.no_share_for` | 10s | The key is shared again |
 
 ## Nesting checked at config load
 
@@ -51,4 +53,4 @@ An inner wait must end before the outer one; `internal/config` refuses the file 
 | cancel and clean-up of a dirty connection | `timeouts.cleanup` | 1s | client idle between transactions | `timeouts.client_idle` | 10m0s | true |
 | check before reuse | `pool.check_timeout` | 250ms | database statement | `timeouts.statement` | 30s | true |
 
-Not yet built: coalesced flight (chunk 11), drain (chunk 13).
+Not yet built: drain (chunk 13).

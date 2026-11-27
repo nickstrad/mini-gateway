@@ -20,9 +20,15 @@ One row per bounded thing in the walking skeleton (chunk 6), with its default. C
 | Unprocessed client input | proxy memory under a pipelining client | 65536 bytes | `(constant)` | FATAL 08P01, connection closed | `timeouts.client_mid_message` | `-` |
 | Held error or end-marker message of a reply | proxy memory | database max message + 5 bytes | `(constant)` | Database connection closed as a protocol violation | `timeouts.statement` | `-` |
 | Reset reply | proxy memory | 4096 bytes | `(constant)` | Reset fails, connection closed | `timeouts.reset` | `engine.resets_failed` |
+| Coalescer flights (keys with a flight; each key has at most a running flight and one waiting behind it) | proxy memory | 1024; zero means the default | `coalesce.max_flights` | The request passes on unshared (overflow flights) | `timeouts.statement` | `coalescer.table_size` |
+| Waiters per flight, the request that started it included | proxy memory; one flight's fan-out | 1024; zero means the default | `coalesce.max_waiters` | ERROR 53M04 (coalesce-cap) at once; nothing reached the database for that request | `timeouts.statement` | `coalescer.waiting` |
+| Shared-reply bytes of one flight (stored once, written to every waiter) | proxy memory under a large shared reply | 65536 bytes, at most half of limits.reply_buffer; zero means the default | `coalesce.max_reply_bytes` | The flight stops sharing: its waiters get ERROR 53M04, the request that started it gets the reply streamed, and the key goes on the no-share list | `timeouts.statement` | `coalescer.stored_bytes` |
+| No-share list | proxy memory | 256; zero means the default | `coalesce.no_share_max` | The oldest listed key is dropped (no_share_ends evicted) | `coalesce.no_share_for` | `coalescer.no_share` |
+| Per-key hotness slots (opt-in diagnostics) | proxy memory and hot-path cost | 0 (off); at most 64 | `coalesce.hot_keys` | The least offered tracked key is replaced | `-` | `coalescer.hot_key_hits` |
+| Per-tenant coalescer counters kept for export | proxy memory | 4096 | `(constant)` | Further tenants are counted under the tenant label other | `-` | `coalescer.tenant_hits` |
 | Engine mailbox | proxy memory between socket goroutines and the engine | 4096 events | `(constant)` | Readers and writers wait to post (back pressure) | `-` | `engine.shell_mailbox_depth` |
 | Unprocessed reads per connection | proxy memory: a pause takes effect before the next read | 1 read of 16384 bytes | `(constant)` | The reader waits until the engine has taken the read | `-` | `-` |
 | Write queue per connection | proxy memory if the engine's own bound were broken | 69206016 bytes, 65536 items | `(constant)` | Connection closed | `timeouts.client_write per write` | `engine.shell_write_queue_overflows` |
 | Live sockets | file descriptors | 69632 | `(constant)` | New sockets closed at once | `-` | `engine.shell_accept_refused` |
 
-Not yet built: per-tenant queues and active-tenant states (chunks 8, 9), coalescer flights, waiters and shared-reply bytes (chunk 11).
+Not yet built: active-tenant states for fairness (chunk 9).

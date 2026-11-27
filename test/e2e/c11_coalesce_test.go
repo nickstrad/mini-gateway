@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/nickstrad/mini-gateway/internal/coalesce"
+
 	"github.com/nickstrad/mini-gateway/internal/sim/simtest"
 )
 
@@ -36,7 +38,11 @@ func runCoalesce(t *testing.T, sc CoalesceScenario, seed int64) *SimRun {
 	}
 	if sc.Ablate != nil {
 		ab := sc.Ablate(sc.Spec)
-		r, err := RunSim(ab, seed, SimOptions{Dir: runDir(t), Arm: "ablation", Replay: replay})
+		dir := t.TempDir()
+		if ab.Coalesce.Mode == coalesce.ModeOff {
+			dir = runDir(t)
+		}
+		r, err := RunSim(ab, seed, SimOptions{Dir: dir, Arm: "ablation", Replay: replay})
 		if err == nil {
 			err = sc.Check(r)
 		}

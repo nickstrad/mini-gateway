@@ -743,3 +743,14 @@ func coalFingerprint(sp Spec) string {
 	}
 	return fmt.Sprintf("-co%s-%s-s%d-w%d-x%d", sp.Coalesce.Mode, sp.Coalesce.Join, sp.KeyScope, sp.Coalesce.MaxWaiters, sp.Coalesce.Plant)
 }
+
+func (sc CoalesceScenario) AblationArm() *Spec {
+	if sc.Ablate == nil {
+		return nil
+	}
+	ab := sc.Ablate(sc.Spec)
+	if ab.Coalesce.Mode != coalesce.ModeOff {
+		return nil
+	}
+	return &ab
+}

@@ -25,6 +25,7 @@ func (f *File) applyDefaults() {
 	setString(&f.ClientTLS.Mode, DefaultClientTLS)
 	setString(&f.BackendTLS.Mode, DefaultBackendTLS)
 	setString(&f.Lease.Reset, DefaultLeaseReset)
+	f.applyCoalesceDefaults()
 	f.applyPoolDefaults()
 	f.divideFleetConnections()
 	p := f.proxyCaps().WithDefaults()
@@ -62,7 +63,8 @@ func setString(s *string, def string) {
 func (f *File) proxyCaps() proxy.Config {
 	return proxy.Config{Connections: f.Pool.Connections, QueueCap: f.Queue.Capacity, MaxClients: f.Limits.MaxClients,
 		MaxStartup: f.Limits.MaxStartup, ReplyBufferCap: f.Limits.ReplyBuffer, Timeouts: f.poolTimeouts(),
-		Reset: f.resetPolicy(), Reseed: f.Lease.Reseed == LeaseReseedOn, Pool: f.poolCore(), Admission: f.admission()}
+		Reset: f.resetPolicy(), Reseed: f.Lease.Reseed == LeaseReseedOn, Pool: f.poolCore(), Admission: f.admission(),
+		Coalesce: f.coalesce(), KeyScope: f.keyScope()}
 }
 
 // Proxy converts the JSON Timeouts block into proxy.Timeouts.
@@ -103,6 +105,7 @@ func (f *File) validate(base string) error {
 	add(f.validateObs())
 	add(f.validateFleet())
 	add(f.validatePool())
+	add(f.validateCoalesce())
 	return errors.Join(errs...)
 }
 
