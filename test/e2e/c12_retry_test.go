@@ -96,3 +96,46 @@ func TestCanaryRetrySweepCatchesAPolicyThatIgnoresReached(t *testing.T) {
 		t.Fatalf("no statement applied twice with the reached-no condition removed\n%s", r.Summary())
 	}
 }
+
+func withRetryOn(sp Spec) Spec {
+	sp.Retry = retry.Config{Kind: retry.KindPreForwardOnce}
+	return sp
+}
+
+func TestScenarioRetryRerunsKillRowsAndResultsWithThePolicyOn(t *testing.T) {
+	names := map[string]bool{"e2e-results": true, "e2e-kill-before-read": true, "e2e-kill-before-write": true, "e2e-kill-during-reply": true,
+		"e2e-kill-mid-transaction": true, "e2e-kill-after-reply": true, "e2e-silent-db-query": true}
+	for _, sc := range Scenarios() {
+		if !names[sc.Spec.Name] {
+			continue
+		}
+		t.Run(sc.Spec.Name, func(t *testing.T) {
+			r, err := RunSim(withRetryOn(sc.Spec), 1, SimOptions{Dir: t.TempDir(), Arm: "retry-on", Tamper: sc.Tamper})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := sc.Check(r); err != nil {
+				t.Fatal(err)
+			}
+			p, ok := r.World.Proxy.Engine.RetrySnapshot()
+			if !ok || p.Kind != int64(retry.KindPreForwardOnce) || p.Retries != 0 || p.Attempts == 0 {
+				t.Fatalf("policy %+v", p)
+			}
+		})
+	}
+	for _, sc := range PoolScenarios() {
+		if sc.Spec.Name != "pool-results" {
+			continue
+		}
+		r, err := RunSim(withRetryOn(sc.Spec), 1, SimOptions{Dir: t.TempDir(), Arm: "retry-on"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := sc.Check(r); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := RunSim(withRetryOn(sc.Spec), 1, SimOptions{Direct: true, Dir: t.TempDir(), Arm: "direct"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
