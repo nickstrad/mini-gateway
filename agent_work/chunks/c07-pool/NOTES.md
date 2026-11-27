@@ -369,6 +369,197 @@ Each "fails before" was checked by running the new test on a copy of `3cf6c92`.
   `FuzzPoolOps` is not simulation-level (no `internal/sim` dependency), so the pinned
   simulator-level inventory did not change.
 
+## Join with chunk 8
+
+Join builder: Opus (`claude-opus-5-5`), 2026-11-27, branch `work/c07-pool`, worktree
+`/root/Software/mini-gateway-work/c07`. `git merge --no-ff work/c08-admission` (chunk 8 stacked on
+chunk 6a), one conflict resolution in merge commit `d572ed3`, then the join fix `f69522b` and the
+join tests `67b39b1`. The plan's stage order (D1: classify, gate, coalesce, queue, lease, forward,
+release) holds: chunk 8 owns the queue stage, chunk 7 the gate's breaker and the lease stage.
+
+### Conflicts and how each was resolved
+
+| File | Resolution |
+| --- | --- |
+| `internal/proxy/config.go` | `Config` carries both `Pool`/`Reseed` (chunk 7) and `Admission` (chunk 8); `Validate` runs both validations. |
+| `internal/proxy/timers.go` | Both timer kinds: `tPool`, `tClientIdleTx` and `tAdmission`. |
+| `internal/proxy/engine.go` | `Invariants` runs chunk 8's `admissionCheck` and then chunk 7's `coreAgrees` and `pool.Invariants` (decision c). |
+| `internal/proxy/lease.go` | `enqueue`: chunk 8's rule (no direct lend for a `ShedQueue`) and chunk 7's arbitration rule (a failed direct checkout is not followed by a second checkout in the same call) both kept: `attempted` is set only on the direct-lend path, which a `ShedQueue` never takes, so with the admission queue every request is pushed and `dispatch` makes the one checkout; then `queueTouched` and, unless the direct checkout was tried, `dispatch`. |
+| `internal/proxy/contracts.go` | Timeout rows: chunk 7's pool rows, then chunk 8's admission rows. Capacity rows: chunk 7's pool rows replace the fixed-set rows chunk 8 still carried; chunk 7's one-FIFO queue row is replaced by chunk 8's four queue rows. |
+| `internal/config/validate.go` | `applyDefaults` applies both (`Pool.CheckTimeout`, `applyQueueDefaults`); `proxyCaps` passes `poolTimeouts()`, the reset policy, `Reseed`, `Pool` and `Admission`; `validate` runs `validateQueue` and `validatePool`. |
+| `internal/obs/catalog/catalog.go`, `enginesrc/enginesrc.go` | Both components declared (`pool`, `admission`); health rules: database, `breaker`, then chunk 8's `admission`. |
+| `internal/obs/simrun/engine_test.go`, `csvassert_test.go` | Chunk 7's parallel runner and heavy-scenario skip, then chunk 8's `AdmissionBaseline`; under `-short` the SQL files of chunk 8's overload scenarios count as skipped with chunk 7's heavy ones (one counter). |
+| `test/e2e/spec.go`, `simtier.go`, `realtier.go` | `Spec` has both sets of fields; `engineConfig` passes `Admission` on both arms; the fingerprint appends `admFingerprint` to both arms (empty for `Rule == 0`, so every existing run name is unchanged); `GatewayOpts` has both sets of fields. |
+| `scripts/chaos.sh` | Chunk 8's (6a's) version with chunk 7's `TestScenario(E2E|Pool)` pattern, also in the per-scenario failure detail. |
+| `scripts/fuzz-plant.sh` | Chunk 7's `plant` function, with chunk 8's `FuzzAdmissionOps` / `admission-remove-order` as a third call (pattern `grep -E`, corpus clean-up removes up to the package's `testdata`). |
+| `docs/timeout-budget.md`, `capacity-table.md`, `csv-schema.md` | Regenerated with `scripts/gen-docs.sh`, never hand-merged. |
+| `docs/c4/`, `book/`, `README.md` | Chunk 8's side (they auto-merged to it exactly). |
+| `agent_work/INDEX.md` | Both sides' rows (auto-merged). |
+
+### Where the chunks assumed different things, and what holds now
+
+**The one place the naive merge was wrong.** Chunk 7's breaker flush (`refuseQueued`) took each
+queued request with `Queue.Pop` and counted it in the engine as `Shed` / `BreakerFlushed`. Behind
+chunk 8's admission queue a pop is a *served* request (and records a served-wait sample), while
+chunk 8's `Engine.Invariants` requires the core's shed total to equal the engine's `Shed`: the
+first breaker flush with a standing queue broke it (`admission: the core shed 0, the engine
+answered 3`). Fixed in `f69522b`, additively in chunk 8's core: shed reason `breaker`
+(`admission.ReasonBreaker`), `Queues.Refuse(now, id)` and `ShedQueue.Refuse`. The flush with an
+admission queue first sweeps the core at the instant (due sheds are answered `53M01` as rule sheds,
+"time passes before the event"), then refuses every still-queued request in request-id order
+(arrival order) through `Refuse` and answers it `53M03`. A refusal is counted as a shed with reason
+`breaker`; it does not mark the tenant queue as shedding (the queue did not overload; the pool
+component's `breaker` health rule reports the outage). The FIFO path (chunk 6/7 scenarios) is
+unchanged. Canary: `proxy.PlantBreakerFlushPops` (tests only) restores the pop path;
+`TestCanaryJoinBreakerFlushThroughPopBreaksTheAdmissionCount` shows the scenario's invariant
+catching it.
+
+**A second one, with chunk 6a (which chunk 8 carries).** Chunk 7's error row
+`lost-mid-statement-in-transaction` (`FATAL 08006`) had exactly the message of
+`lost-in-transaction` (`mini-gateway: database connection lost inside a transaction`), so chunk
+6a's `mgctl` could not name it from severity, code and message
+(`internal/mgctl` `TestEveryProxyMadeRowIsNamedFromItsCodeAndMessage`: "matched as
+lost-in-transaction"). Fixed in `8791d9a`: the row's message is now `mini-gateway: database
+connection lost mid-statement inside a transaction`; code, severity, retry and connection facts
+are unchanged, `reply-golden.txt` and `docs/error-contract.md` regenerated. Nothing in chunk 7
+asserted the old text.
+
+A client cancel of a queued request (chunk 7) now removes it at the current instant
+(`RemoveAt`, the same call chunk 8's client-gone path uses) and re-arms the admission timer
+(`queueTouched`); chunk 7 called `Queue.Remove`, which behind the admission core used the last
+timestamp seen.
+
+**(a) Where a request waits, and how it leaves.** There is one waiting place: its tenant's
+admission queue (D3, no separate wait for a connection). While the breaker is **open** a request
+never reaches the queue: the gate refuses it with `53M03` at once (counted `Rejected`,
+`StageRefuse[breaker]`, no push). While the breaker is **half-open**, or the breaker is closed but
+no connection is lendable (all lent, connecting, checking, cleaning or resetting, or the stale idle
+ones are being checked), the request is pushed into its tenant queue and waits there behind the
+trial or the preparation. Its exits:
+
+| Exit | Answer | Counted (admission / engine) |
+| --- | --- | --- |
+| a connection is lent (the trial passed, a check passed, a reset or dial completed) | the reply | `served` / `StagePassed[queue]` |
+| the rule's allowed wait passed (interval with no standing queue, target while standing; control law drop) | `ERROR 53M01` | `shed{rule}` / `Shed` |
+| tenant ring full, total full, tenant cap | `ERROR 53M01` | `shed{overflow,total,tenants}` / `Shed` |
+| `timeouts.queue_wait` backstop | `ERROR 53M01` | `shed{deadline}` / `Shed` |
+| the breaker opens or re-opens (a failed trial, a loss) while it waits | `ERROR 53M03` | `shed{breaker}` / `Shed`, `BreakerFlushed` |
+| client cancel | `ERROR 57014` | `removed` / `Failed`, `CancelsQueued` |
+| client gone, or shutdown | none | `removed` / `Failed` without a reply |
+
+The trial is not tied to the waiting requests: if the trial (a dial, up to
+`timeouts.database_connect`) takes longer than the allowed wait, the waiting requests are shed
+`53M01` by the rule and the trial still decides the breaker. With the defaults (interval 100 ms,
+target 5 ms) and a database a few milliseconds away this does not happen in the tests.
+
+**(b) Shutdown.** `Engine.Shutdown(now)` runs, in order: chunk 8's sweep of the admission core at
+`now` (due sheds answered `53M01`); every client closed (queued requests removed as client-gone;
+lent ones end through chunk 7's dirty-table / release path); chunk 7's `coreShutdown` (the pool
+core's `Shutdown`, every pool connection closed `shutdown`, every cancel connection closed, the
+pool timer cancelled); the fixed set's slots (none on the core path) and the redial timer; then
+chunk 8's `closeAdmission` (empty tenant queues removed, `tAdmission` cancelled). Both chunks'
+rules hold unchanged; neither needed to move. Test:
+`TestJoinShutdownWithQueuedRequestsAndConnectionsInEveryPoolState` (two tenants queued while the
+pool has connections connecting, idle, checking, lent, cleaning with a cancel in flight, and
+resetting; after `Shutdown`: no wake armed, `Quiesce` passes, `Invariants` pass, admission
+`pushes = served + shed + removed` with 2 removed, engine shed = admission shed, pool open 0,
+connecting 0, cancels 0).
+
+**(c) `Engine.Invariants`.** Every check of both runs: the snapshot conservation, lease pairing,
+queue/waiting agreement and wire checks (chunk 6), then chunk 8's `admissionCheck` (no unanswered
+shed, core shed total = engine `Shed`, the admission timer armed at the core's `Next`,
+`Queues.Check`), then chunk 7's `coreAgrees` (every connection's engine phase against the core,
+the idle gauge) and `pool.Invariants`. The admission check returns first only when it fails; the
+core checks always run after it. With the breaker reason the admission equality now also covers
+breaker flushes.
+
+**(d) The binary's default, and the tests that had to change.** The binary runs the pool core
+(chunk 7, no key for the fixed set) behind the timeout rule with adaptive LIFO (chunk 8, `queue.rule`
+default `timeout`): `TestBinaryDefaultRunsThePoolCoreBehindTheTimeoutRule`. Tier S specs choose
+their seams, so no tier S test changed: chunk 6 scenarios run the fixed set on `FIFO`, chunk 7's
+pool scenarios the core on `FIFO` (`Spec.Admission` zero), chunk 8's admission scenarios the fixed
+set behind the admission core; `pool-admission-restart` is the one tier S run of both. Changed:
+
+| Test | Change | Why |
+| --- | --- | --- |
+| chunk 7 tier R pool tests (`TestTierRPool*`) | none in code; they now start the gateway with chunk 8's `GatewayOpts.Queue` default `RelaxedQueue` (interval 5 s, target 1 s) | the binary now sheds by the timeout rule; chunk 8 gave every tier R gateway the relaxed rule because those tests queue longer than 100 ms on purpose (the headline's 500 clients through 16 connections) |
+| chunk 8 `TestTierRAdmissionOverloadWithPgSleep` | none in code; it now runs on the pool core (on-demand dials, the core's reset accounting) instead of the fixed set | the binary's pool is chunk 7's |
+| chunk 6 `TestTierRQueueFull` | both chunks' edits kept: chunk 7's warm-up query, chunk 8's explicit interval 5 s / target 1 s | each chunk's default needed one of them |
+| chunk 6 `TestTierRDatabaseLegTLSModes` | chunk 7's edit kept (accepts `53M03` as well as `53M01` for the wrong CA) | unchanged by the join |
+| `internal/admission` `TestPropertyRunsExerciseEveryShedReasonAndLIFO` | the new reason `breaker` is excluded from the random-operation coverage, like `undrained` | only the engine reaches `Refuse`; it is covered by `TestRefuseCountsABreakerShedTheCallerAnswersAndKeepsTheQueueHealthy` and the engine join tests |
+| `internal/proxy` `newCoreRig` | applies the package variable `coreAdmission` (zero by default, so every chunk 7 engine test runs as before) | lets `TestJoinEveryCoreEngineTestHoldsWithTheAdmissionQueue` rerun chunk 7's engine tests behind each product rule |
+| `internal/obs/simrun` baseline tests | merged as above | both chunks changed them |
+
+Tier R was not part of this join's required checks (G6 runs at landing); see "Join results" for
+what was run.
+
+**(e) Config keys.** One `File.validate` validates both chunks' keys and joins every error:
+`proxyCaps().Validate()` (the engine config with the pool core's config and the admission
+config), `validateLease` (`lease.reset`, `lease.reseed`), `validateQueue` (`queue.rule`,
+`queue.lifo`), `validateFleet` and `validatePool` (`pool.*`, `breaker.*`, `backend.tcp_keepalive.*`,
+`backend.server_keepalive`, `backend.path_idle_limit`). `queue.capacity` is chunk 8's total across
+the tenant queues (it was chunk 6's one FIFO). No key of one chunk constrains a key of the other;
+no cross-rule was added. `TestPoolAndQueueKeysAreValidatedTogether` gives four bad keys (two of
+each chunk) in one file and requires each to be named. Both chunks' existing rule tests
+(`TestPoolRulesFailClosedNamingTheKey`, `TestQueueKeysFailClosedNamingTheKey`, …) pass unchanged.
+
+**No behaviour of either chunk was dropped or weakened, and no two behaviours truly conflict.**
+The only change to chunk 8's code is additive (a shed reason, `Refuse`, a `ShedQueue` method, the
+`shed` metric's help text); chunk 7's FIFO-path flush is unchanged, and the only other change to
+chunk 7 is the new error row's message text (same code and facts).
+
+### Join tests
+
+| Test | What it proves |
+| --- | --- |
+| `internal/proxy` `TestJoinOverloadWithAHealthyPoolShedsByTheRuleAndLeavesThePoolUntouched` | 4 requests from two tenants queued behind one lent connection, shed `53M01` by the rule after the interval; the pool's dials, failures, closes, breaker, checkouts unchanged; the next request after the overload is served |
+| `TestJoinBreakerOpeningRefusesTheStandingQueueWith53M03AndCountersAgree` | a standing queue (3 requests, 2 tenants) refused `53M03` when the lent connection's loss opens the breaker; admission `shed{breaker}` 3 = engine `BreakerFlushed`, shed totals equal, nothing removed, not shedding; an arrival while open is refused at the gate without a push or a dial; a half-open arrival is pushed and lent on the trial connection |
+| `TestJoinHalfOpenTrialWithQueuedRequestsFromTwoTenants` | two tenants admitted while half-open wait behind one trial; trial passes: oldest served on the trial connection, the other on the next dial, nothing shed; trial fails: both `53M03`, `shed{breaker}` 2, breaker open again |
+| `TestJoinCancelWhileQueuedLeavesItsTenantQueueAsRemoved` | `57014`, admission `removed` 1, nothing shed |
+| `TestJoinShutdownWithQueuedRequestsAndConnectionsInEveryPoolState` | decision (b) above |
+| `TestJoinQuiesceWaitsForTheQuietTenantQueueThenPasses` | `Quiesce` fails while the tenant queue is in its 16-interval quiet window and passes after it, with the pool's connection idle |
+| `TestJoinEveryCoreEngineTestHoldsWithTheAdmissionQueue` | 18 of chunk 7's 20 engine core tests rerun behind the timeout rule and the control law (interval 10 s, target 5 s, so the rule never sheds), every event checked by both chunks' invariants. Left out: `TestCoreCancelDoneMakesTheConnectionIdleInTheEngineToo` and `TestCoreQuiesceAndShutdownLeaveNothing`, which call `Quiesce` right after traffic, when chunk 8's tenant queue is still in its quiet window (by chunk 8's design; the previous test covers it) |
+| `internal/admission` `TestRefuseCountsABreakerShedTheCallerAnswersAndKeepsTheQueueHealthy` | `Refuse` counts reason `breaker`, leaves nothing for `TakeShed`, refuses only queued ids, keeps `Check` and conservation, does not set shedding |
+| `internal/config` `TestBinaryDefaultRunsThePoolCoreBehindTheTimeoutRule`, `TestPoolAndQueueKeysAreValidatedTogether` | decisions (d) and (e) |
+| `test/e2e` `TestScenarioPool/pool-admission-restart` | chunk 7's database restart (`checkRestart` unchanged: breaker opens and closes, `53M03` fast, goodput back) behind the default timeout rule with adaptive LIFO; admission `shed{breaker}` > 0 and = engine `BreakerFlushed`, shed totals equal, `pushes = served + shed + removed`, nothing queued, no tenant queue at the end. Seed 1: 968 pushes, 960 served, 4 breaker, 4 rule sheds. Replay law through `runPool`. SQL `test/analysis/pool-admission-restart/admission-pool.sql`. Canary `TestCanaryJoinBreakerFlushThroughPopBreaksTheAdmissionCount` |
+
+The breaker join tests were run against the naive merge's flush (the pop path): both fail on
+chunk 8's invariant (`admission: the core shed 0, the engine answered 3` / `… 2`).
+
+### Stated limits of the join
+
+1. **Pop and unpop while a connection is being prepared.** With the pool core a checkout can
+   refuse while connections are idle (they need a check, or the breaker is half-open); the admission
+   queue then `Unpop`s. Chunk 8's stated limit 5 applies more often than with the fixed set: the
+   served-wait sample and the load-gauge sample of such a pop stay recorded (`admission.unpops`
+   counts them). The sample is never above the allowed wait (the head sweep runs first).
+2. **A trial or a cold-start dial longer than the allowed wait** sheds the waiting requests
+   `53M01` (above, (a)).
+3. **Breaker refusals are admission sheds** (reason `breaker`, answered `53M03`): the `shed` metric
+   by reason and the engine's `requests_shed` include them; the admission health rule does not.
+
+### For the prose seat
+
+`admission.Reason`'s doc comment ("shed with 53M01") and `ShedQueue`'s no longer cover reason
+`breaker` / `Refuse` (`53M03`); `Queues.Refuse`, `AdmissionQueue.Refuse`, `ReasonBreaker` and
+`PlantBreakerFlushPops` have no comments (builder rule). `docs/timeout-budget.md`'s check row still
+says a failed check "counts toward the breaker" (chunk 7's arbitrated rule: a failed check of an
+idle connection that is not the trial does not count).
+
+### Join results
+
+All on 2026-11-27, host load 5–8 (other agents and a landing gate's tier R on the machine).
+
+| Check | Tree | Result |
+| --- | --- | --- |
+| `go build ./... && go vet ./...` | `8791d9a` | pass |
+| `go test -count=1 ./internal/... ./test/... ./scripts/ ./cmd/...` | `67b39b1` | every package passed (`internal/obs/simrun` 379 s, `test/e2e` 318 s, `scripts` 31 s) except `internal/mgctl` `TestEveryProxyMadeRowIsNamedFromItsCodeAndMessage`: the row collision fixed in `8791d9a`; after it `internal/mgctl`, `internal/pgwire`, `internal/proxy`, `cmd/...` pass |
+| adversarial `./agent_work/adversarial/c07-pool/...`, `c08-admission/...`, `c06a-operator-tools/...` (unchanged) | `8791d9a` | pass, pass, pass |
+| `scripts/gen-docs.sh --check` | `8791d9a` | pass |
+| 5-seed sweep: `DST_SEEDS=5 RUN_DIR=… go test -run '^(TestScenarioPool|TestScenarioAdmission.*)$' ./test/e2e` | `8791d9a` | pass (127 s); then `scripts/csv-assert.sh` per scenario directory over its `test/analysis/<scenario>/*.sql`: 28 directories (22 pool incl. `pool-admission-restart`, 6 admission), every SQL file 0 failures. Heavy pool scenarios ran 3 seeds, chunk 8's overload scenarios 1 (both by design) |
+| chunk 7 gate extra (`agent_work/chunks/c07-pool/gate/extra.sh`, now with `TestCanaryJoin` and `TestJoin`) | `8791d9a` | pass; `fuzz-plant.sh`: `FuzzEngineOps` 13 s, `FuzzPoolOps` 3 s, `FuzzAdmissionOps` 2 s (budget 20 s each) |
+| chunk 8 gate extra (`agent_work/chunks/c08-admission/gate/extra.sh`) | `8791d9a` | pass; `fuzz-plant.sh` 2 s / 5 s / 1 s; `admission-head-to-head.sh --check`: the table reproduced exactly |
+
 ## Commands
 
 ```
