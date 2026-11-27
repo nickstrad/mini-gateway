@@ -169,18 +169,22 @@ func (m *fmModel) push(now Time, t *fmTenant, id int64) {
 
 func (m *fmModel) under(t *fmTenant) bool { return t.inFlight+1 <= m.share(t) }
 
-func (m *fmModel) eligible(t *fmTenant) bool {
-	total := m.total()
-	if total >= m.limit {
-		return false
+func (m *fmModel) reservedForAnIdleTenant() bool {
+	for _, t := range m.tenants {
+		if len(t.items) == 0 && t.inFlight > 0 && t.inFlight < m.share(t) {
+			return true
+		}
 	}
-	return total+1 < m.limit || m.under(t)
+	return false
 }
 
 func (m *fmModel) choose() *fmTenant {
+	if m.total() >= m.limit {
+		return nil
+	}
 	var best *fmTenant
 	for _, t := range m.tenants {
-		if len(t.items) == 0 || !m.eligible(t) {
+		if len(t.items) == 0 {
 			continue
 		}
 		if best != nil && m.under(best) && !m.under(t) {
@@ -189,6 +193,9 @@ func (m *fmModel) choose() *fmTenant {
 		if best == nil || m.under(t) && !m.under(best) || t.turn < best.turn || t.turn == best.turn && t.items[0].seq < best.items[0].seq {
 			best = t
 		}
+	}
+	if best != nil && !m.under(best) && m.total()+1 == m.limit && m.reservedForAnIdleTenant() {
+		return nil
 	}
 	return best
 }
@@ -576,20 +583,53 @@ func (v claimView) under(w *fairWorld, name string) bool {
 	return v.inFlight[name]+1 <= v.share(w, name)
 }
 
+func (v claimView) belowShare(w *fairWorld) []string {
+	var out []string
+	for i := range fairTenants {
+		name := tenantName(i)
+		if (v.waiting[name] || v.inFlight[name] > 0) && v.inFlight[name] < v.share(w, name) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+func (v claimView) anyWaiting(w *fairWorld, below []string) bool {
+	for _, name := range below {
+		if v.waiting[name] {
+			return true
+		}
+	}
+	return false
+}
+
 func (v claimView) eligible(w *fairWorld, name string) bool {
 	if v.total >= v.limit {
 		return false
 	}
-	return v.total+1 < v.limit || v.under(w, name)
+	return v.total+1 < v.limit || v.under(w, name) || len(v.belowShare(w)) == 0
+}
+
+func (v claimView) idleAllowed(w *fairWorld) error {
+	if len(v.waiting) == 0 || v.total >= v.limit {
+		return nil
+	}
+	below := v.belowShare(w)
+	switch {
+	case v.total+1 < v.limit:
+		return fmt.Errorf("%d leases free", v.limit-v.total)
+	case len(below) == 0:
+		return fmt.Errorf("the last lease is free and no active tenant is below its share")
+	case v.anyWaiting(w, below):
+		return fmt.Errorf("the last lease is free and a tenant below its share waits (%v)", below)
+	}
+	return nil
 }
 
 func (w *fairWorld) claimsAtPop(v claimView, id int64, ok, lend bool) error {
 	if !ok {
-		for name := range v.waiting {
-			if v.eligible(w, name) {
-				return fmt.Errorf("claim work-conserving: nothing popped while %s waits eligible (in flight %d of %d, own %d, share %d)",
-					name, v.total, v.limit, v.inFlight[name], v.share(w, name))
-			}
+		if err := v.idleAllowed(w); err != nil {
+			return fmt.Errorf("claim work-conserving: nothing popped (in flight %d of %d, waiting %v): %v", v.total, v.limit, v.waiting, err)
 		}
 		return nil
 	}
@@ -597,8 +637,8 @@ func (w *fairWorld) claimsAtPop(v claimView, id int64, ok, lend bool) error {
 	if v.total >= v.limit {
 		return fmt.Errorf("claim limit: %s popped with %d in flight at limit %d", x, v.total, v.limit)
 	}
-	if v.total+1 >= v.limit && v.inFlight[x]+1 > v.share(w, x) {
-		return fmt.Errorf("claim share: %s lent to %d in flight with share %d at the limit (%d of %d)", x, v.inFlight[x]+1, v.share(w, x), v.total+1, v.limit)
+	if below := v.belowShare(w); v.total+1 == v.limit && v.inFlight[x]+1 > v.share(w, x) && len(below) > 0 {
+		return fmt.Errorf("claim share: %s lent to %d in flight with share %d at the limit (%d of %d) while %v is below its share", x, v.inFlight[x]+1, v.share(w, x), v.total+1, v.limit, below)
 	}
 	if !v.under(w, x) {
 		for y := range v.waiting {

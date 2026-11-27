@@ -415,6 +415,9 @@ func (q *Queues) Push(now Time, tenant string, id int64) bool {
 	q.c.queuedPeak = max(q.c.queuedPeak, int64(q.total))
 	t.rule.Pushed(now, wasEmpty)
 	t.observeLIFO(now, &q.cfg)
+	if wasEmpty && q.fair != nil {
+		q.fair.noteActive()
+	}
 	return true
 }
 

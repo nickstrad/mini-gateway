@@ -149,3 +149,18 @@ func (e *Engine) TenantQueued(t work.TenantID) int {
 	}
 	return 0
 }
+
+func (e *Engine) releasable() int {
+	if q := e.fairCore(); q != nil {
+		return q.Releasable()
+	}
+	return e.seams.Queue.Len()
+}
+
+func (e *Engine) checkoutDemand() (int, bool) {
+	q := e.fairCore()
+	if q == nil || q.Limit() >= e.cfg.Connections {
+		return 0, false
+	}
+	return min(q.Releasable(), max(0, q.Limit()-q.InFlight()-1)), true
+}

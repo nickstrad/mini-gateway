@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/admission"
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
@@ -185,60 +186,151 @@ func TestFairTheFixedSetReportsEveryLeaseEndToo(t *testing.T) {
 	}
 }
 
-func heldBackPremise(t *testing.T) (*coreRig, proxy.ConnID) {
-	r := fairRig(t, 3, nil)
-	held := r.lease(10, 0, "BEGIN")
-	r.db(held, complete("BEGIN", 'T'))
-	other := r.lease(11, 1, "SELECT pg_sleep(1)")
-	r.login(12, 0)
-	before := len(r.dbs)
-	r.q(12, "SELECT 2")
-	if len(r.dbs) == before {
-		r.tick(1000 * 1000)
+const fairIdleTimeout = 50 * time.Millisecond
+
+func heldBackPremise(t *testing.T) (*coreRig, proxy.ConnID, proxy.ConnID) {
+	r := fairRig(t, 4, func(c *proxy.Config) {
+		c.Pool = &pool.Config{RatePerSec: 1000, NoJitter: true, IdleTimeout: fairIdleTimeout}
+	})
+	for _, client := range []proxy.ConnID{10, 11} {
+		id := r.lease(client, 0, "BEGIN")
+		r.db(id, complete("BEGIN", 'T'))
 	}
-	if len(r.dbs) != before+1 {
-		t.Fatal("premise: a dial for the waiting request")
+	other := r.lease(12, 1, "SELECT pg_sleep(1)")
+	spare := r.lease(13, 1, "SELECT 1")
+	r.db(spare, complete("SELECT 1", 'I'))
+	r.db(spare, complete("DISCARD ALL", 'I'))
+	if p := r.pool(); p.Idle.Value != 1 || tenantInFlight(r, 0) != 2 || tenantInFlight(r, 1) != 1 {
+		t.Fatalf("premise: idle %d, in flight %d / %d", p.Idle.Value, tenantInFlight(r, 0), tenantInFlight(r, 1))
 	}
-	idle := r.dbs[len(r.dbs)-1]
-	a := r.open(idle)
-	if bytes.Contains(written(a, proxy.ActDBWrite, idle), []byte("SELECT 2")) {
-		t.Fatalf("tenant 0 at its share was lent the third connection: %q", written(a, proxy.ActDBWrite, idle))
+	r.login(14, 0)
+	a := r.q(14, "SELECT 2")
+	if bytes.Contains(written(a, proxy.ActDBWrite, spare), []byte("SELECT 2")) {
+		t.Fatalf("tenant 0 at its share of 2 took the last lease while tenant 1 holds 1 of its 2: %q", written(a, proxy.ActDBWrite, spare))
 	}
-	if p := r.pool(); p.Idle.Value != 1 {
-		t.Fatalf("premise: idle %d", p.Idle.Value)
+	if _, as := r.agree(); as.Queued.Value != 1 || as.Fair.HeldShare == 0 {
+		t.Fatalf("premise: queued %d, held at a share %d", as.Queued.Value, as.Fair.HeldShare)
 	}
-	return r, other
+	return r, other, spare
 }
 
 func TestFairAHeldBackRequestCostsNoPopNoUnpopAndNoDial(t *testing.T) {
-	r, _ := heldBackPremise(t)
+	r, _, _ := heldBackPremise(t)
 	_, before := r.agree()
 	dials, checkouts := len(r.dbs), r.pool().Checkouts
-	for range 50 {
-		r.tick(10 * 1000 * 1000)
+	for range 4 {
+		r.tick(10 * time.Millisecond)
 	}
 	_, after := r.agree()
 	if after.Unpops != before.Unpops || after.Served != before.Served || len(r.dbs) != dials || r.pool().Checkouts != checkouts {
-		t.Fatalf("held back over 50 events: unpops %d->%d, served %d->%d, dials %d->%d, checkouts %d->%d",
+		t.Fatalf("held back over 4 events: unpops %d->%d, served %d->%d, dials %d->%d, checkouts %d->%d",
 			before.Unpops, after.Unpops, before.Served, after.Served, dials, len(r.dbs), checkouts, r.pool().Checkouts)
 	}
-	if after.Fair.HeldShare-before.Fair.HeldShare > 50 {
+	if after.Fair.HeldShare-before.Fair.HeldShare > 4 {
 		t.Fatalf("more than one selection per event: %d", after.Fair.HeldShare-before.Fair.HeldShare)
 	}
 }
 
+func TestFairAHeldBackRequestCausesNoDialAfterTheIdleConnectionCloses(t *testing.T) {
+	r, _, _ := heldBackPremise(t)
+	dials := len(r.dbs)
+	closed := r.pool().Closes[pool.CloseIdle]
+	for range 40 {
+		r.tick(fairIdleTimeout / 2)
+	}
+	p := r.pool()
+	if p.Closes[pool.CloseIdle]-closed != 1 || p.Idle.Value != 0 {
+		t.Fatalf("premise: the spare connection closes once at the idle timeout: closed idle %d, idle %d", p.Closes[pool.CloseIdle]-closed, p.Idle.Value)
+	}
+	if len(r.dbs) != dials {
+		t.Fatalf("%d replacement dials over 20 idle timeouts while one request stayed held back", len(r.dbs)-dials)
+	}
+	if _, as := r.agree(); as.Queued.Value != 1 {
+		t.Fatalf("the held-back request left the queue: queued %d", as.Queued.Value)
+	}
+}
+
 func TestFairAHeldBackRequestIsLentAtTheEventThatMakesItEligible(t *testing.T) {
-	r, other := heldBackPremise(t)
-	idle := r.dbs[len(r.dbs)-1]
+	r, other, spare := heldBackPremise(t)
 	a := r.run(r.ev(proxy.EvDBClosed, other, nil, 0))
-	if bytes.Equal(written(a, proxy.ActDBWrite, idle), query("")) {
-		a = r.db(idle, emptyReply())
+	if bytes.Equal(written(a, proxy.ActDBWrite, spare), query("")) {
+		a = r.db(spare, emptyReply())
 	}
-	if !bytes.HasSuffix(written(a, proxy.ActDBWrite, idle), query("SELECT 2")) {
-		t.Fatalf("tenant 1's lease was lost: tenant 0 is alone and must get the idle connection at once, wrote %q", written(a, proxy.ActDBWrite, idle))
+	if !bytes.HasSuffix(written(a, proxy.ActDBWrite, spare), query("SELECT 2")) {
+		t.Fatalf("tenant 1's lease was lost: tenant 0 is alone and must get the idle connection at once, wrote %q", written(a, proxy.ActDBWrite, spare))
 	}
-	if tenantInFlight(r, 0) != 2 {
+	if tenantInFlight(r, 0) != 3 {
 		t.Fatalf("tenant 0 in flight %d", tenantInFlight(r, 0))
+	}
+}
+
+func TestFairAHeldBackRequestIsDialledForWhenItBecomesEligibleAfterTheIdleClose(t *testing.T) {
+	r, other, _ := heldBackPremise(t)
+	for range 4 {
+		r.tick(fairIdleTimeout)
+	}
+	if r.pool().Idle.Value != 0 {
+		t.Fatal("premise: the spare connection closed")
+	}
+	dials := len(r.dbs)
+	r.run(r.ev(proxy.EvDBClosed, other, nil, 0))
+	r.tick(time.Millisecond)
+	if len(r.dbs) != dials+1 {
+		t.Fatalf("tenant 1's lease was lost: the request is releasable and one connection must be dialled, got %d dials", len(r.dbs)-dials)
+	}
+	fresh := r.dbs[len(r.dbs)-1]
+	a := r.open(fresh)
+	for range 10 {
+		r.tick(10 * time.Millisecond)
+	}
+	if p := r.pool(); p.Open.Value+p.Connecting.Value > 4 {
+		t.Fatalf("open %d, connecting %d: past pool.connections", p.Open.Value, p.Connecting.Value)
+	}
+	if !bytes.HasSuffix(written(a, proxy.ActDBWrite, fresh), query("SELECT 2")) {
+		t.Fatalf("the dialled connection was not lent to the waiting request: %q (in flight %d / %d, queued %d)", written(a, proxy.ActDBWrite, fresh),
+			tenantInFlight(r, 0), tenantInFlight(r, 1), r.e.AdmissionSnapshot().Queued.Value)
+	}
+}
+
+func TestFairNoDialPastTheFairLimitWhileConnectionsOpen(t *testing.T) {
+	r := fairRig(t, 4, func(c *proxy.Config) { c.Fairness.Limit = 2 })
+	for i := range proxy.ConnID(4) {
+		r.login(10+i, int(i%2))
+		r.q(10+i, "SELECT pg_sleep(1)")
+	}
+	r.tick(time.Millisecond)
+	if len(r.dbs) != 2 {
+		t.Fatalf("fair limit 2, four waiting: %d dials, want 2", len(r.dbs))
+	}
+	for _, id := range append([]proxy.ConnID(nil), r.dbs...) {
+		r.open(id)
+	}
+	for range 20 {
+		r.tick(10 * time.Millisecond)
+	}
+	if len(r.dbs) != 2 {
+		t.Fatalf("fair limit 2: %d dials after both opened and were lent, want 2", len(r.dbs))
+	}
+	if _, as := r.agree(); as.Fair.InFlight.Value != 2 || as.Queued.Value != 2 {
+		t.Fatalf("in flight %d, queued %d", as.Fair.InFlight.Value, as.Queued.Value)
+	}
+}
+
+func TestFairNoDialPastTheFairLimit(t *testing.T) {
+	r := fairRig(t, 4, func(c *proxy.Config) { c.Fairness.Limit = 1 })
+	r.lease(10, 0, "SELECT pg_sleep(1)")
+	for i := range proxy.ConnID(4) {
+		r.login(11+i, int(i%2))
+		r.q(11+i, "SELECT 2")
+	}
+	for range 20 {
+		r.tick(10 * time.Millisecond)
+	}
+	if len(r.dbs) != 1 {
+		t.Fatalf("fair limit 1 below pool.connections 4: %d dials, want 1", len(r.dbs))
+	}
+	if _, as := r.agree(); as.Fair.InFlight.Value != 1 || as.Queued.Value != 4 {
+		t.Fatalf("in flight %d, queued %d", as.Fair.InFlight.Value, as.Queued.Value)
 	}
 }
 

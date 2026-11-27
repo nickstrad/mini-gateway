@@ -22,8 +22,9 @@ const (
 // CorePool adapts *pool.Pool to the engine's Pool seam, buffering pool actions
 // emitted during Checkout until finish drains them in corePump.
 type CorePool struct {
-	p    *pool.Pool
-	acts []pool.Action
+	p      *pool.Pool
+	acts   []pool.Action
+	demand func() (int, bool)
 }
 
 // NewCorePool constructs a CorePool wrapping a validated pool.Pool.
@@ -44,6 +45,11 @@ func (cp *CorePool) Snapshot() pool.Snapshot { return cp.p.Snapshot() }
 // Checkout asks the pool core for a lendable connection for tenant, buffering
 // any off-path check or switch-reset actions for corePump.
 func (cp *CorePool) Checkout(now Instant, tenant work.TenantID) (ConnID, bool) {
+	if cp.demand != nil {
+		if n, ok := cp.demand(); ok {
+			cp.acts = cp.p.Demand(pool.Instant(now), n, cp.acts)
+		}
+	}
 	id, ok, acts := cp.p.Checkout(pool.Instant(now), tenant, cp.acts)
 	cp.acts = acts
 	return ConnID(id), ok
@@ -122,6 +128,7 @@ func (e *Engine) initCore() error {
 		e.core = cp
 		e.seams.Pool = cp
 	}
+	e.core.demand = e.checkoutDemand
 	if e.seams.Breaker == nil {
 		e.seams.Breaker = CoreBreaker{cp: e.core}
 	}
@@ -142,7 +149,7 @@ func (e *Engine) coreRun(acts []pool.Action) {
 
 func (e *Engine) corePump() {
 	acts := e.core.take()
-	acts = e.core.p.Demand(e.pnow(), e.seams.Queue.Len(), acts)
+	acts = e.core.p.Demand(e.pnow(), e.releasable(), acts)
 	e.coreRun(acts)
 	next := Instant(e.core.p.Next())
 	if next == 0 {

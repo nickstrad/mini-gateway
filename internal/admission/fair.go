@@ -210,6 +210,42 @@ func (f *Fair) Share(name string) int {
 
 func (f *Fair) lastSlot() bool { return f.total+1 >= f.cfg.Limit }
 
+func (f *Fair) reserved(w int64) bool {
+	for _, t := range f.list {
+		if !f.waiting(t.name) && t.inFlight < f.share(t.name, w) {
+			return true
+		}
+	}
+	return false
+}
+
+func (f *Fair) releasable() int {
+	free := f.cfg.Limit - f.total
+	n := min(f.q.total, max(free, 0))
+	if n == 0 || n < free || !f.shareOn() {
+		return n
+	}
+	w, _ := f.activeWeight()
+	absorbed, reserved := 0, f.reserved(w)
+	for _, t := range f.q.list {
+		if t.empty() {
+			continue
+		}
+		deficit := max(0, f.share(t.name, w)-f.TenantInFlight(t.name))
+		absorbed += min(deficit, t.ring.len())
+		reserved = reserved || deficit > t.ring.len()
+	}
+	if absorbed >= free || !reserved {
+		return free
+	}
+	return free - 1
+}
+
+func (f *Fair) noteActive() {
+	_, n := f.activeWeight()
+	f.c.activePeak = max(f.c.activePeak, int64(n))
+}
+
 func (f *Fair) shareOn() bool { return f.cfg.Plant&FairPlantNoShareBound == 0 }
 
 func (f *Fair) Pick(_ Time, active []TenantView) int {
@@ -219,17 +255,16 @@ func (f *Fair) Pick(_ Time, active []TenantView) int {
 		f.c.heldLimit++
 		return -1
 	}
-	last := f.lastSlot()
 	w, _ := f.activeWeight()
 	best, bestUnder := -1, false
 	for i, v := range active {
 		under := !f.shareOn() || f.TenantInFlight(v.Name)+1 <= f.share(v.Name, w)
-		if last && !under {
-			continue
-		}
 		if best < 0 || under && !bestUnder || under == bestUnder && before(v, active[best]) {
 			best, bestUnder = i, under
 		}
+	}
+	if best >= 0 && !bestUnder && f.lastSlot() && f.reserved(w) {
+		best = -1
 	}
 	if best < 0 {
 		f.c.heldShare++
@@ -287,8 +322,7 @@ func (f *Fair) start(name string, stats func(string) *tenantStats) bool {
 	f.total++
 	f.c.starts++
 	f.c.inFlightPeak = max(f.c.inFlightPeak, int64(f.total))
-	_, n := f.activeWeight()
-	f.c.activePeak = max(f.c.activePeak, int64(n))
+	f.noteActive()
 	return true
 }
 
@@ -417,6 +451,13 @@ func (q *Queues) Limit() int {
 	return q.fair.cfg.Limit
 }
 
+func (q *Queues) Releasable() int {
+	if q.fair == nil {
+		return q.total
+	}
+	return q.fair.releasable()
+}
+
 func (q *Queues) Held() bool { return q.fair != nil && q.fair.held }
 
 func (q *Queues) InFlight() int {
@@ -512,7 +553,7 @@ func (q *Queues) fairSnapshot(s *Snapshot) {
 	w, n := f.activeWeight()
 	s.Fair = FairSnapshot{On: true, Limit: int64(f.cfg.Limit), MaxLeases: int64(f.cfg.MaxLeases),
 		InFlight: obs.Gauge{Value: int64(f.total), Peak: f.c.inFlightPeak}, States: obs.Gauge{Value: int64(len(f.list)), Peak: f.c.statesPeak},
-		Active: obs.Gauge{Value: int64(n), Peak: max(f.c.activePeak, int64(n))}, Rounds: q.round, Picks: f.c.picks,
+		Active: obs.Gauge{Value: int64(n), Peak: f.c.activePeak}, Rounds: q.round, Picks: f.c.picks,
 		HeldLimit: f.c.heldLimit, HeldShare: f.c.heldShare, LeaseStarts: f.c.starts, LeaseEnds: f.c.ends, Saturated: f.c.saturated,
 		DefaultWeight: int64(f.cfg.DefaultWeight)}
 	rows := make(map[*tenantStats]int, len(s.PerTenant))
