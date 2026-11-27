@@ -2,7 +2,7 @@
 
 **Built so far: chunks 0–6. Dashed parts are planned.** In this diagram 0 of 10 elements and 0 of 9 relationships are built. Model: diagram `deployment` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
-Each instance enforces its own limits. The config declares the instance count and divides the fleet budgets. What multiplies, weakens or survives at N instances is the table in PLAN.md section 8.2; the weakened rows are measured in three-instance scenarios.
+Each instance enforces its own limits. The config declares the instance count and divides the fleet budgets. The table in PLAN.md section 8.2 lists what multiplies, weakens, or survives at N instances. The weakened rows are measured in three-instance scenarios.
 
 A solid box or arrow is built; a dashed one is planned. An arrow points to the supplier.
 

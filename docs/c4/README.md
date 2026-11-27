@@ -1,8 +1,10 @@
 # C4 diagrams — mini-gateway
 
-**Target architecture of the approved plan.** These diagrams describe what [PLAN.md](../../PLAN.md) sets out to build; Nick approved the plan on 2026-11-24 as amended by his rulings (PLAN.md section 18). The set was updated for those rulings: the batcher is gone (batching was dropped from v1), and TLS is drawn on the shell and the two session machines. The build has started, so each diagram shows two things at once: what exists in the code (status `existing`, drawn solid) and what is still planned (status `planned`, drawn dashed). At every chunk landing the orchestrator marks what the chunk built — one edit to the AS BUILT block at the top of [gen.py](gen.py), described in [docs/knowledge/c4-as-built.md](../knowledge/c4-as-built.md) — and a diagram that no longer matches the code is treated as a defect.
+**Target architecture of the approved plan.** These diagrams describe the system [PLAN.md](../../PLAN.md) sets out to build. Nick approved the plan on 2026-11-24 as amended by his rulings (PLAN.md section 18). The set reflects those rulings: the batcher is gone because batching was dropped from v1, and TLS is drawn on the shell and the two session machines.
 
-Three C4 levels plus a deployment view: system context, containers (two views), components (eight views), and the three-instance deployment.
+Because the build has started, each diagram shows both what exists in the code (status `existing`, drawn solid) and what is still planned (status `planned`, drawn dashed). At every chunk landing the orchestrator marks what the chunk built — one edit to the AS BUILT block at the top of [gen.py](gen.py), described in [docs/knowledge/c4-as-built.md](../knowledge/c4-as-built.md) — and a diagram that no longer matches the code is treated as a defect.
+
+The set covers three C4 levels plus a deployment view: system context, containers (two views), components (eight views), and the three-instance deployment.
 
 ## Diagrams
 
@@ -42,15 +44,15 @@ Three C4 levels plus a deployment view: system context, containers (two views), 
 
 ## Format
 
-- [gen.py](gen.py) is the source. Elements, relationships and diagrams are tables in that file; running it writes everything else here. Edit `gen.py`, not the generated files. What is built is said in one place, the AS BUILT block at its top: `LANDED` (the last landed chunk), `BUILT` (element → chunk), `PARTIAL` (element → what exists so far) and `REL_BUILT` (exceptions to the rule that a relationship is built when both its ends are).
-- [model.json](model.json) is the C4 model as a `c4-sdk` bundle (`schemaVersion: 1`): every element, relationship and diagram. Statuses are the SDK's: `existing` for built, `planned` for the rest; a diagram that holds both has the status `mixed`.
-- Each diagram page has a Mermaid picture, an element table and a numbered relationship table. Edge numbers in the picture match the table rows. A solid box or arrow is built; a dashed one is planned; every picture has a key for the two. An arrow points to the supplier; one marked "implements" means the source implements the target's interface. Both tables have a Status column: `built (chunk N)` or `planned`. An element that is only partly built stays `planned`, and its row says what exists so far.
+- [gen.py](gen.py) is the source for this directory. It defines elements, relationships, and diagrams in tables and generates every other file here when run. Edit `gen.py`, not the generated files. What is built lives in one place, the AS BUILT block at the top of the file: `LANDED` names the last landed chunk, `BUILT` maps each built element to its chunk, `PARTIAL` records what exists so far for a partly built element, and `REL_BUILT` lists exceptions to the rule that a relationship is built when both of its ends are.
+- [model.json](model.json) holds the full C4 model — every element, relationship, and diagram — as a `c4-sdk` bundle (`schemaVersion: 1`). It uses the SDK's statuses: `existing` for built items, `planned` for the rest, and `mixed` for a diagram that contains both.
+- Each diagram page contains a Mermaid diagram, an element table, and a numbered relationship table whose row numbers match the edge numbers in the diagram. Solid boxes and arrows represent built parts, dashed ones represent planned parts, and every diagram includes a key. Arrows point to the supplier. An arrow marked "implements" means the source implements the target's interface. Both tables have a Status column showing `built (chunk N)` or `planned`. A partly built element stays `planned`, and its row notes what exists so far.
 - [diagrams/](diagrams/) holds the Mermaid sources, one per diagram.
 
 ## Model notes
 
 1. **Containers are Go packages** inside one `mini-gateway` process, except the simulator harness and the end-to-end suite, which are test code in the same repository.
-2. **Neighbour elements.** `c4-sdk` 0.1.0 accepts a container in another container's component view only when the element is tagged `external`, and the tag belongs to the element, not the view. So each container has a twin with the id prefix `n-`, tagged `external` and `neighbour`, used only in component views. The page tables show the real container's description for it.
+2. **Neighbour elements.** `c4-sdk` 0.1.0 allows a container in another container's component view only if that element is tagged `external`, and tags belong to the element rather than the view. Each container therefore has a twin with the id prefix `n-`, tagged `external` and `neighbour`, that appears only in component views. In the page tables, the twin displays the real container's description.
 3. **Deployment instances** are instances of the container "Shell and binary", which stands for the whole process.
 4. **Terminal (Unicode) renderings** of these diagrams are not included in this first set; see the open item in STATE.md.
 
@@ -60,10 +62,10 @@ Three C4 levels plus a deployment view: system context, containers (two views), 
 | --- | --- | --- |
 | `model.json` decodes | `decodeArchitecture` from `c4-sdk@0.1.0` (`c4-sdk/core`) | ok, 0 errors, 0 warnings |
 | Every diagram builds a scene | `buildScene` from `c4-sdk/core` | 12 of 12 |
-| Pictures and tables agree with the model | All three are written by `gen.py` from the same tables; it refuses a diagram edge whose ends are not in the diagram and a relationship no diagram uses | passes |
-| Mermaid renders | Each built page opened in a headless browser; every picture drew | 12 of 12 |
+| Pictures and tables agree with the model | `gen.py` writes all three from the same tables and refuses both diagram edges whose ends are not in the diagram and relationships that no diagram uses | passes |
+| Mermaid renders | Each built page was opened in a headless browser, and every diagram rendered | 12 of 12 |
 
-To repeat after a change:
+To repeat these checks after a change:
 
 ```sh
 python3 docs/c4/gen.py
