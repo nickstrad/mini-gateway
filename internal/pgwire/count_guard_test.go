@@ -14,6 +14,9 @@ var cntTallyMethods = map[string]bool{"Bump": true, "Add": true, "Value": true, 
 
 var cntBuiltins = map[string]bool{"len": true, "max": true, "min": true, "make": true, "append": true}
 
+// TestLexLoopsCountTheirSteps proves that every loop in *Lexer methods and
+// clscount.Ref helpers in lex.go starts with a clscount.On bump, scan counts
+// its first byte, and lexer code calls no uncounted looping helper.
 func TestLexLoopsCountTheirSteps(t *testing.T) {
 	src, err := os.ReadFile("lex.go")
 	if err != nil {
@@ -24,6 +27,8 @@ func TestLexLoopsCountTheirSteps(t *testing.T) {
 	}
 }
 
+// TestClassifierLexLoopsCountTheirSteps proves that every loop in (*clsMsg).lex
+// starts with a clscount.On step bump.
 func TestClassifierLexLoopsCountTheirSteps(t *testing.T) {
 	src, err := os.ReadFile("classify.go")
 	if err != nil {
@@ -46,6 +51,9 @@ func TestClassifierLexLoopsCountTheirSteps(t *testing.T) {
 	}
 }
 
+// TestLexLoopGuardRejectsUncountedWork proves that the lexer AST guard catches
+// four planted violations: an uncounted loop, a call to a looping helper, an
+// external package call, and scan missing its leading count.
 func TestLexLoopGuardRejectsUncountedWork(t *testing.T) {
 	src, err := os.ReadFile("lex.go")
 	if err != nil {

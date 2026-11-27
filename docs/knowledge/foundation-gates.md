@@ -214,26 +214,28 @@ Facts about the lints that are easy to trip over:
 
 ## G3 also runs the counted growth tests (2026-11-27)
 
-G3 has three checks: `unit` (`go test -count=1 ./...`), `counted` and `race`. `counted` runs
-`scripts/counted-growth.sh`, which runs
-`go test -tags clscount -count=1 -run Linearly -v ./internal/pgwire/`. The check is red when
-that run fails, and red when any of the five growth tests the script names did not pass in
-it (a renamed test or a lost build tag turns red; it cannot pass with "no tests to run").
-`scripts/ci-fast.sh` gets the check through the gate's G3. The tests in
-`scripts/counted_growth_test.go` hold all of this: they run the script against a stub `go`,
-and they check that gate.sh's G3 block calls it.
+G3 runs three checks: `unit` (`go test -count=1 ./...`), `counted`, and `race`. `counted`
+invokes `scripts/counted-growth.sh`, which runs
+`go test -tags clscount -count=1 -run Linearly -v ./internal/pgwire/`. The check fails if
+that run exits non-zero or if any of the five growth tests the script names does not report
+`PASS` (so a renamed test, a skipped tagged test, a dropped build tag, or `"no tests to
+run"` turns red). `COUNTED_GO` is a test seam of `counted-growth.sh`
+(`scripts/counted_growth_test.go`); `scripts/gate.sh` unsets it before running the script.
+`scripts/ci-fast.sh` gets `counted` through the gate's G3, and
+`scripts/counted_growth_test.go` verifies the script's arguments, failure modes, and
+`gate.sh`/`ci-fast.sh` wiring with a stub `go`.
 
-Why a tag: the lexer and classifier count their work per byte and per token step only when
-`clscount.On` is true (`internal/pgwire/clscount/on.go`, tag `clscount`). In the default build
-the constant is false and every `if clscount.On { … }` block is removed at compile time.
-The switch lives in its own package, `internal/pgwire/clscount`, because detlint's
-`[buildtag]` rule rejects any `//go:build` line in a package on `det-packages.txt` (test
-files included), and it type-checks both files of a tag pair together. For that reason the
-package is deliberately not on `det-packages.txt`. It imports nothing and holds only a
-constant and integer tallies. The counted tests in `internal/pgwire` skip when the
-constant is false.
-So a plain `go test ./...` cannot check per-byte work. Run the tagged run by hand with
-`scripts/counted-growth.sh`.
+Why a build tag: the lexer and classifier count every loop step and lexer-pass token step
+only when `clscount.On` is true (`internal/pgwire/clscount/on.go`, tag `clscount`). In the
+default build the constant is false and the compiler removes every `if clscount.On { … }`
+block at compile time. The switch sits in its own package, `internal/pgwire/clscount`,
+because detlint's `[buildtag]` rule rejects any `//go:build` line inside a package on
+`det-packages.txt` (test files included) and type-checks both files of a tag pair together.
+`internal/pgwire/clscount` is deliberately omitted from `det-packages.txt`; it imports
+nothing and holds only a constant and integer tallies. Because the tagged tests in
+`internal/pgwire` skip when `clscount.On` is false, a plain `go test ./...` does not check
+per-step lexer work (including string bodies and line comments). Run the full counted suite
+by hand with `scripts/counted-growth.sh`.
 
 ## Chunk extras (G10)
 

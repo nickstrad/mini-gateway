@@ -174,68 +174,90 @@ Nick's rework rule forbade quietly dropping tests from the first build: every su
 Running the core classifier, safe-shape, canary, memory, and linearity tests produces:
 
 ```sh
-$ go test -count=1 -v -run '^(TestSafeShapeTable|TestSafeShapePropertyFitsAgreesWithTheReferenceChecker|TestSafeShapeCanaryWithoutTheAlphabetCheckThePropertyFails|TestSafeShapeRecogniserReferencesNothingFromTheLexerOrClassifier|TestSafeShapeAllocatesNothing|TestClassifierCorpus|TestClassifierTempWordsRejectOnlyWhereATemporaryObjectIsMade|TestClassifierPlantedSetForwardableIsCaught|TestClassifierMemoryIsBounded|TestLexOperatorRunsGrowLinearly|TestClassifierSpanKeywordChecksGrowLinearly|TestClassifierTimeGrowsLinearly)$' ./internal/pgwire
+$ go test -count=1 -v -run '^(TestSafeShapeTable|TestSafeShapePropertyFitsAgreesWithTheReferenceChecker|TestSafeShapeCanaryWithoutTheAlphabetCheckThePropertyFails|TestSafeShapeRecogniserReferencesNothingFromTheLexerOrClassifier|TestSafeShapeAllocatesNothing|TestClassifierCorpus|TestClassifierTempWordsRejectOnlyWhereATemporaryObjectIsMade|TestClassifierPlantedSetForwardableIsCaught|TestClassifierMemoryIsBounded|TestLexOperatorRunsGrowLinearly|TestClassifierSpanKeywordChecksGrowLinearly|TestClassifierWorkGrowsLinearly)$' ./internal/pgwire
 === RUN   TestClassifierTempWordsRejectOnlyWhereATemporaryObjectIsMade
 --- PASS: TestClassifierTempWordsRejectOnlyWhereATemporaryObjectIsMade (0.00s)
 === RUN   TestClassifierCorpus
-    classify_test.go:149: corpus: 599 records, 60 fit the safe shape; 40 of the first build's 116 coalescable records still fit
---- PASS: TestClassifierCorpus (0.01s)
+    classify_test.go:151: corpus: 599 records, 60 fit the safe shape; 40 of the first build's 116 coalescable records still fit
+--- PASS: TestClassifierCorpus (0.00s)
 === RUN   TestClassifierMemoryIsBounded
-    classify_test.go:475: worst measured allocation per input byte at 1 MiB: 52 (bound 80 per byte + 65536)
---- PASS: TestClassifierMemoryIsBounded (2.60s)
+    classify_test.go:494: worst measured allocation per input byte at 1 MiB: 52 (bound 80 per byte + 65536)
+--- PASS: TestClassifierMemoryIsBounded (1.91s)
 === RUN   TestLexOperatorRunsGrowLinearly
-    classify_test.go:507: "+": 4 KiB 1.109344ms, 64 KiB 31.434395ms, ratio 28
-    classify_test.go:507: "-": 4 KiB 28.117µs, 64 KiB 500.853µs, ratio 17
-    classify_test.go:507: "+-": 4 KiB 1.348292ms, 64 KiB 25.134543ms, ratio 18
-    classify_test.go:507: "*+": 4 KiB 49.399µs, 64 KiB 1.339644ms, ratio 27
-    classify_test.go:507: "=-": 4 KiB 51.711µs, 64 KiB 1.121786ms, ratio 21
-    classify_test.go:507: "<+-": 4 KiB 116.114µs, 64 KiB 1.281653ms, ratio 11
-    classify_test.go:507: "+ ": 4 KiB 561.628µs, 64 KiB 16.828805ms, ratio 29
-    classify_test.go:507: "1+": 4 KiB 1.014328ms, 64 KiB 23.855066ms, ratio 23
---- PASS: TestLexOperatorRunsGrowLinearly (0.38s)
+    classify_test.go:547: "+": 4 KiB {opRunBytes:4096 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:16401 tokenVisits:53275 literalBytes:6}}, 64 KiB {opRunBytes:65536 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:262161 tokenVisits:851995 literalBytes:6}}
+    classify_test.go:547: "-": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:17 tokenVisits:26 literalBytes:6}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:17 tokenVisits:26 literalBytes:6}}
+    classify_test.go:547: "-+": 4 KiB {opRunBytes:4096 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:16401 tokenVisits:53275 literalBytes:6}}, 64 KiB {opRunBytes:65536 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:262161 tokenVisits:851995 literalBytes:6}}
+    classify_test.go:547: "+-": 4 KiB {opRunBytes:4096 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:16401 tokenVisits:53275 literalBytes:6}}, 64 KiB {opRunBytes:65536 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:262161 tokenVisits:851995 literalBytes:6}}
+    classify_test.go:547: "*+": 4 KiB {opRunBytes:4096 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:25 tokenVisits:53 literalBytes:6}}, 64 KiB {opRunBytes:65536 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:25 tokenVisits:53 literalBytes:6}}
+    classify_test.go:547: "=-": 4 KiB {opRunBytes:4096 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:25 tokenVisits:53 literalBytes:6}}, 64 KiB {opRunBytes:65536 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:25 tokenVisits:53 literalBytes:6}}
+    classify_test.go:547: "<+-": 4 KiB {opRunBytes:4095 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:29 tokenVisits:66 literalBytes:6}}, 64 KiB {opRunBytes:65535 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:29 tokenVisits:66 literalBytes:6}}
+    classify_test.go:547: "+ ": 4 KiB {opRunBytes:2048 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:8209 tokenVisits:26651 literalBytes:6}}, 64 KiB {opRunBytes:32768 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:131089 tokenVisits:426011 literalBytes:6}}
+    classify_test.go:547: "1+": 4 KiB {opRunBytes:2048 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:16401 tokenVisits:53275 literalBytes:6}}, 64 KiB {opRunBytes:32768 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:262161 tokenVisits:851995 literalBytes:6}}
+--- PASS: TestLexOperatorRunsGrowLinearly (0.07s)
 === RUN   TestClassifierSpanKeywordChecksGrowLinearly
-    classify_test.go:511: "pg_settings ": 4 KiB 160.044µs, 64 KiB 1.899445ms, ratio 11
-    classify_test.go:511: "standard_conforming_strings ": 4 KiB 187.192µs, 64 KiB 1.380448ms, ratio 7
-    classify_test.go:511: "client_encoding ": 4 KiB 89.462µs, 64 KiB 1.620468ms, ratio 18
-    classify_test.go:511: "\"pg_settings\" ": 4 KiB 176.167µs, 64 KiB 3.022201ms, ratio 17
-    classify_test.go:511: "pg_settings, ": 4 KiB 174.814µs, 64 KiB 3.068697ms, ratio 17
-    classify_test.go:511: "SELECT pg_settings ": 4 KiB 222.889µs, 64 KiB 3.351685ms, ratio 15
---- PASS: TestClassifierSpanKeywordChecksGrowLinearly (0.07s)
-=== RUN   TestClassifierTimeGrowsLinearly
-    classify_test.go:546: "(": 64 KiB 23.680583ms, 1 MiB 353.349902ms, ratio 14
-    classify_test.go:546: "a ": 64 KiB 22.138632ms, 1 MiB 303.267862ms, ratio 13
-    classify_test.go:546: ";": 64 KiB 6.649444ms, 1 MiB 228.95621ms, ratio 34
-    classify_test.go:546: "'x'": 64 KiB 426.302µs, 1 MiB 7.418669ms, ratio 17
-    classify_test.go:546: "set_config(1,2,": 64 KiB 3.321177ms, 1 MiB 99.015788ms, ratio 29
-    classify_test.go:546: "U&\"a\" ": 64 KiB 3.512276ms, 1 MiB 99.804832ms, ratio 28
-    classify_test.go:546: "SELECT abs(t.a) FROM t; ": 64 KiB 6.106475ms, 1 MiB 127.732207ms, ratio 20
-    classify_test.go:546: "'a'\n": 64 KiB 1.031093ms, 1 MiB 18.458897ms, ratio 17
-    classify_test.go:546: "-- c\n": 64 KiB 1.738404ms, 1 MiB 54.887749ms, ratio 31
---- PASS: TestClassifierTimeGrowsLinearly (4.75s)
+    classify_test.go:554: "pg_settings ": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:2063 tokenVisits:5482 literalBytes:3757}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:32783 tokenVisits:87402 literalBytes:60077}}
+    classify_test.go:554: "standard_conforming_strings ": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:893 tokenVisits:2362 literalBytes:3948}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:14057 tokenVisits:37466 literalBytes:63186}}
+    classify_test.go:554: "client_encoding ": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:1553 tokenVisits:4122 literalBytes:3846}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:24593 tokenVisits:65562 literalBytes:61446}}
+    classify_test.go:554: "\"pg_settings\" ": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:1185 tokenVisits:4114 literalBytes:3802}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:18741 tokenVisits:65560 literalBytes:60859}}
+    classify_test.go:554: "pg_settings, ": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:3167 tokenVisits:8847 literalBytes:3471}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:50427 tokenVisits:141175 literalBytes:55457}}
+    classify_test.go:554: "SELECT pg_settings ": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:2597 tokenVisits:6906 literalBytes:3661}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:41405 tokenVisits:110394 literalBytes:58639}}
+--- PASS: TestClassifierSpanKeywordChecksGrowLinearly (0.01s)
+=== RUN   TestClassifierWorkGrowsLinearly
+    classify_test.go:601: "(": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:16395 tokenVisits:40971 literalBytes:0}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:262155 tokenVisits:655371 literalBytes:0}}
+    classify_test.go:601: "a ": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:12299 tokenVisits:32778 literalBytes:2048}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:196619 tokenVisits:524298 literalBytes:32768}}
+    classify_test.go:601: ";": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:0 tokenVisits:28672 literalBytes:0}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:0 tokenVisits:458752 literalBytes:0}}
+    classify_test.go:601: "'x'": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:15 tokenVisits:24 literalBytes:0}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:15 tokenVisits:24 literalBytes:0}}
+    classify_test.go:601: "set_config(1,2,": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:4928 tokenVisits:15032 literalBytes:10}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:78656 tokenVisits:240312 literalBytes:10}}
+    classify_test.go:601: "U&\"a\" ": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:3419 tokenVisits:10238 literalBytes:3410}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:54619 tokenVisits:163838 literalBytes:54610}}
+    classify_test.go:601: "SELECT abs(t.a) FROM t; ": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:10030 tokenVisits:24990 literalBytes:2720}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:161070 tokenVisits:401310 literalBytes:43680}}
+    classify_test.go:601: "'a'\n": 4 KiB {opRunBytes:0 lookahead:2047 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:15 tokenVisits:24 literalBytes:0}}, 64 KiB {opRunBytes:0 lookahead:32767 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:15 tokenVisits:24 literalBytes:0}}
+    classify_test.go:601: "-- c\n": 4 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:0 tokenVisits:0 literalBytes:0}}, 64 KiB {opRunBytes:0 lookahead:0 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:0 tokenVisits:0 literalBytes:0}}
+    classify_test.go:601: "$a$x$a$ ": 4 KiB {opRunBytes:0 lookahead:1024 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:2059 tokenVisits:6667 literalBytes:0}}, 64 KiB {opRunBytes:0 lookahead:16384 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:32779 tokenVisits:106507 literalBytes:0}}
+    classify_test.go:601: "$a ": 4 KiB {opRunBytes:0 lookahead:2730 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:8201 tokenVisits:21850 literalBytes:1365}}, 64 KiB {opRunBytes:0 lookahead:43690 clsCounts:{lex:{reads:{} steps:{} opRuns:{} ahead:{}} keywordChecks:131081 tokenVisits:349530 literalBytes:21845}}
+--- PASS: TestClassifierWorkGrowsLinearly (0.05s)
 === RUN   TestSafeShapeTable
 --- PASS: TestSafeShapeTable (0.00s)
 === RUN   TestSafeShapeCanaryWithoutTheAlphabetCheckThePropertyFails
-    share_test.go:206: with the alphabet check skipped, 113896 texts with a byte outside the alphabet fit
---- PASS: TestSafeShapeCanaryWithoutTheAlphabetCheckThePropertyFails (0.34s)
+    share_test.go:216: with the alphabet check skipped, 113896 texts with a byte outside the alphabet fit
+--- PASS: TestSafeShapeCanaryWithoutTheAlphabetCheckThePropertyFails (0.23s)
 === RUN   TestSafeShapePropertyFitsAgreesWithTheReferenceChecker
-    share_test.go:419: 15817 of 200000 random texts fit; ShareFits and the reference agreed on all
---- PASS: TestSafeShapePropertyFitsAgreesWithTheReferenceChecker (0.54s)
+    share_test.go:434: 15817 of 200000 random texts fit; ShareFits and the reference agreed on all
+--- PASS: TestSafeShapePropertyFitsAgreesWithTheReferenceChecker (0.36s)
 === RUN   TestSafeShapeRecogniserReferencesNothingFromTheLexerOrClassifier
---- PASS: TestSafeShapeRecogniserReferencesNothingFromTheLexerOrClassifier (0.03s)
+--- PASS: TestSafeShapeRecogniserReferencesNothingFromTheLexerOrClassifier (0.02s)
 === RUN   TestSafeShapeAllocatesNothing
---- PASS: TestSafeShapeAllocatesNothing (0.01s)
+--- PASS: TestSafeShapeAllocatesNothing (0.00s)
 === RUN   TestClassifierPlantedSetForwardableIsCaught
---- PASS: TestClassifierPlantedSetForwardableIsCaught (0.07s)
+--- PASS: TestClassifierPlantedSetForwardableIsCaught (0.04s)
 PASS
-ok  	github.com/nickstrad/mini-gateway/internal/pgwire	8.835s
+ok  	github.com/nickstrad/mini-gateway/internal/pgwire	2.716s
 ```
 
 Key properties proved across the suite:
 
 - **Structural independence and exactness:** `TestSafeShapeRecogniserReferencesNothingFromTheLexerOrClassifier` parses `share.go` with `go/ast` and fails if it imports any package or references any identifier defined outside `share.go`. `TestSafeShapePropertyFitsAgreesWithTheReferenceChecker` checks 200,000 seeded texts (15,817 fit) against an independent reference checker and verifies that every fitting text lexes cleanly as exactly one statement. `TestSafeShapeAllocatesNothing` proves 0 heap allocations.
 - **Canaries with teeth:** Bypassing the alphabet check lets 113,896 non-alphabet texts fit. Planting `SET` as forwardable fails `classifier-reject-list` with both `"a rejected statement reached the database"` and `"session state changed"`. Mutating any of 8 CSV metrics fails `scripts/csv-assert.sh` with `"violating rows"`, and mutating any contract table breaks `scripts/gen-docs.sh --check`.
-- **Fuzzing and bounded work:** Three new fuzz targets (`FuzzLex`, `FuzzClassify`, `FuzzSafeShape`, bringing the repository total to 14) run with no panics and invariant checks. Worst measured allocation at 1 MiB is **52 bytes/input byte** (bound: 80 B/byte + 64 KiB). Across all 23 linear-work shapes, 16× input growth measures 7–34× time (bound: 96×).
+- **Fuzzing and bounded work:** Three new fuzz targets (`FuzzLex`, `FuzzClassify`, `FuzzSafeShape`, bringing the repository total to 14) run with no panics and invariant checks. Worst measured allocation at 1 MiB is **52 bytes/input byte** (bound: 80 B/byte + 64 KiB). Across all 26 linear-work shapes, the growth tests count operations rather than elapsed time—measuring lexer reads, classifier token steps, operator-run bytes, lookahead bytes, keyword checks, token visits, and literal bytes—and require 16× input growth (4 KiB to 64 KiB) to take at most **17×** the work, so verdicts do not depend on machine load.
 - **Live Postgres 17 differential (Tier R):** `TestTierRClassifierDifferential` verified that 407 forwarded corpus statements left session state unchanged. `TestTierRSafeShapeDifferential` ran 81 corpus/table texts, 400 generated texts, and 6 queries on a 200,000-row table `big` (5 of 6 confirmed to use a `Parallel Seq Scan` plan) against Postgres 17.11. Every run produced identical outcomes inside `BEGIN READ ONLY` (never `25006`), unchanged table checksums, clean sessions under the shipped [`test/oracles/dirty-check.sql`](../../test/oracles/dirty-check.sql) oracle, and matching row multisets on re-run (37 ending in the same Postgres error each time).
+
+The full per-step count compiles in only under the build tag `clscount` (via [`internal/pgwire/clscount`](../../internal/pgwire/clscount/on.go)), so the default build drops every counting block at compile time. The gate runs the tagged suite through [`scripts/counted-growth.sh`](../../scripts/counted-growth.sh): `TestCountedWorkGrowsLinearly` measures `ClassifyQuery`'s own lexer passes across all 26 shapes, requiring lexer reads to grow 15×–17× and all seven counters to stay within 17×, while AST guards (`TestLexLoopsCountTheirSteps`, `TestClassifierLexLoopsCountTheirSteps`) require every lexer and `(*clsMsg).lex` loop to count its step. In the default build, string bodies (`'x'`) and line comments (`-- c\n`, `-`) are not counted; the whole-call linear-work claim holds in the tagged run:
+
+```sh
+$ scripts/counted-growth.sh | grep -E '^(NOTE:|=== RUN|--- PASS:|PASS|ok)'
+NOTE: -tags clscount -run Linearly: 5 tests passed
+=== RUN   TestCountedWorkGrowsLinearly
+--- PASS: TestCountedWorkGrowsLinearly (0.10s)
+=== RUN   TestCountedCheckRejectsWorkThatDoesNotGrowLinearly
+--- PASS: TestCountedCheckRejectsWorkThatDoesNotGrowLinearly (0.00s)
+=== RUN   TestLexOperatorRunsGrowLinearly
+--- PASS: TestLexOperatorRunsGrowLinearly (0.07s)
+=== RUN   TestClassifierSpanKeywordChecksGrowLinearly
+--- PASS: TestClassifierSpanKeywordChecksGrowLinearly (0.01s)
+=== RUN   TestClassifierWorkGrowsLinearly
+--- PASS: TestClassifierWorkGrowsLinearly (0.05s)
+PASS
+ok  	github.com/nickstrad/mini-gateway/internal/pgwire	0.240s
+```
 
 ---
 

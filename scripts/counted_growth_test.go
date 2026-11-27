@@ -65,6 +65,9 @@ func countedPassLines(names []string) string {
 	return b.String()
 }
 
+// TestCountedGrowthRunsTheTaggedTests proves that scripts/counted-growth.sh
+// invokes go test with -tags clscount -count=1 -run Linearly -v on
+// ./internal/pgwire/ and exits 0 when all five required tests pass.
 func TestCountedGrowthRunsTheTaggedTests(t *testing.T) {
 	run := runCountedGrowth(t, countedPassLines(countedRequired), "0")
 	if run.code != 0 {
@@ -75,6 +78,8 @@ func TestCountedGrowthRunsTheTaggedTests(t *testing.T) {
 	}
 }
 
+// TestCountedGrowthFailsWhenTheRunFails proves that scripts/counted-growth.sh
+// exits 1 and explains why when the tagged go test run fails.
 func TestCountedGrowthFailsWhenTheRunFails(t *testing.T) {
 	run := runCountedGrowth(t, countedPassLines(countedRequired)+"--- FAIL: TestCountedWorkGrowsLinearly (0.1s)\nFAIL\n", "1")
 	if run.code != 1 || !strings.Contains(run.out, "the tagged run failed") {
@@ -82,6 +87,8 @@ func TestCountedGrowthFailsWhenTheRunFails(t *testing.T) {
 	}
 }
 
+// TestCountedGrowthFailsWhenNoTestRuns proves that scripts/counted-growth.sh
+// fails closed when go test exits 0 with "no tests to run".
 func TestCountedGrowthFailsWhenNoTestRuns(t *testing.T) {
 	run := runCountedGrowth(t, "testing: warning: no tests to run\nPASS\nok  \tgithub.com/nickstrad/mini-gateway/internal/pgwire\t0.01s [no tests to run]\n", "0")
 	if run.code != 1 || !strings.Contains(run.out, "did not pass in the tagged run") {
@@ -89,6 +96,9 @@ func TestCountedGrowthFailsWhenNoTestRuns(t *testing.T) {
 	}
 }
 
+// TestCountedGrowthFailsWhenTheCountedTestIsMissing proves that
+// scripts/counted-growth.sh exits 1 and names any required test that did not
+// report PASS in the tagged run.
 func TestCountedGrowthFailsWhenTheCountedTestIsMissing(t *testing.T) {
 	for _, gone := range countedRequired {
 		var rest []string
@@ -104,6 +114,8 @@ func TestCountedGrowthFailsWhenTheCountedTestIsMissing(t *testing.T) {
 	}
 }
 
+// TestGateAndCIRunCountedGrowthInG3 proves that gate.sh runs
+// scripts/counted-growth.sh as G3 counted and ci-fast.sh includes G3.
 func TestGateAndCIRunCountedGrowthInG3(t *testing.T) {
 	gate, err := os.ReadFile("gate.sh")
 	if err != nil {

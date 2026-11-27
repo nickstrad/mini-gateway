@@ -8,6 +8,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/pgwire/clscount"
 )
 
+// clsReadsGrowthFloor requires lexer reads to grow by at least 15x for 16x
+// input so a constant or dead read counter cannot pass.
 const clsReadsGrowthFloor = clsWorkLargeInput/clsWorkSmallInput - 1
 
 type clsCountedGroup struct {
@@ -20,6 +22,9 @@ type clsCountedWork struct {
 	small, large int
 }
 
+// clsSkipUncounted skips tests that require -tags clscount. This file omits a
+// //go:build tag because detlint forbids build tags in internal/pgwire;
+// scripts/counted-growth.sh enforces that both tests pass rather than skip.
 func clsSkipUncounted(t *testing.T) {
 	t.Helper()
 	if !clscount.On {
@@ -27,6 +32,10 @@ func clsSkipUncounted(t *testing.T) {
 	}
 }
 
+// TestCountedWorkGrowsLinearly proves that under -tags clscount, every shape
+// from all three growth tests drives ClassifyQuery's own lexer passes with
+// non-zero lexer reads (growing 15x to 17x) and token steps, and keeps all
+// seven work counters within 17x for 16x input.
 func TestCountedWorkGrowsLinearly(t *testing.T) {
 	clsSkipUncounted(t)
 	groups := []clsCountedGroup{
@@ -45,6 +54,9 @@ func TestCountedWorkGrowsLinearly(t *testing.T) {
 	}
 }
 
+// TestCountedCheckRejectsWorkThatDoesNotGrowLinearly proves that
+// clsCountedProblems rejects dead counters, non-growing lexer reads, and
+// quadratic growth in reads or token visits.
 func TestCountedCheckRejectsWorkThatDoesNotGrowLinearly(t *testing.T) {
 	clsSkipUncounted(t)
 	healthy := clsCountedPairs(clsCountedSizes("SELECT ", "'x'"))

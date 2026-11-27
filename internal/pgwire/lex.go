@@ -68,10 +68,15 @@ func (t Token) Text(src []byte) []byte { return src[t.Start:t.End] }
 // classifier. It assumes standard_conforming_strings = on and never panics on
 // arbitrary bytes.
 type Lexer struct {
-	reads      clscount.Tally
-	src        []byte
-	pos        int
-	run        lexOpRun
+	// reads stays first because clscount.Tally is zero-sized in default
+	// builds, keeping every other field offset unchanged.
+	reads clscount.Tally
+	src   []byte
+	pos   int
+	run   lexOpRun
+	// Per-call work counters read by linear-growth tests in place of wall-clock
+	// timing: bytes scanned in operator runs, and look-ahead bytes checked for
+	// string continuations or dollar-quote tags.
 	opRunBytes int
 	lookahead  int
 }
@@ -167,6 +172,9 @@ func lexIsPunct(c byte) bool {
 	return false
 }
 
+// scan reads one token starting at l.pos. TestLexLoopsCountTheirSteps enforces
+// that scan and every loop in lexer scanning code open with a clscount.On bump
+// so no uncounted loop can hide from -tags clscount growth checks.
 func (l *Lexer) scan() TokenKind {
 	if clscount.On {
 		l.reads.Bump()
@@ -296,7 +304,9 @@ func (l *Lexer) quoted(q byte, backslash bool, kind TokenKind) TokenKind {
 // lexContinuation matches PostgreSQL's rule joining adjacent single-quoted
 // string literals separated by whitespace and "--" comments containing at
 // least one '\n' or '\r'. Block comments do not join strings. Escape mode
-// (e.g. E'...') is preserved across the continuation.
+// (e.g. E'...') is preserved across the continuation. On failure it returns
+// the stopping index so quoted can account for look-ahead bytes; reads records
+// loop steps under -tags clscount.
 func lexContinuation(src []byte, i int, reads clscount.Ref) (int, bool) {
 	newline := false
 	for i < len(src) {
@@ -411,6 +421,8 @@ func (l *Lexer) dollar() TokenKind {
 	return TokenBad
 }
 
+// lexHasPrefix checks whether b begins with p, taking reads so dollar-quote
+// body scans count prefix-comparison steps under -tags clscount.
 func lexHasPrefix(b, p []byte, reads clscount.Ref) bool {
 	if len(b) < len(p) {
 		return false

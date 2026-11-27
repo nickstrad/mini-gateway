@@ -115,6 +115,8 @@ type clsMsg struct {
 	counts clsCounts
 }
 
+// clsCounts holds per-call work counters returned by clsRunCounted for
+// deterministic linear-growth tests.
 type clsCounts struct {
 	lex           clsLexCounts
 	keywordChecks int
@@ -122,6 +124,8 @@ type clsCounts struct {
 	literalBytes  int
 }
 
+// clsLexCounts groups the four tagged lexer tallies under one field so
+// clsCounts stays at four top-level fields and remains SSA-able in registers.
 type clsLexCounts struct {
 	reads  clscount.Tally
 	steps  clscount.Tally
@@ -134,6 +138,9 @@ func clsRun(text []byte, inTx, plant bool) work.Unit {
 	return u
 }
 
+// clsRunCounted runs classification and returns per-call work counts alongside
+// the resulting Unit. clsRun stays a thin inlined wrapper so exported
+// signatures and shared state are unchanged.
 func clsRunCounted(text []byte, inTx, plant bool) (work.Unit, clsCounts) {
 	m := clsMsg{src: text, plant: plant}
 	m.lex()
@@ -167,6 +174,9 @@ const clsNameMax = 63
 
 // lex counts significant tokens before allocating m.toks so a large input
 // avoids slice-doubling overhead and stays under ClassifMemoryFactor.
+// TestClassifierLexLoopsCountTheirSteps requires every loop here to start with
+// a clscount.On step bump, and countPass folds both lexer passes into m.counts
+// under -tags clscount.
 func (m *clsMsg) lex() {
 	n := 0
 	l := LexerFor(m.src)
@@ -652,6 +662,9 @@ func (m *clsMsg) setConfigLocal(open int) bool {
 	if p.match < 0 || p.comma2 < 0 || int(p.comma1) != open+2 {
 		return false
 	}
+	// Count the setting literal through isString and literalBytes before
+	// clsContinued runs, because clsContinued scans the bytes even when it
+	// rejects a continued string.
 	if !m.isString(open + 1) {
 		return false
 	}

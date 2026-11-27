@@ -87,19 +87,22 @@ and the wide function allow-list behind them; `AllowList`/`AllowLookup`;
   never search a whole statement, or rescan the rest of a token run, once per token. The
   lexer scans an operator run once (`lexOpRun`) and cuts every operator from that scan;
   the classifier reads a statement's `update`/`set`/`reset` words once (`spanWords`).
-  `TestLexOperatorRunsGrowLinearly` and `TestClassifierSpanKeywordChecksGrowLinearly` hold
-  this.
-- **Every lexer loop counts its steps (CR-3, 2026-11-27).** The first statement of every
-  loop in a `*Lexer` method, and in every lex.go function that takes a `clscount.Ref`, must
-  be `if clscount.On { l.reads.Bump() }` (`reads.Bump()` with a `clscount.Ref`). `(*Lexer).scan`
-  must also start with it. The same holds for every loop in `(*clsMsg).lex`, with
-  `m.counts.lex.steps.Bump()`. Lexer code may call only lex.go functions that either take a
-  `clscount.Ref` or have no loop. `TestLexLoopsCountTheirSteps` and
-  `TestClassifierLexLoopsCountTheirSteps` enforce these rules by parsing the source. Counting
-  is compiled in only under `-tags clscount`. `TestCountedWorkGrowsLinearly` runs there,
-  through `scripts/counted-growth.sh` in the gate's G3, and requires each shape's lexer
-  reads to grow 15 to 17 times when its input grows 16 times. In the default build the
-  compiled lexer is byte-identical to the build without the counting blocks.
+  `TestLexOperatorRunsGrowLinearly`, `TestClassifierSpanKeywordChecksGrowLinearly`, and
+  `TestClassifierWorkGrowsLinearly` hold this by counting operations rather than wall-clock
+  time (16× input, at most 17× work).
+- **Every lexer loop counts its steps (2026-11-27).** Every loop in a `*Lexer` method, and
+  in every `lex.go` function taking a `clscount.Ref`, must start with
+  `if clscount.On { l.reads.Bump() }` (or `reads.Bump()` with a `clscount.Ref`);
+  `(*Lexer).scan` must start with the same guard, and every loop in `(*clsMsg).lex` must
+  start with `m.counts.lex.steps.Bump()`. Lexer code may call only `lex.go` functions that
+  take a `clscount.Ref` or contain no loop. `TestLexLoopsCountTheirSteps` and
+  `TestClassifierLexLoopsCountTheirSteps` enforce these rules by parsing the source.
+  Counting compiles in only under `-tags clscount`; in the default build the compiler drops
+  every guard block so the compiled lexer is byte-identical to a build without them, and
+  string bodies (`'x'`) and line comments (`-- c\n`, `-`) are not counted. The whole-call
+  claim holds under `-tags clscount`, where `scripts/counted-growth.sh` (gate G3 `counted`)
+  runs `TestCountedWorkGrowsLinearly` across all 26 shapes and requires lexer reads to grow
+  15× to 17× and all seven counters to stay within 17× for 16× input.
 - `ReplyBuilder` counts `ByRow`/`Total` only for replies it built; a refused build
   (pass-through row, bad status, bad row) counts in `Failed` alone.
 - Postgres joins string literals continued across a newline (whitespace and `--` comments

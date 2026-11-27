@@ -508,6 +508,9 @@ func FuzzClassify(f *testing.F) {
 	})
 }
 
+// Linear-growth checks compare a 4 KiB input against a 64 KiB input (16x) and
+// allow up to 17x work so fixed prefixes and repeat-count rounding fit while
+// quadratic regressions (~256x) fail cleanly.
 const (
 	clsWorkSmallInput  = 1 << 12
 	clsWorkLargeInput  = 1 << 16
@@ -537,10 +540,16 @@ var (
 	clsWholeCallShapes   = []string{"(", "a ", ";", "'x'", "set_config(1,2,", `U&"a" `, "SELECT abs(t.a) FROM t; ", "'a'\n", "-- c\n", "$a$x$a$ ", "$a "}
 )
 
+// TestLexOperatorRunsGrowLinearly proves that operator-run lexing does linear
+// work (16x input <= 17x work) across nine shapes (eight operator runs plus "-"
+// as a line comment) and moves opRunBytes whenever operator tokens appear.
 func TestLexOperatorRunsGrowLinearly(t *testing.T) {
 	clsCheckLinearShapes(t, "SELECT ", clsKindIs(TokenOperator), func(w clsWork) int { return w.opRunBytes }, clsOperatorRunShapes)
 }
 
+// TestClassifierSpanKeywordChecksGrowLinearly proves that repeated setting
+// names classify in linear work without rescanning earlier spans and move
+// keywordChecks across all six shapes.
 func TestClassifierSpanKeywordChecksGrowLinearly(t *testing.T) {
 	clsCheckLinearShapes(t, "SELECT ", clsKindIs(TokenWord), func(w clsWork) int { return w.keywordChecks }, clsSpanKeywordShapes)
 }
@@ -584,10 +593,17 @@ func clsCheckGrowth(t *testing.T, unit, what string, small, large int) {
 	}
 }
 
+// TestClassifierWorkGrowsLinearly proves that the default build's five
+// always-on work counters grow linearly across eleven whole-call shapes without
+// reading the wall clock. String bodies and line comments are covered under
+// -tags clscount by TestCountedWorkGrowsLinearly.
 func TestClassifierWorkGrowsLinearly(t *testing.T) {
 	clsCheckLinearShapes(t, "", TokenKind.Significant, func(w clsWork) int { return w.tokenVisits }, clsWholeCallShapes)
 }
 
+// TestClassifierCountsTheSetConfigLiteralItScans proves that setConfigLocal
+// counts literalBytes on a continued string literal before clsContinued rejects
+// it.
 func TestClassifierCountsTheSetConfigLiteralItScans(t *testing.T) {
 	for _, local := range []string{"false", "0"} {
 		plain := []byte("SELECT set_config('abcdef', 'x', " + local + ")")
