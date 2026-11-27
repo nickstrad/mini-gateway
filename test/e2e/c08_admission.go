@@ -15,6 +15,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/workload"
 )
 
+// Admission scenario defaults: 1 backend connection serving 5 ms reads (~5.5 ms
+// per lease with DISCARD ALL reset, ~181 leases/s) under 100 open-loop clients.
 const (
 	AdmConns        = 1
 	AdmService      = 5 * time.Millisecond
@@ -30,12 +32,14 @@ const (
 	AdmRecoverAfter = time.Duration(admission.DefaultInterval) + time.Duration(admission.DefaultLIFOHold) + time.Duration(admission.DefaultInterval)
 )
 
+// AdmArm names one queue-rule and LIFO configuration compared in admission scenarios.
 type AdmArm struct {
 	Name string
 	Rule admission.RuleKind
 	LIFO admission.LIFOMode
 }
 
+// Product rules and simulator-only comparison arms for admission scenarios.
 var (
 	ArmTimeout    = AdmArm{Name: "timeout", Rule: admission.RuleTimeout}
 	ArmControlLaw = AdmArm{Name: "control-law", Rule: admission.RuleControlLaw}
@@ -43,8 +47,10 @@ var (
 	ArmFolly      = AdmArm{Name: "folly", Rule: admission.RuleFolly}
 )
 
+// AdmArms returns all four arms in head-to-head table order.
 func AdmArms() []AdmArm { return []AdmArm{ArmTimeout, ArmControlLaw, ArmFIFO, ArmFolly} }
 
+// AdmSpec configures one open-loop tier S admission overload or recovery scenario.
 type AdmSpec struct {
 	Scenario  string
 	Arm       AdmArm
@@ -57,6 +63,7 @@ type AdmSpec struct {
 	Plant     admission.Plant
 }
 
+// AdmSample captures admission, engine, and workload snapshots at a phase boundary.
 type AdmSample struct {
 	At      time.Duration
 	Adm     admission.Snapshot
@@ -65,6 +72,7 @@ type AdmSample struct {
 	Backlog int64
 }
 
+// AdmRun holds the world, phase samples, final state, and optional CSV flush of RunAdmission.
 type AdmRun struct {
 	Spec    AdmSpec
 	Seed    int64
@@ -102,6 +110,7 @@ func (s AdmSpec) workload(addr string) workload.Config {
 	return cfg
 }
 
+// Fingerprint returns a deterministic identifier covering every parameter of s.
 func (s AdmSpec) Fingerprint() string {
 	return fmt.Sprintf("%s-%s-l%d-p%d-c%d-t%d-q%d-r%v-x%d", s.Scenario, s.Arm.Name, s.LoadPct, s.Phases, s.Clients, s.TenantCap, s.TotalCap, s.Recovery, s.Plant)
 }
@@ -120,7 +129,12 @@ func (r *AdmRun) sample() AdmSample {
 	return s
 }
 
+// RunAdmission runs an open-loop workload through the real proxy.Engine on the
+// simulator, optionally flushing CSV metrics into dir, and validates engine and
+// admission snapshots before returning.
 func RunAdmission(spec AdmSpec, seed int64, dir, replay string) (*AdmRun, error) {
+	// Assign service time to KindRead only so the fake does not also charge 5 ms
+	// to every DISCARD ALL reset and halve effective capacity.
 	w, err := proxysim.BuildWorld(proxysim.WorldConfig{Seed: seed, Scenario: spec.Scenario, Replay: replay, Tenants: 1,
 		Fake:   fakepg.Config{Rows: admRows(), Service: fakepg.Service{PerKind: []fakepg.KindTime{{Kind: fakepg.KindRead, Time: AdmService}}}, MaxConnections: 64},
 		Engine: spec.engine()})
@@ -192,13 +206,17 @@ func RunAdmission(spec AdmSpec, seed int64, dir, replay string) (*AdmRun, error)
 	return r, r.Final.Adm.Check()
 }
 
+// HeadToHeadSpec builds one arm's single-phase overload scenario at loadPct% of capacity.
 func HeadToHeadSpec(arm AdmArm, loadPct int64) AdmSpec {
 	return AdmSpec{Scenario: fmt.Sprintf("admission-h2h-l%d", loadPct), Arm: arm, LoadPct: loadPct, Phases: 1, Clients: AdmClients,
 		TenantCap: AdmTenantCap, TotalCap: AdmTotalCap}
 }
 
+// HeadToHeadLoads returns the offered-load percentages compared in the head-to-head table (1.2x, 2x, 10x).
 func HeadToHeadLoads() []int64 { return []int64{120, 200, 1000} }
 
+// AntiBloatSpec builds a four-phase (T through 4T) 10x overload scenario, with
+// recovery phases for the two product rules.
 func AntiBloatSpec(arm AdmArm) AdmSpec {
 	s := AdmSpec{Scenario: "admission-anti-bloat", Arm: arm, LoadPct: 1000, Phases: 4, Clients: AdmClients,
 		TenantCap: AdmTotalCap, TotalCap: AdmTotalCap, Recovery: arm.Rule != admission.RuleFIFO}
@@ -208,6 +226,7 @@ func AntiBloatSpec(arm AdmArm) AdmSpec {
 	return s
 }
 
+// AntiBloatArms returns the arms run in the anti-bufferbloat scenario.
 func AntiBloatArms() []AdmArm { return []AdmArm{ArmTimeout, ArmControlLaw, ArmFIFO} }
 
 func admFingerprint(a admission.Config) string {
@@ -217,6 +236,7 @@ func admFingerprint(a admission.Config) string {
 	return fmt.Sprintf("-%s-x%d", a.Rule, a.Plant)
 }
 
+// Timing parameters for the first-burst-after-idle scenario.
 const (
 	BurstClients = 6
 	BurstService = 9 * time.Millisecond
@@ -224,6 +244,8 @@ const (
 	BurstHold    = 60 * time.Millisecond
 )
 
+// FirstBurstSpec builds a scenario where a tenant sits idle, then sends a burst
+// whose waiters exceed DefaultTarget while staying under DefaultInterval.
 func FirstBurstSpec(rule admission.RuleKind, plant admission.Plant) Spec {
 	name := "admission-first-burst-" + rule.String()
 	if plant != 0 {
@@ -240,6 +262,8 @@ func FirstBurstSpec(rule admission.RuleKind, plant admission.Plant) Spec {
 	return sp
 }
 
+// CheckFirstBurst verifies that the first burst after idle experiences waits
+// past DefaultTarget without shedding any request.
 func CheckFirstBurst(r *SimRun) error {
 	shed := 0
 	for c := range r.Clients {
@@ -260,6 +284,8 @@ func CheckFirstBurst(r *SimRun) error {
 	return nil
 }
 
+// RelaxedQueue widens interval and target for chunk 6's tier R tests that
+// deliberately queue longer than the 100 ms default interval.
 var RelaxedQueue = map[string]any{"interval": "5s", "target": "1s"}
 
 func admissionOverloadSpecs() []AdmSpec {
@@ -275,6 +301,7 @@ func admissionOverloadSpecs() []AdmSpec {
 	return out
 }
 
+// AdmissionOverloadScenarios returns the scenario names skipped by simrun under -short.
 func AdmissionOverloadScenarios() []string {
 	var out []string
 	for _, load := range HeadToHeadLoads() {
@@ -283,6 +310,8 @@ func AdmissionOverloadScenarios() []string {
 	return append(out, AntiBloatSpec(ArmTimeout).Scenario)
 }
 
+// AdmissionBaseline runs the admission scenarios (optionally omitting the heavy
+// overload runs under -short) and flushes their CSV snapshots into dir.
 func AdmissionBaseline(dir string, overload bool) ([]obs.InstanceSnapshot, error) {
 	var out []obs.InstanceSnapshot
 	add := func(r *AdmRun, err error) error {

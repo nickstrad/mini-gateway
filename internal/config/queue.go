@@ -8,7 +8,9 @@ import (
 )
 
 const (
+	// DefaultQueueRule is the admission shedding rule selected when queue.rule is omitted.
 	DefaultQueueRule = "timeout"
+	// DefaultQueueLIFO is the adaptive LIFO setting selected when queue.lifo is omitted.
 	DefaultQueueLIFO = "adaptive"
 )
 

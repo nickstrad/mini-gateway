@@ -22,6 +22,7 @@ func h2hTable(t *testing.T, root string) []byte {
 	return out.Bytes()
 }
 
+// TestHeadToHeadScriptAcceptsAQuoteInTheRunDirectory proves scripts/admission-head-to-head.sh escapes single quotes in directory paths and prints the same table.
 func TestHeadToHeadScriptAcceptsAQuoteInTheRunDirectory(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs the simulator and DuckDB")

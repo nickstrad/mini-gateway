@@ -8,6 +8,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 )
 
+// TenantSnapshot is an immutable point-in-time view of one tenant's queue
+// state and cumulative counters (or the folded "other" bucket past MaxTenantStats).
 type TenantSnapshot struct {
 	Tenant    string
 	Live      bool
@@ -27,6 +29,8 @@ type TenantSnapshot struct {
 	QueueWait obs.HistogramSnapshot
 }
 
+// Snapshot is an immutable point-in-time view of all admission totals,
+// served-wait histograms, and sorted per-tenant rows for observability export.
 type Snapshot struct {
 	Rule           RuleKind
 	LIFOMode       LIFOMode
@@ -56,6 +60,7 @@ type Snapshot struct {
 	PerTenant      []TenantSnapshot
 }
 
+// ShedTotal returns the sum of sheds across all reasons.
 func (s Snapshot) ShedTotal() int64 {
 	n := int64(0)
 	for _, v := range s.Shed {
@@ -64,6 +69,8 @@ func (s Snapshot) ShedTotal() int64 {
 	return n
 }
 
+// Check verifies request conservation, tenant-queue conservation, capacity bounds,
+// step-budget headroom, and agreement between per-tenant sums and totals.
 func (s Snapshot) Check() error {
 	parts := []obs.Term{obs.T("served", s.Served), obs.T("removed", s.Removed), obs.T("queued", s.Queued.Value)}
 	for r, v := range s.Shed {
@@ -106,6 +113,9 @@ func (s Snapshot) Check() error {
 	return nil
 }
 
+// depthLimit bounds the folded "other" row by total capacity because it sums
+// across multiple live queues; Queues.Check still enforces TenantCapacity on
+// every live ring individually.
 func (s Snapshot) depthLimit(tenant string) int64 {
 	if tenant == OtherTenant {
 		return s.Capacity
@@ -113,6 +123,8 @@ func (s Snapshot) depthLimit(tenant string) int64 {
 	return s.TenantCapacity
 }
 
+// Snapshot returns a full copy of the admission queues' counters, gauges,
+// histograms, and sorted per-tenant rows.
 func (q *Queues) Snapshot() Snapshot {
 	s := Snapshot{Rule: q.cfg.Rule, LIFOMode: q.cfg.LIFO, Capacity: int64(q.cfg.Capacity), TenantCapacity: int64(q.cfg.TenantCapacity),
 		MaxTenants: int64(q.cfg.MaxTenants), Queued: obs.Gauge{Value: int64(q.total), Peak: q.c.queuedPeak},
@@ -163,6 +175,8 @@ func (q *Queues) Snapshot() Snapshot {
 
 func (q *Queues) shedding(t *tenantQueue) bool { return t.hasShed && q.last-t.shedAt < q.cfg.Interval }
 
+// light builds a minimal Snapshot without copying histograms or sorting rows so
+// Engine.Invariants can run Queues.Check after every event cheaply.
 func (q *Queues) light() Snapshot {
 	s := Snapshot{Capacity: int64(q.cfg.Capacity), TenantCapacity: int64(q.cfg.TenantCapacity), MaxTenants: int64(q.cfg.MaxTenants),
 		Queued: obs.Gauge{Value: int64(q.total), Peak: q.c.queuedPeak}, Tenants: obs.Gauge{Value: int64(len(q.list)), Peak: q.c.tenantsPeak},

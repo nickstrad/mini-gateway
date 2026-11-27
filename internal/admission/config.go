@@ -1,3 +1,7 @@
+// Package admission implements per-tenant bounded admission queues with
+// selectable shedding rules, adaptive LIFO service under overload, and a
+// minimum-delay load gauge. It is pure sans-I/O integer code: callers pass
+// explicit virtual timestamps and drain decided sheds after each operation.
 package admission
 
 import (
@@ -5,20 +9,28 @@ import (
 	"fmt"
 )
 
+// Time is a virtual timestamp or duration in nanoseconds.
 type Time = int64
 
+// RuleKind identifies which shedding rule a Queues instance runs.
 type RuleKind uint8
 
 const (
+	// RuleTimeout is the "Fail at Scale" timeout rule: allowed wait is
+	// Interval unless a standing queue exists, in which case it drops to Target.
 	RuleTimeout RuleKind = iota + 1
+	// RuleControlLaw is the RFC 8289 CoDel control law driven at the queue head.
 	RuleControlLaw
+	// RuleFIFO is a simulator-only comparison arm that never sheds by a rule.
 	RuleFIFO
+	// RuleFolly is a simulator-only comparison arm reproducing folly's Codel detector.
 	RuleFolly
 	numRuleKinds
 )
 
 var ruleNames = [...]string{"?", "timeout", "control-law", "fifo", "folly"}
 
+// String returns the canonical lowercase name of k, or "?" if unknown.
 func (k RuleKind) String() string {
 	if k < numRuleKinds {
 		return ruleNames[k]
@@ -26,10 +38,15 @@ func (k RuleKind) String() string {
 	return "?"
 }
 
+// ComparisonArm reports whether k is a simulator-only baseline that cannot be
+// selected from the proxy binary's configuration.
 func (k RuleKind) ComparisonArm() bool { return k == RuleFIFO || k == RuleFolly }
 
+// RuleKinds returns all four defined rules (both product rules and both comparison arms).
 func RuleKinds() []RuleKind { return []RuleKind{RuleTimeout, RuleControlLaw, RuleFIFO, RuleFolly} }
 
+// ParseProductRule parses a binary-config rule name, accepting only "timeout"
+// and "control-law" so simulator comparison arms stay unreachable from config.
 func ParseProductRule(s string) (RuleKind, bool) {
 	switch s {
 	case "timeout":
@@ -40,13 +57,19 @@ func ParseProductRule(s string) (RuleKind, bool) {
 	return 0, false
 }
 
+// LIFOMode controls whether overloaded tenant queues switch from oldest-first
+// to newest-first service.
 type LIFOMode uint8
 
 const (
+	// LIFOAdaptive serves newest-first while the rule reports overload and
+	// returns to oldest-first after LIFOHold without overload.
 	LIFOAdaptive LIFOMode = iota + 1
+	// LIFOOff keeps strict oldest-first (FIFO) service order at all times.
 	LIFOOff
 )
 
+// String returns the canonical lowercase name of m, or "?" if unknown.
 func (m LIFOMode) String() string {
 	switch m {
 	case LIFOAdaptive:
@@ -57,6 +80,7 @@ func (m LIFOMode) String() string {
 	return "?"
 }
 
+// ParseLIFO parses a queue.lifo config value ("adaptive" or "off").
 func ParseLIFO(s string) (LIFOMode, bool) {
 	switch s {
 	case "adaptive":
@@ -67,15 +91,22 @@ func ParseLIFO(s string) (LIFOMode, bool) {
 	return 0, false
 }
 
+// Plant is a bitmask of test-only fault switches used by canaries and fuzzing.
+// Production configuration always leaves Plant zero.
 type Plant uint8
 
 const (
+	// PlantNoHeadSweep disables head sweeping so stale entries remain queued under LIFO.
 	PlantNoHeadSweep Plant = 1 << iota
+	// PlantFirstBurst reproduces the classic bug of updating LastEmpty only on dequeue.
 	PlantFirstBurst
+	// PlantNoLIFOHysteresis clears LIFO immediately instead of waiting for LIFOHold.
 	PlantNoLIFOHysteresis
+	// PlantRemoveSwapsTail breaks arrival order on mid-queue removal for fuzz testing.
 	PlantRemoveSwapsTail
 )
 
+// Time units, configuration defaults, and fixed structural bounds.
 const (
 	Millisecond Time = 1_000_000
 	Second      Time = 1_000 * Millisecond
@@ -99,6 +130,8 @@ const (
 	maxPendingShedPad = 2
 )
 
+// Config holds the queue capacities, shedding rule parameters, LIFO hold, and
+// test-only Plant switches for a Queues instance. Zero values mean defaults.
 type Config struct {
 	Rule           RuleKind
 	Target         Time
@@ -112,8 +145,11 @@ type Config struct {
 	Plant          Plant
 }
 
+// ErrConfig is wrapped by every admission configuration validation error.
 var ErrConfig = errors.New("admission: bad configuration")
 
+// WithDefaults returns a copy of c with any zero field replaced by its default.
+// Negative values are preserved so Validate fails closed naming the key.
 func (c Config) WithDefaults() Config {
 	if c.Rule == 0 {
 		c.Rule = RuleTimeout
@@ -142,6 +178,8 @@ func (c Config) WithDefaults() Config {
 	return c
 }
 
+// Validate checks every field and cross-field bound of c, returning a joined
+// error naming each offending config key.
 func (c Config) Validate() error {
 	var errs []error
 	bad := func(key, format string, args ...any) {
@@ -176,8 +214,13 @@ func (c Config) Validate() error {
 	return errors.Join(errs...)
 }
 
+// Quiet returns how long an empty tenant queue is kept before removal (16 intervals,
+// matching the control law's re-entry memory window).
 func (c Config) Quiet() Time { return QuietIntervals * c.Interval }
 
+// pendingRefuseAt caps undrained sheds before Push refuses arrivals (ReasonUndrained);
+// pendingCap sizes the single preallocated buffer to absorb one full-capacity sweep
+// on top of that threshold without ever reallocating.
 func pendingRefuseAt(cfg Config) int { return cfg.Capacity + maxPendingShedPad - 1 }
 
 func pendingCap(cfg Config) int { return pendingRefuseAt(cfg) + cfg.Capacity + 1 }

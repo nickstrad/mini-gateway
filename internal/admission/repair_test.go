@@ -20,6 +20,7 @@ func churnPastTheStatsCap(t *testing.T, q *Queues, first string) Time {
 	return now
 }
 
+// TestFoldedOtherRowIsBoundedByTheTotalNotOneTenant proves multiple live queues folded into "other" past MaxTenantStats pass Check against total capacity.
 func TestFoldedOtherRowIsBoundedByTheTotalNotOneTenant(t *testing.T) {
 	q := mustNew(t, Config{Rule: RuleTimeout, Capacity: 64, TenantCapacity: 1, MaxTenants: 8, Detail: true})
 	now := churnPastTheStatsCap(t, q, "first")
@@ -48,6 +49,7 @@ func TestFoldedOtherRowIsBoundedByTheTotalNotOneTenant(t *testing.T) {
 	}
 }
 
+// TestARealTenantNamedOtherSharesTheFoldRow proves a real tenant named "other" merges with folded tenants into one PerTenant row.
 func TestARealTenantNamedOtherSharesTheFoldRow(t *testing.T) {
 	q := mustNew(t, Config{Rule: RuleTimeout, Capacity: 64, TenantCapacity: 2, MaxTenants: 8, Detail: true})
 	now := churnPastTheStatsCap(t, q, OtherTenant)
@@ -71,6 +73,7 @@ func TestARealTenantNamedOtherSharesTheFoldRow(t *testing.T) {
 	}
 }
 
+// TestPendingShedStorageStaysFixedUnderAPartialDrain proves partial TakeShed draining compacts in place without growing the backing slice.
 func TestPendingShedStorageStaysFixedUnderAPartialDrain(t *testing.T) {
 	cfg := Config{Rule: RuleFIFO, Capacity: 3, TenantCapacity: 3}
 	q := mustNew(t, cfg)
@@ -96,6 +99,7 @@ func TestPendingShedStorageStaysFixedUnderAPartialDrain(t *testing.T) {
 	}
 }
 
+// TestPendingShedStorageHoldsTheWorstUndrainedBacklog proves the preallocated pending buffer never reallocates even when a full-capacity sweep hits the refusal threshold.
 func TestPendingShedStorageHoldsTheWorstUndrainedBacklog(t *testing.T) {
 	cfg := Config{Rule: RuleTimeout, Capacity: 4, TenantCapacity: 4, Target: Millisecond, Interval: 10 * Millisecond}
 	q := mustNew(t, cfg)
@@ -113,6 +117,7 @@ func TestPendingShedStorageHoldsTheWorstUndrainedBacklog(t *testing.T) {
 	}
 }
 
+// TestUnpopRestoresTheRuleStateAndTheDeadline proves Unpop restores the original deadline and rule state cleared when Pop emptied the tenant ring.
 func TestUnpopRestoresTheRuleStateAndTheDeadline(t *testing.T) {
 	for _, rule := range []RuleKind{RuleTimeout, RuleControlLaw} {
 		cfg := Config{Rule: rule, Target: 1000, Interval: 10000, LIFOHold: 4000, Capacity: 17, TenantCapacity: 7, MaxTenants: 3}
@@ -139,6 +144,7 @@ func TestUnpopRestoresTheRuleStateAndTheDeadline(t *testing.T) {
 	}
 }
 
+// TestAOneSlotQueueUnderFloodReachesItsOverloadState proves a 1-slot ring overflowing continuously enters standing state instead of resetting LastEmpty.
 func TestAOneSlotQueueUnderFloodReachesItsOverloadState(t *testing.T) {
 	for _, rule := range []RuleKind{RuleTimeout} {
 		q := mustNew(t, Config{Rule: rule, LIFO: LIFOOff, Capacity: 1, TenantCapacity: 1})
@@ -158,6 +164,7 @@ func TestAOneSlotQueueUnderFloodReachesItsOverloadState(t *testing.T) {
 	}
 }
 
+// TestOverflowOfTheArrivingTenantByTheTotalCapKeepsItsRuleState proves shedding the arriving tenant's own head at total capacity preserves its rule state.
 func TestOverflowOfTheArrivingTenantByTheTotalCapKeepsItsRuleState(t *testing.T) {
 	q := mustNew(t, Config{Rule: RuleTimeout, LIFO: LIFOOff, Capacity: 2, TenantCapacity: 2})
 	q.Push(0, "a", 1)
@@ -169,6 +176,7 @@ func TestOverflowOfTheArrivingTenantByTheTotalCapKeepsItsRuleState(t *testing.T)
 	}
 }
 
+// TestTheLoadGaugeFirstWindowIsOneInterval proves the load gauge keeps its first minimum-delay window open for a full Interval.
 func TestTheLoadGaugeFirstWindowIsOneInterval(t *testing.T) {
 	q := mustNew(t, Config{Rule: RuleTimeout, LIFO: LIFOOff})
 	q.Push(0, "a", 1)
@@ -180,6 +188,7 @@ func TestTheLoadGaugeFirstWindowIsOneInterval(t *testing.T) {
 	}
 }
 
+// TestTimeoutDeadlineAtEqualityWhileStanding proves TimeoutRule sheds an entry aged exactly Target at the instant a standing queue begins.
 func TestTimeoutDeadlineAtEqualityWhileStanding(t *testing.T) {
 	q := mustNew(t, Config{Rule: RuleTimeout, LIFO: LIFOOff})
 	q.Push(0, "a", 1)
@@ -195,6 +204,7 @@ func TestTimeoutDeadlineAtEqualityWhileStanding(t *testing.T) {
 	}
 }
 
+// TestControlLawAtEqualityOfTargetAndFirstAbove proves ControlLaw starts FirstAbove when sojourn equals Target and drops the head at exact FirstAbove.
 func TestControlLawAtEqualityOfTargetAndFirstAbove(t *testing.T) {
 	q := mustNew(t, Config{Rule: RuleControlLaw, LIFO: LIFOOff})
 	q.Push(0, "a", 1)

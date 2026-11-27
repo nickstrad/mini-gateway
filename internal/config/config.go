@@ -134,7 +134,7 @@ type Pool struct {
 	Connections int `json:"connections"`
 }
 
-// Queue configures the bounded admission queue capacity.
+// Queue configures the bounded per-tenant admission queues, shedding rule, and adaptive LIFO.
 type Queue struct {
 	Capacity       int      `json:"capacity"`
 	Rule           string   `json:"rule"`

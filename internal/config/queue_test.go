@@ -9,6 +9,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/config"
 )
 
+// TestQueueKeysFailClosedNamingTheKey proves invalid queue.* settings fail validation naming the offending key.
 func TestQueueKeysFailClosedNamingTheKey(t *testing.T) {
 	for _, c := range []struct {
 		key string
@@ -36,6 +37,7 @@ func TestQueueKeysFailClosedNamingTheKey(t *testing.T) {
 	}
 }
 
+// TestQueueKeysZeroMeansTheDefault proves omitted or zero queue.* settings resolve to documented defaults.
 func TestQueueKeysZeroMeansTheDefault(t *testing.T) {
 	for key, zero := range map[string]any{"queue.tenant_capacity": 0, "queue.max_tenants": 0, "queue.target": nil, "queue.interval": nil, "queue.lifo_hold": nil, "queue.rule": nil, "queue.lifo": nil} {
 		f, err := parseWith(t, key, zero)
@@ -51,6 +53,7 @@ func TestQueueKeysZeroMeansTheDefault(t *testing.T) {
 	}
 }
 
+// TestQueueConfigReachesTheEngine proves parsed queue.* settings propagate into proxy.Config.AdmissionConfig.
 func TestQueueConfigReachesTheEngine(t *testing.T) {
 	f, err := parseWith(t, "queue.rule", "control-law")
 	if err != nil {
@@ -65,6 +68,7 @@ func TestQueueConfigReachesTheEngine(t *testing.T) {
 	}
 }
 
+// TestBinaryConfigCannotSelectAComparisonArm proves simulator-only arms (fifo, folly) are refused by binary config.
 func TestBinaryConfigCannotSelectAComparisonArm(t *testing.T) {
 	for _, arm := range []admission.RuleKind{admission.RuleFIFO, admission.RuleFolly} {
 		_, err := parseWith(t, "queue.rule", arm.String())
@@ -74,6 +78,7 @@ func TestBinaryConfigCannotSelectAComparisonArm(t *testing.T) {
 	}
 }
 
+// TestConfigNeverSetsAnAdmissionPlant proves valid binary configs always leave admission Plant switches zero.
 func TestConfigNeverSetsAnAdmissionPlant(t *testing.T) {
 	for _, rule := range []string{"timeout", "control-law"} {
 		f, err := parseWith(t, "queue.rule", rule)

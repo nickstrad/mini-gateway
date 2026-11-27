@@ -203,6 +203,8 @@ func (c Config) admissionConfig() admission.Config {
 	return a.WithDefaults()
 }
 
+// AdmissionConfig returns the effective admission queue configuration derived
+// from c with defaults applied and Capacity bound to QueueCap.
 func (c Config) AdmissionConfig() admission.Config { return c.WithDefaults().admissionConfig() }
 
 // ErrConfig is wrapped by all engine configuration validation errors.

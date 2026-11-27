@@ -1,3 +1,5 @@
+// Package admsrc maps admission.Snapshot values onto the observability spine as
+// component "admission" and provides the admission shedding health rule.
 package admsrc
 
 import (
@@ -10,12 +12,15 @@ const (
 	lr = obs.LabelReason
 	lm = obs.LabelMode
 
+	// MetricShedding is the gauge of tenant queues that shed within the last interval.
 	MetricShedding = "shedding"
-	CheckShedding  = "admission"
+	// CheckShedding is the health check name registered for admission shedding.
+	CheckShedding = "admission"
 )
 
 var none = obs.Labels{}
 
+// Metrics returns the full metric descriptor catalog for component "admission".
 func Metrics() []obs.MetricDesc {
 	return []obs.MetricDesc{
 		obs.GaugeDesc("rule", lm, "1 for the queue rule this instance runs (mode: timeout, control-law, fifo, folly; the last two are simulator arms)."),
@@ -66,6 +71,8 @@ func b(v bool) int64 {
 	return 0
 }
 
+// Map emits totals always, and emits queue_wait histograms and per-tenant rows
+// only when obs.detail is enabled on the emitter.
 func Map(s admission.Snapshot, e *obs.Emitter) {
 	for _, k := range admission.RuleKinds() {
 		e.Gauge("rule", obs.Labels{Mode: k.String()}, b(s.Rule == k))
@@ -130,10 +137,13 @@ func mapTenant(t admission.TenantSnapshot, e *obs.Emitter) {
 	}
 }
 
+// Source wraps a snapshot provider as an obs.Source for component "admission".
 func Source(snapshot func() admission.Snapshot) obs.Source {
 	return obs.NewSource(obs.ComponentAdmission, Metrics(), snapshot, Map)
 }
 
+// HealthRules returns the admission health rule, which reports StateDegraded
+// (never StateFailed) while any tenant queue shed within the last interval.
 func HealthRules() []obs.Rule {
 	return []obs.Rule{{Name: CheckShedding, Check: func(s obs.InstanceSnapshot) (obs.State, string) {
 		if n := s.Value(obs.ComponentAdmission, MetricShedding, none); n > 0 {

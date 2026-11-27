@@ -7,21 +7,31 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 )
 
+// Reason explains why a queued or arriving request was shed with 53M01.
 type Reason uint8
 
 const (
+	// ReasonRule means the tenant queue's shedding rule dropped the head during a sweep.
 	ReasonRule Reason = iota
+	// ReasonAtPop means FollyRule shed the request at dequeue time.
 	ReasonAtPop
+	// ReasonOverflow means a full tenant ring shed its oldest entry for a new arrival.
 	ReasonOverflow
+	// ReasonTotal means total capacity was full and the globally oldest entry was shed.
 	ReasonTotal
+	// ReasonTenants means MaxTenants was reached with no empty tenant queue to evict.
 	ReasonTenants
+	// ReasonDeadline means the engine's outer timeouts.queue_wait backstop expired.
 	ReasonDeadline
+	// ReasonUndrained means Push refused an arrival because pending sheds reached the safety cap.
 	ReasonUndrained
+	// NumReasons is the number of defined Reason values.
 	NumReasons
 )
 
 var reasonNames = [NumReasons]string{"rule", "at-pop", "overflow", "total", "tenants", "deadline", "undrained"}
 
+// String returns the canonical lowercase name of r, or "?" if unknown.
 func (r Reason) String() string {
 	if r < NumReasons {
 		return reasonNames[r]
@@ -29,6 +39,7 @@ func (r Reason) String() string {
 	return "?"
 }
 
+// Shed describes one shed decision waiting for the caller to answer on the wire.
 type Shed struct {
 	ID     int64
 	Tenant string
@@ -36,6 +47,7 @@ type Shed struct {
 	Wait   Time
 }
 
+// TenantView is the read-only summary of one non-empty tenant queue passed to Dispatcher.Pick.
 type TenantView struct {
 	Index     int
 	Name      string
@@ -45,12 +57,17 @@ type TenantView struct {
 	LIFO      bool
 }
 
+// Dispatcher chooses which non-empty tenant queue Pop serves next.
+// Chunk 9 plugs in fair scheduling here without changing the core rings or rules.
 type Dispatcher interface {
 	Pick(now Time, active []TenantView) int
 }
 
+// OldestFirst is the default Dispatcher: it picks the tenant whose oldest queued
+// request arrived earliest (lowest OldestSeq).
 type OldestFirst struct{}
 
+// Pick returns the index in active with the lowest OldestSeq, or -1 if active is empty.
 func (OldestFirst) Pick(_ Time, active []TenantView) int {
 	best := -1
 	for i, v := range active {
@@ -71,6 +88,8 @@ type popped struct {
 	rule    ruleState
 }
 
+// Queues manages per-tenant fixed-capacity admission rings, shedding rules,
+// adaptive LIFO, and cumulative per-tenant counters.
 type Queues struct {
 	cfg        Config
 	dispatcher Dispatcher
@@ -104,6 +123,7 @@ type counters struct {
 
 func (q *Queues) stepBudget() int { return 4*(q.cfg.Capacity+q.cfg.MaxTenants) + 16 }
 
+// New constructs a validated Queues instance with defaults applied to zero fields.
 func New(cfg Config) (*Queues, error) {
 	cfg = cfg.WithDefaults()
 	if err := cfg.Validate(); err != nil {
@@ -114,8 +134,10 @@ func New(cfg Config) (*Queues, error) {
 		hist: obs.NewDurationHistogram()}, nil
 }
 
+// Config returns the effective configuration with defaults applied.
 func (q *Queues) Config() Config { return q.cfg }
 
+// SetDispatcher replaces the tenant selection policy; nil restores OldestFirst.
 func (q *Queues) SetDispatcher(d Dispatcher) {
 	if d == nil {
 		d = OldestFirst{}
@@ -123,14 +145,19 @@ func (q *Queues) SetDispatcher(d Dispatcher) {
 	q.dispatcher = d
 }
 
+// Len returns the total number of requests currently queued across all tenants.
 func (q *Queues) Len() int { return q.total }
 
+// Cap returns the configured total queue capacity across all tenants.
 func (q *Queues) Cap() int { return q.cfg.Capacity }
 
+// Tenants returns the number of currently live tenant queues.
 func (q *Queues) Tenants() int { return len(q.list) }
 
+// Pending returns the number of decided sheds not yet drained via TakeShed.
 func (q *Queues) Pending() int { return len(q.pending) - q.pendHead }
 
+// TakeShed removes and returns the next decided shed in FIFO order.
 func (q *Queues) TakeShed() (Shed, bool) {
 	if q.pendHead >= len(q.pending) {
 		return Shed{}, false
@@ -145,6 +172,9 @@ func (q *Queues) TakeShed() (Shed, bool) {
 	return s, true
 }
 
+// Next returns the earliest virtual instant at which the core must be swept
+// (head expiry, LIFO hold end, shedding-gauge decay, or quiet-tenant removal),
+// or 0 if no internal deadline is pending.
 func (q *Queues) Next() Time {
 	var at Time
 	for _, t := range q.list {
@@ -155,8 +185,12 @@ func (q *Queues) Next() Time {
 	return at
 }
 
+// Sweep advances internal deadlines up to and including now.
 func (q *Queues) Sweep(now Time) { q.advance(now) }
 
+// advance steps every internal deadline due at or before now at its own exact
+// instant ("time passes before the event") so rule state transitions and drop
+// timestamps match waking on each timer individually.
 func (q *Queues) advance(now Time) {
 	q.lastPop.ok = false
 	for range q.stepBudget() {
@@ -233,6 +267,8 @@ func (q *Queues) shedEntry(t *tenantQueue, e entry, now Time, r Reason) {
 	q.pending = append(q.pending, Shed{ID: e.id, Tenant: t.name, Reason: r, Wait: now - e.enq})
 }
 
+// compactPending shifts live sheds to index 0 before the slice hits cap so a
+// caller that drains only part of the backlog never triggers slice growth.
 func (q *Queues) compactPending() {
 	if q.pendHead == 0 || len(q.pending) < cap(q.pending) {
 		return
@@ -250,6 +286,9 @@ func (q *Queues) count(s *tenantStats, r Reason) {
 	}
 }
 
+// statsFor returns cumulative counters for name, folding tenants past
+// MaxTenantStats into a single "other" row (reusing any real tenant named
+// "other" so Snapshot never emits duplicate "other" rows).
 func (q *Queues) statsFor(name string) *tenantStats {
 	if s, ok := q.stats[name]; ok {
 		return s
@@ -330,6 +369,10 @@ func (q *Queues) refuse(name string, r Reason) bool {
 	return false
 }
 
+// Push enqueues request id for tenant at now. When the tenant ring or total
+// capacity is full, Push sheds the oldest queued entry to make room and returns
+// true; it returns false only when the arrival itself is refused (tenant cap
+// reached with no empty tenant to evict, duplicate id, or undrained shed cap).
 func (q *Queues) Push(now Time, tenant string, id int64) bool {
 	q.advance(now)
 	if q.Pending() >= pendingRefuseAt(q.cfg) {
@@ -344,6 +387,8 @@ func (q *Queues) Push(now Time, tenant string, id int64) bool {
 	}
 	q.c.pushes++
 	t.stats.pushes++
+	// Record emptiness before overflow so a 1-slot ring shedding its own head
+	// does not appear to have emptied and reset its rule state.
 	wasEmpty := t.empty()
 	if t.ring.full() {
 		q.shedEntry(t, t.ring.popFront(), now, ReasonOverflow)
@@ -371,11 +416,15 @@ func (q *Queues) shedOldest(now Time, arriving *tenantQueue) {
 		return
 	}
 	q.shedEntry(oldest, oldest.ring.popFront(), now, ReasonTotal)
+	// Skip emptied when oldest is the arriving tenant, which is about to receive the push.
 	if oldest.empty() && oldest != arriving {
 		q.emptied(oldest, now)
 	}
 }
 
+// Pop advances deadlines to now, selects a non-empty tenant via the Dispatcher,
+// and pops either its newest entry (when LIFO is active) or its oldest.
+// Entries rejected by AtPop (FollyRule) are recorded as ReasonAtPop and skipped.
 func (q *Queues) Pop(now Time) (int64, bool) {
 	q.advance(now)
 	for {
@@ -408,6 +457,7 @@ func (q *Queues) Pop(now Time) (int64, bool) {
 		}
 		t.gauge.observe(now, wait)
 		q.lastPop = popped{t: t, e: e, back: back, ok: true}
+		// Save pre-empty rule state so an immediate Unpop restores the original deadline.
 		if t.empty() {
 			q.lastPop.emptied, q.lastPop.emptyAt, q.lastPop.rule = true, t.emptyAt, saveRule(t.rule)
 			q.emptied(t, now)
@@ -435,6 +485,9 @@ func (q *Queues) pick(now Time) *tenantQueue {
 	return q.list[q.views[i].Index]
 }
 
+// Unpop returns the entry popped by the immediately preceding Pop back to its
+// original end of its tenant ring and restores any rule state cleared when that
+// pop emptied the ring. The served-wait histogram and load gauge samples remain.
 func (q *Queues) Unpop() bool {
 	p := q.lastPop
 	q.lastPop.ok = false
@@ -458,8 +511,11 @@ func (q *Queues) Unpop() bool {
 	return true
 }
 
+// Remove deletes a queued request because its client departed, counting it as removed.
 func (q *Queues) Remove(now Time, id int64) bool { return q.take(now, id, false) }
 
+// Expire deletes a queued request whose outer queue_wait timer fired, counting
+// it as shed with ReasonDeadline.
 func (q *Queues) Expire(now Time, id int64) bool { return q.take(now, id, true) }
 
 func (q *Queues) take(now Time, id int64, expired bool) bool {
@@ -493,6 +549,8 @@ func (q *Queues) take(now Time, id int64, expired bool) bool {
 	return true
 }
 
+// Close sweeps to now and immediately removes all empty tenant queues (used on
+// engine shutdown so no quiet-removal timer remains armed).
 func (q *Queues) Close(now Time) {
 	q.advance(now)
 	for i := 0; i < len(q.list); {
@@ -505,6 +563,7 @@ func (q *Queues) Close(now Time) {
 	}
 }
 
+// ShedCount returns the cumulative number of sheds across all reasons.
 func (q *Queues) ShedCount() int64 {
 	n := int64(0)
 	for _, v := range q.c.shed {
@@ -513,11 +572,14 @@ func (q *Queues) ShedCount() int64 {
 	return n
 }
 
+// Contains reports whether request id is currently queued.
 func (q *Queues) Contains(id int64) bool {
 	_, ok := q.where[id]
 	return ok
 }
 
+// Check verifies per-ring capacities, total and index consistency, tenant cap,
+// and snapshot conservation without copying histograms.
 func (q *Queues) Check() error {
 	sum := 0
 	for _, t := range q.list {
@@ -538,6 +600,8 @@ func (q *Queues) Check() error {
 	return q.light().Check()
 }
 
+// Quiesce verifies that no requests, live tenant queues, undrained sheds, or
+// pending internal deadlines remain.
 func (q *Queues) Quiesce() error {
 	if q.total != 0 || len(q.list) != 0 || q.Pending() != 0 {
 		return fmt.Errorf("admission: %d queued, %d tenant queues, %d sheds not taken", q.total, len(q.list), q.Pending())

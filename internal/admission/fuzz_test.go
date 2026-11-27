@@ -40,6 +40,7 @@ func fuzzSeeds() [][]byte {
 	}
 }
 
+// FuzzAdmissionOps decodes bounded operation sequences (3 bytes per op, up to 64 ops) and checks all four rules against the reference model.
 func FuzzAdmissionOps(f *testing.F) {
 	for _, s := range fuzzSeeds() {
 		f.Add(s)
@@ -55,6 +56,7 @@ func FuzzAdmissionOps(f *testing.F) {
 	})
 }
 
+// TestFuzzDecodingIsTotalBoundedAndLocal proves decodeOps caps op count and virtual time, ignores trailing bytes, and confines a one-byte edit to one op.
 func TestFuzzDecodingIsTotalBoundedAndLocal(t *testing.T) {
 	long := make([]byte, 10_000)
 	for i := range long {
@@ -92,6 +94,7 @@ func TestFuzzDecodingIsTotalBoundedAndLocal(t *testing.T) {
 	}
 }
 
+// TestFuzzExecutionCostIsBounded proves worst-case fuzz inputs stay within bounded step count and queue memory.
 func TestFuzzExecutionCostIsBounded(t *testing.T) {
 	worst := make([]byte, fuzzMaxOps*fuzzOpBytes)
 	for i := 0; i < len(worst); i += fuzzOpBytes {
@@ -112,6 +115,7 @@ func TestFuzzExecutionCostIsBounded(t *testing.T) {
 	}
 }
 
+// TestPlantedRemoveOrderBugIsCaughtByTheOperationModel proves PlantRemoveSwapsTail fails the reference model while the unplanted core passes.
 func TestPlantedRemoveOrderBugIsCaughtByTheOperationModel(t *testing.T) {
 	ops := decodeOps([]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0})
 	for _, cfg := range fuzzConfigs(PlantRemoveSwapsTail) {

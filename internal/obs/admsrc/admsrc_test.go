@@ -42,6 +42,8 @@ func collect(t *testing.T, q *admission.Queues, detail bool) obs.InstanceSnapsho
 	return s
 }
 
+// TestCountersMoveAndConserveThroughTheMapping proves admission totals, per-tenant counters,
+// histograms, and request conservation survive mapping through obs.Collector.
 func TestCountersMoveAndConserveThroughTheMapping(t *testing.T) {
 	q := busy(t)
 	if err := q.Snapshot().Check(); err != nil {
@@ -78,6 +80,7 @@ func TestCountersMoveAndConserveThroughTheMapping(t *testing.T) {
 	}
 }
 
+// TestDetailOffExportsNoTenantRows proves no tenant_* metric or tenant label is emitted when obs.detail is false.
 func TestDetailOffExportsNoTenantRows(t *testing.T) {
 	s := collect(t, busy(t), false)
 	for _, p := range s.Points {
@@ -87,6 +90,7 @@ func TestDetailOffExportsNoTenantRows(t *testing.T) {
 	}
 }
 
+// TestHealthIsDegradedWhileAQueueSheds proves the admission health rule reports degraded when shedding and ok when idle.
 func TestHealthIsDegradedWhileAQueueSheds(t *testing.T) {
 	rule := admsrc.HealthRules()[0]
 	if st, _ := rule.Check(collect(t, busy(t), false)); st != obs.StateDegraded {

@@ -52,6 +52,7 @@ func burstAfterIdle(t *testing.T, cfg Config, idle Time, burst int, service Time
 	return r
 }
 
+// TestFirstBurstAfterIdleGetsTheIntervalNotTheShortTarget proves a burst arriving after an idle period waits past Target without shedding under both product rules.
 func TestFirstBurstAfterIdleGetsTheIntervalNotTheShortTarget(t *testing.T) {
 	for _, rule := range []RuleKind{RuleTimeout, RuleControlLaw} {
 		cfg := Config{Rule: rule, LIFO: LIFOOff}
@@ -65,6 +66,7 @@ func TestFirstBurstAfterIdleGetsTheIntervalNotTheShortTarget(t *testing.T) {
 	}
 }
 
+// TestCanaryFirstBurstBugShedsTheFirstBurst proves PlantFirstBurst causes the first burst after idle to be shed.
 func TestCanaryFirstBurstBugShedsTheFirstBurst(t *testing.T) {
 	cfg := Config{Rule: RuleTimeout, LIFO: LIFOOff, Plant: PlantFirstBurst}
 	r := burstAfterIdle(t, cfg, 2*Second, 10, 9*Millisecond)
@@ -73,6 +75,7 @@ func TestCanaryFirstBurstBugShedsTheFirstBurst(t *testing.T) {
 	}
 }
 
+// TestDeadlineAtEqualityHasExpired proves an entry is kept one nanosecond before its deadline and shed at exact equality.
 func TestDeadlineAtEqualityHasExpired(t *testing.T) {
 	q := mustNew(t, Config{Rule: RuleTimeout, LIFO: LIFOOff})
 	q.Push(0, "a", 1)
@@ -109,6 +112,7 @@ func overloadLIFO(t *testing.T, plant Plant) (maxQueuedAge, maxServedWait Time, 
 	return maxQueuedAge, maxServedWait, q.Snapshot()
 }
 
+// TestLIFOWithoutTheHeadSweepBuriesStaleRequests proves the head sweep keeps age and served wait under Interval under LIFO, whereas PlantNoHeadSweep lets stale entries accumulate.
 func TestLIFOWithoutTheHeadSweepBuriesStaleRequests(t *testing.T) {
 	age, wait, s := overloadLIFO(t, 0)
 	if s.LIFOOn == 0 || s.Shed[ReasonRule] == 0 {
@@ -136,6 +140,7 @@ func clDriveOverload(q *Queues, from, to Time, id *int64) {
 
 func clRule(q *Queues) *ControlLaw { return q.byName["a"].rule.(*ControlLaw) }
 
+// TestControlLawCountAndNextDropAcrossLeavingAndReentering proves ControlLaw retains count - lastCount on re-entry within 16 intervals and resets count to 1 after 16 intervals.
 func TestControlLawCountAndNextDropAcrossLeavingAndReentering(t *testing.T) {
 	cfg := Config{Rule: RuleControlLaw, LIFO: LIFOOff, Capacity: 4096, TenantCapacity: 4096}
 	q := mustNew(t, cfg)
@@ -193,6 +198,7 @@ func TestControlLawCountAndNextDropAcrossLeavingAndReentering(t *testing.T) {
 	}
 }
 
+// TestIntervalOverSqrtMatchesTheReferenceForEveryCountUpToTheMaximum proves integer Law matches the math/big reference for every count 1..MaxDropCount across five intervals.
 func TestIntervalOverSqrtMatchesTheReferenceForEveryCountUpToTheMaximum(t *testing.T) {
 	intervals := []Time{1_001, 7 * Millisecond, DefaultInterval, 999_999_937, MaxInterval}
 	step := int64(1)
@@ -211,6 +217,7 @@ func TestIntervalOverSqrtMatchesTheReferenceForEveryCountUpToTheMaximum(t *testi
 	}
 }
 
+// TestOverflowShedsTheHeadNotTheArrival proves tenant ring overflow sheds the tenant's oldest entry and total capacity overflow sheds the globally oldest entry.
 func TestOverflowShedsTheHeadNotTheArrival(t *testing.T) {
 	q := mustNew(t, Config{Rule: RuleTimeout, Capacity: 8, TenantCapacity: 3})
 	for i := int64(1); i <= 4; i++ {
@@ -234,6 +241,7 @@ func TestOverflowShedsTheHeadNotTheArrival(t *testing.T) {
 	}
 }
 
+// TestTenantCapShedsTheArrivalOnlyWhenNoQueueIsEmpty proves MaxTenants refuses new tenants only while all existing queues are non-empty, evicting an empty queue once one frees.
 func TestTenantCapShedsTheArrivalOnlyWhenNoQueueIsEmpty(t *testing.T) {
 	q := mustNew(t, Config{Rule: RuleTimeout, MaxTenants: 2})
 	q.Push(1, "a", 1)
@@ -253,6 +261,7 @@ func TestTenantCapShedsTheArrivalOnlyWhenNoQueueIsEmpty(t *testing.T) {
 	}
 }
 
+// TestQuietTenantQueueIsRemovedAndItsRingReused proves quiet tenants are removed after 16 intervals and their rings recycled within MaxTenants storage.
 func TestQuietTenantQueueIsRemovedAndItsRingReused(t *testing.T) {
 	q := mustNew(t, Config{Rule: RuleControlLaw, MaxTenants: 4})
 	for round := range 50 {
@@ -302,6 +311,7 @@ func hysteresisRun(t *testing.T, plant Plant) Snapshot {
 	return q.Snapshot()
 }
 
+// TestLIFOHysteresisDoesNotFlapAtTheThreshold proves a load oscillating across the overload threshold switches LIFO on once, while PlantNoLIFOHysteresis flaps repeatedly.
 func TestLIFOHysteresisDoesNotFlapAtTheThreshold(t *testing.T) {
 	s := hysteresisRun(t, 0)
 	if s.LIFOOn != 1 || s.LIFOOff != 0 {
@@ -313,6 +323,7 @@ func TestLIFOHysteresisDoesNotFlapAtTheThreshold(t *testing.T) {
 	}
 }
 
+// TestLIFOSwitchesOffOnlyAfterTheHold proves LIFO stays active one nanosecond before LIFOHold and clears at exact equality.
 func TestLIFOSwitchesOffOnlyAfterTheHold(t *testing.T) {
 	cfg := Config{Rule: RuleTimeout, LIFOHold: 500 * Millisecond}
 	q := mustNew(t, cfg)
@@ -334,6 +345,7 @@ func TestLIFOSwitchesOffOnlyAfterTheHold(t *testing.T) {
 	}
 }
 
+// TestComparisonArmsAreNotProductRules proves ParseProductRule accepts only timeout and control-law and rejects simulator arms.
 func TestComparisonArmsAreNotProductRules(t *testing.T) {
 	for _, s := range []string{"fifo", "folly", "plain-fifo", ""} {
 		if _, ok := ParseProductRule(s); ok {
@@ -347,6 +359,7 @@ func TestComparisonArmsAreNotProductRules(t *testing.T) {
 	}
 }
 
+// TestConfigFailsClosedNamingTheKey proves invalid Config fields return ErrConfig naming the key while zero fields resolve to defaults.
 func TestConfigFailsClosedNamingTheKey(t *testing.T) {
 	cases := map[string]Config{
 		"queue.rule":            {Rule: 9},
@@ -371,6 +384,7 @@ func TestConfigFailsClosedNamingTheKey(t *testing.T) {
 	}
 }
 
+// TestFollyDetectorWithLIFOIsBlind proves pairing FollyRule with adaptive LIFO fails to bound depth compared to FollyRule with FIFO dequeue.
 func TestFollyDetectorWithLIFOIsBlind(t *testing.T) {
 	run := func(lifo LIFOMode) Snapshot {
 		q := mustNew(t, Config{Rule: RuleFolly, LIFO: lifo, Capacity: 1 << 16, TenantCapacity: 1 << 16})
@@ -394,6 +408,7 @@ func TestFollyDetectorWithLIFOIsBlind(t *testing.T) {
 	}
 }
 
+// TestSnapshotConservesAndCountersMove proves Snapshot records all exit paths, passes Check, and catches conservation tampering.
 func TestSnapshotConservesAndCountersMove(t *testing.T) {
 	q := mustNew(t, Config{Rule: RuleTimeout, Detail: true, TenantCapacity: 2, Capacity: 3})
 	q.Push(0, "a", 1)
