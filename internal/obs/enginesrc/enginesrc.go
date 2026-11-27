@@ -118,6 +118,7 @@ func Metrics() []obs.MetricDesc {
 		obs.CounterDesc("retried_requests", 0, "Requests run again by the proxy at least once."),
 		obs.GaugeDesc("retries_pending", 0, "Requests run again whose outcome is not known yet."),
 		obs.HighWaterDesc("retries_pending_peak", 0, "Most requests run again with no outcome yet at once."),
+		obs.CounterDesc("retry_rows", lr, "Retries granted, by the error-contract row the failure would have been answered with (reason)."),
 		obs.CounterDesc("retry_ends", lo, "Requests run again, by how they ended (outcome: completed, failed, shed, gone)."),
 	}
 }
@@ -227,6 +228,9 @@ func mapRequests(s proxy.Snapshot, e *obs.Emitter) {
 	e.Counter("retried_requests", none, s.RetriedRequests)
 	e.Gauge("retries_pending", none, s.RetryPending.Value)
 	e.Gauge("retries_pending_peak", none, s.RetryPending.Peak)
+	for i, v := range s.RetryRows {
+		e.Counter("retry_rows", obs.Labels{Reason: pgwire.ErrRowID(i).Row().ID}, v)
+	}
 	for i, v := range s.RetryEnds {
 		e.Counter("retry_ends", obs.Labels{Outcome: proxy.RetryEnd(i).String()}, v)
 	}

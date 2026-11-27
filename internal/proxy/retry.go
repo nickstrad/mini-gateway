@@ -109,6 +109,7 @@ func (e *Engine) offerRetry(c *client, req *request, reached work.Tri, row pgwir
 		return false
 	}
 	e.snap.RetryAsked++
+	e.snap.RetryRows[row]++
 	return true
 }
 
@@ -167,6 +168,13 @@ func (s Snapshot) retryConserved() error {
 	}
 	if s.RetriedRequests != ended+s.RetryPending.Value {
 		return fmt.Errorf("retry: %d requests retried, %d ended and %d pending", s.RetriedRequests, ended, s.RetryPending.Value)
+	}
+	var rows int64
+	for _, v := range s.RetryRows {
+		rows += v
+	}
+	if rows != s.RetryAsked {
+		return fmt.Errorf("retry: %d retries by row for %d granted", rows, s.RetryAsked)
 	}
 	if s.RetriedRequests > s.RetryAsked || s.RetryAsked > s.RetryOffered {
 		return fmt.Errorf("retry: %d requests retried, %d retries granted for %d failures offered", s.RetriedRequests, s.RetryAsked, s.RetryOffered)

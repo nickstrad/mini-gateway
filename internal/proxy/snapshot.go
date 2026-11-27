@@ -158,6 +158,7 @@ type Snapshot struct {
 	RetriedRequests int64
 	RetryPending    obs.Gauge
 	RetryEnds       [NumRetryEnds]int64
+	RetryRows       [pgwire.ErrRowCount]int64
 }
 
 // Check enforces exact counter conservation and capacity invariants on s.
