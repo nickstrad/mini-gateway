@@ -84,7 +84,7 @@ func TestTierRPoolEmptyQueryCheckAndServerKeepalive(t *testing.T) {
 }
 
 type policyResult struct {
-	crossings, sameTenant int
+	crossings, sameTenant     int
 	residueOther, residueSame bool
 }
 
