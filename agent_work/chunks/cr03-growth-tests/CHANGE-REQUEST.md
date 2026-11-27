@@ -63,3 +63,33 @@ machine load, and keep them able to fail:
 ## Not in scope
 
 The fuzz deadline (CR-2), the tier R timing margins, any other test.
+
+## Addition, 2026-11-27 (after the first build) — the third wall-clock test
+
+While the first build ran, CR-2's second landing gate failed again, and this time a third
+test of the same kind failed with the other two: `TestClassifierTimeGrowsLinearly`
+(`internal/pgwire/classify_test.go`; shapes `"a "`, `"'x'"`, `"U&\"a\" "`, `"'a'\n"`; ratios
+158 to 220 against the limit of 96, at load 15). It is in scope from here on. It runs in the
+gate (the gate does not pass `-short`), so it must not reach its verdict from the clock:
+
+1. Preferred: hold the general property — the whole classification of an input does work
+   linear in its length, for every shape the test lists — by counting work at a level that
+   covers the whole call, not only the two paths of the first build (for example every byte
+   the lexer advances over or looks back at, and every token the classifier visits), with
+   the same 16-times-input, at-most-17-times-work form. The counters of the first build may
+   be widened or joined for this; the cost rule is unchanged (nothing measurable on the hot
+   path, no exported behaviour, no metric).
+2. If a whole-call count cannot be had without distorting the code, keep the test's timing
+   form but take it out of every run that gives a verdict for the gate (an explicit
+   environment switch, off by default), say so in NOTES.md with the reason, and state as a
+   limit which quadratic defects the counted tests would not catch.
+
+Proof for this addition: a quadratic defect planted in a path the first build's two counters
+do NOT cover (the builder chooses one, for example rescanning from the start of the input
+for each string literal) fails a counted test under item 1; `go test -count=100 -run
+'Linearly' ./internal/pgwire/` passes under load with identical counts; `grep -n 'time\.Now\|time\.Since'
+internal/pgwire/classify_test.go` shows no clock read on a verdict path of the default run.
+
+The two adversarial tests of chunk 5 that the first build listed
+(`TestAdv_5_OperatorSuffixRescanning`, `TestAdv_5_WholeSpanRescanning`) are the
+orchestrator's to settle; do not edit them.
