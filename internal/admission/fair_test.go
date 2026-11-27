@@ -283,7 +283,7 @@ func TestUnpopLeavesTurnsAndCountersAsIfThePopNeverHappened(t *testing.T) {
 		t.Fatal("pop and unpop")
 	}
 	sa, sb := a.Snapshot(), b.Snapshot()
-	sa.Unpops, sa.QueueWait, sb.QueueWait = 0, sb.QueueWait, sb.QueueWait
+	sa.Unpops, sa.QueueWait = 0, sb.QueueWait
 	for i := range sa.PerTenant {
 		sa.PerTenant[i].QueueWait = sb.PerTenant[i].QueueWait
 	}

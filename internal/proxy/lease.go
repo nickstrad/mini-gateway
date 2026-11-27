@@ -29,6 +29,7 @@ func (e *Engine) startRequest(c *client, body []byte) {
 	if inTx && c.db != nil {
 		e.snap.Accepted++
 		c.req = req
+		e.fairStatementStart(c)
 		e.forward(c)
 		return
 	}
@@ -155,6 +156,7 @@ func (e *Engine) dispatch() {
 func (e *Engine) lend(c *client, d *dbConn) {
 	e.snap.StagePassed[StageLease]++
 	e.snap.LeasesStarted++
+	e.fairStarted(c.tenant)
 	e.snap.DBIdle.Add(-1)
 	e.snap.DBLent.Add(1)
 	d.phase = dpLent
@@ -293,6 +295,7 @@ func (e *Engine) replyDone(d *dbConn, c *client, status byte) {
 	} else {
 		c.phase = cpHeld
 		e.setInTx(c, true)
+		e.fairStatementDone(c, true)
 	}
 	e.pump(c)
 }
@@ -304,6 +307,7 @@ func (e *Engine) release(d *dbConn, c *client, status byte) {
 	}
 	e.snap.StagePassed[StageRelease]++
 	e.snap.LeasesEnded++
+	e.fairEnded(c.tenant)
 	d.client = nil
 	c.db = nil
 	in := ReleaseInput{Conn: d.id, Tenant: c.tenant, LastTenant: d.lastTenant, Status: status, Unread: len(d.hold) > 0 || d.cur.mid() || d.trailing}
@@ -333,6 +337,7 @@ func (e *Engine) leaseLost(d *dbConn) {
 		return
 	}
 	e.snap.LeasesEnded++
+	e.fairEnded(d.lastTenant)
 	e.snap.LeasesEndedClose++
 	if c := d.client; c != nil && c.db == d {
 		c.db = nil

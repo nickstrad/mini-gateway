@@ -94,6 +94,7 @@ type fairTenant struct {
 type fairSaved struct {
 	ok    bool
 	picks int64
+	held  bool
 }
 
 type fairCounters struct {
@@ -120,6 +121,7 @@ type Fair struct {
 	total   int
 	last    Time
 	saved   fairSaved
+	held    bool
 	c       fairCounters
 }
 
@@ -211,7 +213,8 @@ func (f *Fair) binding() bool {
 }
 
 func (f *Fair) Pick(_ Time, active []TenantView) int {
-	f.saved = fairSaved{ok: true, picks: f.c.picks}
+	f.saved = fairSaved{ok: true, picks: f.c.picks, held: f.held}
+	f.held = true
 	if f.total >= f.cfg.Limit {
 		f.c.heldLimit++
 		return -1
@@ -235,6 +238,7 @@ func (f *Fair) Pick(_ Time, active []TenantView) int {
 		return -1
 	}
 	f.c.picks++
+	f.held = false
 	return best
 }
 
@@ -247,7 +251,7 @@ func before(a, b TenantView) bool {
 
 func (f *Fair) unpick() {
 	if f.saved.ok {
-		f.c.picks = f.saved.picks
+		f.c.picks, f.held = f.saved.picks, f.saved.held
 	}
 	f.saved.ok = false
 }
@@ -414,6 +418,8 @@ func (q *Queues) Limit() int {
 	}
 	return q.fair.cfg.Limit
 }
+
+func (q *Queues) Held() bool { return q.fair != nil && q.fair.held }
 
 func (q *Queues) InFlight() int {
 	if q.fair == nil {

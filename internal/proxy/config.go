@@ -228,6 +228,7 @@ type Config struct {
 	Pool           *pool.Config
 	Reseed         bool
 	Admission      admission.Config
+	Fairness       admission.FairConfig
 }
 
 func (c Config) admissionConfig() admission.Config {
