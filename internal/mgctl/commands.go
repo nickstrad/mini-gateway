@@ -1,7 +1,6 @@
 package mgctl
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,7 +26,6 @@ const (
 	PathStats   = "/stats"
 	PathMetrics = "/metrics"
 
-	maxPassword  = 1 << 10
 	MaxWatch     = 1 << 20
 	statusOK     = 200
 	statusFailed = 503
@@ -320,11 +318,11 @@ func ConfigCheck(e Env, path string) int {
 
 func Verifier(e Env, password string, iterations int) int {
 	if password == "-" {
-		line, err := bufio.NewReaderSize(io.LimitReader(e.Stdin, maxPassword), maxPassword).ReadString('\n')
-		if err != nil && !errors.Is(err, io.EOF) {
+		line, err := ReadPasswordLine(e.Stdin)
+		if err != nil {
 			return e.failf(ExitUsage, "verifier: reading the password: %v", err)
 		}
-		password = strings.TrimRight(line, "\r\n")
+		password = line
 	}
 	if password == "" {
 		return e.failf(ExitUsage, "verifier: needs -password <pw|-> (\"-\" reads the first line of stdin)")

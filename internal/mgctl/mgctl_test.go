@@ -461,3 +461,22 @@ func TestALongerRowMessageWinsOverItsPrefixAndSeverityDecides(t *testing.T) {
 		t.Fatal(line)
 	}
 }
+
+func TestAPasswordLineLongerThanTheLimitIsRefusedNotCut(t *testing.T) {
+	exact := strings.Repeat("p", mgctl.MaxPassword)
+	if got, err := mgctl.ReadPasswordLine(strings.NewReader(exact + "\r\nrest")); err != nil || got != exact {
+		t.Fatalf("a password of exactly the limit: %d bytes, %v", len(got), err)
+	}
+	if got, err := mgctl.ReadPasswordLine(strings.NewReader(exact)); err != nil || got != exact {
+		t.Fatalf("a password of exactly the limit at EOF: %d bytes, %v", len(got), err)
+	}
+	long := strings.Repeat("abcdefgh", 129)
+	if _, err := mgctl.ReadPasswordLine(strings.NewReader(long + "\n")); !errors.Is(err, mgctl.ErrPasswordTooLong) {
+		t.Fatalf("a %d-byte password line: %v", len(long), err)
+	}
+	e, out, errb := env(nil)
+	e.Stdin = strings.NewReader(long + "\n")
+	if mgctl.Verifier(e, "-", 4096) != mgctl.ExitUsage || out.Len() != 0 || strings.Contains(errb.String(), "abcdefgh") {
+		t.Fatalf("an over-long stdin password: out %q err %q", out.String(), errb.String())
+	}
+}
