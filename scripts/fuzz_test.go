@@ -1165,7 +1165,7 @@ func newIsolatedGateRepo(t *testing.T, targets map[string][]string, stubFuzzBody
 		}
 		writeFile(filepath.Join("scripts", name), string(src), 0o755)
 	}
-	for _, name := range []string{"sweep.sh", "tier-r.sh", "csv-assert.sh", "gen-docs.sh"} {
+	for _, name := range []string{"sweep.sh", "tier-r.sh", "csv-assert.sh", "gen-docs.sh", "counted-growth.sh"} {
 		writeFile(filepath.Join("scripts", name), "#!/bin/bash\nexit 0\n", 0o755)
 	}
 	writeFile("scripts/site.sh", "#!/bin/bash\nmkdir -p \"$1/book\"\necho ok > \"$1/book/index.html\"\necho book/index.html > \"$1/pages.txt\"\n", 0o755)

@@ -209,3 +209,15 @@ Results (repair round, on clean commit `cb74d4a`, baseline `779203c`):
   - `G3 race`: **PASS** (35 s, 3 package patterns).
   - `G5 fuzz`: **PASS** (429 s): `16 fuzz targets, 20s each: 14 fuzz, 2 seed-sweep (floor 100/s), 0 without a rate, 0 unclassified, 0 retried` (`fuzz_targets: 16`, `fuzz_seed_sweeps: 2`, `fuzz_retries: 0`, `fuzz_max_retries: 2`).
   - `result.json` was removed and not committed.
+
+## Joined with CR-3 for landing (orchestrator, 2026-11-27)
+
+CR-2 and CR-3 land together, from this branch, on one gate run. Each one's own landing gate
+failed on the fault the other fixes: CR-2's twice on the wall-clock growth tests (CR-3), and
+CR-3's once on Go's fuzz deadline error in `FuzzLex` (CR-2). This branch is CR-3's reviewed
+commits, then CR-2's, then the two prose commits. One line of test code was changed by the
+orchestrator for the join: the throwaway repository that `scripts/fuzz_test.go` builds to
+drive the real `gate.sh` now also stubs `scripts/counted-growth.sh`, the G3 check CR-3
+added (without it `TestGateShLandingCapBlocksWidenedMaxRetriesAlone` and
+`TestGateShCountsFuzzRetriesFromColumnSix` fail at G3 before reaching what they test).
+The gate result for both is `agent_work/chunks/cr02-fuzz-deadline-retry/gate/result.json`.
