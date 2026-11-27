@@ -8,7 +8,7 @@ type limiter struct {
 }
 
 func newLimiter(perSec int) limiter {
-	return limiter{interval: Instant(time.Second) / Instant(perSec)}
+	return limiter{interval: (Instant(time.Second) + Instant(perSec) - 1) / Instant(perSec)}
 }
 
 func (l *limiter) ready(now Instant) bool { return now >= l.tat }

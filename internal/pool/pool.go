@@ -206,6 +206,7 @@ type conn struct {
 	suspect       bool
 	suspectLater  bool
 	cancelPending bool
+	cancelLost    bool
 	entry         EndKind
 	dirty         bool
 	noReply       bool
@@ -234,6 +235,7 @@ type Pool struct {
 	brk       breaker
 	limited   bool
 	atCap     bool
+	refuse    bool
 	snap      Snapshot
 	leaseHist *obs.Histogram
 	ageHist   *obs.Histogram
@@ -263,11 +265,14 @@ func (p *Pool) begin(now Instant, out []Action) {
 		p.now = now
 	}
 	p.out = out
+	p.brk.tick(p.now)
+	p.expire()
 }
 
 func (p *Pool) end() []Action {
 	p.expire()
 	p.maybeDial()
+	p.refuseIfOpen()
 	p.gauges()
 	out := p.out
 	p.out = nil
@@ -385,12 +390,14 @@ func (p *Pool) checkTrial() {
 }
 
 func (p *Pool) jitter(d time.Duration) Instant {
-	j := int64(p.cfg.JitterPermille)
-	if j == 0 || p.cfg.NoJitter {
+	if p.cfg.NoJitter {
 		return Instant(d)
 	}
-	off := p.rng.Int64N(2*j+1) - j
-	return Instant(int64(d) + int64(d)/1000*off)
+	a := jitterAmplitude(d, p.cfg.JitterPermille)
+	if a == 0 {
+		return Instant(d)
+	}
+	return Instant(int64(d) + p.rng.Int64N(2*a+1) - a)
 }
 
 func (p *Pool) dial(trial bool) {
@@ -429,9 +436,8 @@ func (p *Pool) DialFailed(now Instant, id ConnID, out []Action) []Action {
 	if c := p.conns[id]; c != nil && c.state == StateConnecting {
 		p.snap.DialFailures++
 		if c.trial {
-			p.brk.trialDone(id, false, p.now)
-			p.brk.observed++
 			c.trial = false
+			p.trialFailed(id)
 		} else {
 			p.connFailure()
 		}
@@ -442,17 +448,26 @@ func (p *Pool) DialFailed(now Instant, id ConnID, out []Action) []Action {
 
 func (p *Pool) connFailure() {
 	if p.brk.fail(p.now) {
-		p.onOpen()
+		p.refuse = true
 	}
 }
 
-func (p *Pool) onOpen() {
-	for _, c := range p.list {
-		if c.state != StateConnecting {
-			return
-		}
+func (p *Pool) trialFailed(id ConnID) {
+	p.brk.observed++
+	p.brk.trialDone(id, false, p.now)
+	if p.brk.state == BreakerOpen {
+		p.refuse = true
 	}
-	p.emit(Action{Kind: ActRefuseQueued})
+}
+
+func (p *Pool) refuseIfOpen() {
+	if !p.refuse {
+		return
+	}
+	p.refuse = false
+	if p.brk.state == BreakerOpen && !p.Usable() {
+		p.emit(Action{Kind: ActRefuseQueued})
+	}
 }
 
 func (p *Pool) markSuspect() {
@@ -480,6 +495,10 @@ func (p *Pool) toIdle(c *conn, tag work.TenantID) {
 		return
 	}
 	c.state = StateIdle
+	if c.cancelLost {
+		p.remove(c, CloseCleanupFailed)
+		return
+	}
 	if p.now-c.created >= c.lifeLimit {
 		p.remove(c, CloseLifetime)
 		return
@@ -518,6 +537,9 @@ func (p *Pool) remove(c *conn, reason CloseReason) {
 		p.snap.DirtyClosed[c.entry]++
 	}
 	p.snap.Closes[reason]++
+	if p.brk.state == BreakerOpen {
+		p.refuse = true
+	}
 	delete(p.conns, c.id)
 	last := len(p.list) - 1
 	p.list[c.index] = p.list[last]
@@ -677,6 +699,10 @@ func (p *Pool) Release(now Instant, id ConnID, e End, out []Action) []Action {
 }
 
 func (p *Pool) cleanEnd(c *conn, tenant work.TenantID) {
+	if c.cancelLost {
+		p.remove(c, CloseCleanupFailed)
+		return
+	}
 	if p.now-c.created >= c.lifeLimit {
 		p.remove(c, CloseLifetime)
 		return
@@ -823,10 +849,7 @@ func (p *Pool) checkFailed(c *conn, r CheckResult) {
 	c.trial = false
 	p.remove(c, CloseCheckFailed)
 	if trial {
-		p.brk.observed++
-		p.brk.trialDone(c.id, false, p.now)
-	} else {
-		p.connFailure()
+		p.trialFailed(c.id)
 	}
 	p.markSuspect()
 }
@@ -886,6 +909,7 @@ func (p *Pool) expire() {
 			p.snap.CancelsExpired++
 			if c := p.conns[e.conn]; c != nil {
 				c.cancelPending = false
+				c.cancelLost = true
 				if c.state == StateCleaning && c.step == stepAwaitCancel {
 					p.remove(c, CloseCleanupFailed)
 				}
@@ -925,6 +949,9 @@ func (p *Pool) expireOne(c *conn) bool {
 }
 
 func (p *Pool) Next() Instant {
+	if p.stopped {
+		return 0
+	}
 	var next Instant
 	take := func(t Instant) {
 		if t > 0 && (next == 0 || t < next) {
@@ -955,6 +982,7 @@ func (p *Pool) Next() Instant {
 func (p *Pool) Shutdown(now Instant, out []Action) []Action {
 	p.begin(now, out)
 	p.stopped = true
+	p.limited = false
 	for len(p.list) > 0 {
 		c := p.list[len(p.list)-1]
 		if c.state == StateConnecting {

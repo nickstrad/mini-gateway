@@ -43,6 +43,7 @@ const (
 	MaxJitterPermille      = 500
 	MaxCancelsLimit        = 1024
 	MaxBreakerFailures     = 1000
+	MinJitterSpread        = time.Millisecond
 	maxChecksPerCheckout   = 4
 	maxDuration            = 24 * time.Hour
 )
@@ -142,6 +143,16 @@ func (c Config) Validate() error {
 			bad(d.key, "must be above 0 and at most %s, got %s", maxDuration, d.v)
 		}
 	}
+	if !c.NoJitter && c.JitterPermille > 0 {
+		for _, d := range []struct {
+			key string
+			v   time.Duration
+		}{{"pool.idle_timeout", c.IdleTimeout}, {"pool.max_lifetime", c.MaxLifetime}} {
+			if d.v > 0 && jitterAmplitude(d.v, c.JitterPermille) < int64(MinJitterSpread) {
+				bad(d.key, "%s with pool.jitter_percent at %d permille spreads by less than %s; raise it or turn jitter off", d.v, c.JitterPermille, MinJitterSpread)
+			}
+		}
+	}
 	if c.Reset != ResetAlways && c.Reset != ResetOnSwitch {
 		bad("lease.reset", "must be always or on-switch")
 	}
@@ -158,4 +169,8 @@ func Share(total, instances int) (int, error) {
 		return 0, fmt.Errorf("%w: a total of %d is less than the %d instances", ErrShare, total, instances)
 	}
 	return total / instances, nil
+}
+
+func jitterAmplitude(d time.Duration, permille int) int64 {
+	return int64(d) * int64(permille) / 1000
 }

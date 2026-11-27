@@ -94,6 +94,7 @@ type model struct {
 	conns     map[ConnID]*mconn
 	order     []ConnID
 	cancels   map[ConnID]ConnID
+	tainted   map[ConnID]bool
 	lastDial  Instant
 	dialed    bool
 	waiting   int
@@ -110,7 +111,8 @@ func newModel(cfg Config) (*model, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &model{cfg: p.Config(), p: p, conns: make(map[ConnID]*mconn), cancels: make(map[ConnID]ConnID)}, nil
+	return &model{cfg: p.Config(), p: p, conns: make(map[ConnID]*mconn), cancels: make(map[ConnID]ConnID),
+		tainted: make(map[ConnID]bool)}, nil
 }
 
 func (m *model) fail(format string, args ...any) {
@@ -260,6 +262,9 @@ func (m *model) lent(id ConnID, tenant work.TenantID) {
 		if conn == id {
 			m.fail("lent connection %d with a cancel in flight", id)
 		}
+	}
+	if m.tainted[id] {
+		m.fail("lent connection %d whose cancel expired without reporting done", id)
 	}
 	c.lentTo = tenant
 }
@@ -412,6 +417,9 @@ func (m *model) advance(d time.Duration) {
 	m.now += Instant(d)
 	for id, until := range m.cancelExpiries() {
 		if m.now >= until {
+			if conn, ok := m.cancels[id]; ok && m.p.State(conn) != 0 {
+				m.tainted[conn] = true
+			}
 			delete(m.cancels, id)
 		}
 	}
