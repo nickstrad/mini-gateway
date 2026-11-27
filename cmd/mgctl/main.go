@@ -238,7 +238,7 @@ func query(env mgctl.Env, addr string, timeout time.Duration, args []string) int
 		return mgctl.ExitUsage
 	}
 	if c.Password == "-" {
-		pw, err := readLine(env.Stdin)
+		pw, err := mgctl.ReadPasswordLine(env.Stdin)
 		if err != nil {
 			fmt.Fprintf(env.Stderr, "mgctl query: reading the password: %v\n", err)
 			return mgctl.ExitUsage
@@ -260,28 +260,6 @@ func query(env mgctl.Env, addr string, timeout time.Duration, args []string) int
 		return conn, nil
 	}
 	return mgctl.Query(env, c, rest[0])
-}
-
-func readLine(r io.Reader) (string, error) {
-	b := make([]byte, 0, 64)
-	one := make([]byte, 1)
-	for len(b) < 1024 {
-		n, err := r.Read(one)
-		if n == 1 {
-			if one[0] == '\n' {
-				break
-			}
-			b = append(b, one[0])
-			continue
-		}
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return "", err
-		}
-	}
-	return strings.TrimRight(string(b), "\r"), nil
 }
 
 func tlsUpgrade(mode, caFile, serverName, addr string) (mgctl.StartTLS, error) {

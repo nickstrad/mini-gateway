@@ -220,3 +220,12 @@ func runBin(t *testing.T, bin string, args ...string) (string, string, int) {
 	}
 	return out.String(), errb.String(), 0
 }
+
+func TestQueryRefusesAnOverLongStdinPassword(t *testing.T) {
+	var out, errb bytes.Buffer
+	long := strings.Repeat("y", 1025)
+	code := run([]string{"-addr", "127.0.0.1:1", "query", "-user", "t0", "-password", "-", "SELECT 1"}, strings.NewReader(long+"\n"), &out, &errb)
+	if code != 2 || !strings.Contains(errb.String(), "longer than") || strings.Contains(out.String()+errb.String(), long) {
+		t.Fatalf("exit %d\n%s\n%s", code, out.String(), errb.String())
+	}
+}
