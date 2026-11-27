@@ -76,6 +76,7 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `admission` | `max_tenants` | gauge | — | count | sum | Cap on tenant queues (queue.max_tenants). |
 | `admission` | `oldest_age` | gauge | — | ns | sum | Age of the oldest queued request at the last queue operation. |
 | `admission` | `pending_sheds` | gauge | — | count | sum | Sheds decided and not yet answered by the engine (0 between events). |
+| `admission` | `per_tenant_capacity` | gauge | — | count | sum | Capacity of one tenant queue (queue.tenant_capacity). |
 | `admission` | `pushes` | counter | — | count | sum | Requests offered to the queues. |
 | `admission` | `queue_wait` | histogram | — | ns | by bucket | Time a served request waited in its tenant queue. |
 | `admission` | `queue_wait_clamped_high` | counter | — | count | sum | Values recorded into queue_wait above its range, clamped to the highest bucket. |
@@ -89,7 +90,6 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `admission` | `shed` | counter | reason | count | sum | Requests shed with 53M01, by reason (rule, at-pop, overflow, total, tenants, deadline, undrained). |
 | `admission` | `shedding` | gauge | — | count | sum | Tenant queues that shed within the last interval. |
 | `admission` | `tenant_capacity` | gauge | tenant | count | sum | Capacity of this tenant's queue. |
-| `admission` | `tenant_capacity_each` | gauge | — | count | sum | Capacity of one tenant queue (queue.tenant_capacity). |
 | `admission` | `tenant_depth` | gauge | tenant | count | sum | Requests waiting in this tenant's queue now. |
 | `admission` | `tenant_lifo` | gauge | tenant | count | sum | 1 while this tenant queue serves newest first. |
 | `admission` | `tenant_lifo_switches` | counter | tenant, mode | count | sum | Adaptive LIFO switches of this tenant (mode: on, off). |

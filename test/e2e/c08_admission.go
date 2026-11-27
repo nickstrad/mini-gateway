@@ -225,7 +225,7 @@ const (
 )
 
 func FirstBurstSpec(rule admission.RuleKind, plant admission.Plant) Spec {
-	name := "admission-first-burst"
+	name := "admission-first-burst-" + rule.String()
 	if plant != 0 {
 		name += "-planted"
 	}
@@ -259,3 +259,5 @@ func CheckFirstBurst(r *SimRun) error {
 	}
 	return nil
 }
+
+var RelaxedQueue = map[string]any{"interval": "5s", "target": "1s"}

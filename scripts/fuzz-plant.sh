@@ -1,5 +1,5 @@
 #!/bin/bash
-# Shows that FuzzEngineOps finds a planted ordering bug: with MG_FUZZ_PLANT=queued-vanish the
+# Shows that FuzzEngineOps (and, from chunk 8, FuzzAdmissionOps) finds a planted ordering bug: with MG_FUZZ_PLANT=queued-vanish the
 # engine leaves a queue slot taken when a client vanishes while its request is queued
 # (proxy.PlantQueuedVanishKeepsSlot, reachable from tests only). The target must fail with
 # the queue invariant within FUZZ_SECONDS (default 20, the gate's fuzz budget).
@@ -39,3 +39,29 @@ if [ "$rc" = 0 ] || ! grep -q 'queue holds' "$log"; then
 fi
 rm -f "$log"
 echo "NOTE: FuzzEngineOps found the planted queue-slot bug after ${took}s (budget ${secs}s)"
+
+# Chunk 8: FuzzAdmissionOps finds a planted ordering bug in the admission core. With
+# MG_FUZZ_PLANT=admission-remove-order a removal from the middle of a tenant queue swaps the tail
+# into the hole (admission.PlantRemoveSwapsTail, reachable from tests only), so the queue order
+# no longer matches the reference model. The seed corpus does not trigger it; the fuzzer must.
+acorpus=internal/admission/testdata/fuzz/FuzzAdmissionOps
+abefore=$(ls "$acorpus" 2>/dev/null | sort)
+alog=$(mktemp)
+acache=$(mktemp -d)
+astart=$(date +%s)
+MG_FUZZ_PLANT=admission-remove-order go test -count=1 -run '^$' -fuzz '^FuzzAdmissionOps$' -fuzztime "${secs}s" ./internal/admission -args -test.fuzzcachedir="$acache" >"$alog" 2>&1
+arc=$?
+atook=$(( $(date +%s) - astart ))
+rm -rf "$acache"
+for f in $(ls "$acorpus" 2>/dev/null | sort); do
+  grep -qxF "$f" <<<"$abefore" || rm -f "$acorpus/$f"
+done
+[ -d "$acorpus" ] && [ -z "$(ls -A "$acorpus")" ] && rmdir "$acorpus" "$(dirname "$acorpus")" "$(dirname "$(dirname "$acorpus")")" 2>/dev/null
+if [ "$arc" = 0 ] || ! grep -qE 'position [0-9]+: core|reference' "$alog"; then
+  tail -n 20 "$alog"
+  rm -f "$alog"
+  echo "fuzz-plant: FuzzAdmissionOps did not find the planted remove-order bug in ${secs}s" >&2
+  exit 1
+fi
+rm -f "$alog"
+echo "NOTE: FuzzAdmissionOps found the planted remove-order bug after ${atook}s (budget ${secs}s)"
