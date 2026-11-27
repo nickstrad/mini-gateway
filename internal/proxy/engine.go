@@ -32,6 +32,8 @@ type Engine struct {
 	dialing    int
 	dialAfter  Instant
 	redialT    *timer
+	admT       *timer
+	shedQ      ShedQueue
 	lastFailed bool
 	draining   bool
 	stopping   bool
@@ -80,8 +82,18 @@ func New(cfg Config) (*Engine, error) {
 	if e.seams.Coalescer == nil {
 		e.seams.Coalescer = NoCoalesce{}
 	}
+	if e.seams.Queue == nil && cfg.Admission.Rule != 0 {
+		aq, err := NewAdmissionQueue(cfg.admissionConfig())
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrConfig, err)
+		}
+		e.seams.Queue = aq
+	}
 	if e.seams.Queue == nil {
 		e.seams.Queue = NewFIFO(cfg.QueueCap)
+	}
+	if sq, ok := e.seams.Queue.(ShedQueue); ok {
+		e.shedQ = sq
 	}
 	if e.seams.Pool == nil {
 		e.seams.Pool = NewFixedSet(cfg.Connections)
@@ -117,6 +129,9 @@ func (e *Engine) Start(now Instant, out []Action) []Action {
 func (e *Engine) Shutdown(now Instant, out []Action) []Action {
 	e.begin(now, out)
 	e.stopping = true
+	// Sweep due admission deadlines before closing clients so expired requests
+	// are answered and counted as sheds rather than dropped as client-gone.
+	e.sweepAdmission()
 	for len(e.clientList) > 0 {
 		e.closeClient(e.clientList[len(e.clientList)-1], CloseClientShutdown)
 	}
@@ -126,6 +141,8 @@ func (e *Engine) Shutdown(now Instant, out []Action) []Action {
 		}
 	}
 	e.t.cancel(&e.redialT)
+	// Remove empty tenant queues and cancel tAdmission so Quiesce sees no pending timer.
+	e.closeAdmission()
 	return e.finish()
 }
 
@@ -237,6 +254,10 @@ func (e *Engine) fire(t *timer) {
 	case tRedial:
 		e.redialT = nil
 		e.dialMore()
+	case tAdmission:
+		e.admT = nil
+		e.shedQ.Sweep(e.now)
+		e.queueTouched()
 	}
 }
 
@@ -314,6 +335,7 @@ func (e *Engine) Quiesce() error {
 	if e.snap.DBLent.Value != 0 || e.snap.Resetting.Value != 0 {
 		errs = append(errs, fmt.Errorf("%d lent, %d resetting", e.snap.DBLent.Value, e.snap.Resetting.Value))
 	}
+	errs = append(errs, e.admissionQuiet())
 	return errors.Join(errs...)
 }
 
@@ -357,7 +379,7 @@ func (e *Engine) Invariants() error {
 	if e.wire.Snapshot().Check() != nil {
 		return e.wire.Snapshot().Check()
 	}
-	return nil
+	return e.admissionCheck()
 }
 
 // Tenant returns the authenticated tenant identity for client connection id.

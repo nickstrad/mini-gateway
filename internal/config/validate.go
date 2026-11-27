@@ -32,6 +32,7 @@ func (f *File) applyDefaults() {
 	f.Limits.MaxStartup = p.MaxStartup
 	f.Limits.ReplyBuffer = p.ReplyBufferCap
 	f.Timeouts = timeoutsFrom(p.Timeouts)
+	f.applyQueueDefaults(p)
 	if f.Obs.PublishInterval == 0 {
 		f.Obs.PublishInterval = Duration(DefaultPublishInterval)
 	}
@@ -58,7 +59,7 @@ func setString(s *string, def string) {
 func (f *File) proxyCaps() proxy.Config {
 	return proxy.Config{Connections: f.Pool.Connections, QueueCap: f.Queue.Capacity, MaxClients: f.Limits.MaxClients,
 		MaxStartup: f.Limits.MaxStartup, ReplyBufferCap: f.Limits.ReplyBuffer, Timeouts: f.Timeouts.Proxy(),
-		Reset: proxy.ResetAlways}
+		Reset: proxy.ResetAlways, Admission: f.admission()}
 }
 
 // Proxy converts the JSON Timeouts block into proxy.Timeouts.
@@ -94,6 +95,7 @@ func (f *File) validate(base string) error {
 	add(f.validateTenants())
 	add(f.proxyCaps().Validate())
 	add(f.validateLease())
+	add(f.validateQueue())
 	add(f.validateObs())
 	add(f.validateFleet())
 	return errors.Join(errs...)

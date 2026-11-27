@@ -134,9 +134,16 @@ type Pool struct {
 	Connections int `json:"connections"`
 }
 
-// Queue configures the bounded admission queue capacity.
+// Queue configures the bounded per-tenant admission queues, shedding rule, and adaptive LIFO.
 type Queue struct {
-	Capacity int `json:"capacity"`
+	Capacity       int      `json:"capacity"`
+	Rule           string   `json:"rule"`
+	Target         Duration `json:"target"`
+	Interval       Duration `json:"interval"`
+	TenantCapacity int      `json:"tenant_capacity"`
+	MaxTenants     int      `json:"max_tenants"`
+	LIFO           string   `json:"lifo"`
+	LIFOHold       Duration `json:"lifo_hold"`
 }
 
 // Limits configures per-instance client, startup, and reply-buffer bounds.

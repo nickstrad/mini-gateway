@@ -14,6 +14,7 @@ const (
 	tDBStatement
 	tDBReset
 	tRedial
+	tAdmission
 )
 
 type timer struct {

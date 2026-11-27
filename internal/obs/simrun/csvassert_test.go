@@ -140,13 +140,17 @@ func TestCSVAssertBaselineCountsFromFlushedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ran, tierR := 0, 0
+	ran, tierR, short := 0, 0, 0
 	for _, d := range dirs {
 		sqls, _ := filepath.Glob(filepath.Join(d, "*.sql"))
 		if len(sqls) == 0 {
 			continue
 		}
 		name := filepath.Base(d)
+		if testing.Short() && slices.Contains(e2e.AdmissionOverloadScenarios(), name) {
+			short += len(sqls)
+			continue
+		}
 		if strings.HasPrefix(name, e2e.TierRPrefix) {
 			if !slices.Contains(e2e.TierRScenarios(), name) {
 				t.Fatalf("%s has SQL files but no tier R test writes that scenario", name)
@@ -163,8 +167,8 @@ func TestCSVAssertBaselineCountsFromFlushedFiles(t *testing.T) {
 		}
 		ran += len(sqls)
 	}
-	if ran+tierR != analysisFiles(t) || ran == 0 || tierR == 0 {
-		t.Fatalf("%d SQL files run over the simulator runs and %d left to the tier R runs, of %d", ran, tierR, analysisFiles(t))
+	if ran+tierR+short != analysisFiles(t) || ran == 0 || tierR == 0 {
+		t.Fatalf("%d SQL files run over the simulator runs, %d left to the tier R runs and %d to the full suite, of %d", ran, tierR, short, analysisFiles(t))
 	}
 }
 

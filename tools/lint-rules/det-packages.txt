@@ -39,3 +39,6 @@ internal/obs/enginesrc
 # Chunk 6a: the load tool's core (the plan, the open-loop schedule and the accounting). Its
 # runner internal/loadgen/live owns the sockets, the goroutines and the clock, and is not listed.
 internal/loadgen
+# Chunk 8: the admission core (per-tenant queues, the two rules, the comparison arms).
+internal/admission
+internal/obs/admsrc
