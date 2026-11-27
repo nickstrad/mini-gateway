@@ -26,15 +26,23 @@ the fairness scenarios. Full record: `agent_work/chunks/c09-fairness/NOTES.md`.
   active = a request waiting in its tenant queue or a lease in flight. Integer floor.
 - A waiting tenant below its share (in flight + 1 <= share) is chosen before any tenant at or
   above it; within each group, round robin by turn (least recently given a turn; ties go to
-  the oldest head). The last free lease (in flight + 1 = limit) goes only to a tenant below
-  its share; if none waits, nothing is lent (`held{share}`) and the engine retries at the end
-  of every event while held (`Engine.fairRedispatch`): one selection per event, no checkout,
-  no unpop.
+  the oldest head). The last free lease (in flight + 1 = limit) is held back only while an
+  active tenant is below its share (in flight < share) and none of those waits: it is kept for
+  a tenant between requests or holding fewer leases than its share. When no active tenant is
+  below its share (for example floors summing below the limit: limit 3, two tenants of share
+  1), the last lease goes by round robin like any other. While held (`held{share}`) the engine
+  retries at the end of every event (`Engine.fairRedispatch`): one selection per event, no
+  checkout, no unpop.
+- The pool is told only the demand the dispatcher would release (`Queues.Releasable`, passed
+  to `pool.Demand` in `Engine.corePump`): held-back requests open no connection, so there is no
+  dial / idle-close cycle and no dial past the fair limit. With the limit below
+  `pool.connections` (chunk 10), `CorePool.Checkout` also refreshes that demand before the
+  checkout, because the pool's checkout dials against the demand it last saw.
 - In flight counts leases: started at `Engine.lend`, ended where the engine counts
   `LeasesEnded` (release on both pools, the dirty-connection table, a lost lease, shutdown).
   A transaction held open keeps its lease, so it counts.
 - Turns live in the tenant queue (`tenantQueue.turn`, `Queues.round`); a new tenant queue
-  joins just ahead of the tenant served last. `Unpop` restores the turn and the round.
+  joins behind every waiting tenant and just ahead of the tenant served last. `Unpop` restores the turn and the round.
 - Dispatcher state (`fairTenant`) exists only for tenants with a lease in flight; time at
   share is a cumulative per-tenant counter in chunk 8's table (4,096 tenants, then `other`).
 
@@ -48,7 +56,8 @@ per tenant (error prefix `fairness:`). No new health rule.
 
 ## Scenarios and their cost
 
-- `test/e2e/c09_fairness.go`: `RunFair` with `NoisySpec`, `ManySpec`, `HeldSpec` and arms
+- `test/e2e/c09_fairness.go`: `RunFair` with `NoisySpec`, `ManySpec`, `HeldSpec` (and the
+  narrowed-claim variants `LongLeaseSpec`, `SyncSpec`, run without flushed files) and arms
   `fair`, `alone`, `fifo` (the fifo arm is `Config.Admission.Rule == 0`, chunk 6's shared FIFO).
   Two connections (four for held transactions), flooder reads 5 ms, quiet writes 10 ms.
 - About 30-100 s per seed on a loaded vm-1 (the cost is the engine's per-step invariant
