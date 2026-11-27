@@ -233,6 +233,7 @@ type Pool struct {
 	rate      limiter
 	brk       breaker
 	limited   bool
+	atCap     bool
 	snap      Snapshot
 	leaseHist *obs.Histogram
 	ageHist   *obs.Histogram
@@ -338,6 +339,7 @@ func (p *Pool) maybeDial() {
 		default:
 			if p.waiting <= p.supply() {
 				p.limited = false
+				p.atCap = false
 				return
 			}
 		}
@@ -346,9 +348,13 @@ func (p *Pool) maybeDial() {
 			p.limited = false
 			if trial {
 				p.checkTrial()
+			} else if !p.atCap {
+				p.atCap = true
+				p.snap.Exhausted++
 			}
 			return
 		}
+		p.atCap = false
 		if connecting >= p.cfg.MaxConnecting && p.cfg.Plant&PlantNoRate == 0 {
 			p.limited = false
 			return
@@ -561,9 +567,6 @@ func (p *Pool) Checkout(now Instant, tenant work.TenantID, out []Action) (ConnID
 		p.snap.CheckoutsLent++
 	} else {
 		p.snap.CheckoutsRefused++
-		if open, connecting := p.counts(); open+connecting >= p.cfg.Cap {
-			p.snap.Exhausted++
-		}
 	}
 	return id, ok, p.end()
 }

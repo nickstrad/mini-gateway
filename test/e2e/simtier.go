@@ -44,6 +44,7 @@ type SimRun struct {
 	Flush   *simrun.Run
 	Tamper  *tamperer
 	Final   obs.InstanceSnapshot
+	Path    *pathRelay
 }
 
 func fragmented(o simnet.Options) simnet.Options {
@@ -53,8 +54,17 @@ func fragmented(o simnet.Options) simnet.Options {
 }
 
 func (spec Spec) engineConfig() proxy.Config {
-	return proxy.Config{Connections: spec.Conns, QueueCap: spec.QueueCap, Timeouts: spec.Timeouts,
+	c := proxy.Config{Connections: spec.Conns, QueueCap: spec.QueueCap, Timeouts: spec.Timeouts,
 		ReplyBufferCap: spec.ReplyCap, Plant: spec.Plant, MaxClients: 1024, MaxStartup: 1024}
+	if spec.Pool != nil {
+		pc := *spec.Pool
+		c.Pool = &pc
+		c.Reset = spec.Reset
+		c.Reseed = spec.Reseed
+		c.MaxClients = proxy.MaxClients
+		c.MaxStartup = proxy.MaxClients
+	}
+	return c
 }
 
 // BuildSim constructs a tier S world (with optional tamper relay and scheduled
@@ -64,11 +74,20 @@ func BuildSim(spec Spec, seed int64, o SimOptions) (*SimRun, error) {
 	if spec.Fragment {
 		opts = fragmented(opts)
 	}
-	fake := fakepg.Config{Rows: spec.Rows, Service: spec.Service, MaxConnections: 256,
+	maxConns := 256
+	if spec.FakeConns > 0 {
+		maxConns = spec.FakeConns
+	}
+	fake := fakepg.Config{Rows: spec.Rows, Service: spec.Service, MaxConnections: maxConns,
 		StatementLog: fakepg.LogConfig{Cap: logCap}, WriteLog: fakepg.LogConfig{Cap: logCap}}
 	cfg := proxysim.WorldConfig{Seed: seed, Scenario: spec.Name, Replay: o.Replay, Tenants: spec.Tenants, Fake: fake,
 		Engine: spec.engineConfig(), Options: opts, DBOptions: opts}
 	r := &SimRun{Spec: spec, Seed: seed}
+	if spec.Path != nil && !o.Direct {
+		r.Path = newPathRelay(*spec.Path)
+		cfg.DBAddr = faultAddr
+		cfg.BeforeProxy = r.Path.listen
+	}
 	if o.Tamper != TamperNone {
 		r.Tamper = &tamperer{mode: o.Tamper}
 		cfg.DBAddr = tamperAddr
@@ -129,6 +148,9 @@ func RunSim(spec Spec, seed int64, o SimOptions) (*SimRun, error) {
 }
 
 func fingerprint(spec Spec) string {
+	if spec.Pool != nil {
+		return fmt.Sprintf("%s-c%d-q%d-p%d-pool%d-%s-r%v", spec.Name, spec.Conns, spec.QueueCap, spec.Plant, spec.Pool.Plant, spec.Reset, spec.Reseed)
+	}
 	return fmt.Sprintf("%s-c%d-q%d-p%d", spec.Name, spec.Conns, spec.QueueCap, spec.Plant)
 }
 
