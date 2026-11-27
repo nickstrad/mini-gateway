@@ -51,6 +51,7 @@ type Result struct {
 	Stopped   bool
 	Elapsed   time.Duration
 	FlushErrs int64
+	FlushErr  error
 }
 
 type evKind uint8
@@ -388,9 +389,7 @@ func (r *runner) finish() Result {
 	}
 	if r.csv != nil {
 		res.RunDir = r.csv.RunDir()
-		if err := r.csv.Close(); err != nil {
-			fmt.Fprintf(r.o.Status, "loadgen: CSV flush: %v\n", err)
-		}
+		res.FlushErr = r.csv.Close()
 		res.FlushErrs = r.csv.FlushStats().FlushErrors
 	}
 	return res

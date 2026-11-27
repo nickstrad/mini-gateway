@@ -27,14 +27,18 @@ func FormatTenths(v int64) string {
 	return strconv.FormatInt(v/tenths, 10) + "." + strconv.FormatInt(v%tenths, 10)
 }
 
+func tenthsOf(ns, unit int64) int64 {
+	return ns/unit*tenths + ns%unit*tenths/unit
+}
+
 func FormatNs(ns int64) string {
 	switch {
 	case ns >= NsPerSecond:
-		return FormatTenths(ns*tenths/NsPerSecond) + "s"
+		return FormatTenths(tenthsOf(ns, NsPerSecond)) + "s"
 	case ns >= nsPerMilli:
-		return FormatTenths(ns*tenths/nsPerMilli) + "ms"
+		return FormatTenths(tenthsOf(ns, nsPerMilli)) + "ms"
 	case ns >= nsPerMicro:
-		return FormatTenths(ns*tenths/nsPerMicro) + "µs"
+		return FormatTenths(tenthsOf(ns, nsPerMicro)) + "µs"
 	}
 	return strconv.FormatInt(ns, 10) + "ns"
 }
@@ -76,7 +80,7 @@ type Latencies struct {
 
 func StatusLine(elapsedNs int64, s Snapshot, l Latencies) string {
 	var b strings.Builder
-	b.WriteString("t=" + FormatTenths(elapsedNs*tenths/NsPerSecond) + "s")
+	b.WriteString("t=" + FormatTenths(tenthsOf(elapsedNs, NsPerSecond)) + "s")
 	b.WriteString(" sent " + strconv.FormatInt(s.Sent, 10) + "/" + strconv.FormatInt(s.Intended, 10))
 	b.WriteString(" completed " + strconv.FormatInt(s.CompletedTotal(), 10))
 	b.WriteString(" errors " + classes(s))

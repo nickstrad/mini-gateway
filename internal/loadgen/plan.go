@@ -143,6 +143,8 @@ func (p Plan) Validate() error {
 		return fmt.Errorf("%w: keys %d (want 1 to %d)", ErrPlan, p.Keys, MaxKeys)
 	case p.Profile > ProfileErrors:
 		return fmt.Errorf("%w: profile %d", ErrPlan, p.Profile)
+	case p.Count() < 1:
+		return fmt.Errorf("%w: -rate %d/s over -duration %dns plans no operation (raise -rate or -duration)", ErrPlan, p.Rate, p.DurationNs)
 	}
 	return nil
 }
