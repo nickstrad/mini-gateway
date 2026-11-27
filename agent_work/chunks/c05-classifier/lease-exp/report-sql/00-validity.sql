@@ -1,0 +1,14 @@
+-- Table 0: conservation and validity. RUN FIRST. Any row = the campaign is not readable as is.
+-- Reads: every run directory under `root` (all files; views.sql `problems`).
+-- Keys: one row per run directory and failed check; severity `broken` (incomplete, not
+--   conserved, cap exceeded, unlabelled, duplicated) or `invalid` (flagged by its runner:
+--   run.result <> ok, the runner's validity key not ok, a real-tier run with db_lost > 0).
+-- Formulas, per run and per flush (NOTES-E2.md section 4):
+--   requested = granted + waiters + pending + refused;  granted = released + lent;
+--   connects{ok} = closes_done + open;  sum of the seven *_ns_total = conn_ns_total;
+--   open_connecting_hw <= pool.cap;  db_backends_hw and max(server.csv count) <=
+--   pool.cap (+ connect.max_concurrent under remake.order=open-then-close) + server_extra;
+--   requests.achieved (lab.csv) = leases_requested; at least one lease; required files present
+--   (metrics, histograms, run, lab, oracle; leases with obs.leases_csv=on; server for real-tier
+--   remake runs). An empty campaign is one row.
+SELECT severity, dir, "check", detail FROM problems ORDER BY severity, dir, "check", detail;
