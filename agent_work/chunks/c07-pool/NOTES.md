@@ -51,21 +51,32 @@ The relay classifies the cancel connections the proxy opens (first bytes = a
    One engine timer (`tPool`) at `core.Next()`. The connect deadline stays in the engine.
 2. **Dial on demand only**, no prefill and no minimum idle. Demand is the queue length; a dial
    is wanted while `waiting > idle + connecting + checking + resetting`.
-3. **Creation rate**: a one-slot GCRA (`interval = 1 s / rate`, burst 1). Bound: in any
-   window W, dials ≤ `floor(W·rate/1s) + 1`; consecutive dials ≥ `1/rate` apart. A half-open
+3. **Creation rate**: a one-slot GCRA (`interval = ceil(1 s / rate)` in nanoseconds, burst
+   1; rounded up in the repair round so the bound holds for a rate that does not divide a
+   second). Bound: in any window W, dials ≤ `floor(W·rate/1s) + 1`; consecutive dials ≥
+   `1/rate` apart. A half-open
    trial and the redials after a mass death go through the same limiter.
 4. **`max_connecting` default 4**; `pool.max_cancels` default 16.
-5. **Breaker**: consecutive connection-class failures, default 5, `open_for` 1 s. What
-   counts: dial failure or connect deadline, check failure, loss of an idle connection by a
-   reset or unexpected bytes, loss of a lent / resetting / cleaning connection. What does not:
-   SQL errors (never seen by the pool), a zero-reply statement deadline alone, a polite close
-   (FIN) of an idle connection (it marks the siblings suspect but does not count: a database
-   whose `idle_session_timeout` closes idle connections is healthy). A dial, a passed check
-   or a completed reset resets the count.
-6. **Half-open trial only when wanted**: a trial is sent once a request was refused by the
-   breaker or work is waiting, so an idle proxy against a dead database does not dial every
-   `open_for`. When the pool is at its cap of (suspect) idle connections, the trial is a check
-   of one of them.
+5. **Breaker** (rewritten in the repair round, orchestrator's ruling on review finding 8):
+   consecutive connection-class failures, default 5, `open_for` 1 s. What counts: dial
+   failure or connect deadline, loss of an idle connection by unexpected bytes, loss of a
+   lent / resetting / cleaning connection, and a failed half-open trial (dial or check),
+   which re-opens it. What does not: a failed check of an idle connection that is not the
+   breaker's trial (it proves only that one old flow died — a middlebox drop, a failover —
+   not that new dials fail; the check closes it `check_failed`, marks the siblings suspect,
+   and the replacement dial decides), SQL errors (never seen by the pool; an `ErrorResponse`
+   to the check is such a failed check), a zero-reply statement deadline alone, a polite
+   close (FIN) of an idle connection (it marks the siblings suspect but does not count: a
+   database whose `idle_session_timeout` closes idle connections is healthy). A dial, a
+   passed check or a completed reset resets the count. Whenever the breaker is open and no
+   usable connection is left (it just opened, a trial failed, or the last open connection
+   went while open) queued work is answered `53M03`.
+6. **Half-open trial only when wanted**: a trial is sent once a request arrived (refused
+   while open, or admitted while half-open) or work is waiting, so an idle proxy against a
+   dead database does not dial every `open_for`. When the pool is at its cap of (suspect)
+   idle connections, the trial is a check of one of them. While half-open `Allow` admits
+   requests: they queue behind the one trial and nothing is lent until it passes (repair
+   round; before, the first request after a quiet outage was answered `53M03`).
 7. **Breaker opening with queued work**: the queued requests are answered `53M03` at once
    when nothing is usable (no open connection); otherwise they stay queued.
 8. **The check**: at checkout, MRU order; at most 4 checks started per checkout call. A
@@ -110,21 +121,21 @@ The relay classifies the cancel connections the proxy opens (first bytes = a
 
 | # | Claim | Tests |
 | --- | --- | --- |
-| 1 | The cap holds at every instant | core: `TestPoolMatchesTheReferenceModelOnRandomOperations` (model checks open+connecting ≤ cap after every action), `FuzzPoolOps`, `Invariants` (registered by the engine with the simulator, after every event); e2e `pool-hard-cap` (1,000 clients at once: fake session peak, relay pair peak and open+connecting peak ≤ 8), `pool-storm`; SQL `pool-*/pool.sql` (every flush, value and high-water) and `pool-hard-cap/fake-peak.sql`; canary `TestCanaryPoolCapPlantBreaksTheHardCap` (plant `PlantNoCap`: "8 open + 1 connecting above the cap 8"); tier R `TestTierRPoolHeadlineDatabaseConnectionsDirectAgainstProxy`, `TestTierRPoolReconnectionStormWithClientTLS` |
-| 2 | Creation limits hold (concurrent connects, dials per interval), also after a trial and a mass death | core: model (consecutive dials ≥ 1/rate), `TestCreationRateSpacesDialsAndConcurrentConnectsAreCapped`; e2e `pool-cold-start` (spacing at the relay), `pool-mass-*` and `pool-slots-held` (dials per second ≤ rate + 1); SQL `pool-cold-start/dial-rate.sql`; ablation `TestAblationColdStartWithoutTheCreationRateExceedsTheBound` (`PlantNoRate`: dials 7 µs apart) |
-| 3 | No synchronized expiry (jitter ±10%) | `TestJitterSpreadsTheExpiryOfConnectionsCreatedTogether` (200 connections created together: at most 6 lifetimes within any 1 s); e2e `pool-lifetimes` (at most 4 lifetime ends within 100 ms, no dial spike above 16/s); ablation `TestAblationLifetimesWithoutJitterExpireTogether` (no jitter: 16 ends within 100 ms) |
-| 4 | Nothing is lent in doubt | model (`lent` checks: suspect, idle ≥ check_after_idle without a check, no completed reset unless same-tenant tag under on-switch, a cancel in flight); `TestCheckStartsAtExactlyCheckAfterIdleAndEndsAtItsDeadline`, `TestOneFailureMakesEveryIdleSiblingSuspect`, `TestDirtyTableCancelsDrainsRollsBackAndResetsBeforeReuse`, `TestCancelsAreCappedAndAClientCancelOnlyReachesALentConnection`; engine `TestCoreChecksALongIdleConnectionOffTheRequestPath`; bytes after `ReadyForQuery` still close (chunk 6 tests unchanged) |
+| 1 | The cap holds at every instant | core: `TestPoolMatchesTheReferenceModelOnRandomOperations` (model checks open+connecting ≤ cap after every action), `FuzzPoolOps`, `Invariants` (registered by the engine with the simulator, after every event; since the repair round `Engine.Invariants` also checks every connection's engine phase and the idle gauge against the core: `coreAgrees`); e2e `pool-hard-cap` (1,000 clients at once: fake session peak, relay pair peak and open+connecting peak ≤ 8), `pool-storm`; SQL `pool-*/pool.sql` (every flush, value and high-water) and `pool-hard-cap/fake-peak.sql`; canary `TestCanaryPoolCapPlantBreaksTheHardCap` (plant `PlantNoCap`: "8 open + 1 connecting above the cap 8"); tier R `TestTierRPoolHeadlineDatabaseConnectionsDirectAgainstProxy`, `TestTierRPoolReconnectionStormWithClientTLS` |
+| 2 | Creation limits hold (concurrent connects, dials per interval), also after a trial and a mass death | core: model (consecutive dials ≥ 1/rate), `TestCreationRateSpacesDialsAndConcurrentConnectsAreCapped`; e2e `pool-cold-start` (spacing at the relay), `pool-mass-*` and `pool-slots-held` (dials per second ≤ rate + 1); SQL `pool-cold-start/dial-rate.sql`; ablation `TestAblationColdStartWithoutTheCreationRateExceedsTheBound` (`PlantNoRate`: dials 7 µs apart); `TestCreationRateBoundHoldsForRatesThatDoNotDivideASecond` (rates 3, 7, 9, 11, 13, 999, 7919: every pair of dials within the stated bound) |
+| 3 | No synchronized expiry (jitter ±10%) | `TestJitterSpreadsTheExpiryOfConnectionsCreatedTogether` (200 connections created together: at most 6 lifetimes within any 1 s); e2e `pool-lifetimes` (at most 4 lifetime ends within 100 ms, no dial spike above 16/s); ablation `TestAblationLifetimesWithoutJitterExpireTogether` (no jitter: 16 ends within 100 ms); `TestJitterSpreadsSmallDurationsAndRefusesOnesTooSmallToSpread` (a spread under 1 ms refused naming the key; 1 permille of 1 s gives ≥ 60 distinct lifetimes of 64). Narrowed: see "Narrowed claims" |
+| 4 | Nothing is lent in doubt | model (`lent` checks: suspect, idle ≥ check_after_idle without a check, no completed reset unless same-tenant tag under on-switch, a cancel in flight); `TestCheckStartsAtExactlyCheckAfterIdleAndEndsAtItsDeadline`, `TestOneFailureMakesEveryIdleSiblingSuspect`, `TestDirtyTableCancelsDrainsRollsBackAndResetsBeforeReuse`, `TestCancelsAreCappedAndAClientCancelOnlyReachesALentConnection`, `TestEveryOperationExpiresWhatIsDueBeforeApplyingIt` (lifetime, idle timeout, check, reset and drain at deadline equality without a prior `Tick`), `TestAnExpiredCancelNeverLetsItsConnectionBeLentAgain` (the model also fails on such a lend); engine `TestCoreChecksALongIdleConnectionOffTheRequestPath`, `TestCoreDrainDoesNotTakeTheTailOfASplitMessageForReadyForQuery`, `TestCoreCancelDoneMakesTheConnectionIdleInTheEngineToo`; bytes after `ReadyForQuery` still close (chunk 6 tests unchanged) |
 | 5 | The check never costs a client | engine `TestCoreCheckThatHangsEndsAtItsDeadlineWithNoClientError` (deadline at equality); e2e `pool-check-hangs` (zero client errors, the queued request served within the check deadline + 100 ms); canary `TestCanaryPoolCheckDeadlinePlantHoldsTheQueuedRequest` (`PlantNoCheckDeadline`: quiesce finds the connection still checking) |
-| 6 | One death, bounded damage | e2e `pool-mass-blackhole`, `pool-mass-peer-forgot` (client errors ≤ the 2 connections lent at the death, goodput back within statement deadline + clean-up + 1 s); canary `TestCanaryPoolSuspectPlantCostsClientsAfterAMassDeath` (`PlantNoSuspect`: 6 client errors for 2 lent) |
-| 7 | The breaker | core `TestBreakerOpensOnConnectionFailuresSendsOneTrialAndRecovers`, `TestHalfOpenSendsNoTrialWhileNoWorkWasRefused`, `TestZeroReplyDeadlineSetsSuspectButDoesNotCountTowardTheBreaker`, `TestBreakerOpeningRefusesQueuedWorkOnlyWhenNothingIsUsable`; engine `TestCoreBreakerRefusesAtOnceWithNoDial`; e2e `pool-db-restart` (opens and closes, 53M03 answered in < 10 ms, trials ≤ half-open periods, goodput after the restart); SQL `pool-db-restart/recovery.sql`; ablation `TestAblationRestartWithoutTheBreakerAnswersNo53M03`; poolsrc `TestHealthIsDegradedWhileTheBreakerIsOpen` |
+| 6 | One death, bounded damage | e2e `pool-mass-blackhole`, `pool-mass-peer-forgot` (client errors ≤ the 2 connections lent at the death, goodput back within statement deadline + clean-up + 1 s); canary `TestCanaryPoolSuspectPlantCostsClientsAfterAMassDeath` (`PlantNoSuspect`: 6 client errors for 2 lent); `TestNightTrickleEachRemedyAloneCarriesTheRamp` check-only arm (0 client errors, breaker never opened). Narrowed: see "Narrowed claims" |
+| 7 | The breaker | core `TestBreakerOpensOnConnectionFailuresSendsOneTrialAndRecovers`, `TestHalfOpenSendsNoTrialWhileNoWorkWasRefused`, `TestZeroReplyDeadlineSetsSuspectButDoesNotCountTowardTheBreaker`, `TestBreakerOpeningRefusesQueuedWorkOnlyWhenNothingIsUsable`; engine `TestCoreBreakerRefusesAtOnceWithNoDial`; e2e `pool-db-restart` (opens and closes, 53M03 answered in < 10 ms, trials ≤ half-open periods, goodput after the restart); SQL `pool-db-restart/recovery.sql`; ablation `TestAblationRestartWithoutTheBreakerAnswersNo53M03`; poolsrc `TestHealthIsDegradedWhileTheBreakerIsOpen`; repair round: `TestAFailedCheckOfAnIdleConnectionDoesNotCountTowardTheBreaker` (error, unexpected reply, timeout, loss), `TestATrialThatFailsOrALossWhileOpenRefusesQueuedWork`, `TestShutdownLeavesNoTimerWhileTheBreakerIsOpenOrTheRateLimits`, engine `TestCoreHalfOpenBreakerLetsARequestWaitForTheTrial`; adversarial `TestAdv_7_SQLFailureViaCheck` now holds |
 | 8 | Release policies | e2e `pool-session-{always,on-switch,always-reseed,on-switch-reseed}` (`TenantCrossings` from the fake's statement log: 0 between tenants; same-tenant carry-over > 0 only under on-switch; re-seeds sent iff `lease.reseed: on`); canary `TestCanaryPoolOnSwitchIgnoringTheTagCrossesTenants` (`PlantIgnoreTag`: 74 crossings); engine `TestCoreOnSwitchLendsTheSameTenantAsIsAndResetsOnASwitch`, `TestCoreReseedFollowsTheResetAndIsJudged`; core `TestOnSwitchPrefersTheSameTenantAndResetsWhenItMustSwitch`; tier R `TestTierRPoolSessionStateUnderEachReleasePolicy` (Postgres 17, `test/oracles/dirty-check.sql`, the random-seed residue) |
-| 9 | The dirty table | engine `TestCoreStatementDeadlineWithNoReplyCancelsDrainsAndReuses`, `TestCoreClientVanishedInsideATransactionIsRolledBackAndReused`, `TestCoreClientVanishedMidStatementCancelsTheStatement`, `TestCoreIdleInTransactionIsRolledBackWith25P03`; core `TestDirtyTableCancelsDrainsRollsBackAndResetsBeforeReuse`, `TestCleanupDeadlineClosesAndNoReplyNamesTheReason`; e2e `pool-vanish`, `pool-idle-in-tx`, `pool-slow-reader` (write deadline); model (dirty releases of every kind, then lend only after a completed reset) |
+| 9 | The dirty table | engine `TestCoreStatementDeadlineWithNoReplyCancelsDrainsAndReuses`, `TestCoreClientVanishedInsideATransactionIsRolledBackAndReused`, `TestCoreClientVanishedMidStatementCancelsTheStatement`, `TestCoreIdleInTransactionIsRolledBackWith25P03`; core `TestDirtyTableCancelsDrainsRollsBackAndResetsBeforeReuse`, `TestCleanupDeadlineClosesAndNoReplyNamesTheReason`; engine `TestCoreLifetimeEndingDuringAResetCountsTheResetOnce`; e2e `pool-vanish`, `pool-idle-in-tx`, `pool-slow-reader` (write deadline); model (dirty releases of every kind, then lend only after a completed reset) |
 | 10 | Cancel | engine `TestCoreClientCancelReachesOnlyTheLentConnection`, `TestCoreCancelWhileQueuedAnswers57014`; core cap test; e2e `pool-cancel` (the fake applied exactly 1 cancel, for client 0; client 1's sleep and client 2's read untouched); shell `TestCancelRequestGoesOutOnASecondConnectionAndReportsDone`, `TestCancelToASilentDatabaseEndsAtTheCleanupDeadline`; tier R `TestTierRPoolCancelReachesTheRightStatementOnly` |
 | 11 | Startup cap during a TLS storm | tier R `TestTierRPoolReconnectionStormWithClientTLS` (`clients_in_startup_peak` ≤ `limits.max_startup` 64 from the CSV file); chunk 6's `TestClientCapRefusesWith53300` |
-| 12 | Fleet division | `TestShareSumsToAtMostTheTotalAndIsNeverZero` (every N 1–64, total 0–300); config cases "fleet total below instances", "fleet rate below instances" |
+| 12 | Fleet division | `TestShareSumsToAtMostTheTotalAndIsNeverZero` (every N 1–64, total 0–300); config cases "fleet total below instances", "fleet rate below instances"; `TestFleetDivisionSetsEachInstancesConnections` (an omitted `pool.connections` takes the share: 20/3 → 6, 10/5 → 2; an explicit one is kept, above the share refused) |
 | 13 | Closing never waits | the engine emits `ActDBClose` and forgets the connection in the same step (no wait state exists); `pool-mass-blackhole` / `pool-check-hangs` (closes on blackholed connections hold nothing up; quiesce clean); shell: 100 ms write deadline before `Close` (`conn.abort`) |
 | 14 | Replay and flush | `runPool` (two runs per seed: trace and state digests equal, flushed files byte-identical, round trip `Flush.Check`); core `TestReplayGivesTheSameActionsForTheSameOperations`; SQL files per scenario |
-| 15 | `FuzzPoolOps` | `TestOpDecodingIsTotalBoundedAndLocal`, `TestFuzzPoolOpsCostIsBounded` (worst case < 5 ms), constant config seed (`modelSeed`), `scripts/fuzz-plant.sh` (`PlantResetClearsSuspect`), `TestShrunkResetClearsSuspectOrderingBugReplays` |
+| 15 | `FuzzPoolOps` | `TestOpDecodingIsTotalBoundedAndLocal`, `TestFuzzPoolOpsCostIsBounded` (worst case < 5 ms), constant config seed (`modelSeed`), `scripts/fuzz-plant.sh` (`PlantResetClearsSuspect`; 2–8 s in 5 of 5 runs at load 13), `TestShrunkResetClearsSuspectOrderingBugReplays`, `TestNearMissSeedsPassAndAreOneByteFromThePlantedBug` (no committed seed fails under the plant) |
 
 Steady-state row: `quietPool` after every pool scenario (lent, checking, cleaning, cancels in
 flight 0; open+connecting peak ≤ cap; snapshot conservation); the model's `finish`
@@ -141,7 +152,10 @@ records.
 
 Decoding: 3 bytes per operation (kind, two arguments), at most 64 operations, trailing bytes
 ignored; the high bit of the first byte selects `on-switch`. The seed corpus holds 8 random
-lists and three near-miss lists of the planted bug. The pinned inventory in
+lists and two near-miss lists of the planted bug that pass under the plant (repair round:
+the three padded near-misses diluted mutation and missed the 20 s budget). The reference
+model now fails as soon as a connection loses its suspect flag without a check, after every
+operation and while it settles the run, so ordinary inputs reach the plant. The pinned inventory in
 `agent_work/adversarial/cr01-shrink-fuzz-rules/adv_test.go` does not include it:
 `TestAdv_6_GateSeedSweepCounts` and `TestAdv_7_InventoryAndHiddenHashImports` are expected red
 until the orchestrator re-pins.
@@ -154,12 +168,12 @@ Tier S unless noted; seed 1; full per-seed checks in the tests named.
 | --- | --- | --- |
 | 1 night trickle, remedies on | `pool-night-keepalive-idle-check` (idle_drop 1 h, a read every 5 s for 2 h, then 8 clients × 20 reads) | 0 client errors, `backend_no_reply` 0 (also `test/analysis/pool-night-keepalive-idle-check/no-reply.sql`) |
 | 1 ablation, every remedy off | `TestAblationNightTrickleWithEveryRemedyOffHangsTheRamp` | the middlebox dropped 9 idle connections; the ramp hit 4 of them: 4 client errors (`08006` after the statement deadline), 4 no-reply deadlines — the invariant fails as required |
-| 1 each remedy alone | `TestNightTrickleEachRemedyAloneCarriesTheRamp` | **keepalive alone**: no drop, 0 errors. **idle timeout alone** (180 s): the idle connections are closed long before the middlebox's hour (10 idle closes), the ramp is a cold start, 0 errors. **check alone**: 8 connections dropped, the checks catch them (0 statement hangs, 0 `08006`/`08007`), but the failed checks are connection-class failures and open the breaker, so the ramp sees 53M03 refusals (123 client errors on seed 1) until the breaker's trial succeeds. Keepalive or the idle timeout carries the ramp; the check bounds the damage (no hang) but not the refusals (stated limit 4). |
+| 1 each remedy alone | `TestNightTrickleEachRemedyAloneCarriesTheRamp` | **keepalive alone**: no drop, 0 errors. **idle timeout alone** (180 s): the idle connections are closed long before the middlebox's hour (10 idle closes), the ramp is a cold start, 0 errors. **check alone** (re-run in the repair round, seed 1): 9 idle connections dropped by the middlebox, 4 caught by failed checks (the others expired idle first), **0 client errors, 0 `53M03`**, breaker never opened, 0 no-reply deadlines. Before the repair the failed checks counted toward the breaker and the ramp saw 123 `53M03` refusals. Each remedy alone carries the ramp; the test now requires zero client errors for the check-only arm too. |
 | 2 silent mass death | `pool-mass-blackhole` | client errors ≤ 2 (the connections lent at the death); idle ones caught by suspect checks with no client error; goodput back within 0.5 s + 0.3 s + 1 s; dials per second ≤ rate + 1; canary `PlantNoSuspect`: 6 errors |
 | 3 failover | `pool-mass-peer-forgot` | same assertions; errors arrive one network delay after the write |
 | 4 polite idle close | `pool-polite-close` | 0 client errors; closes counted `peer_closed_idle` |
 | 5 the check hangs | `pool-check-hangs` | check ends at 250 ms (`check_failed`, result `timeout`), the queued request served by a new dial within the check deadline + 100 ms, no client error, quiesce clean; canary `PlantNoCheckDeadline` |
-| 6 server slots held | `pool-slots-held` (fake `max_connections` 5, slots held 4 s) | re-dials refused with `53300` while the slots are held, dials ≤ 10/s (the configured rate) throughout, recovery after the reap |
+| 6 server slots held | `pool-slots-held` (fake `max_connections` 5, slots held 4 s) | re-dials refused with `53300` while the slots are held, dials ≤ 10/s (the configured rate) throughout, recovery after the reap. Repair round: the refused dials open the breaker (the database does refuse new connections), so while it is open with nothing usable the loopers get `53M03` at once (92 on seed 1); the check allows `53M03` only together with refused dials and a breaker opening, other errors ≤ the 2 lent, and a client that starts after the reap must succeed |
 | 7 tier R | `TestTierRPoolEmptyQueryCheckAndServerKeepalive` | the empty query against Postgres 17 returns exactly `EmptyQueryResponse` + `ReadyForQuery(I)`; `SHOW tcp_keepalives_idle/interval/count` on a pooled connection = 30/10/3; `ss -tnoi` shows a keepalive timer on the gateway's database sockets. The packet-drop rule (optional, root) was not built. The socket options are also read back with `getsockopt` in the fast test `TestKeepAliveDialerSetsTheDatabaseSocketOptions` (SO_KEEPALIVE 1, TCP_KEEPIDLE 30, TCP_KEEPINTVL 10, TCP_KEEPCNT 3; off → SO_KEEPALIVE 0). |
 | 8 harness self-test | `TestPathFaultOnOneConnectionLeavesTheOtherUnchangedAndClearingRestores` | a blackhole on one connection leaves the other's replies identical to a never-faulted run; clearing idle_drop (and a keepalive shorter than the drop) gives a run identical to a never-faulted one |
 
@@ -195,6 +209,92 @@ release rows and "recognised and counted only" for cancels; the facts are in
 `docs/knowledge/pool-core.md` (new transport action `ActDBCancel`, event `EvDBCancelDone`, the
 `CorePool` / `CoreBreaker` / `CorePolicy` seam implementations).
 
+## Narrowed claims
+
+For the orchestrator to accept or refuse. In each the code is right and the claim's wording
+was broader than the behaviour; the code was not bent.
+
+1. **Claim 1, the cap** (attack `TestAdv_1_CloseOutstanding`): open + connecting ≤ cap holds in
+   the pool core at every instant, where a connection counts until the core **issues** its
+   close (`ActClose`), not until the driver reports the descriptor closed: the core frees the
+   slot in the step that emits the close and may dial a replacement in the same step. The
+   engine's close is synchronous (stated limit 8): the shell closes the descriptor without
+   waiting for the peer (a 100 ms write deadline for a TLS close-notify), so the physical
+   overlap is at most one close in progress per replacement dial.
+2. **Claim 3, no synchronized expiry** (attack `TestAdv_3_JitterCollisions`): jitter spreads
+   expiries; it does not make them unique. The bound: each connection's idle timeout and
+   lifetime is uniform per nanosecond in `d ± d·permille/1000`; with the default ±10% of
+   30 min, 200 connections created together have at most 6 lifetimes ending within any 1 s
+   (`TestJitterSpreadsTheExpiryOfConnectionsCreatedTogether`); with 1 permille of 1 s, 64
+   connections created together have at least 60 distinct lifetimes
+   (`TestJitterSpreadsSmallDurationsAndRefusesOnesTooSmallToSpread`; seed 3); e2e
+   `pool-lifetimes`: at most 4 lifetime ends within 100 ms and no dial spike above the rate.
+   A duration whose spread would be under 1 ms is refused at validation (see the repair
+   round, `TestAdv_3_SubMicrosecondJitter`). After the repair (jitter drawn per nanosecond
+   instead of in permille steps) the attack's own 64-connection case no longer collides at
+   seed 70927, but the claim is stated as above, not as uniqueness.
+3. **Claim 6, one death, bounded damage** (attacks `TestAdv_6_RecentIdleBlackhole`,
+   `TestAdv_6_RecentIdlePeerForgot`): after a silent mass death, client errors ≤ connections
+   lent at that instant **plus connections idle for less than `pool.check_after_idle` and not
+   suspect**. Such a connection is lent without a check (stated limit 3, G5's exposure), so
+   after a silent death the first statement on each one can fail once (`08006`); that
+   failure marks every sibling suspect, so each dead connection costs at most one client
+   error. Idle connections at or past `check_after_idle`, or suspect, are caught by the check
+   with no client error. The later `53M03` that `TestAdv_6_RecentIdlePeerForgot`'s recovery
+   query got is not covered by this narrowing and was fixed (repair round: half-open
+   admits); that query now succeeds and the attack fails only on the narrowed `08006`.
+4. **Claim 8, release policies** (attack `TestAdv_8_ReseedSameTenant`): the re-seed
+   accompanies a reset. Under `lease.reset: on-switch` a connection returned to and lent
+   again to the same tenant runs neither a reset nor a re-seed, by the policy's definition,
+   so with `lease.reseed: on` the random-seed residue is gone across tenants and on every
+   reset connection, and stays within one tenant's consecutive leases of an on-switch
+   connection (tier R `TestTierRPoolSessionStateUnderEachReleasePolicy`, on-switch + re-seed:
+   "residue gone across tenants and present within the tenant").
+
+## Adversarial tests that stay red, and why
+
+- `TestAdv_1_CloseOutstanding`, `TestAdv_3_JitterCollisions` (now passes),
+  `TestAdv_6_RecentIdleBlackhole`, `TestAdv_6_RecentIdlePeerForgot`,
+  `TestAdv_8_ReseedSameTenant`: narrowed above. `TestAdv_6_RecentIdlePeerForgot` now fails
+  only on the narrowed first-statement `08006`; its recovery query succeeds.
+- `TestAdv_3_SubMicrosecondJitter`: fixed by refusal, which the orchestrator's ruling
+  allows. Its configuration (`MaxLifetime` 999 ns with 1 permille of jitter) is now refused
+  by `pool.New` with `pool.max_lifetime: 999ns with pool.jitter_percent at 1 permille spreads
+  by less than 1ms`, so the attack fails at its setup (`fresh` calls `t.Fatal` on the
+  error) instead of at its assertion. The attack is not wrong; its premise ("validation
+  accepts this duration") no longer holds.
+- No adversarial test asserts something no claim says. The 33 attacks that held still hold.
+
+## Repair round
+
+Review 1 (Neon) and Astra's adversarial results, against the orchestrator's decisions.
+Each "fails before" was checked by running the new test on a copy of `3cf6c92`.
+
+| Finding / attack | Outcome | Commit | Regression test (fails before the fix) |
+| --- | --- | --- | --- |
+| R1 BLOCKER cancel done leaves the engine `dpCleaning` | fixed: `coreSyncAll` after `CancelDone` (event and fallback); `Engine.Invariants` checks every phase and the idle gauge against the core | `bd47280` | `TestCoreCancelDoneMakesTheConnectionIdleInTheEngineToo` (quiesce, reuse, unsolicited bytes: the nil-pointer panic); removing the sync also fails the old `TestCoreStatementDeadlineWithNoReplyCancelsDrainsAndReuses` through the new invariant |
+| R2 BLOCKER lifetime during a reset counted twice | fixed: the completed reset leaves `dpResetting` before the core judges it | `bd47280` | `TestCoreLifetimeEndingDuringAResetCountsTheResetOnce` |
+| R3 MAJOR fleet division never sets `pool.connections` | fixed: an omitted `pool.connections` takes `Share(total, N)` | `dcf192b` | `TestFleetDivisionSetsEachInstancesConnections` |
+| R4 MAJOR expiry after the event | fixed: every exported operation expires what is due, and ticks the breaker, before applying itself | `a94fd47` | `TestEveryOperationExpiresWhatIsDueBeforeApplyingIt` (5 cases); attacks `TestAdv_4_ResetDeadlineEquality`, `TestAdv_4_LifetimeEqualityCheckout`, `TestAdv_5_LateCheckSuccess`, `TestAdv_9_CleanupDeadlineDrain` pass unchanged |
+| R5 MAJOR drain reads a split message's tail as `ReadyForQuery` | fixed: a drain that starts inside a message seeds its header buffer with a non-`Z` marker | `bd47280` | `TestCoreDrainDoesNotTakeTheTailOfASplitMessageForReadyForQuery` (6- and 5-byte tails) |
+| R6 MAJOR `FuzzPoolOps` misses its plant in 20 s | fixed: the model fails on a lost suspect flag at once and while settling; near-miss seeds that pass under the plant | `04e72e1` | `scripts/fuzz-plant.sh` (5 of 5 runs in 2–8 s at load 13, was 7–20 s and 2 of 3 before); `TestNearMissSeedsPassAndAreOneByteFromThePlantedBug` |
+| R7 MAJOR config rules untested; sub-second keepalive with only the server keepalive on | fixed: whole seconds ≥ 1 s whenever either keepalive is on; tests for every rule | `dcf192b` | `TestPoolRulesFailClosedNamingTheKey` (18 cases), `TestKeepaliveWholeSecondsAreAcceptedAndSentToTheServer`, `TestWarningsNameEveryRiskySetting`; mutation check: deleting each of the G2/G3/G4 rules, the check-timeout nesting, the server-keepalive condition or the fleet division fails a test |
+| R8 MAJOR failed idle checks open the breaker (ruled) | fixed as ruled: a failed check of an idle connection that is not the trial does not count; a failed trial re-opens; dials count as before. Decision 5 and stated limit 4 rewritten; check-only night arm re-run: 0 client errors (was 123 `53M03`) | `a94fd47`, `41cc4bc` | `TestAFailedCheckOfAnIdleConnectionDoesNotCountTowardTheBreaker`; `TestNightTrickleEachRemedyAloneCarriesTheRamp` now requires 0 errors for the check-only arm; attacks `TestAdv_6_OldIdleCheckRefusal`, `TestAdv_7_SQLFailureViaCheck` pass unchanged. `pool-slots-held`'s check changed (G9 row 6): there the database refuses dials, so `53M03` is right |
+| R9 MINOR `as_is` check dropped from 13 tier R SQL files | fixed: restored (no ablation arm shares those scenario names) | `d776629` | tier R only (G6/G7) |
+| R10 MINOR no refusal on a failed trial or a loss while open; `Next` after `Shutdown` | fixed | `a94fd47` | `TestATrialThatFailsOrALossWhileOpenRefusesQueuedWork`, `TestShutdownLeavesNoTimerWhileTheBreakerIsOpenOrTheRateLimits` |
+| R11 MINOR `internal/obs/simrun` serial (942 s in G3) | fixed: scenarios and per-scenario SQL on 4 workers, collected in order; heavy pool scenarios skipped under `-short` (their SQL left to G7's sweep) | `9164c1e` | measured: 588 s → 256 s under `-short` at load 12 |
+| `TestAdv_2_NonDivisorRate` | fixed: the creation interval rounds up | `a94fd47` | `TestCreationRateBoundHoldsForRatesThatDoNotDivideASecond`; attack passes |
+| `TestAdv_3_SubMicrosecondJitter` | fixed by refusal at validation naming the key; jitter now drawn per nanosecond | `a94fd47` | `TestJitterSpreadsSmallDurationsAndRefusesOnesTooSmallToSpread`; config case "lifetime too short for its jitter". Attack fails at setup (above) |
+| `TestAdv_10_LateCancelAfterExpiry` | fixed: an expired cancel taints its connection; closed `cleanup_failed` at its next return, never lent | `a94fd47` | `TestAnExpiredCancelNeverLetsItsConnectionBeLentAgain`; the reference model fails on such a lend (it caught the old code in the property test); attack passes |
+| `TestAdv_1_CloseOutstanding` | narrowed (Narrowed claims 1) | — | — |
+| `TestAdv_3_JitterCollisions` | narrowed (Narrowed claims 2); passes after the jitter change | — | — |
+| `TestAdv_6_RecentIdleBlackhole`, `TestAdv_6_RecentIdlePeerForgot` | narrowed (Narrowed claims 3); the recovery `53M03` was a defect and is fixed: a half-open breaker admits requests to wait for its one trial | `e81050b` | `TestCoreHalfOpenBreakerLetsARequestWaitForTheTrial`; the attack's recovery query succeeds |
+| `TestAdv_8_ReseedSameTenant` | narrowed (Narrowed claims 4) | — | — |
+| `TestAdv_4_*`, `TestAdv_5_LateCheckSuccess`, `TestAdv_9_CleanupDeadlineDrain` | fixed with R4 | `a94fd47` | see R4 |
+| `TestAdv_6_OldIdleCheckRefusal`, `TestAdv_7_SQLFailureViaCheck` | fixed with R8 | `a94fd47` | see R8 |
+
+`pool-slots-held`'s check and late client: `73b9539`. Docs and notes: the commit after these.
+
 ## Stated limits
 
 1. **G10 `TCP_USER_TIMEOUT` declined for v1** (the brief's ruling): Linux only, set through the
@@ -206,10 +306,13 @@ release rows and "recognised and counted only" for cancels; the facts are in
    count are checked only in tier R by reading the options back.
 3. **The exposure G5 names remains**: a connection that died less than `check_after_idle` ago
    (30 s) and is not suspect costs its first client one statement deadline; G6 bounds it to
-   one error per dead connection.
-4. **Check alone after a mass silent death opens the breaker** (G9 test 1, check-only arm): the
-   failed checks are connection-class failures, so after enough of them the breaker refuses
-   requests with `53M03` for `open_for`, although new dials would work. No statement hangs.
+   one error per dead connection (Narrowed claims 3).
+4. **Check alone after a mass silent death** (G9 test 1, check-only arm; rewritten in the
+   repair round): the failed checks close the dead connections and do not count toward the
+   breaker, so the ramp is served by replacement dials with no `53M03` (numbers in the G9
+   table). The limit that remains: the ramp waits for those dials (creation rate, connect
+   time) and for one check per dead connection; no statement hangs. If the database is
+   really down the replacement dials fail and the breaker opens on them.
 5. **FIN and reset are not told apart** on an idle connection (the transport has one close
    event); both are `peer_closed_idle` and neither counts toward the breaker.
 6. **Cancel connections are outside the cap**; at most `pool.max_cancels` (16) at once, which
@@ -249,6 +352,19 @@ release rows and "recognised and counted only" for cancels; the facts are in
 - **G9 test 7's packet-drop rule** (optional) is not built.
 - **Sweep**: pool scenarios run at most 20 seeds in a sweep, heavy ones 3 (stated limit 7);
   in `-short` heavy ones are skipped and the others run one seed.
+- **Repair round, `pool-slots-held`**: its check no longer borrows claim 6's silent-death bound
+  (that bound is for a healthy database; here the database refuses new dials for 4 s, the
+  breaker opens on them and `53M03` is the intended answer). It now bounds errors other than
+  `53M03` by the 2 lent connections, allows `53M03` only with refused dials and a breaker
+  opening, and has one more client after the reap (the loopers spend all their steps on fast
+  refusals before recovery). Commit `73b9539`.
+- **Repair round, `internal/obs/simrun` under `-short`**: the four heavy pool scenarios
+  (`pool-hard-cap`, `pool-storm`, `pool-lifetimes`, `pool-night-keepalive-idle-check`) are not
+  run and their SQL files are counted as left to the sweep (G4 + G7 run them over 3 seeds);
+  without `-short` (G3) everything runs, concurrently.
+- **Repair round, half-open admission** (not a review finding): found by the recovery query of
+  `TestAdv_6_RecentIdlePeerForgot`, which the orchestrator required to succeed. Decision 6
+  rewritten.
 - **`TestAdv_6_GateSeedSweepCounts` / `TestAdv_7_InventoryAndHiddenHashImports`** stayed green:
   `FuzzPoolOps` is not simulation-level (no `internal/sim` dependency), so the pinned
   simulator-level inventory did not change.
