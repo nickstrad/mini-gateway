@@ -26,12 +26,13 @@ import (
 )
 
 const (
-	tierRMgctlSteps   = 40
-	tierRMgctlKeys    = 5
-	tierRMgctlSeed    = 6
-	runTargetsTimeout = 5 * time.Minute
-	promPollAttempts  = 60
-	promPollPause     = 500 * time.Millisecond
+	tierRMgctlSteps     = 40
+	tierRMgctlKeys      = 5
+	tierRMgctlSeed      = 6
+	runTargetsTimeout   = 5 * time.Minute
+	promPollAttempts    = 60
+	promPollPause       = 500 * time.Millisecond
+	runTargetsLateAfter = "2s"
 )
 
 func buildCmd(t *testing.T, name string) string {
@@ -355,7 +356,7 @@ func TestTierRRunTargetsUpLoadDown(t *testing.T) {
 	if !ok {
 		t.Fatal("Prometheus has no completed-requests series after run-up")
 	}
-	load := d.make("load", "RATE=40", "DURATION=5s", "PROFILE=simple", "SEED=11")
+	load := d.make("load", "RATE=40", "DURATION=5s", "PROFILE=simple", "SEED=11", "LOAD_ARGS=-late-after "+runTargetsLateAfter)
 	if !strings.Contains(load, "loadgen: seed 11 ") || strings.Contains(load, "SHORTFALL") {
 		t.Fatalf("load:\n%s", load)
 	}
