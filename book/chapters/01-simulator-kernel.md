@@ -1,10 +1,16 @@
 # 1. A world that repeats: the simulator kernel
 
-Networked proxies fail in ways that ordinary unit tests rarely catch. A client sends a query that arrives split across two TCP packets; a backend stalls for twenty milliseconds while the send buffer fills; one peer drops off the network without sending a reset; a timeout fires at the same microsecond as a late reply. Run that scenario against real sockets and a wall clock, and a bug that shows up once in five hundred runs vanishes as soon as you attach a debugger.
+Networked proxies fail in ways that ordinary unit tests rarely catch. A client query arrives split across two TCP packets, or a backend stalls for twenty milliseconds while the send buffer fills. One peer drops off the network without sending a reset, or a timeout fires at the same microsecond as a late reply. Run that scenario against real sockets and a wall clock, and a bug that shows up once in five hundred runs vanishes as soon as you attach a debugger.
 
 Before `mini-gateway` has a single line of proxy or Postgres code, it builds a deterministic simulator. A deterministic simulator replaces the operating system's scheduler, wall clock, random-number generator, and TCP sockets with a single-threaded event loop driven by one 64-bit seed. Give it the same seed and the same binary, and every event, timer, random draw, byte split, and failure happens in the exact same order, down to the nanosecond.
 
-This chapter covers Chunk 1: the simulator kernel ([`internal/sim`](../../internal/sim)), the simulated byte-stream network ([`internal/sim/simnet`](../../internal/sim/simnet)), the measurement half of observability ([`internal/obs`](../../internal/obs)), the test plumbing ([`internal/sim/simtest`](../../internal/sim/simtest) and [`internal/obs/obstest`](../../internal/obs/obstest)), a toy echo protocol that exercises the harness ([`internal/sim/simtoy`](../../internal/sim/simtoy)), and the standalone runner ([`cmd/mgsim`](../../cmd/mgsim)).
+This chapter covers Chunk 1:
+
+- the simulator kernel ([`internal/sim`](../../internal/sim)) and simulated byte-stream network ([`internal/sim/simnet`](../../internal/sim/simnet)),
+- the measurement half of observability ([`internal/obs`](../../internal/obs)),
+- the test plumbing ([`internal/sim/simtest`](../../internal/sim/simtest) and [`internal/obs/obstest`](../../internal/obs/obstest)),
+- a toy echo protocol that exercises the harness ([`internal/sim/simtoy`](../../internal/sim/simtoy)), and
+- the standalone runner ([`cmd/mgsim`](../../cmd/mgsim)).
 
 ---
 
@@ -22,8 +28,8 @@ Instead of inheriting a cluster model, Chunk 1 builds a small kernel in this rep
 
 Two other alternatives were rejected up front:
 
-- **Property-testing libraries (`pgregory.net/rapid`).** The module policy restricts third-party dependencies to one Postgres codec (`pgproto3`, entering in Chunk 2). Instead of importing `rapid` to generate and shrink fault schedules, the kernel decodes raw bytes into bounded fault schedules (`ScheduleFromBytes`) for Go's built-in fuzzer and shrinks failing schedules with an 18-line standard-library loop (`Shrink`).
-- **Floating-point arithmetic inside the simulation.** Floating-point rounding and library choices can vary across instructions or math routines, and `mini-gateway`'s core control laws (CoDel, AIMD, histograms) are designed in integer form anyway ([decision D2](../../PLAN.md#3-design-decisions-this-plan-makes)). Keeping floats out of all four simulation and measurement packages lets the determinism linter (`detlint`) enforce a zero-float, zero-goroutine, zero-wall-clock, zero-global-random rule with an empty allow-list (`tools/lint-rules/detlint-allow.txt`). Test plumbing packages (`simtest` and `obstest`, which read flags, environment variables, files, or `reflect`) stay outside the lint list by explicit listing in [`tools/lint-rules/det-packages.txt`](../../tools/lint-rules/det-packages.txt).
+- **Property-testing libraries (`pgregory.net/rapid`).** The module policy restricts third-party dependencies to one Postgres codec (`pgproto3`, entering in Chunk 2). Rather than importing `rapid` to generate and shrink fault schedules, the kernel feeds Go's built-in fuzzer raw bytes decoded into bounded schedules (`ScheduleFromBytes`). Failing schedules are then shrunk by an 18-line standard-library loop (`Shrink`).
+- **Floating-point arithmetic inside the simulation.** Floating-point rounding and library choices can vary across instructions or math routines, and `mini-gateway`'s core control laws (CoDel, AIMD, histograms) are designed in integer form anyway ([decision D2](../../PLAN.md#3-design-decisions-this-plan-makes)). Keeping floats out of all four simulation and measurement packages lets `detlint` enforce a zero-float, zero-goroutine, zero-wall-clock, zero-global-random rule with an empty allow-list (`tools/lint-rules/detlint-allow.txt`). The test plumbing packages (`simtest` and `obstest`) read flags, environment variables, files, or `reflect`, so they stay outside the lint list by explicit listing in [`tools/lint-rules/det-packages.txt`](../../tools/lint-rules/det-packages.txt).
 
 ---
 
@@ -37,7 +43,7 @@ Four mechanisms make a simulation repeat bit for bit.
 
 ### Isolated named random streams
 
-A single shared random generator is fragile: if you add one extra random draw to connection 1 (say, because a fault triggered a retry), every later draw for connection 2 shifts, destroying fault isolation. [`sim.NewStream`](../../internal/sim/stream.go) avoids this by deriving a separate PCG generator from `(seed, fnv64a(label))`:
+A single shared random generator is fragile. Adding one extra draw to connection 1 (say, because a fault triggered a retry) shifts every later draw for connection 2 and destroys fault isolation. [`sim.NewStream`](../../internal/sim/stream.go) avoids this by deriving a separate PCG generator from `(seed, fnv64a(label))`:
 
 ```go
 func NewStream(seed int64, label string) *rand.Rand {
@@ -45,7 +51,7 @@ func NewStream(seed int64, label string) *rand.Rand {
 }
 ```
 
-Each pipe of each simulated connection draws from its own stream (`simnet/conn/<id>/up` or `down`), and each toy client draws from `simtoy/client/<id>`. Drawing a million extra values from one label leaves every other label's sequence unchanged. Callers keep the returned `*rand.Rand`; calling `Stream(label)` twice with the same label starts from the beginning again.
+Each pipe of each simulated connection draws from its own stream (`simnet/conn/<id>/up` or `down`), and each toy client draws from `simtoy/client/<id>`. Drawing a million extra values from one label leaves every other label's sequence unchanged. Callers keep the returned `*rand.Rand`, because calling `Stream(label)` twice with the same label starts from the beginning again.
 
 ### An opaque-event min-heap with real cancellation
 
@@ -53,19 +59,19 @@ The event queue in [`internal/sim/queue.go`](../../internal/sim/queue.go) is an 
 
 Every event stores its own heap slot (`hi`), so `Timer.Cancel()` removes the entry from the heap in `O(log n)` time rather than leaving a tombstone behind. That matters once a proxy holds thousands of per-request deadline timers that are cancelled on every normal reply.
 
-Events carry either a Go closure (`At`, `After`) or an opaque `Handler` interface plus a `uint64` code (`AtHandler`, `AfterHandler`), which avoids allocating a closure on hot paths like byte delivery. Timers marked with `MarkBackground()` keep firing while foreground work runs, but `RunUntilQuiet()` stops once only background timers remain, and the end-of-run leak check ignores them.
+Events carry either a Go closure (`At`, `After`) or an opaque `Handler` interface plus a `uint64` code (`AtHandler`, `AfterHandler`), which avoids allocating a closure on hot paths like byte delivery. Timers marked with `MarkBackground()` keep firing while foreground work runs. Once only background timers remain, `RunUntilQuiet()` stops, and the end-of-run leak check ignores them.
 
 ### Livelock guards, panic guards, invariants, and quiesce
 
 [`Sim.Step`](../../internal/sim/sim.go) enforces three safety bounds before popping an event:
 
 - `MaxSteps` (default 50,000,000): stops infinite event chains with `ErrBudgetExhausted`.
-- `MaxSameInstant` (default 1,000,000): stops zero-delay spin loops with `ErrTimeFrozen`, counting the first step at any instant as `1` so `t = 0` and `t > 0` enforce the exact same limit.
+- `MaxSameInstant` (default 1,000,000): stops zero-delay spin loops with `ErrTimeFrozen`. It counts the first step at any instant as `1`, so `t = 0` and `t > 0` enforce the exact same limit.
 - `MaxEvents` (default 4,194,304): checked on schedule; stops runaway fan-out with `ErrHeapFull`.
 
 Any panic inside an event callback, invariant, or quiesce check is caught by `recover()` and turned into a sticky `*sim.PanicError` carrying the seed, step count, virtual time, and `REPLAY:` command line. Errors are sticky: the first error wins and halts further steps so the original cause is never masked.
 
-After every step, the loop runs registered **invariants** (`RegisterInvariant`, or `RegisterSampledInvariant` for expensive checks). At the end of a scenario, callers invoke `CheckQuiesce()`, which verifies that no non-background timers remain in the heap and that every registered subsystem **quiesce** check (an assertion that zero resources remain leaked or in flight) returns `nil`.
+After every step, the loop runs registered **invariants** (`RegisterInvariant`, or `RegisterSampledInvariant` for expensive checks). At the end of a scenario, callers invoke `CheckQuiesce()`, which verifies that no non-background timers remain in the heap and that every registered subsystem **quiesce** check—an assertion that zero resources remain leaked or in flight—returns `nil`.
 
 ---
 
@@ -73,14 +79,14 @@ After every step, the loop runs registered **invariants** (`RegisterInvariant`, 
 
 To prove the **replay law**—running the same scenario twice with the same seed yields identical behaviour—the kernel maintains two independent SHA-256 hashes in [`internal/sim/trace.go`](../../internal/sim/trace.go):
 
-1. **Trace digest (`TraceDigest`):** hashes every 48-byte decision record (`At`, 8-byte `Kind` tag, and four `int64` fields) as actors call `s.Trace(...)`. Records omit the loop's sequence number so an unrelated fault on connection 1 does not shift the trace records of connection 2. The last `N` records (default 256, capped at 65,536) stay in a bounded ring buffer for failure reports. Tracing can be switched off (`Config.TraceOff`), which skips hashing and ring writes.
-2. **State digest (`StateDigest`):** invokes every writer registered with `RegisterState(name, fn)` in registration order—never map iteration order—hashing length-prefixed names, strings, and 64-bit integers. Neither the kernel's step/fault counters nor `simnet`'s fault counters are fed into `StateDigest`. That design makes two properties hold at once: switching tracing off leaves `StateDigest` identical, and injecting a fault then clearing it before traffic leaves `StateDigest` identical to a never-faulted run.
+1. **Trace digest (`TraceDigest`):** Hashes every 48-byte decision record (`At`, 8-byte `Kind` tag, and four `int64` fields) as actors call `s.Trace(...)`. Records omit the loop's sequence number so an unrelated fault on connection 1 does not shift the trace records of connection 2. A bounded ring buffer keeps the last `N` records (default 256, capped at 65,536) for failure reports. Tracing can be switched off with `Config.TraceOff`, which skips hashing and ring writes.
+2. **State digest (`StateDigest`):** Calls every writer registered with `RegisterState(name, fn)` in registration order—never map iteration order—and hashes length-prefixed names, strings, and 64-bit integers. Neither the kernel's step and fault counters nor `simnet`'s fault counters feed into `StateDigest`. Two properties follow at once: switching tracing off leaves `StateDigest` identical, and injecting a fault then clearing it before traffic leaves `StateDigest` identical to a never-faulted run.
 
 ### Fault schedules and shrinking
 
 Faults are plain structs: `Fault{At, Kind, Target, Arg1, Arg2}`. Fault kinds are registered per `Sim` instance (up to 64 kinds) rather than in a package-level global, so the set of kinds never depends on which packages a test binary happens to link. `simnet` owns kinds 1 through 9; later world packages will take disjoint ranges.
 
-For fuzzing, `ScheduleFromBytes(data, Space)` consumes 8 bytes per fault, maps each field modulo the allowed kinds, target count, time window `[Start, Start+Window)` (using 128-bit multiplication so `Window` can reach `MaxTime` without overflow), and argument bounds, caps the length at `MaxFaults` (default 64, hard cap 1,024), and stably sorts by time. Every byte string decodes to a valid schedule without panicking.
+For fuzzing, `ScheduleFromBytes(data, Space)` consumes 8 bytes per fault and maps each field modulo the allowed kinds, target count, time window `[Start, Start+Window)`, and argument bounds. The window mapping uses 128-bit multiplication so `Window` can reach `MaxTime` without overflow. The decoder caps the schedule at `MaxFaults` (default 64, hard cap 1,024) and stably sorts it by time; every byte string decodes to a valid schedule without panicking.
 
 When a fuzzed or long fault schedule triggers a failure, [`sim.Shrink`](../../internal/sim/fault.go) reduces it to a **1-minimal** failing schedule—one that still fails, and from which deleting any single fault makes the failure disappear:
 
@@ -117,11 +123,11 @@ Nothing is ever called synchronously inside a network operation. Every notificat
 
 ### Latency, chunking, and back pressure
 
-A handshake takes one round trip on the virtual clock: after up latency, the server's accept callback runs; after down latency, the client receives `EvConnected`. If the server writes immediately on accept, its bytes buffer and `EvReadable` is queued strictly after `EvConnected`.
+A handshake takes one round trip on the virtual clock. After up latency, the server's accept callback runs; after down latency, the client receives `EvConnected`. If the server writes immediately on accept, its bytes buffer and `EvReadable` is queued strictly after `EvConnected`.
 
 Each pipe enforces a bounded **send window** (default 64 KiB, cap 16 MiB). **In flight** means every byte accepted by `Write` that has neither been read by the receiver nor discarded—whether still travelling, held by a stall, or sitting delivered in the receive buffer. When a writer tries to write more than `window - len(buf)`, `Write` accepts only what fits, increments `WritesRefused`, and sets `blocked = true`. When the receiver later reads bytes or discards them on `Close()`, `pipe.unblock()` delivers one `EvWritable` event (**back pressure**).
 
-Accepted writes are cut into delivery pieces according to the direction's chunking mode: `ChunkWhole` (one piece), `ChunkFixed` (down to 1 byte per event), or `ChunkRandom` (seeded splits capped at 64 pieces per write). Each piece's arrival time is clamped so random jitter can delay a later piece but never reorder it ahead of an earlier one:
+Accepted writes are split into delivery pieces according to the direction's chunking mode: `ChunkWhole` sends one piece, `ChunkFixed` splits down to 1 byte per event, and `ChunkRandom` uses seeded splits capped at 64 pieces per write. Each piece's arrival time is clamped so random jitter can delay a later piece but never reorder it ahead of an earlier one:
 
 ```go
 func (p *pipe) arrival() sim.Time {
@@ -144,14 +150,14 @@ Every `simnet` fault is injectable through the kernel's fault schedule, traced a
 
 | Fault (kind) | Target | What both ends see | Clear behaviour |
 | --- | --- | --- | --- |
-| `net.reset` (1) | connection | All in-flight bytes discarded immediately; client gets `EvReset` first, then server at the same instant; calls return `ErrReset`. | Not clearable. |
+| `net.reset` (1) | connection | All in-flight bytes are discarded immediately. Client gets `EvReset` first, then server at the same instant, and subsequent calls return `ErrReset`. | Not clearable. |
 | `net.stall` (2) | connection | Arriving pieces and FINs on the masked direction(s) are held while still counting against the send window. | Releases all held bytes and FINs in order as one arrival (or auto-clears after `Arg2` ns). |
-| `net.half-open` (3) | connection | The killed end gets no events and returns `ErrGone`; the surviving end never gets a FIN or reset, writes until the window fills, and closes (`ReasonHalfOpen`) only on its own `Close()` (or `ReasonReset` on `Reset()`). Bytes already in flight from the gone end still arrive. | Not clearable. |
-| `net.half-close` (4) | connection | Queues a FIN behind pending bytes on the targeted side; later writes on that side return `ErrClosed` while reads continue. | Not clearable. |
+| `net.half-open` (3) | connection | The killed end gets no events and returns `ErrGone`. The surviving end never gets a FIN or reset, writes until the window fills, and closes (`ReasonHalfOpen`) only on its own `Close()` (or `ReasonReset` on `Reset()`). Bytes already in flight from the gone end still arrive. | Not clearable. |
+| `net.half-close` (4) | connection | Queues a FIN behind pending bytes on the targeted side. Later writes on that side return `ErrClosed` while reads continue. | Not clearable. |
 | `net.chunk` (5) | connection | Overrides piece size (minimum 1 byte) for subsequent writes on the masked direction(s). | Restores original chunking. |
 | `net.refuse` (6) | listener | Subsequent dials receive `EvRefused` after one round trip; server never sees them. | Later dials accepted. |
-| `net.dial-stall` (7) | listener | Subsequent dials never complete (`ErrNotConnected`); client `Close`/`Reset` aborts them (`ReasonAborted`). | Later dials complete; already stalled dials stay stalled. |
-| `net.silence` (8) | listener | **Accept-then-silence:** client receives `EvConnected` and fills its send window, while the server's accept callback is never called; closes as `ReasonSilent` when the client closes. | Later dials normal; silenced connections stay silent. |
+| `net.dial-stall` (7) | listener | Subsequent dials never complete (`ErrNotConnected`). Client `Close`/`Reset` aborts them (`ReasonAborted`). | Later dials complete; already stalled dials stay stalled. |
+| `net.silence` (8) | listener | **Accept-then-silence:** client receives `EvConnected` and fills its send window, while the server's accept callback is never called. Closes as `ReasonSilent` when the client closes. | Later dials normal; silenced connections stay silent. |
 | `net.clear` (9) | conn / listener | Clears the fault kind named in `Arg1`. | — |
 
 On every loop step, `simnet` checks a registered **conservation law** invariant on both directions:
@@ -183,7 +189,7 @@ func bucketIndex(v int64) int {
 }
 ```
 
-For the duration histogram (`NewDurationHistogram`, 1 µs to 60 s in nanoseconds), this layout uses 3,302 `int64` buckets (26.4 KB). Out-of-range values clamp into the edge bucket and increment `ClampedLow` or `ClampedHigh`. `Quantile(bp)` accepts **basis points** (`0..10000`, so p99 is `9900`), computes rank `ceil(n * bp / 10000)` in 128-bit arithmetic (`bits.Mul64`/`bits.Div64`) so huge sample counts never overflow, and returns that bucket's upper bound clipped to `Hi`. For any in-range value `v`, the reported quantile `q` satisfies `v <= q` and `(q - v) * 128 <= v`—less than 0.79% relative error, inside the 1% target.
+For the duration histogram (`NewDurationHistogram`, 1 µs to 60 s in nanoseconds), this layout uses 3,302 `int64` buckets (26.4 KB). Out-of-range values clamp into the edge bucket and increment `ClampedLow` or `ClampedHigh`. `Quantile(bp)` takes **basis points** (`0..10000`, so p99 is `9900`) and computes the rank `ceil(n * bp / 10000)` in 128-bit arithmetic (`bits.Mul64`/`bits.Div64`) so huge sample counts never overflow. It returns that bucket's upper bound clipped to `Hi`. For any in-range value `v`, the reported quantile `q` satisfies `v <= q` and `(q - v) * 128 <= v`—less than 0.79% relative error, inside the 1% target.
 
 Beside `internal/obs`, [`internal/obs/obstest`](../../internal/obs/obstest) supplies reflection helpers (`RequirePlain`, `MergeMoved`, `NeverMoved`) so tests can reject maps, floats, pointers, or `time.Time` in snapshots and fail if any snapshot counter never moves.
 
@@ -191,7 +197,7 @@ Beside `internal/obs`, [`internal/obs/obstest`](../../internal/obs/obstest) supp
 
 ## Running the toy echo protocol and `mgsim`
 
-To prove the harness end to end before Postgres exists, [`internal/sim/simtoy`](../../internal/sim/simtoy) implements a line-echo server and client over `simnet` with 11 named scenarios—one clean run, one random-split run, and nine fault scenarios covering every `simnet` fault. Each scenario runs three clients (with connection faults targeting connection 1) plus a fourth recovery client after the fault clears.
+To prove the harness end to end before Postgres exists, [`internal/sim/simtoy`](../../internal/sim/simtoy) implements a line-echo server and client over `simnet`. It defines 11 named scenarios: one clean run, one random-split run, and nine fault scenarios covering every `simnet` fault. Each scenario runs three clients (with connection faults targeting connection 1) plus a fourth recovery client after the fault clears.
 
 You can list and run scenarios directly with [`cmd/mgsim`](../../cmd/mgsim):
 
@@ -216,7 +222,7 @@ state-digest: 91c2b2d389eab70c453454b29f4c7d32bd1fd81ba239ef710ca9271559a7f4fe
 REPLAY: go run ./cmd/mgsim run echo-reset -seed 7
 ```
 
-Passing `-trace` streams every 48-byte trace record as it happens. In `echo-reset` with seed 7, connection 1 is reset at 2.5 ms (`t=2500000`), causing client 0 to finish with outcome `2` (`reset`), while clients 1 and 2 finish cleanly (`1` = `completed`), a second reset at 30 ms hits a closed connection (`NoTarget`), and recovery client 3 finishes cleanly at 55.6 ms:
+Passing `-trace` streams every 48-byte trace record as it happens. In `echo-reset` with seed 7, connection 1 is reset at 2.5 ms (`t=2500000`), so client 0 finishes with outcome `2` (`reset`) while clients 1 and 2 finish cleanly (`1` = `completed`). A second reset at 30 ms hits a closed connection (`NoTarget`), and recovery client 3 finishes cleanly at 55.6 ms:
 
 ```text
 t=0 net.dial 1 0 0 0
@@ -240,9 +246,9 @@ t=55617311 toy.out 3 1 450 450
 Tests in Chunk 1 total 3,698 lines across 127 test and fuzz functions (beside 3,529 lines of product code, of which 380 are `simtest` and `obstest` plumbing). They are organized into three layers:
 
 1. **Meta-tests (testing the test harness).**
-   - *Replay:* `TestScenario` runs every scenario twice per seed via `simtest.RequireDeterministic`, asserting identical trace digests, state digests, and formatted snapshots. `TestCrossProcessReplay` and the gate extra script ([`extra.sh`](../../agent_work/chunks/c01-sim-kernel/gate/extra.sh)) execute `mgsim` in separate OS processes and require byte-identical output. `TestGoldenDigests` pins all 11 scenarios across 5 seeds (`1, 2, 3, 7, 42`) in [`testdata/golden-digests.txt`](../../internal/sim/simtoy/testdata/golden-digests.txt), updated only deliberately via `-update`.
-   - *Isolation and residue:* `TestFaultOnOneConnectionLeavesOthersIdentical` proves every per-connection fault on connection 1 leaves trace records, received bytes, and finish times of connections 2 and 3 byte-identical to an unfaulted run. `TestClearedFaultLeavesNoResidue` injects and clears all five clearable faults before traffic and asserts traffic trace digests and `StateDigest` match a clean run.
-   - *Leak traps and planted bugs:* `TestQuiesceCatchesLeaks` and `TestQuiesceCatchesInFlightByte` deliberately leak a connection, an unread byte, and a foreground timer and require `CheckQuiesce()` to fail. For a canary, `simtoy` has an unexported `plantBug` switch that drops the last payload byte of any line arriving across more than one `Read`. Because the toy client writes whole lines whenever they fit the window, the bug cannot fire under whole-write delivery (**ablation**: the control run passes even with the bug on), whereas `echo-chunk-1` and `echo-random-split` fail with `ErrMismatch` and a `REPLAY:` line. Running the shrinker against 40-fault random schedules reduces each failing schedule to a single chunk fault:
+   - *Replay:* `TestScenario` runs every scenario twice per seed via `simtest.RequireDeterministic` and asserts identical trace digests, state digests, and formatted snapshots. `TestCrossProcessReplay` and the gate extra script ([`extra.sh`](../../agent_work/chunks/c01-sim-kernel/gate/extra.sh)) run `mgsim` in separate OS processes and require byte-identical output. `TestGoldenDigests` pins all 11 scenarios across 5 seeds (`1, 2, 3, 7, 42`) in [`testdata/golden-digests.txt`](../../internal/sim/simtoy/testdata/golden-digests.txt), updated only deliberately via `-update`.
+   - *Isolation and residue:* `TestFaultOnOneConnectionLeavesOthersIdentical` proves that every per-connection fault on connection 1 leaves the trace records, received bytes, and finish times of connections 2 and 3 byte-identical to an unfaulted run. `TestClearedFaultLeavesNoResidue` injects and clears all five clearable faults before traffic and asserts that traffic trace digests and `StateDigest` match a clean run.
+   - *Leak traps and planted bugs:* `TestQuiesceCatchesLeaks` and `TestQuiesceCatchesInFlightByte` deliberately leak a connection, an unread byte, and a foreground timer, requiring `CheckQuiesce()` to fail. For a canary, `simtoy` provides an unexported `plantBug` switch that drops the last payload byte of any line arriving across more than one `Read`. Because the toy client writes whole lines whenever they fit the window, the bug cannot fire under whole-write delivery (**ablation**: the control run passes even with the bug on). Under `echo-chunk-1` and `echo-random-split`, however, it fails with `ErrMismatch` and a `REPLAY:` line. Running the shrinker against 40-fault random schedules reduces each failing schedule to a single chunk fault:
 
 ```sh
 $ go test -v ./internal/sim/simtoy -run '^TestPlantedBugCaughtAndShrunk$'
@@ -253,8 +259,8 @@ $ go test -v ./internal/sim/simtoy -run '^TestPlantedBugCaughtAndShrunk$'
 --- PASS: TestPlantedBugCaughtAndShrunk (0.06s)
 ```
 
-2. **Property tests and fuzzing.** Seeded property tests compare `eventQueue` and `Sim` against sorted-slice reference models, verify `Histogram` quantiles against sorted slices and `testing.AllocsPerRun == 0` on `Record`, and drive random interleavings of dials, writes, closes, resets, and faults (`TestRandomOperationsKeepEveryLaw`, also run at 3,000 seeds during build verification). Two fuzz targets—`FuzzScheduleFromBytes` and `FuzzToySchedule`—run under [`scripts/fuzz.sh`](../../scripts/fuzz.sh) (20 s per target in the gate).
-3. **End-to-end scenarios and sweeps.** [`scripts/sweep.sh`](../../scripts/sweep.sh) runs all `TestScenario*` tests across `SWEEP_SEEDS` seeds (default 200: 2,200 seed runs in the gate; also run at 1,000 seeds = 11,000 seed runs in 17 s). `TestCountersMove` verifies that every integer counter in `simnet.Snapshot` is non-zero in at least one scenario, and `TestKernelSnapshotCountersMove` does the same for `sim.Snapshot`.
+2. **Property tests and fuzzing.** Seeded property tests compare `eventQueue` and `Sim` against sorted-slice reference models, verify `Histogram` quantiles against sorted slices, check `testing.AllocsPerRun == 0` on `Record`, and drive random interleavings of dials, writes, closes, resets, and faults (`TestRandomOperationsKeepEveryLaw`, also run at 3,000 seeds during build verification). Two fuzz targets—`FuzzScheduleFromBytes` and `FuzzToySchedule`—run under [`scripts/fuzz.sh`](../../scripts/fuzz.sh) for 20 s each in the gate.
+3. **End-to-end scenarios and sweeps.** [`scripts/sweep.sh`](../../scripts/sweep.sh) runs all `TestScenario*` tests across `SWEEP_SEEDS` seeds. The default is 200 seeds (2,200 seed runs in the gate); it was also run at 1,000 seeds (11,000 seed runs in 17 s). `TestCountersMove` verifies that every integer counter in `simnet.Snapshot` is non-zero in at least one scenario, and `TestKernelSnapshotCountersMove` does the same for `sim.Snapshot`.
 
 ---
 
@@ -283,8 +289,8 @@ All seven review findings and all four broken attacks were fixed in one repair r
 The simulator kernel is intentionally small and has clear boundaries:
 
 - **Replay scope.** Bit-identical replay is claimed for the same commit, same Go toolchain (`go1.26.8`), and `linux/amd64`.
-- **Fixed tables per run.** `simnet`'s connection slice grows by one slot per `Dial` and never shrinks within a run, capped at `MaxConns` (1,048,576); listeners are capped at `MaxListeners` (1,024).
-- **Stale delivery events.** Closing or resetting a connection invalidates queued delivery events via `epoch`, but those events stay in the heap until their virtual timestamp arrives (heap size is bounded by `MaxEvents` = 4,194,304).
+- **Fixed tables per run.** `simnet`'s connection slice grows by one slot per `Dial` and never shrinks within a run. It is capped at `MaxConns` (1,048,576), and listeners are capped at `MaxListeners` (1,024).
+- **Stale delivery events.** Closing or resetting a connection invalidates queued delivery events via `epoch`. Those events stay in the heap until their virtual timestamp arrives, bounded by `MaxEvents` = 4,194,304.
 - **One-byte chunking cost.** `ChunkFixed` with `ChunkSize: 1` schedules one loop event per byte (a 1 MiB write creates ~1,048,576 events). `ChunkRandom` caps splits at 64 pieces per write.
 - **Latency model.** `simnet` supports only `Base + uniform[0, Jitter]` in nanoseconds, saturating at `MaxTime`. Skewed or bimodal service-time distributions belong to the fake Postgres in Chapter 2, not the byte transport.
 - **No stack trace in `PanicError`.** Capturing a stack requires `runtime/debug`, which `detlint` forbids in simulation packages. `PanicError` records the panic value, seed, step, virtual time, and `REPLAY:` line instead.
@@ -294,9 +300,11 @@ The simulator kernel is intentionally small and has clear boundaries:
 
 ## Change request CR-1: value lowering, scenario files, and fuzz rate rules
 
-After Chunk 2 froze `internal/sim` at tag `freeze-sim`, Change Request CR-1 ([`CHANGE-REQUEST.md`](../../agent_work/chunks/cr01-shrink-fuzz-rules/CHANGE-REQUEST.md)) extended shrinking and the fuzzing tooling to carry out Nick's DST fuzz ruling ([sections 6.1](../../PLAN.md#61-layers) and [6.6](../../PLAN.md#66-rules-for-simulation-level-fuzz-targets-nicks-dst-fuzz-ruling-2026-11-24) of the plan). The ruling came from `object-store`'s `FuzzClusterNemesis`, which derived its simulator seed from a hash of its input and ran at 0.26 executions per second (against 324/s and 884/s for that project's other targets): hashing turns every one-byte mutation into a different world, degrading coverage-guided fuzzing into a slow random seed sweep, and opaque pinned seeds are fragile regression tests. CR-1 is strictly additive—`sim.Shrink`, every existing exported identifier, and every existing scenario digest remain unchanged (pinned by [`shrink_freeze_test.go`](../../internal/sim/shrink_freeze_test.go)).
+After Chunk 2 froze `internal/sim` at tag `freeze-sim`, Change Request CR-1 ([`CHANGE-REQUEST.md`](../../agent_work/chunks/cr01-shrink-fuzz-rules/CHANGE-REQUEST.md)) extended shrinking and the fuzzing tooling to carry out Nick's DST fuzz ruling ([sections 6.1](../../PLAN.md#61-layers) and [6.6](../../PLAN.md#66-rules-for-simulation-level-fuzz-targets-nicks-dst-fuzz-ruling-2026-11-24) of the plan). The ruling grew out of `object-store`'s `FuzzClusterNemesis`, which hashed its fuzz input into a simulator seed and ran at 0.26 executions per second (against 324/s and 884/s for that project's other targets). Hashing turns every one-byte mutation into a different world, degrading coverage-guided fuzzing into a slow random seed sweep, and opaque pinned seeds make fragile regression tests. CR-1 is strictly additive: `sim.Shrink`, every existing exported identifier, and every existing scenario digest remain unchanged, as pinned by [`shrink_freeze_test.go`](../../internal/sim/shrink_freeze_test.go).
 
-In [`internal/sim/lower.go`](../../internal/sim/lower.go), `sim.LowerValues` uses overflow-free unsigned bisection to lower each remaining fault's `At`, `Arg1`, and `Arg2` toward per-kind floors (`FaultFloor`, defaulting to zero), `sim.Minimize` alternates whole-fault deletion (`sim.Shrink`) with value lowering until a full round changes nothing (proving both deletion and one-step value minimality even for non-monotone predicates), and `sim.LowerInts` lowers plain `int64` slices for non-fault inputs such as workload sizes. In [`internal/sim/schedtext.go`](../../internal/sim/schedtext.go), `sim.FormatSchedule` and `sim.ParseSchedule` define a canonical line-oriented text format bounded at `MaxScheduleLen` (1,024 faults) so found bugs are committed as readable scenario files and replayed as plain tests (`docs/knowledge/shrunk-scenarios.md`). Applied end to end to `simtoy`'s planted bug in [`internal/sim/simtoy/shrunk_test.go`](../../internal/sim/simtoy/shrunk_test.go), `Minimize` keeps the same single `net.chunk` fault as `Shrink` while cutting its value sum from 2,213,137 to 1,021,423—stored in [`planted-bug-chunk.faults`](../../internal/sim/simtoy/testdata/shrunk/planted-bug-chunk.faults) (`faults 1` / `at=1021422ns kind=net.chunk target=3 arg1=0 arg2=1`)—and `LowerInts` reduces the toy workload `[clients, lines, max line]` from `[3 20 40]` to `[3 1 1]`:
+[`internal/sim/lower.go`](../../internal/sim/lower.go) adds three shrinking helpers. `sim.LowerValues` uses overflow-free unsigned bisection to lower each remaining fault's `At`, `Arg1`, and `Arg2` toward per-kind floors (`FaultFloor`, defaulting to zero). `sim.Minimize` alternates whole-fault deletion (`sim.Shrink`) with value lowering until a full round changes nothing, proving both deletion and one-step value minimality even for non-monotone predicates. `sim.LowerInts` lowers plain `int64` slices for non-fault inputs such as workload sizes. Beside them, `sim.FormatSchedule` and `sim.ParseSchedule` in [`internal/sim/schedtext.go`](../../internal/sim/schedtext.go) define a canonical line-oriented text format bounded at `MaxScheduleLen` (1,024 faults), so found bugs can be committed as readable scenario files and replayed as plain tests (`docs/knowledge/shrunk-scenarios.md`).
+
+Applied end to end to `simtoy`'s planted bug in [`internal/sim/simtoy/shrunk_test.go`](../../internal/sim/simtoy/shrunk_test.go), `Minimize` keeps the same single `net.chunk` fault as `Shrink` while cutting its value sum from 2,213,137 to 1,021,423. That shrunk schedule is stored in [`planted-bug-chunk.faults`](../../internal/sim/simtoy/testdata/shrunk/planted-bug-chunk.faults) (`faults 1` / `at=1021422ns kind=net.chunk target=3 arg1=0 arg2=1`), and `LowerInts` reduces the toy workload `[clients, lines, max line]` from `[3 20 40]` to `[3 1 1]`:
 
 ```sh
 $ go test -count=1 -v ./internal/sim/simtoy -run 'PlantedBugMinimised|ShrunkScenario|WorkloadSizes'
@@ -312,6 +320,6 @@ PASS
 ok  	github.com/nickstrad/mini-gateway/internal/sim/simtoy	0.075s
 ```
 
-In [`scripts/fuzz.sh`](../../scripts/fuzz.sh) and [`scripts/gate.sh`](../../scripts/gate.sh), CR-1 enforced all three rules of section 6.6. After each target finishes, `fuzz.sh` parses Go's final `fuzz: elapsed:` progress line, computes executions per second (`execs / elapsed seconds`, avoiding Go's per-interval rate which can print `0/sec` on the last line), and fails closed if the rate cannot be read. Any target whose test package depends on `internal/sim` (`go list -deps -test`) and runs below `FUZZ_RATE_FLOOR` (default 100/s) is classed as a `seed-sweep`: it is reported in the gate's `result.json` (`fuzz_targets`, `fuzz_seed_sweeps`, `fuzz_rate_floor`) without failing the run, and does not count as fuzzing in any claim. Auditing all 12 fuzz targets across the repository confirmed that none hashes its input into a simulator seed (every simulator-running target uses fixed seed `1`).
+In [`scripts/fuzz.sh`](../../scripts/fuzz.sh) and [`scripts/gate.sh`](../../scripts/gate.sh), CR-1 enforced all three rules of section 6.6. After each target finishes, `fuzz.sh` parses Go's final `fuzz: elapsed:` progress line and computes executions per second (`execs / elapsed seconds`, avoiding Go's per-interval rate, which can print `0/sec` on the last line). If that rate cannot be read, the script fails closed. Any target whose test package depends on `internal/sim` (`go list -deps -test`) and runs below `FUZZ_RATE_FLOOR` (default 100/s) is classed as a `seed-sweep`. It is reported in the gate's `result.json` (`fuzz_targets`, `fuzz_seed_sweeps`, `fuzz_rate_floor`) without failing the run, and it does not count as fuzzing in any claim. Auditing all 12 fuzz targets across the repository confirmed that none hashes its input into a simulator seed: every simulator-running target uses fixed seed `1`.
 
 Verification took one repair round. Review 1 ([`REVIEW-1.md`](../../agent_work/chunks/cr01-shrink-fuzz-rules/REVIEW-1.md), Neon seat) returned **FAIL** with one major finding (`LowerValues` and `Minimize` tests did not assert per-kind floor bounds, allowing a positive-floor mutation to pass) and four minor findings; Review 2 ([`REVIEW-2.md`](../../agent_work/chunks/cr01-shrink-fuzz-rules/REVIEW-2.md)) returned **PASS** with 11/11 mutation checks caught. The black-box adversarial harness (24 attacks across all seven claims) was written by Astra, whose run was stopped twice by its provider's content filter before it wrote a report (exhausting the protocol's one re-dispatch), so the orchestrator ran Astra's tests unchanged and assembled [`RESULTS.md`](../../agent_work/adversarial/cr01-shrink-fuzz-rules/RESULTS.md) itself (**22 held, 2 broken**; whether an orchestrator-assembled report suffices is recorded as an open question in `STATE.md`). One break was a real defect—`scripts/fuzz.sh` fell back to an earlier progress line when the final line was unreadable—fixed in the repair round; the other narrowed **Claim 5** from round-tripping every schedule to every schedule of at most `MaxScheduleLen` (1,024) faults (`FormatSchedule` and `ParseSchedule` refuse longer schedules under the bounded-input rule), leaving **23 pass and 1 settled** ([`ADVERSARIAL.md`](../../agent_work/chunks/cr01-shrink-fuzz-rules/ADVERSARIAL.md)). Astra's long campaign also explained an intermittent `FuzzWorldSchedule` failure ("hung or terminated unexpectedly") seen during the initial build: one cached input (`7edb6a746e048b6e`) passed every time when replayed alone, but combined 65,535-byte `pg.bloat` rows with 1-byte `pg.fragment` chunks—taking 11–14 s and 4,069,926 simulator steps per execution so Go reported a hung worker whenever `-fuzztime` expired mid-run. Capping decoded `pg.bloat` rows at 256 bytes in `FuzzWorldSchedule`'s test helper (`fuzzMaxBloatRowBytes`) and committing `7edb6a746e048b6e` as a seed cut its replay to 0.05 s and held worst-case inputs within a 100,000-step budget (`TestFuzzWorldScheduleCostIsBounded`). On a heavily loaded host, Go's fuzz coordinator can still exit with `context deadline exceeded` at the end of a target's budget with no failing input, on which `scripts/fuzz.sh` fails closed.
