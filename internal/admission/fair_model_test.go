@@ -572,7 +572,9 @@ func (v claimView) share(w *fairWorld, name string) int {
 	return ShareOf(v.limit, w.weights[i], v.weight)
 }
 
-func (v claimView) under(w *fairWorld, name string) bool { return v.inFlight[name]+1 <= v.share(w, name) }
+func (v claimView) under(w *fairWorld, name string) bool {
+	return v.inFlight[name]+1 <= v.share(w, name)
+}
 
 func (v claimView) eligible(w *fairWorld, name string) bool {
 	if v.total >= v.limit {
