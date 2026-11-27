@@ -55,7 +55,7 @@ func run(t *testing.T, dir string, env []string, name string, args ...string) (s
 	t.Helper()
 	limit := 150 * time.Second
 	if os.Getenv("ADV_LONG") == "1" {
-		limit = 9 * time.Minute
+		limit = 21 * time.Minute
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
@@ -112,11 +112,18 @@ func child(t *testing.T, changes map[string]string, inject, pattern string, real
 	os.WriteFile(ov, b, 0644)
 	env := []string{"GOFLAGS=-overlay=" + ov, "MG_TIER_R=0", "RUN_DIR=" + filepath.Join(dir, "runs")}
 	if real {
-		env = append(env, "MG_TIER_R=1")
+		prefix := "adv-lease-" + filepath.Base(dir)
+		env = append(env, "MG_TIER_R=1", "MG_TIER_R_PREFIX="+prefix)
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			// TestMain cannot clean up after Go's test-timeout panic.
+			exec.CommandContext(ctx, "docker", "rm", "-f", "-v", prefix+"-c06").Run()
+		}()
 	}
 	out, err := run(t, root, env, "go", "test", "-count="+fmt.Sprint(count), "-timeout="+func() string {
 		if os.Getenv("ADV_LONG") == "1" {
-			return "8m"
+			return "20m"
 		}
 		return "140s"
 	}(), "./test/e2e", "-run", pattern, "-v")

@@ -1,0 +1,6 @@
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:405: 69 dirty observations through the proxy (prepared 21, cursors 19, listens 20, adv_locks 22, session_gucs 24, temp_rels 0, role_changed 18, secret read back 17)
+--- FAIL: TestTierRSessionStateNeverCrossesClients (2.22s)
+FAIL
+FAIL	github.com/nickstrad/mini-gateway/test/e2e	14.021s
+FAIL

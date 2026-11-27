@@ -1,0 +1,7 @@
+=== RUN   TestTierRSessionAblationWithoutResetCrosses
+    tierr_test.go:430: the custom setting mg_hostile.secret was never read back with the reset switched off: the read-back cannot fail
+    tierr_test.go:432: tier R ablation: 46 dirty observations without the reset (prepared 18, cursors 16, listens 17, adv_locks 19, session_gucs 21, temp_rels 20, role_changed 15, secret read back 0)
+--- FAIL: TestTierRSessionAblationWithoutResetCrosses (1.59s)
+FAIL
+FAIL	github.com/nickstrad/mini-gateway/test/e2e	13.124s
+FAIL

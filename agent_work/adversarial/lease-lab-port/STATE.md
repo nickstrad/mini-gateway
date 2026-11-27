@@ -7,4 +7,6 @@ Next: finish long campaign, classify failures, write RESULTS.md and evidence.jso
 Environment: kb default and --global searches failed before returning a search ID; feedback cannot target them. No store initialized or changed.
 Resume: branch work/lease-port-adv. Outputs default.jsonl and long.jsonl; subprocess deadlines apply. Temporary overlays are under .scratch, removed by TestMain.
 
-Long checkpoint: 8 of 15 completed; 0 failures. Current results in long.jsonl.
+Long checkpoint: 14 of 15 completed; 0 failures. Current results in long.jsonl.
+
+Retry checkpoint: long campaign finished with 14 passes and one harness timeout after 19/20 policy repetitions passed. Saved original long.jsonl; cleaned its owned container and orphan gateway. Extended long-only deadline to 20 minutes (outer 21); rerun only RepeatPolicies once, saving retry.jsonl. Assertions and repetition count unchanged.

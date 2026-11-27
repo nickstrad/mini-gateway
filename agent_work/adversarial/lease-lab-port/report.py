@@ -5,7 +5,8 @@ from pathlib import Path
 area = Path(__file__).resolve().parent
 outcomes = {}
 campaigns = []
-for filename in ('default.jsonl', 'long.jsonl'):
+superseded = []
+for filename in ('default.jsonl', 'long.jsonl', 'retry.jsonl'):
     events = [json.loads(line) for line in (area / filename).read_text().splitlines() if line.startswith('{')]
     packages = [e for e in events if not e.get('Test') and e['Action'] in ('pass', 'fail')]
     if not packages:
@@ -15,11 +16,13 @@ for filename in ('default.jsonl', 'long.jsonl'):
         name = e.get('Test', '')
         if not name.startswith('TestAdv_') or e['Action'] not in ('pass', 'fail'):
             continue
+        if name in outcomes:
+            superseded.append(outcomes[name])
         outcomes[name] = {
             'claim': int(name.split('_')[1]), 'test': name,
             'result': 'held' if e['Action'] == 'pass' else 'BROKEN',
             'seed': 271828, 'campaign': filename, 'seconds': e.get('Elapsed', 0),
-            'command': 'PATH=/usr/local/go/bin:$PATH ' + ('ADV_LONG=1 ' if filename == 'long.jsonl' else '') +
+            'command': 'PATH=/usr/local/go/bin:$PATH ' + ('ADV_LONG=1 ' if filename != 'default.jsonl' else '') +
                 f"go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^{name}$'",
             'output': ''.join(x.get('Output', '') for x in events if x.get('Test') == name and x['Action'] == 'output'),
         }
@@ -58,6 +61,7 @@ report += ['## Execution and limits', '']
 for c in campaigns:
     report += [f"- `{c['file']}`: {c['result']}, {c['seconds']} seconds."]
 report += [
+    '- The original long campaign hit its eight-minute harness deadline during policy repetition 20, after 19 passes and no assertion failures. This was a harness budget error, not a demonstrated C8 failure. The long-only deadline was increased to 20 minutes (outer process: 21), and that one check was rerun once without changing its assertions or its 20-repetition requirement. The original transcript and superseded outcome are retained; final counts use retry.jsonl. An owned leftover database container and gateway process were cleaned after the interrupted run.',
     '- Default: 21 executed checks and 15 explicitly deferred checks; the recorded package-test duration is below three minutes on this shared host. Go reports package execution time; initial compilation is not included. This is measured evidence, not a universal timing guarantee.',
     '- Long campaign selects C4–C8; it includes 20 consecutive executions of each of the three builder scenarios, plus setup/removal/reset mutations. Each subprocess owns a database and has a deadline. No additional artificial CPU load was injected; other work shares this host.',
     '- Reset mutations use Go overlays and intentionally relax the reset-tag judge to isolate reset effectiveness. They are experiments against the test suite, not deployable product changes. C5 and two C6 checks run the pre-port tests at `98cee87` as comparison controls.',
@@ -67,8 +71,8 @@ report += [
     '- No numbered claim was left unattacked. The builder brief has no separate numbered claims section; the twelve numbered claims in NOTES.md define the mapping.',
     '- The approximate 15–25-check recommendation conflicts with at least three attacks for each of twelve claims; the latter requires 36 checks.',
     '- Full gate, race suite, and unrelated packages were not run; this brief asks for an independent robustness harness. Failed tests remain failing.',
-    '- Canonical outcomes are in default.jsonl, long.jsonl and evidence.json. Per-child logs in evidence/ are append-only and may also include the inherited interrupted run.',
+    '- Canonical outcomes are in default.jsonl, long.jsonl, retry.jsonl and evidence.json. Per-child logs in evidence/ are append-only and may also include the inherited interrupted run.',
     '- kb could not open its configured store (default and global lookup); no search ID was returned, so feedback was unavailable. No environment store or files outside this work area were changed.',
 ]
 (area / 'RESULTS.md').write_text('\n'.join(report) + '\n')
-(area / 'evidence.json').write_text(json.dumps({'builder': '9f0378ff69640a9ca0042c85ea6f2e833771fd60', 'seed': 271828, 'held': held, 'broken': broken, 'campaigns': campaigns, 'attacks': ordered}, indent=2) + '\n')
+(area / 'evidence.json').write_text(json.dumps({'builder': '9f0378ff69640a9ca0042c85ea6f2e833771fd60', 'seed': 271828, 'held': held, 'broken': broken, 'campaigns': campaigns, 'superseded_attempts': superseded, 'attacks': ordered}, indent=2) + '\n')
