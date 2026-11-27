@@ -210,7 +210,11 @@ func (m *mgctlModel) next(r *rand.Rand) mgctlStep {
 		return mgctlStep{args: []string{"query", "-user", tenant, sql}, code: code, want: want,
 			run: func(e mgctl.Env) int { return mgctl.Query(e, creds, sql) }}
 	}
-	switch r.IntN(10) {
+	switch r.IntN(11) {
+	case 9:
+		other := mgctl.Credentials{User: tenant, Password: creds.Password, Database: "nope"}
+		return mgctlStep{args: []string{"query", "-user", tenant, "-database", "nope", "SELECT 1"}, code: mgctl.ExitAnswered,
+			want: []string{"FATAL 3D000", "error-contract row: unknown-database"}, run: func(e mgctl.Env) int { return mgctl.Query(e, other, "SELECT 1") }}
 	case 0:
 		return mgctlStep{args: []string{"health"}, want: []string{"health: ok", "database", "database reachable"}, run: mgctl.Health}
 	case 1:

@@ -423,3 +423,24 @@ func TestTranscriptIsReadable(t *testing.T) {
 		t.Fatalf("%q", b.String())
 	}
 }
+
+func TestTheProxysOwnFatalTextsAreNamedByTheirRow(t *testing.T) {
+	cases := map[string][2]string{
+		"tls-required":       {"28000", "TLS is required for this connection: SSL off"},
+		"no-user":            {"28000", "no PostgreSQL user name specified in startup packet"},
+		"unknown-database":   {"3D000", `database "nope" does not exist`},
+		"auth-failed":        {"28P01", `password authentication failed for user "alice"`},
+		"startup-parameter":  {"0A000", `unsupported startup parameter "search_path"`},
+		"protocol-version":   {"0A000", "unsupported frontend protocol 4.0: server supports 3.0 to 3.0"},
+		"protocol-violation": {"08P01", "canceling authentication due to timeout"},
+	}
+	for id, c := range cases {
+		line := mgctl.ContractLine(&mgctl.ServerError{Severity: "FATAL", Code: c[0], Message: c[1]})
+		if !strings.Contains(line, "error-contract row: "+id+" ") {
+			t.Errorf("%s: %s", id, line)
+		}
+	}
+	if line := mgctl.ContractLine(&mgctl.ServerError{Severity: "ERROR", Code: "28000", Message: "x"}); !strings.Contains(line, "pass-through") {
+		t.Fatal(line)
+	}
+}
