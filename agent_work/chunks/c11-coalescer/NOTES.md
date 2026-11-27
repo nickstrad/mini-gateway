@@ -292,6 +292,7 @@ flight `cancelled`), overflows by cap. Health rule: open point 10.
   `internal/obs/simrun/engine_test.go` (coalescer scenarios as baseline runs; heavy ones skipped
   under `-short`).
 - `test/e2e/spec.go` (`Coalesce`, `KeyScope`), `simtier.go` (engine config, fingerprint),
+  `c06a_tierr_test.go` (`adminStats` waits for the first publish),
   `realtier.go` (`GatewayOpts.Coalesce`; `mode: off` for `on-switch` gateways).
 - `scripts/fuzz-plant.sh`, `tools/lint-rules/det-packages.txt`, `race-packages.txt`,
   `agent_work/INDEX.md`.
@@ -310,6 +311,13 @@ flight `cancelled`), overflows by cap. Health rule: open point 10.
   Not a weakening: the on-switch test's subject is the reset policy, which coalescing does not
   touch.
 - `internal/obs/simrun/engine_test.go`: adds the coalescer scenarios to the baseline runs.
+- `test/e2e/c06a_tierr_test.go` (`adminStats`): waits, at most `freshStatsDeadline` (15 s), while
+  `/stats` answers `503 nothing published yet`, then decodes. Reason: the first full gate run of
+  this chunk failed G6 on `TestTierRMgctlSeededModelAgainstTheRealBinary` with `invalid character
+  'o' in literal null` — the test read `/stats` before the gateway's first publish (machine load
+  average about 13). It passed 3 of 3 alone before the change. Not a weakening: the decoded
+  snapshot and every assertion on it are unchanged; a gateway that never publishes still fails
+  (the 503 body does not decode).
 
 ## Deviations
 
