@@ -84,3 +84,15 @@ The packages share one Postgres cluster. Chunk 5's real-server tests run the cor
 `TestTierRIdenticalReads` counts executions of that statement shape in
 `pg_stat_statements`, which is cluster-wide: the second final-stage gate run counted 1,001
 for 1,000. Found by the gate, not by a review.
+
+## Three wall-clock attack tests settled by change request CR-3 (2026-11-27)
+
+`TestAdv_5_OperatorSuffixRescanning` and `TestAdv_5_WholeSpanRescanning` (Astra's harness)
+and `TestAdv_5_QuadraticSpanScanDoS` (Neon's harness) each time the classifier on a small
+and a 16-times-larger input and fail above a ratio of 96. They found the two quadratic
+paths the repair removed. On a loaded machine the product tests of the same form failed
+two landing gates with ratios of 98 to 373 on linear code. CR-3 replaced the product tests
+by tests that count work (`agent_work/chunks/cr03-growth-tests/NOTES.md`): each of the two
+defects, put back, fails them, at any load. The three attack tests are skipped with a
+pointer here; they are not deleted, and running one by hand on a quiet machine (remove the
+skip line) still shows the timing form.

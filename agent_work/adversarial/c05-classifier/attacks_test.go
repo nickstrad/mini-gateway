@@ -289,9 +289,11 @@ func scaling(t *testing.T, makeQ func(int) []byte) {
 	}
 }
 func TestAdv_5_OperatorSuffixRescanning(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: superseded by change request CR-3: this test reads the wall clock (16 times the input in at most 96 times the time) and fails under machine load; the property is now held by the work-counting tests in internal/pgwire/classify_test.go, which fail when the defect this test found is put back (agent_work/chunks/cr03-growth-tests/NOTES.md; record in agent_work/chunks/c05-classifier/ADVERSARIAL.md). See agent_work/chunks/c05-classifier/ADVERSARIAL.md.")
 	scaling(t, func(n int) []byte { return []byte("SELECT " + strings.Repeat("+", n)) })
 }
 func TestAdv_5_WholeSpanRescanning(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: superseded by change request CR-3: this test reads the wall clock (16 times the input in at most 96 times the time) and fails under machine load; the property is now held by the work-counting tests in internal/pgwire/classify_test.go, which fail when the defect this test found is put back (agent_work/chunks/cr03-growth-tests/NOTES.md; record in agent_work/chunks/c05-classifier/ADVERSARIAL.md). See agent_work/chunks/c05-classifier/ADVERSARIAL.md.")
 	scaling(t, func(n int) []byte { return []byte("SELECT " + strings.Repeat("pg_settings ", n)) })
 }
 func TestAdv_5_BinaryAndMemoryCampaign(t *testing.T) {
