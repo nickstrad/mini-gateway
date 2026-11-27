@@ -147,6 +147,9 @@ func TestCSVAssertBaselineCountsFromFlushedFiles(t *testing.T) {
 			continue
 		}
 		name := filepath.Base(d)
+		if testing.Short() && slices.Contains(e2e.AdmissionOverloadScenarios(), name) {
+			continue
+		}
 		if strings.HasPrefix(name, e2e.TierRPrefix) {
 			if !slices.Contains(e2e.TierRScenarios(), name) {
 				t.Fatalf("%s has SQL files but no tier R test writes that scenario", name)
