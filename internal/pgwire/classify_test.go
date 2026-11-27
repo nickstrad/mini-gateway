@@ -531,12 +531,18 @@ func clsMeasureWork(q []byte) clsWork {
 	return clsWork{opRunBytes: l.opRunBytes, lookahead: l.lookahead, clsCounts: counts}
 }
 
+var (
+	clsOperatorRunShapes = []string{"+", "-", "-+", "+-", "*+", "=-", "<+-", "+ ", "1+"}
+	clsSpanKeywordShapes = []string{"pg_settings ", "standard_conforming_strings ", "client_encoding ", `"pg_settings" `, "pg_settings, ", "SELECT pg_settings "}
+	clsWholeCallShapes   = []string{"(", "a ", ";", "'x'", "set_config(1,2,", `U&"a" `, "SELECT abs(t.a) FROM t; ", "'a'\n", "-- c\n", "$a$x$a$ ", "$a "}
+)
+
 func TestLexOperatorRunsGrowLinearly(t *testing.T) {
-	clsCheckLinearShapes(t, "SELECT ", clsKindIs(TokenOperator), func(w clsWork) int { return w.opRunBytes }, []string{"+", "-", "-+", "+-", "*+", "=-", "<+-", "+ ", "1+"})
+	clsCheckLinearShapes(t, "SELECT ", clsKindIs(TokenOperator), func(w clsWork) int { return w.opRunBytes }, clsOperatorRunShapes)
 }
 
 func TestClassifierSpanKeywordChecksGrowLinearly(t *testing.T) {
-	clsCheckLinearShapes(t, "SELECT ", clsKindIs(TokenWord), func(w clsWork) int { return w.keywordChecks }, []string{"pg_settings ", "standard_conforming_strings ", "client_encoding ", `"pg_settings" `, "pg_settings, ", "SELECT pg_settings "})
+	clsCheckLinearShapes(t, "SELECT ", clsKindIs(TokenWord), func(w clsWork) int { return w.keywordChecks }, clsSpanKeywordShapes)
 }
 
 func clsCheckLinearShapes(t *testing.T, prefix string, measuredKind func(TokenKind) bool, measured func(clsWork) int, units []string) {
@@ -579,5 +585,5 @@ func clsCheckGrowth(t *testing.T, unit, what string, small, large int) {
 }
 
 func TestClassifierWorkGrowsLinearly(t *testing.T) {
-	clsCheckLinearShapes(t, "", TokenKind.Significant, func(w clsWork) int { return w.tokenVisits }, []string{"(", "a ", ";", "'x'", "set_config(1,2,", `U&"a" `, "SELECT abs(t.a) FROM t; ", "'a'\n", "-- c\n"})
+	clsCheckLinearShapes(t, "", TokenKind.Significant, func(w clsWork) int { return w.tokenVisits }, clsWholeCallShapes)
 }

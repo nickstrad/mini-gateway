@@ -66,6 +66,7 @@ func (t Token) Text(src []byte) []byte { return src[t.Start:t.End] }
 // classifier. It assumes standard_conforming_strings = on and never panics on
 // arbitrary bytes.
 type Lexer struct {
+	reads      workTally
 	src        []byte
 	pos        int
 	run        lexOpRun
@@ -165,15 +166,24 @@ func lexIsPunct(c byte) bool {
 }
 
 func (l *Lexer) scan() TokenKind {
+	if clsCounting {
+		l.reads.bump()
+	}
 	c := l.src[l.pos]
 	switch {
 	case lexIsSpace(c):
 		for l.more(0) && lexIsSpace(l.src[l.pos]) {
+			if clsCounting {
+				l.reads.bump()
+			}
 			l.pos++
 		}
 		return TokenSpace
 	case c == '-' && l.peek(1) == '-':
 		for l.more(0) && l.src[l.pos] != '\n' && l.src[l.pos] != '\r' {
+			if clsCounting {
+				l.reads.bump()
+			}
 			l.pos++
 		}
 		return TokenLineComment
@@ -199,6 +209,9 @@ func (l *Lexer) scan() TokenKind {
 		return l.quoted('"', false, TokenUnicodeIdent)
 	case lexIsIdentStart(c):
 		for l.more(0) && lexIsIdentCont(l.src[l.pos]) {
+			if clsCounting {
+				l.reads.bump()
+			}
 			l.pos++
 		}
 		return TokenWord
@@ -222,6 +235,9 @@ func (l *Lexer) blockComment() TokenKind {
 	l.pos += 2
 	depth := 1
 	for l.more(0) {
+		if clsCounting {
+			l.reads.bump()
+		}
 		c := l.src[l.pos]
 		switch {
 		case c == '/' && l.peek(1) == '*':
@@ -242,6 +258,9 @@ func (l *Lexer) blockComment() TokenKind {
 
 func (l *Lexer) quoted(q byte, backslash bool, kind TokenKind) TokenKind {
 	for l.more(0) {
+		if clsCounting {
+			l.reads.bump()
+		}
 		c := l.src[l.pos]
 		switch {
 		case backslash && c == '\\':
@@ -257,7 +276,7 @@ func (l *Lexer) quoted(q byte, backslash bool, kind TokenKind) TokenKind {
 			}
 			l.pos++
 			if q == '\'' {
-				next, ok := lexContinuation(l.src, l.pos)
+				next, ok := lexContinuation(l.src, l.pos, l.reads.ref())
 				l.lookahead += next - l.pos
 				if ok {
 					l.pos = next
@@ -276,9 +295,12 @@ func (l *Lexer) quoted(q byte, backslash bool, kind TokenKind) TokenKind {
 // string literals separated by whitespace and "--" comments containing at
 // least one '\n' or '\r'. Block comments do not join strings. Escape mode
 // (e.g. E'...') is preserved across the continuation.
-func lexContinuation(src []byte, i int) (int, bool) {
+func lexContinuation(src []byte, i int, reads workRef) (int, bool) {
 	newline := false
 	for i < len(src) {
+		if clsCounting {
+			reads.bump()
+		}
 		c := src[i]
 		switch {
 		case c == '\n' || c == '\r':
@@ -288,6 +310,9 @@ func lexContinuation(src []byte, i int) (int, bool) {
 			i++
 		case c == '-' && i+1 < len(src) && src[i+1] == '-':
 			for i < len(src) && src[i] != '\n' && src[i] != '\r' {
+				if clsCounting {
+					reads.bump()
+				}
 				i++
 			}
 		case c == '\'' && newline:
@@ -303,6 +328,9 @@ func (l *Lexer) number() {
 	if l.src[l.pos] == '0' && lexIsRadix(l.peek(1)) {
 		l.pos += 2
 		for l.more(0) && (lexIsHexDigit(l.src[l.pos]) || l.src[l.pos] == '_') {
+			if clsCounting {
+				l.reads.bump()
+			}
 			l.pos++
 		}
 		return
@@ -334,6 +362,9 @@ func lexIsHexDigit(c byte) bool {
 
 func (l *Lexer) digits() {
 	for l.more(0) && (lexIsDigit(l.src[l.pos]) || (l.src[l.pos] == '_' && lexIsDigit(l.peek(1)))) {
+		if clsCounting {
+			l.reads.bump()
+		}
 		l.pos++
 	}
 }
@@ -342,6 +373,9 @@ func (l *Lexer) dollar() TokenKind {
 	if lexIsDigit(l.peek(1)) {
 		l.pos++
 		for l.more(0) && lexIsDigit(l.src[l.pos]) {
+			if clsCounting {
+				l.reads.bump()
+			}
 			l.pos++
 		}
 		return TokenParam
@@ -349,6 +383,9 @@ func (l *Lexer) dollar() TokenKind {
 	end := l.pos + 1
 	if end < len(l.src) && lexIsIdentStart(l.src[end]) {
 		for end < len(l.src) && lexIsIdentCont(l.src[end]) && l.src[end] != '$' {
+			if clsCounting {
+				l.reads.bump()
+			}
 			end++
 		}
 	}
@@ -360,7 +397,10 @@ func (l *Lexer) dollar() TokenKind {
 	tag := l.src[l.pos : end+1]
 	body := end + 1
 	for i := body; i+len(tag) <= len(l.src); i++ {
-		if l.src[i] == '$' && lexHasPrefix(l.src[i:], tag) {
+		if clsCounting {
+			l.reads.bump()
+		}
+		if l.src[i] == '$' && lexHasPrefix(l.src[i:], tag, l.reads.ref()) {
 			l.pos = i + len(tag)
 			return TokenDollarString
 		}
@@ -369,11 +409,14 @@ func (l *Lexer) dollar() TokenKind {
 	return TokenBad
 }
 
-func lexHasPrefix(b, p []byte) bool {
+func lexHasPrefix(b, p []byte, reads workRef) bool {
 	if len(b) < len(p) {
 		return false
 	}
 	for i := range p {
+		if clsCounting {
+			reads.bump()
+		}
 		if b[i] != p[i] {
 			return false
 		}
@@ -395,6 +438,9 @@ func (l *Lexer) operator() {
 func (l *Lexer) scanOpRun() lexOpRun {
 	r := lexOpRun{start: l.pos, end: l.pos, lastKeep: -1}
 	for r.end < len(l.src) && lexIsOpChar(l.src[r.end]) {
+		if clsCounting {
+			l.reads.bump()
+		}
 		c := l.src[r.end]
 		if r.end+1 < len(l.src) && ((c == '-' && l.src[r.end+1] == '-') || (c == '/' && l.src[r.end+1] == '*')) {
 			break
@@ -402,12 +448,18 @@ func (l *Lexer) scanOpRun() lexOpRun {
 		r.end++
 	}
 	for k := r.start; k < r.end-1; k++ {
+		if clsCounting {
+			l.reads.bump()
+		}
 		if lexKeepsTrailingSign(l.src[k]) {
 			r.lastKeep = k
 		}
 	}
 	r.signFrom = r.end
 	for r.signFrom > r.start && lexIsSign(l.src[r.signFrom-1]) {
+		if clsCounting {
+			l.reads.bump()
+		}
 		r.signFrom--
 	}
 	return r
