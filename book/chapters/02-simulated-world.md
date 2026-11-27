@@ -266,37 +266,6 @@ Chunk 2 adds 6,347 lines of product code (excluding Chunk 1's `cmd/mgsim/main.go
 
 ---
 
-## Reviews, adversarial attacks, narrowed claims, and arbitration
-
-Chunk 2 was the first chunk to go all the way to arbitration after two failed reviews.
-
-### Initial adversarial pass and Review 1
-
-Against the initial build (`66e52dc`), the black-box adversarial suite (Astra seat, [`RESULTS.md`](../../agent_work/adversarial/c02-sim-world/RESULTS.md)) ran 34 named attacks and reported **HELD: 29, BROKEN: 5**:
-
-- Three were real product defects: exceeding the 64-statement limit inside an explicit transaction left the session in `'T'` instead of `'E'` (`TestAdv_2_StatementLimitErrorAbortsTransaction`); committing two inserts against `MaxRows=1` ignored `put`'s error and logged a phantom write (`TestAdv_3_FullTableCommitMustNotLogPhantom`); and an injected `pg.stall-window` missed statements already in service (`TestAdv_5_StallHitsAlreadyServing`).
-- Two exposed over-broad wording in the chunk's original claims (`TestAdv_7_SendWindowIndependentOfService` and `TestAdv_11_AllGoImportsIncludingTests`).
-
-In parallel, `REVIEW-1.md` (Neon seat) returned **FAIL** with 2 blockers, 6 majors, 4 minors, and 4 surviving mutations out of 13. Beyond the same `MaxRows` and stall-window blockers, the review found that `TestEachDatabaseFault` did not check that clearing `fragment`, `trickle`, or `bloat` actually removed their effect; `CheckWriteLog` missed silently dropped writes; `FaultMaxConn` could raise the limit above `Config.MaxConnections` and trip the invariant; targeted `fragment`/`garbage` faults clobbered server-wide state; `matchRows` had a signed `int64` overflow bypassing `MaxRowSize`; `Retry.OnCodes` was ignored for non-FATAL query errors and a failed transaction's `ROLLBACK` mutated `r.stmts` in place; `FaultTerminate` under back pressure dropped buffered bytes mid-frame; and four smaller edge bugs (ready-only faults counted during startup, 1-column bloat on 2-column reads, `freeze` not pausing delayed resets, and a stale `stop-reading` timer).
-
-### Repair round and two narrowed claims
-
-One repair round fixed every Review 1 finding and the three adversarial product defects, moving the adversarial suite to **HELD: 32, BROKEN: 0, NARROWED: 2** ([`ADVERSARIAL.md`](../../agent_work/chunks/c02-sim-world/ADVERSARIAL.md)). The orchestrator accepted two narrowed claims rather than bending the code to literal wording:
-
-- **Claim 7 (open-loop generation, narrowed):** Originally stated that "the number of requests sent in a window equals the intended number regardless of server speed." As narrowed: **arrivals** (intended sends) follow the schedule regardless of server speed, every admitted arrival is eventually sent, and latency is measured exactly from its intended send time (no coordinated omission); however, the **wire send** of a request waits for the previous reply on that client connection, because a request may be a multi-statement transaction and writing a second request onto a busy session would execute it inside the open transaction.
-- **Claim 11 (`pgproto3` import exclusivity, narrowed):** Originally stated repository-wide with no carve-out. As narrowed: holds for **every Go file outside `tools/`** (including tests, nested modules, and `testdata`; the Phase 1 probe was renamed to `main.go.txt` so it is not a stray `.go` file). Five test fixtures under `tools/detlint/cmd/importlint/testdata/` must import `pgproto3` so the import linter can test its own rule.
-
-### Review 2 failure and arbitration
-
-[`REVIEW-2.md`](../../agent_work/chunks/c02-sim-world/REVIEW-2.md) verified all 17 repair-round revert checks and all 7 core mutations, but returned **FAIL** again with one blocker and one minor finding, sending the chunk to arbitration by a third model, Muse Wonder Full ([`ARBITRATION-1.md`](../../agent_work/chunks/c02-sim-world/ARBITRATION-1.md)):
-
-1. **The blocker (`MaxRows` peak during `COMMIT`).** The repair round had added a commit-time check (`rowsAfter`) that checked only the *final* row count after applying a transaction's writes. Because `apply()` executes writes one by one against `srv.put()`, a transaction that inserted (or re-created via `UPDATE`) a row and then deleted another row could stay under `MaxRows` at the end while exceeding `MaxRows` midway. On a concurrent fill, `commit()` returned `COMMIT` on the wire, silently dropped the intermediate insert or update without logging it, and still applied and logged the later `DELETE`—falsifying Claim 3's exact write-log guarantee.
-2. **The minor finding (retrying requests vs `Tenant.Backlog`).** Requests waiting in retry backoff sat in `c.waiting` outside `c.backlog`, so fresh arrivals refilled `c.backlog` to `Tenant.Backlog` and the backoff timer prepended retried requests back unchecked. The arbiter confirmed that for never-sent requests retrying after `53300` (`Retry.OnConnect`), this also broke the documented `NotYetSent` gauge (peaking at 50 under `Backlog: 2`).
-
-The arbiter upheld both findings, fixed both directly in two commits—replacing `rowsAfter` with `peakRowsAfter` (plus 6 regression and control tests in `fakepg/repair_test.go`) and counting `len(c.backlog) + c.waiting` plus any still-retryable current request in admission (plus `TestBacklogCapCountsRetryingRequests` in `workload/repair_test.go`)—and issued **VERDICT: PASS**.
-
----
-
 ## Stated limits
 
 - **Protocol subset.** Simple-query protocol with trust authentication only; no extended protocol (`Parse`/`Bind`/`Execute`), no `COPY`, no SCRAM-SHA-256, and no TLS (SCRAM and TLS enter in Chunk 4).

@@ -6,7 +6,7 @@ Its job is to bound both the connections and the work reaching that database. In
 
 This book follows the build, one chapter per step. Each chapter is published only after that step's code has been built, reviewed, attacked in an adversarial pass, and passed its landing gate of automated checks. The book grows with the code.
 
-Each chapter states the problem, explains the design and the alternatives turned down, and shows real code and real output. It also covers how the step was tested, what the attacks found, and where the limits are.
+Each chapter states the problem, explains the design and the alternatives turned down, and shows real code and real output. It also covers how the step was tested and where the limits are.
 
 The simulator comes first. Before any proxy code exists, the first two chapters build a deterministic simulator: a single-threaded test harness with a virtual clock, seeded random streams, simulated byte-stream connections, a fake Postgres, and simulated clients. Every later part of the proxy is proved in that repeatable world before it is tested against a real Postgres server.
 

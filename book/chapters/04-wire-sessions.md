@@ -226,43 +226,6 @@ The test suite spans six layers:
 
 ---
 
-## Reviews, adversarial attacks, and narrowed claims
-
-Chunk 4 went through one review-and-repair round, one adversarial pass, a second review of the repair, and a third scoped review after integrating with Chunk 3.
-
-### Review 1 and the adversarial pass
-
-Against the initial build, [`REVIEW-1.md`](../../agent_work/chunks/c04-wire-sessions/REVIEW-1.md) returned **VERDICT: FAIL** (3 majors, 4 minors, and 1 surviving mutation out of 10: `M10` disabled `SkipBodies` in `CycleTracker` and no test failed because `TestCycleTrackerStreamsManyRowsWithoutBuffering` only checked `BufferCap() <= 1024`).
-
-In parallel, the black-box adversarial suite (Astra seat, [`RESULTS.md`](../../agent_work/adversarial/c04-wire-sessions/RESULTS.md)) ran 35 independent named attacks across all 11 claims (plus a 50,000-seed / 600,000-step hostile-input campaign that held) and reported **HELD: 28, BROKEN: 7**:
-
-1. **Invalid handshake event enums (`TestAdv_2_InvalidHandshakeEnums`, Review 1 Finding 5):** Passing an out-of-range `HandshakeOutcome` or `TLSVersion` indexed snapshot arrays out of bounds and panicked. Fixed by `HandshakeResult.normalized()` clamping invalid values to `HandshakeFailed` / `TLSVersionOther`.
-2. **Unbounded SCRAM payloads (`TestAdv_2_ScramMessageBound`, `TestAdv_2_WireSCRAMBound`):** The pure SCRAM functions accepted messages larger than `MaxScramMessage` (2,048 bytes), and the outer frame cap (`maxAuthMessage = 2,112`) let a 2,061-byte SCRAM message through `ClientSession`. Fixed by checking `len(msg) > MaxScramMessage` in all four SCRAM server/client entry points.
-3. **Handshake deadline classification (`TestAdv_7_HandshakeDeadlineClassification`, Review 1 Finding 5):** `HandshakeDone` classified `HandshakeDeadline` and `HandshakeViolation` as `tls-failed` instead of `deadline` and `protocol-violation`. Fixed on both legs.
-4. **Repeated refused `SSLRequest` fidelity (`TestAdv_11_RepeatedSSLAfterRefusal`):** With `ssl=off`, `fakepg` answered a second `SSLRequest` with `'N'` where Postgres 17.11 returned `FATAL 0A000`. Fixed in `fakepg/auth.go`.
-5. **Unknown-user iteration oracle (`TestAdv_5_UnknownUserIterationOracle`):** With `MockIterations` left at 0 and a tenant table using 32-iteration verifiers, known users got `i=32` while unknown users got `i=4096`. Fixed for uniform tables by `TenantTable.mockShape()` (and narrowed for mixed tables below).
-6. **Independent key-issuer collision (`TestAdv_9_IndependentIssuerCollision`):** Two separate `KeyIssuer` instances fed the same constant random stream issued identical keys. Narrowed below.
-
-The repair round also fixed Review 1's remaining findings: tightening the `CycleTracker` zero-buffer test (`M10`), renaming `ReplyTracker` to `CycleTracker` (avoiding Chunk 5's reserved `Reply` prefix; `NewReplyTracker` stays as a one-line compatibility alias for the frozen adversarial test), guarding `BackendSession.fail()` so a ready session ignores `Deadline`/`PeerClosed`, clearing `s.scram = nil` on failure, preserving client bytes coalesced with `ClientHello` in `pgwiretest`, and removing dead fields (`midMessage`, `ReasonTerminate`).
-
-After the repair round ([`ADVERSARIAL.md`](../../agent_work/chunks/c04-wire-sessions/ADVERSARIAL.md)), **34 of the 35 attacks pass, 0 fail, and 1 is settled by the orchestrator** (`TestAdv_9_IndependentIssuerCollision`, skipped under the narrowed Claim 9).
-
-### Narrowed claims (accepted by the orchestrator)
-
-- **Claim 9 (proxy-issued key uniqueness):** Originally stated that proxy-issued key data is unique per session. As narrowed: **unique among the sessions of one `KeyIssuer`** (non-zero sequential process IDs unique for `2^31 - 1` issues, random 4-byte secret, never copied from a backend key). Two independent issuers share no state and produce identical keys if fed identical random streams; a real proxy instance keeps one issuer seeded from `crypto/rand` (as Postgres scopes cancel keys to one postmaster).
-- **Claim 5 (unknown user vs wrong password indistinguishability):** Holds for every reply byte shape (message types, SQLSTATE `28P01`, message template) and for the SCRAM challenge (`s=` length and `i=`) **when every verifier in the tenant table uses the same iteration count and salt length** (with default `MockIterations = 0`). In a table that mixes verifier shapes, a user whose verifier differs from the modal shape can be distinguished from an unknown user by `i=` or `s=` length, matching Postgres's own mock behavior. Timing is not part of the claim.
-
-### Reviews 2 and 3 (NITS carried to Chunk 6)
-
-[`REVIEW-2.md`](../../agent_work/chunks/c04-wire-sessions/REVIEW-2.md) (17/17 mutation checks caught) and [`REVIEW-3.md`](../../agent_work/chunks/c04-wire-sessions/REVIEW-3.md) (scoped review of the Chunk 3 integration, 7/8 mutations caught by Go tests and 8/8 by `importlint` + tests) both closed with **VERDICT: NITS**, carrying four minor follow-up items into Chunk 6:
-
-1. `NewTenantTable` does not yet cap verifier salt length against `maxMockSaltLen` (128 bytes), to be validated alongside mixed-shape checks in Chunk 6's config loader.
-2. `snapshot_wire_test.go` retains a stale skip entry for `Database.TLSFailed[HandshakeViolation]` even though `busyStats` now exercises it.
-3. `TestOneRawExportImportRule` in `internal/obs/simrun/imports_test.go` checks `wiresrc` → adapter but does not mirror `pgwire` → adapter or adapter → `wiresrc`/`pgwire` (both of which `importlint` already enforces).
-4. Five metrics compared in `handshake-failures.sql` and `tls-requests.sql` are omitted from `-- requires:` headers (guarded in Go by `TestEveryDeclaredMetricIsEmittedAndEveryEmittedOneDocumented`, kept short for DuckDB startup time).
-
----
-
 ## Stated limits
 
 - **No SASLprep:** Passwords are hashed as raw bytes. ASCII passwords match Postgres; non-ASCII passwords that SASLprep would normalize will not match a Postgres-generated verifier.
