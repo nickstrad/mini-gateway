@@ -110,10 +110,16 @@ type clsMsg struct {
 	bad     bool
 	plant   bool
 	scratch [clsNameMax]byte
+
+	keywordChecks int
 }
 
 func clsRun(text []byte, inTx, plant bool) work.Unit {
 	m := clsMsg{src: text, plant: plant}
+	return m.unit(inTx)
+}
+
+func (m *clsMsg) unit(inTx bool) work.Unit {
 	m.lex()
 	m.matchParens()
 	u := work.Unit{Class: work.ClassStartLease}
@@ -122,9 +128,9 @@ func clsRun(text []byte, inTx, plant bool) work.Unit {
 	}
 	// SafeRead and Hinted are computed directly from raw bytes so a lexer
 	// defect can never widen sharing or downgrade 08007 to 08006.
-	u.Hinted = bytes.HasPrefix(text, []byte(ShareHint))
+	u.Hinted = bytes.HasPrefix(m.src, []byte(ShareHint))
 	u.Opaque = m.bad
-	u.SafeRead = ShareFits(text)
+	u.SafeRead = ShareFits(m.src)
 	stmts := m.split()
 	u.Statements = len(stmts)
 	for _, s := range stmts {
@@ -239,6 +245,7 @@ func (m *clsMsg) split() []clsSpan {
 func (m *clsMsg) word(i int) bool { return i >= 0 && i < len(m.toks) && m.toks[i].Kind == TokenWord }
 
 func (m *clsMsg) is(i int, kw string) bool {
+	m.keywordChecks++
 	if !m.word(i) {
 		return false
 	}

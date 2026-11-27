@@ -66,9 +66,10 @@ func (t Token) Text(src []byte) []byte { return src[t.Start:t.End] }
 // classifier. It assumes standard_conforming_strings = on and never panics on
 // arbitrary bytes.
 type Lexer struct {
-	src []byte
-	pos int
-	run lexOpRun
+	src        []byte
+	pos        int
+	run        lexOpRun
+	opRunBytes int
 }
 
 // lexOpRun caches one scanned operator run so repeated trailing '+'/'-' cuts
@@ -379,6 +380,7 @@ func lexHasPrefix(b, p []byte) bool {
 func (l *Lexer) operator() {
 	if l.pos < l.run.start || l.pos >= l.run.end {
 		l.run = l.scanOpRun()
+		l.opRunBytes += l.run.end - l.run.start
 	}
 	l.pos = l.run.cut(l.pos)
 }
