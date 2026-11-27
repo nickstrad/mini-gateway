@@ -35,7 +35,7 @@ func TimeoutBudgetMarkdown() []byte {
 	for _, n := range t.Nesting() {
 		fmt.Fprintf(&b, "| %s | `%s` | %s | %s | `%s` | %s | %v |\n", n.Inner, n.InnerKey, n.InnerValue, n.Outer, n.OuterKey, n.OuterValue, n.InnerValue < n.OuterValue)
 	}
-	b.WriteString("\nNot yet built: client idle inside a transaction (chunk 7), cancel and clean-up of a dirty connection (chunk 7), coalesced flight (chunk 11), drain (chunk 13).\n")
+	b.WriteString("\nNot yet built: coalesced flight (chunk 11), drain (chunk 13).\n")
 	return b.Bytes()
 }
 
@@ -49,7 +49,7 @@ func CapacityTableMarkdown() []byte {
 	for _, r := range rows {
 		fmt.Fprintf(&b, "| %s | %s | %s | `%s` | %s | `%s` | `%s` |\n", cell(r.Thing), cell(r.Protects), cell(r.Capacity), r.Key, cell(r.Full), r.Deadline, r.Gauge)
 	}
-	b.WriteString("\nNot yet built: per-tenant queues and active-tenant states (chunks 8, 9), coalescer flights, waiters and shared-reply bytes (chunk 11), concurrent cancels (chunk 7).\n")
+	b.WriteString("\nNot yet built: per-tenant queues and active-tenant states (chunks 8, 9), coalescer flights, waiters and shared-reply bytes (chunk 11).\n")
 	return b.Bytes()
 }
 

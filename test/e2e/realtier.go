@@ -85,6 +85,11 @@ type GatewayOpts struct {
 	ServerName string
 	DBAddr     string
 	Tenants    int
+	Reset      string
+	Reseed     string
+	Pool       map[string]any
+	MaxStartup int
+	MaxClients int
 	Queue      map[string]any
 }
 
@@ -159,6 +164,7 @@ func (env *RealEnv) gatewayConfig(o GatewayOpts, dir string) map[string]any {
 	if o.ClientTLS == "off" {
 		cfg["client_tls"] = map[string]any{"mode": "off"}
 	}
+	env.poolConfig(o, cfg)
 	return cfg
 }
 
@@ -365,4 +371,32 @@ func TierRScenarios() []string {
 	return []string{"tierr-results", "tierr-fragment", "tierr-tx-integrity", "tierr-reject-list", "tierr-session-state",
 		"tierr-client-vanish", "tierr-db-killed", "tierr-slow-reader", "tierr-queue-full", "tierr-silent-db", "tierr-tls",
 		"tierr-backend-tls", "tierr-smoke", "tierr-admission-overload"}
+}
+
+func (env *RealEnv) poolConfig(o GatewayOpts, cfg map[string]any) {
+	lease := map[string]any{"reset": "always"}
+	if o.Reset != "" {
+		lease["reset"] = o.Reset
+	}
+	if o.Reseed != "" {
+		lease["reseed"] = o.Reseed
+	}
+	cfg["lease"] = lease
+	p := cfg["pool"].(map[string]any)
+	for k, v := range o.Pool {
+		p[k] = v
+	}
+	if o.MaxStartup > 0 || o.MaxClients > 0 {
+		limits, _ := cfg["limits"].(map[string]any)
+		if limits == nil {
+			limits = map[string]any{}
+		}
+		if o.MaxStartup > 0 {
+			limits["max_startup"] = o.MaxStartup
+		}
+		if o.MaxClients > 0 {
+			limits["max_clients"] = o.MaxClients
+		}
+		cfg["limits"] = limits
+	}
 }

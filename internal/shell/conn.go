@@ -228,6 +228,8 @@ func (c *conn) abort() {
 	close(c.done)
 	c.mu.Unlock()
 	if nc != nil {
+		// Bound TLS close-notify writes so closing a dead peer never stalls the shell.
+		_ = nc.SetWriteDeadline(time.Now().Add(closeWriteWait))
 		_ = nc.Close()
 	}
 	if cancel != nil {

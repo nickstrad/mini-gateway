@@ -36,6 +36,9 @@ internal/work
 internal/proxy
 internal/proxy/proxysim
 internal/obs/enginesrc
+# Chunk 7: the pool core.
+internal/pool
+internal/obs/poolsrc
 # Chunk 6a: the load tool's core (the plan, the open-loop schedule and the accounting). Its
 # runner internal/loadgen/live owns the sockets, the goroutines and the clock, and is not listed.
 internal/loadgen

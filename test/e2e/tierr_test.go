@@ -114,9 +114,13 @@ func realConservation(s obs.InstanceSnapshot) error {
 		return fmt.Errorf("conservation from the file: received %d accepted %d rejected %d completed %d failed %d shed %d", rec, acc, rej, comp, fail, shed)
 	}
 	ended := ev(s, "leases_ended", none)
-	if ended != ev(s, "leases_started", none) || ended != ev(s, "resets_completed", none)+s.Sum(obs.ComponentEngine, "resets_failed")+
-		ev(s, "leases_ended_by", obs.Labels{Outcome: "close"})+ev(s, "leases_ended_by", obs.Labels{Outcome: "as-is"}) {
+	by := func(o string) int64 { return ev(s, "leases_ended_by", obs.Labels{Outcome: o}) }
+	if ended != ev(s, "leases_started", none) || ended != by("reset")+by("close")+by("as-is")+by("dirty") {
 		return fmt.Errorf("lease accounting from the file: started %d ended %d", ev(s, "leases_started", none), ended)
+	}
+	started := ev(s, "resets_started", none)
+	if started != by("reset")+ev(s, "resets_not_at_release", none) || started != ev(s, "resets_completed", none)+s.Sum(obs.ComponentEngine, "resets_failed") {
+		return fmt.Errorf("reset accounting from the file: started %d, at release %d, completed %d", started, by("reset"), ev(s, "resets_completed", none))
 	}
 	return nil
 }
@@ -381,8 +385,14 @@ func TestTierRClientVanishes(t *testing.T) {
 		c.Close()
 	}
 	final := stopAndRead(t, env, g, "tierr-client-vanish")
-	if n := ev(final, "database_closes", obs.Labels{Reason: "client-vanished"}); n != 2 {
-		t.Fatalf("%d connections closed for vanished clients, want 2", n)
+	vanished := final.Value(obs.ComponentPool, "lease_ends", obs.Labels{Reason: "vanished-in-transaction"}) +
+		final.Value(obs.ComponentPool, "lease_ends", obs.Labels{Reason: "vanished-mid-statement"})
+	cleaned := final.Value(obs.ComponentPool, "dirty_reused", obs.Labels{Reason: "vanished-in-transaction"}) +
+		final.Value(obs.ComponentPool, "dirty_reused", obs.Labels{Reason: "vanished-mid-statement"}) +
+		final.Value(obs.ComponentPool, "dirty_closed", obs.Labels{Reason: "vanished-in-transaction"}) +
+		final.Value(obs.ComponentPool, "dirty_closed", obs.Labels{Reason: "vanished-mid-statement"})
+	if vanished != 2 || cleaned != 2 {
+		t.Fatalf("%d leases of vanished clients entered the dirty-connection table and %d left it, want 2 and 2", vanished, cleaned)
 	}
 }
 
@@ -532,6 +542,10 @@ func TestTierRQueueFull(t *testing.T) {
 		}
 		conns = append(conns, rc)
 	}
+	if got := conns[0].Query("SELECT 1"); !slices.Equal(got, okSelect1) {
+		t.Fatalf("warm-up: %v", got)
+	}
+	time.Sleep(200 * time.Millisecond)
 	res := RunReal(context.Background(), spec, func(i int) (*RealClient, error) {
 		rc := conns[0]
 		conns = conns[1:]
@@ -735,8 +749,8 @@ func TestTierRDatabaseLegTLSModes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := c.Query("SELECT 1"); !slices.Equal(got, errTokens("53M01")) {
-		t.Fatalf("wrong CA: %v", got)
+	if got := c.Query("SELECT 1"); !slices.Equal(got, errTokens("53M01")) && !slices.Equal(got, errTokens("53M03")) {
+		t.Fatalf("wrong CA: %v, want a pre-forward refusal (53M01 shed or 53M03 breaker open)", got)
 	}
 	c.Close()
 	final := stopAndRead(t, env, g, "tierr-backend-tls")

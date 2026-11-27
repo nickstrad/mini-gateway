@@ -69,9 +69,11 @@ func (e *Engine) gates(c *client) bool {
 
 func (e *Engine) enqueue(c *client) {
 	req := c.req
+	attempted := false
 	// Skip the direct-lend fast path for ShedQueue so the rule and load gauge
 	// observe zero-wait requests as well as queued ones.
 	if e.shedQ == nil && e.seams.Queue.Len() == 0 && e.seams.Pool.Idle() > 0 {
+		attempted = true
 		if id, ok := e.seams.Pool.Checkout(e.now, c.tenant); ok {
 			e.snap.StagePassed[StageQueue]++
 			e.queueHist.Record(0)
@@ -90,7 +92,9 @@ func (e *Engine) enqueue(c *client) {
 	e.snap.Queued.Add(1)
 	e.t.arm(&c.queueT, e.after(e.cfg.Timeouts.QueueWait), tQueueWait, c, nil)
 	e.queueTouched()
-	e.dispatch()
+	if !attempted {
+		e.dispatch()
+	}
 }
 
 func (e *Engine) shed(c *client) {
@@ -169,6 +173,7 @@ func (e *Engine) forward(c *client) {
 	req.sent = e.now
 	req.start = d.queued
 	req.relayed = 0
+	d.got = 0
 	d.cycle.QuerySent()
 	e.writeDB(d, req.msg)
 	e.t.arm(&d.stmtT, e.after(e.cfg.Timeouts.Statement), tDBStatement, nil, d)
@@ -293,6 +298,10 @@ func (e *Engine) replyDone(d *dbConn, c *client, status byte) {
 }
 
 func (e *Engine) release(d *dbConn, c *client, status byte) {
+	if e.core != nil {
+		e.coreRelease(d, c, status)
+		return
+	}
 	e.snap.StagePassed[StageRelease]++
 	e.snap.LeasesEnded++
 	d.client = nil
@@ -334,7 +343,11 @@ func (e *Engine) leaseLost(d *dbConn) {
 func (e *Engine) leaseFailed(d *dbConn, reason CloseReason) {
 	c := d.client
 	e.leaseLost(d)
-	e.closeDB(d, reason)
+	if e.core != nil {
+		e.coreLost(d, reason, lossFor(reason))
+	} else {
+		e.closeDB(d, reason)
+	}
 	if c == nil || c.phase == cpClosed {
 		return
 	}
@@ -384,6 +397,8 @@ func lostRow(req *request, reached work.Tri) pgwire.ErrRowID {
 		return pgwire.ErrRowPartialReply
 	case req.inTx && reached == work.No:
 		return pgwire.ErrRowLostInTransaction
+	case req.inTx && !mayEndTransaction(req.msg):
+		return pgwire.ErrRowLostMidStatementInTransaction
 	case req.inTx:
 		return pgwire.ErrRowLostAfterWrite
 	case reached == work.No || req.unit.SafeRead:
@@ -392,16 +407,55 @@ func lostRow(req *request, reached work.Tri) pgwire.ErrRowID {
 	return pgwire.ErrRowLostAfterWrite
 }
 
+func mayEndTransaction(msg []byte) bool {
+	text := msg
+	if len(text) > headerLen {
+		text = text[headerLen:]
+	}
+	for _, w := range transactionEnders {
+		if containsFold(text, w) {
+			return true
+		}
+	}
+	return false
+}
+
+var transactionEnders = [...]string{"COMMIT", "END", "PREPARE"}
+
+func containsFold(text []byte, word string) bool {
+	for i := 0; i+len(word) <= len(text); i++ {
+		match := true
+		for j := 0; j < len(word); j++ {
+			c := text[i+j]
+			if c >= 'a' && c <= 'z' {
+				c -= 'a' - 'A'
+			}
+			if c != word[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+	return false
+}
+
 func (e *Engine) startReset(d *dbConn) {
 	e.snap.ResetsStarted++
 	d.resetAt = e.now
 	d.judge = resetJudge{}
 	d.judge.fr.Max = MaxResetReply
 	e.writeDB(d, pgwire.AppendQuery(nil, []byte(discardAll)))
-	if e.cfg.Plant&PlantLendBeforeResetReply != 0 {
+	if e.cfg.Plant&PlantLendBeforeResetReply != 0 && e.core == nil {
 		e.snap.ResetsCompleted++
 		e.makeIdle(d)
 		e.dispatch()
+		return
+	}
+	if e.core != nil {
+		d.failCounted = false
 		return
 	}
 	d.phase = dpResetting
@@ -409,9 +463,24 @@ func (e *Engine) startReset(d *dbConn) {
 	e.t.arm(&d.resetT, e.after(e.cfg.Timeouts.Reset), tDBReset, nil, d)
 }
 
+type judgeMode uint8
+
+const (
+	judgeReset judgeMode = iota
+	judgeCheck
+	judgeRollback
+	judgeSilent
+	judgeDrain
+	judgeDone
+)
+
 type resetJudge struct {
-	fr     pgwire.Framer
-	sawTag bool
+	fr       pgwire.Framer
+	sawTag   bool
+	mode     judgeMode
+	reseed   bool
+	reseeded bool
+	rows     int
 }
 
 type resetVerdict uint8
@@ -423,6 +492,12 @@ const (
 )
 
 func (j *resetJudge) take(b []byte) (int, resetVerdict, ResetFailure) {
+	if j.mode == judgeSilent || j.mode == judgeDone {
+		if len(b) > 0 {
+			return 0, rvFail, ResetFailSurprise
+		}
+		return 0, rvMore, 0
+	}
 	n := 0
 	for n < len(b) {
 		k, done, err := j.fr.Take(b[n:])
@@ -433,33 +508,117 @@ func (j *resetJudge) take(b []byte) (int, resetVerdict, ResetFailure) {
 		if !done {
 			continue
 		}
-		f := j.fr.Frame()
-		switch f.Type {
-		case pgwire.MsgParameterStatus, pgwire.MsgNoticeResponse:
-		case pgwire.MsgErrorResponse:
-			return n, rvFail, ResetFailError
-		case pgwire.MsgCommandComplete:
-			if j.sawTag || string(f.Body) != discardAll+"\x00" {
-				return n, rvFail, ResetFailWrongTag
-			}
-			j.sawTag = true
-		case pgwire.MsgReadyForQuery:
-			if !j.sawTag {
-				return n, rvFail, ResetFailWrongTag
-			}
-			if len(f.Body) != 1 || f.Body[0] != pgwire.StatusIdle {
-				return n, rvFail, ResetFailWrongStatus
-			}
-			return n, rvDone, 0
-		default:
-			return n, rvFail, ResetFailSurprise
+		v, why := j.frame(j.fr.Frame())
+		if v != rvMore {
+			return n, v, why
 		}
 	}
 	return n, rvMore, 0
 }
 
+func (j *resetJudge) frame(f pgwire.Frame) (resetVerdict, ResetFailure) {
+	switch j.mode {
+	case judgeCheck:
+		return j.check(f)
+	case judgeRollback:
+		return j.expect(f, rollbackQuery)
+	}
+	if j.reseeded {
+		return j.reseedReply(f)
+	}
+	v, why := j.expect(f, discardAll)
+	if v == rvDone && j.reseed {
+		j.reseeded, j.sawTag = true, false
+		return rvMore, 0
+	}
+	return v, why
+}
+
+func (j *resetJudge) expect(f pgwire.Frame, tag string) (resetVerdict, ResetFailure) {
+	switch f.Type {
+	case pgwire.MsgParameterStatus, pgwire.MsgNoticeResponse:
+	case pgwire.MsgErrorResponse:
+		return rvFail, ResetFailError
+	case pgwire.MsgCommandComplete:
+		if j.sawTag || string(f.Body) != tag+"\x00" {
+			return rvFail, ResetFailWrongTag
+		}
+		j.sawTag = true
+	case pgwire.MsgReadyForQuery:
+		return j.ready(f)
+	default:
+		return rvFail, ResetFailSurprise
+	}
+	return rvMore, 0
+}
+
+func (j *resetJudge) ready(f pgwire.Frame) (resetVerdict, ResetFailure) {
+	if !j.sawTag {
+		return rvFail, ResetFailWrongTag
+	}
+	if len(f.Body) != 1 || f.Body[0] != pgwire.StatusIdle {
+		return rvFail, ResetFailWrongStatus
+	}
+	return rvDone, 0
+}
+
+func (j *resetJudge) check(f pgwire.Frame) (resetVerdict, ResetFailure) {
+	switch f.Type {
+	case pgwire.MsgEmptyQueryResponse:
+		if j.sawTag {
+			return rvFail, ResetFailWrongTag
+		}
+		j.sawTag = true
+	case pgwire.MsgReadyForQuery:
+		return j.ready(f)
+	case pgwire.MsgErrorResponse:
+		return rvFail, ResetFailError
+	default:
+		return rvFail, ResetFailSurprise
+	}
+	return rvMore, 0
+}
+
+func (j *resetJudge) reseedReply(f pgwire.Frame) (resetVerdict, ResetFailure) {
+	switch f.Type {
+	case pgwire.MsgRowDescription:
+		if j.rows > 0 || j.sawTag {
+			return rvFail, ResetFailSurprise
+		}
+	case pgwire.MsgDataRow:
+		j.rows++
+		if j.rows > 1 || j.sawTag {
+			return rvFail, ResetFailSurprise
+		}
+	case pgwire.MsgCommandComplete:
+		if j.rows != 1 {
+			return rvFail, ResetFailWrongTag
+		}
+		return j.expect(f, reseedTag)
+	default:
+		return j.expect(f, reseedTag)
+	}
+	return rvMore, 0
+}
+
 func (e *Engine) judgeReset(d *dbConn, b []byte) []byte {
 	n, v, why := d.judge.take(b)
+	if e.core != nil && v == rvDone && n == len(b) {
+		e.snap.ResetsCompleted++
+		e.resetHist.Record(int64(e.now - d.resetAt))
+		// Leave dpResetting before notifying the pool core so a lifetime close
+		// emitted inside StepDone does not also count as a failed reset.
+		e.coreSetPhase(d, dpCleaning)
+		e.coreStepDone(d, pgwire.StatusIdle)
+		return nil
+	}
+	if e.core != nil && v != rvMore {
+		if v == rvDone {
+			why = ResetFailSurprise
+		}
+		e.coreStepFailed(d, why)
+		return nil
+	}
 	switch v {
 	case rvFail:
 		e.resetFailed(d, why)

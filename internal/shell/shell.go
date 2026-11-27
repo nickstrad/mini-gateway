@@ -88,6 +88,7 @@ type Config struct {
 	Obs             ObsConfig
 	Sources         func(c *obs.Collector, shell func() proxy.ShellSnapshot) error
 	HealthRules     []obs.Rule
+	KeepAlive       net.KeepAliveConfig
 }
 
 type envelope struct {
@@ -129,6 +130,7 @@ type Shell struct {
 
 	clients  map[proxy.ConnID]*conn
 	dbs      map[proxy.ConnID]*conn
+	cancels  map[proxy.ConnID]context.CancelFunc
 	out      []proxy.Action
 	deferred []proxy.Event
 	wake     *time.Timer
@@ -154,21 +156,28 @@ func New(core Core, cfg Config) (*Shell, error) {
 		return nil, fmt.Errorf("%w: the publish interval must be above 0", ErrConfig)
 	}
 	if cfg.Dial == nil {
-		cfg.Dial = dialTCP
+		cfg.Dial = keepAliveDialer(cfg.KeepAlive)
 	}
 	cfg.Timeouts = proxy.Config{Timeouts: cfg.Timeouts}.WithDefaults().Timeouts
 	s := &Shell{cfg: cfg, core: core, base: time.Now(),
 		mailbox: make(chan envelope, cfg.MailboxCap), stop: make(chan struct{}, bellCap), lost: make(chan struct{}, bellCap),
-		live: make(map[*conn]struct{}), clients: make(map[proxy.ConnID]*conn), dbs: make(map[proxy.ConnID]*conn)}
+		live: make(map[*conn]struct{}), clients: make(map[proxy.ConnID]*conn), dbs: make(map[proxy.ConnID]*conn),
+		cancels: make(map[proxy.ConnID]context.CancelFunc)}
 	if err := s.wireObs(); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-func dialTCP(ctx context.Context, address string) (net.Conn, error) {
-	var d net.Dialer
-	return d.DialContext(ctx, "tcp", address)
+func keepAliveDialer(ka net.KeepAliveConfig) DialFunc {
+	d := net.Dialer{KeepAliveConfig: ka}
+	// Disable Go's default 15s keepalive explicitly when the operator turned keepalive off.
+	if !ka.Enable {
+		d.KeepAlive = -1
+	}
+	return func(ctx context.Context, address string) (net.Conn, error) {
+		return d.DialContext(ctx, "tcp", address)
+	}
 }
 
 // Addr returns the client listener's bound network address.

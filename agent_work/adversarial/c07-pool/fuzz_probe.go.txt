@@ -1,0 +1,63 @@
+package pool
+
+import (
+	"bytes"
+	"math/rand/v2"
+	"reflect"
+	"testing"
+)
+
+func TestAdvProbeDecoder(t *testing.T) {
+	for v := 0; v < 256; v++ {
+		for _, n := range []int{0, 1, 2, 3, 191, 192, 193, 4096, 1048576} {
+			b := bytes.Repeat([]byte{byte(v)}, n)
+			ops := decodeOps(b)
+			if len(ops) > 64 || len(ops) != min(n/3, 64) {
+				t.Fatalf("byte=%d length=%d decoded=%d", v, n, len(ops))
+			}
+			for _, o := range ops {
+				if o.kind >= numOpKinds {
+					t.Fatal("invalid op", o)
+				}
+			}
+			if n > 192 && !reflect.DeepEqual(ops, decodeOps(b[:192])) {
+				t.Fatal("unbounded suffix affects decode")
+			}
+		}
+	}
+}
+func TestAdvProbeConstantSeed(t *testing.T) {
+	r := rand.New(rand.NewPCG(70927, 15))
+	for i := 0; i < 200; i++ {
+		b := make([]byte, 193)
+		for j := range b {
+			b[j] = byte(r.Uint32())
+		}
+		c := modelConfig()
+		if c.Seed != 7 {
+			t.Fatalf("seed changed: %d", c.Seed)
+		}
+		ops := decodeOps(b)
+		a, z := run(c, ops, true), run(c, ops, true)
+		if !reflect.DeepEqual(a, z) {
+			t.Fatalf("seed=70927 input=%x changed replay", b)
+		}
+	}
+}
+func TestAdvProbePlant(t *testing.T) {
+	// Independent witness: two live connections, one borrower, sibling loss,
+	// release reset, then the unchecked borrower. No builder seed corpus is used.
+	ops := []op{{kind: opDemand, a: 2}, {kind: opOpened}, {kind: opAdvance, a: 3}, {kind: opOpened}, {kind: opCheckout}, {kind: opLost, a: 0}, {kind: opReleaseClean, b: 1}, {kind: opStepDone}, {kind: opCheckout}}
+	c := modelConfig()
+	c.Plant = 0
+	plain := run(c, decodeOps(encodeOps(ops)), true)
+	if plain.violation != "" {
+		t.Fatalf("control failed: %s", plain.violation)
+	}
+	c.Plant = PlantResetClearsSuspect
+	bad := run(c, decodeOps(encodeOps(ops)), true)
+	if bad.violation == "" {
+		t.Fatal("independent operation witness failed to expose suspect-clearing plant")
+	}
+	t.Logf("seed=70927 plant caught: %s", bad.violation)
+}

@@ -99,6 +99,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, ctxFn context
 	}
 	if *check {
 		fmt.Fprintf(stdout, "config %s is valid; fingerprint %s\n", *configPath, f.Fingerprint())
+		for _, w := range f.Warnings() {
+			fmt.Fprintf(stdout, "warning: %s\n", w)
+		}
 		return exitOK
 	}
 	ctx, cancel := ctxFn()
@@ -131,6 +134,9 @@ func printVerifier(password string, iterations int, stdin io.Reader, stdout, std
 }
 
 func serve(ctx context.Context, f *config.File, stdout, stderr io.Writer) int {
+	for _, w := range f.Warnings() {
+		fmt.Fprintf(stderr, "mini-gateway: warning: %s\n", w)
+	}
 	r := cryptoRandom{}
 	pcfg, err := f.Proxy(r, pgwire.NewKeyIssuer(r))
 	if err != nil {
@@ -184,6 +190,7 @@ func shellConfig(f *config.File, engine *proxy.Engine, ln, admin net.Listener) s
 			return enginesrc.Register(c, engine, sh)
 		},
 		HealthRules: enginesrc.HealthRules(),
+		KeepAlive:   f.KeepAlive(),
 	}
 }
 

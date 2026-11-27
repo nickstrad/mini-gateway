@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nickstrad/mini-gateway/internal/pgwire"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 	"github.com/nickstrad/mini-gateway/internal/proxy/proxysim"
 	"github.com/nickstrad/mini-gateway/internal/sim"
@@ -213,6 +214,9 @@ func (c *simClient) sendStep() {
 	} else {
 		c.send(c.sess.Query(nil, st.SQL))
 	}
+	if st.Cancel > 0 {
+		c.s.After(st.Cancel, c.cancel)
+	}
 	if st.StopReading {
 		c.noRead = true
 		c.s.After(st.StallFor, c.unstall)
@@ -226,6 +230,21 @@ func (c *simClient) sendStep() {
 			c.complete()
 		})
 	}
+}
+
+func (c *simClient) cancel() {
+	var k pgwire.BackendKey
+	k.ProcessID = c.sess.ProcessID()
+	copy(k.Secret[:], c.sess.Secret())
+	msg := pgwire.AppendCancelRequest(nil, k)
+	var end *simnet.End
+	end = c.net.Dial(c.addr, c.opts, simnet.HandlerFunc(func(_ *simnet.End, ev simnet.Event) {
+		switch ev {
+		case simnet.EvConnected:
+			_, _ = end.Write(msg)
+			_ = end.Close()
+		}
+	}))
 }
 
 func (c *simClient) vanish() {

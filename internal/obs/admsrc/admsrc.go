@@ -39,7 +39,7 @@ func Metrics() []obs.MetricDesc {
 		obs.CounterDesc("served", 0, "Requests taken from a queue to a database connection."),
 		obs.CounterDesc("removed", 0, "Queued requests removed because their client left."),
 		obs.CounterDesc("unpops", 0, "Taken requests put back because no connection could be lent."),
-		obs.CounterDesc("shed", lr, "Requests shed with 53M01, by reason (rule, at-pop, overflow, total, tenants, deadline, undrained)."),
+		obs.CounterDesc("shed", lr, "Requests shed, by reason (rule, at-pop, overflow, total, tenants, deadline, undrained: 53M01; breaker: 53M03, refused while queued because the breaker opened)."),
 		obs.GaugeDesc("pending_sheds", 0, "Sheds decided and not yet answered by the engine (0 between events)."),
 		obs.GaugeDesc("oldest_age", 0, "Age of the oldest queued request at the last queue operation.").WithUnit(obs.UnitNs),
 		obs.GaugeDesc("lifo_tenants", 0, "Tenant queues serving newest first now."),

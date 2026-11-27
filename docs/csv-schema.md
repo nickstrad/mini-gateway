@@ -87,7 +87,7 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `admission` | `rule` | gauge | mode | count | sum | 1 for the queue rule this instance runs (mode: timeout, control-law, fifo, folly; the last two are simulator arms). |
 | `admission` | `rule_states` | gauge | mode | count | sum | Tenant queues in each rule state (mode: normal, standing, dropping, overloaded). |
 | `admission` | `served` | counter | — | count | sum | Requests taken from a queue to a database connection. |
-| `admission` | `shed` | counter | reason | count | sum | Requests shed with 53M01, by reason (rule, at-pop, overflow, total, tenants, deadline, undrained). |
+| `admission` | `shed` | counter | reason | count | sum | Requests shed, by reason (rule, at-pop, overflow, total, tenants, deadline, undrained: 53M01; breaker: 53M03, refused while queued because the breaker opened). |
 | `admission` | `shedding` | gauge | — | count | sum | Tenant queues that shed within the last interval. |
 | `admission` | `tenant_capacity` | gauge | tenant | count | sum | Capacity of this tenant's queue. |
 | `admission` | `tenant_depth` | gauge | tenant | count | sum | Requests waiting in this tenant's queue now. |
@@ -125,7 +125,14 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `classifier` | `sql_statements` | counter | — | count | sum | SQL statements in the classified Query messages. |
 | `classifier` | `statements` | counter | — | count | sum | Query messages classified. |
 | `classifier` | `statements_by_class` | counter | outcome | count | sum | Query messages classified, by class (outcome). |
+| `engine` | `backend_no_reply` | counter | — | count | sum | Statements whose bytes were handed over and that had received zero reply bytes at the statement deadline. |
+| `engine` | `breaker_flushed` | counter | — | count | sum | Queued requests answered 53M03 when the breaker opened with nothing usable. |
+| `engine` | `cancel_connections` | gauge | — | count | sum | Cancel connections open now. |
+| `engine` | `cancel_connections_peak` | gauge | — | count | max | Most cancel connections open at once. |
 | `engine` | `cancel_requests` | counter | — | count | sum | Cancel requests recognised (mapping arrives in chunk 7). |
+| `engine` | `cancels_done` | counter | — | count | sum | Cancel connections finished. |
+| `engine` | `cancels_sent` | counter | — | count | sum | Cancel requests sent to the database on a second connection. |
+| `engine` | `client_cancels` | counter | outcome | count | sum | Client cancel requests by outcome (forwarded, queued, refused, unmatched, ignored). |
 | `engine` | `client_closes` | counter | reason | count | sum | Client connections closed, by reason. |
 | `engine` | `clients_accepted` | counter | — | count | sum | Client connections accepted. |
 | `engine` | `clients_by_tls` | gauge | mode | count | sum | Ready client connections by TLS version (mode: plain, 1.2, 1.3). |
@@ -158,9 +165,10 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `engine` | `events` | counter | — | count | sum | Events handled by the engine. |
 | `engine` | `failures_reached` | counter | outcome | count | sum | Failures by whether the request may have reached the database (outcome: no, yes). |
 | `engine` | `failures_without_reply` | counter | — | count | sum | Failures where the client was gone and no reply was possible. |
+| `engine` | `idle_in_transaction_rolled_back` | counter | — | count | sum | Transactions left idle past timeouts.idle_in_transaction and rolled back. |
 | `engine` | `ignored_database_data` | counter | — | count | sum | Bytes events from database connections already closed. |
 | `engine` | `leases_ended` | counter | — | count | sum | Leases that ended. |
-| `engine` | `leases_ended_by` | counter | outcome | count | sum | Leases that ended, by what happened to the connection (outcome: reset, close, as-is). |
+| `engine` | `leases_ended_by` | counter | outcome | count | sum | Leases that ended, by what happened to the connection (outcome: reset, close, as-is, dirty). |
 | `engine` | `leases_started` | counter | — | count | sum | Database connections lent to a client. |
 | `engine` | `non_request_replies` | counter | — | count | sum | Proxy-made replies not tied to a request (startup caps, violations, a loss between statements). |
 | `engine` | `parameter_status_in_turn` | counter | — | count | sum | ParameterStatus messages relayed during a client's turn. |
@@ -183,11 +191,13 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `engine` | `requests_received` | counter | — | count | sum | Query messages received after startup. |
 | `engine` | `requests_rejected` | counter | — | count | sum | Requests refused before acceptance (reject list, extended protocol, gates). |
 | `engine` | `requests_shed` | counter | — | count | sum | Accepted requests shed by the queue (full or waited too long). |
+| `engine` | `reseeds` | counter | — | count | sum | Random-seed re-seeds sent after a reset (lease.reseed on). |
 | `engine` | `reset_time` | histogram | — | ns | by bucket | Time from sending DISCARD ALL to its ReadyForQuery. |
 | `engine` | `reset_time_clamped_high` | counter | — | count | sum | Values recorded into reset_time above its range, clamped to the highest bucket. |
 | `engine` | `reset_time_clamped_low` | counter | — | count | sum | Values recorded into reset_time below its range, clamped to the lowest bucket. |
 | `engine` | `resets_completed` | counter | — | count | sum | Resets answered with the DISCARD ALL tag and status I. |
 | `engine` | `resets_failed` | counter | reason | count | sum | Resets that failed, by reason; the connection was closed. |
+| `engine` | `resets_not_at_release` | counter | — | count | sum | Resets sent by the pool core other than at a clean release (tenant switch, after a clean-up). |
 | `engine` | `resets_started` | counter | — | count | sum | DISCARD ALL resets sent after a lease. |
 | `engine` | `retry_asked` | counter | — | count | sum | Failures the retry seam asked to retry (policy off: always 0). |
 | `engine` | `shell_accept_errors` | counter | — | count | sum | Errors returned by the client listener's Accept. |
@@ -296,6 +306,66 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `obs` | `prom_tenants_tracked` | gauge | — | count | sum | Tenants that hold a tenant label value in the Prometheus text adapter. |
 | `obs` | `publishes` | counter | — | count | sum | Snapshots published by the collector, this one included. |
 | `obs` | `sources` | gauge | — | count | sum | Sources registered with the collector. |
+| `pool` | `backend_no_reply` | counter | — | count | sum | Statements with zero reply bytes at the statement deadline. |
+| `pool` | `breaker_failures` | counter | — | count | sum | Connection-class failures seen by the breaker. |
+| `pool` | `breaker_state` | gauge | — | count | sum | Breaker state: 0 closed, 1 open, 2 half-open. |
+| `pool` | `breaker_transitions` | counter | mode | count | sum | Breaker transitions (mode). |
+| `pool` | `breaker_trials` | counter | — | count | sum | Trials sent while half-open. |
+| `pool` | `cancels` | counter | — | count | sum | Cancel requests sent. |
+| `pool` | `cancels_done` | counter | — | count | sum | Cancel requests finished. |
+| `pool` | `cancels_expired` | counter | — | count | sum | Cancel requests dropped at their deadline or at shutdown. |
+| `pool` | `cancels_in_flight` | gauge | — | count | sum | Cancel requests in flight now. |
+| `pool` | `cancels_in_flight_peak` | gauge | — | count | max | Most cancel requests in flight at once. |
+| `pool` | `cancels_refused` | counter | — | count | sum | Cancel requests refused (cap reached, or no lent connection). |
+| `pool` | `capacity` | gauge | — | count | sum | The cap on open plus connecting database connections (pool.connections, the fleet share). |
+| `pool` | `checking` | gauge | — | count | sum | Connections being checked before reuse now. |
+| `pool` | `checking_peak` | gauge | — | count | max | Most connections being checked at once. |
+| `pool` | `checkout_attempts` | counter | — | count | sum | Checkouts asked for; each ends lent or refused. |
+| `pool` | `checkouts` | counter | outcome | count | sum | Checkouts by outcome (lent, refused). |
+| `pool` | `checks` | counter | — | count | sum | Checks before reuse started. |
+| `pool` | `checks_by_result` | counter | outcome | count | sum | Checks by result (ok, timeout, error, unexpected). |
+| `pool` | `cleaning` | gauge | — | count | sum | Connections in the dirty-connection table now (cancel, drain, rollback, waiting for a cancel). |
+| `pool` | `cleaning_peak` | gauge | — | count | max | Most connections in the dirty-connection table at once. |
+| `pool` | `client_cancels` | counter | — | count | sum | Cancel requests asked for by clients for their lent connection. |
+| `pool` | `closes` | counter | reason | count | sum | Connections closed, by reason. |
+| `pool` | `connecting` | gauge | — | count | sum | Database connections being opened now. |
+| `pool` | `connecting_peak` | gauge | — | count | max | Most connections being opened at once. |
+| `pool` | `creation_rate_per_s` | gauge | — | count | sum | The creation-rate limit: dials per second, at most one per 1/rate. |
+| `pool` | `dial_failures` | counter | — | count | sum | Dials that failed. |
+| `pool` | `dials` | counter | — | count | sum | Dials started. |
+| `pool` | `dials_opened` | counter | — | count | sum | Dials that finished startup. |
+| `pool` | `dirty_closed` | counter | reason | count | sum | Dirty-table entries that ended in a close, by how the lease ended. |
+| `pool` | `dirty_reused` | counter | reason | count | sum | Dirty-table entries that ended in reuse after a completed clean-up, by how the lease ended. |
+| `pool` | `exhausted` | counter | — | count | sum | Checkouts refused with open plus connecting at the cap. |
+| `pool` | `idle` | gauge | — | count | sum | Idle connections now. |
+| `pool` | `idle_age_at_lend` | histogram | — | ns | by bucket | How long a connection had been idle when it was lent. |
+| `pool` | `idle_age_at_lend_clamped_high` | counter | — | count | sum | Values recorded into idle_age_at_lend above its range, clamped to the highest bucket. |
+| `pool` | `idle_age_at_lend_clamped_low` | counter | — | count | sum | Values recorded into idle_age_at_lend below its range, clamped to the lowest bucket. |
+| `pool` | `idle_peak` | gauge | — | count | max | Most idle connections at once. |
+| `pool` | `lease_ends` | counter | reason | count | sum | Leases that ended, by how (reason). |
+| `pool` | `lease_time` | histogram | — | ns | by bucket | Time from lend to the end of the lease. |
+| `pool` | `lease_time_clamped_high` | counter | — | count | sum | Values recorded into lease_time above its range, clamped to the highest bucket. |
+| `pool` | `lease_time_clamped_low` | counter | — | count | sum | Values recorded into lease_time below its range, clamped to the lowest bucket. |
+| `pool` | `lent` | gauge | — | count | sum | Lent connections now. |
+| `pool` | `lent_as_is` | counter | — | count | sum | Lends of a connection last held by the same tenant, with no reset (on-switch). |
+| `pool` | `lent_peak` | gauge | — | count | max | Most lent connections at once. |
+| `pool` | `max_cancels` | gauge | — | count | sum | The cap on cancel requests in flight. |
+| `pool` | `max_connecting` | gauge | — | count | sum | The cap on connections being opened at once. |
+| `pool` | `open` | gauge | — | count | sum | Database connections open now (idle, checking, lent, cleaning, resetting). |
+| `pool` | `open_peak` | gauge | — | count | max | Most database connections open at once. |
+| `pool` | `open_plus_connecting` | gauge | — | count | sum | Open plus connecting now; never above capacity. |
+| `pool` | `open_plus_connecting_peak` | gauge | — | count | max | Most open plus connecting at once. |
+| `pool` | `rate_limited` | counter | — | count | sum | Times a wanted dial waited for the creation rate. |
+| `pool` | `reseeds` | counter | — | count | sum | Re-seeds sent with a reset (lease.reseed on). |
+| `pool` | `resets` | counter | mode | count | sum | Resets started, by policy (mode: always, on-switch, cleanup). |
+| `pool` | `resets_failed` | counter | mode | count | sum | Resets that failed, by policy (mode). |
+| `pool` | `resets_ok` | counter | mode | count | sum | Resets completed, by policy (mode). |
+| `pool` | `resetting` | gauge | — | count | sum | Connections being reset now. |
+| `pool` | `resetting_peak` | gauge | — | count | max | Most connections being reset at once. |
+| `pool` | `rollbacks` | counter | — | count | sum | ROLLBACK messages sent by the dirty-connection table. |
+| `pool` | `suspect` | gauge | — | count | sum | Connections that must pass a check before their next lend. |
+| `pool` | `suspect_peak` | gauge | — | count | max | Most suspect connections at once. |
+| `pool` | `tenant_switches` | counter | — | count | sum | Resets started at checkout because the connection was last held by another tenant (on-switch). |
 | `sim` | `background_timers` | gauge | — | count | sum | Waiting events marked as background work. |
 | `sim` | `cancelled` | counter | — | count | sum | Scheduled events cancelled before firing. |
 | `sim` | `faults_applied` | counter | — | count | sum | Faults applied by the kernel's fault schedule. |

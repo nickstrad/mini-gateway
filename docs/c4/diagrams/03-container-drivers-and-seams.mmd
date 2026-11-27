@@ -14,7 +14,7 @@ flowchart TB
     C_PGWIRE["Wire layer<br/>internal/pgwire"]:::planned
     C_WORK["Work vocabulary<br/>internal/work"]:::built
     C_ADM["Admission<br/>internal/admission"]:::planned
-    C_POOL["Pool<br/>internal/pool"]:::planned
+    C_POOL["Pool<br/>internal/pool"]:::built
     C_COAL["Coalescer<br/>internal/coalesce"]:::planned
     C_RETRY["Retry policy<br/>internal/retry"]:::planned
     C_CONFIG["Configuration<br/>internal/config"]:::planned
@@ -26,7 +26,7 @@ flowchart TB
   C_PGWIRE -.->|5| C_WORK
   C_ENGINE -->|6| C_WORK
   C_ADM -.->|7| C_WORK
-  C_POOL -.->|8| C_WORK
+  C_POOL -->|8| C_WORK
   C_COAL -.->|9| C_WORK
   C_RETRY -.->|10| C_WORK
   C_SIM -->|11| PGPROTO3

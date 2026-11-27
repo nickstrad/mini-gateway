@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/admission"
+	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 	"github.com/nickstrad/mini-gateway/internal/sim"
 	"github.com/nickstrad/mini-gateway/internal/sim/fakepg"
@@ -34,6 +35,7 @@ type Step struct {
 	Vanish      Vanish
 	StopReading bool
 	StallFor    time.Duration
+	Cancel      time.Duration
 }
 
 // Script defines one client's tenant, start delay, and sequence of Steps.
@@ -60,6 +62,12 @@ type Spec struct {
 	Duration  time.Duration
 	SetupSQL  []string
 	ClientTLS bool
+	Pool      *pool.Config
+	Reset     proxy.ResetPolicy
+	Reseed    bool
+	FakeConns int
+	Path      *PathPlan
+	Flush     time.Duration
 	Admission admission.Config
 }
 

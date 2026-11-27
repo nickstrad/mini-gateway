@@ -123,6 +123,9 @@ func (e *Engine) startupActs(c *client, acts []pgwire.Action) {
 			e.emit(Action{Kind: ActClientStartTLS, Conn: c.id})
 		case pgwire.ActCancel:
 			e.snap.CancelRequests++
+			if e.core != nil {
+				e.clientCancel(a.Key)
+			}
 		case pgwire.ActReady:
 			e.clientReady(c, a)
 		case pgwire.ActClose:
@@ -167,6 +170,9 @@ func (e *Engine) clientReady(c *client, a pgwire.Action) {
 	c.counted = true
 	c.front = pgwire.NewFrontendTracker(e.cfg.Client.MaxMessage, &e.wire)
 	e.t.arm(&c.idleT, e.after(e.cfg.Timeouts.ClientIdle), tClientIdle, c, nil)
+	if e.keys != nil {
+		e.keys[c.sess.Key()] = c
+	}
 }
 
 func (e *Engine) setInTx(c *client, on bool) {
@@ -228,7 +234,9 @@ func (e *Engine) pump(c *client) {
 	}
 	if !e.busy(c) && c.out == 0 && len(c.inbuf) == 0 {
 		e.resume(c)
-		if c.idleT == nil {
+		if c.idleT == nil && e.core != nil && c.phase == cpHeld {
+			e.t.arm(&c.idleT, e.after(e.cfg.Timeouts.IdleInTx), tClientIdleTx, c, nil)
+		} else if c.idleT == nil {
 			e.t.arm(&c.idleT, e.after(e.cfg.Timeouts.ClientIdle), tClientIdle, c, nil)
 		}
 	}
@@ -306,6 +314,10 @@ func (e *Engine) reply(c *client, row pgwire.ErrRowID) {
 			reason = CloseClientLostInTx
 		case pgwire.ErrRowPartialReply:
 			reason = CloseClientPartialReply
+		case pgwire.ErrRowIdleInTransaction:
+			reason = CloseClientIdleInTx
+		case pgwire.ErrRowLostMidStatementInTransaction:
+			reason = CloseClientLostInTx
 		}
 		e.closeClient(c, reason)
 	}
@@ -380,6 +392,11 @@ func (e *Engine) clientTimer(t *timer) {
 	case tQueueWait:
 		c.queueT = nil
 		e.queueExpired(c)
+	case tClientIdleTx:
+		c.idleT = nil
+		if c.phase == cpHeld {
+			e.idleInTx(c)
+		}
 	}
 }
 
@@ -414,11 +431,17 @@ func (e *Engine) closeClient(c *client, reason CloseReason) {
 	}
 	if c.db != nil {
 		d := c.db
+		if d.client == c && e.core != nil {
+			e.coreClientGone(c, d, reason)
+		}
 		c.db = nil
 		if d.client == c {
 			e.leaseLost(d)
 			e.closeDB(d, CloseDBClientVanished)
 		}
+	}
+	if e.keys != nil && c.sess != nil && e.keys[c.sess.Key()] == c {
+		delete(e.keys, c.sess.Key())
 	}
 	e.setInTx(c, false)
 	if c.counted {
@@ -438,16 +461,20 @@ func (e *Engine) closeClient(c *client, reason CloseReason) {
 	e.dispatch()
 }
 
+func (e *Engine) unqueue(id RequestID) {
+	if e.shedQ != nil {
+		e.shedQ.RemoveAt(e.now, id)
+		return
+	}
+	e.seams.Queue.Remove(id)
+}
+
 func (e *Engine) dequeueGone(c *client) {
 	if c.req == nil {
 		return
 	}
 	if e.cfg.Plant&PlantQueuedVanishKeepsSlot == 0 {
-		if e.shedQ != nil {
-			e.shedQ.RemoveAt(e.now, c.req.id)
-		} else {
-			e.seams.Queue.Remove(c.req.id)
-		}
+		e.unqueue(c.req.id)
 		delete(e.waiting, c.req.id)
 		e.queueTouched()
 	}

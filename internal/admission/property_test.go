@@ -138,7 +138,7 @@ func TestPropertyRunsExerciseEveryShedReasonAndLIFO(t *testing.T) {
 		}
 	}
 	for r, v := range shed {
-		if v == 0 && Reason(r) != ReasonUndrained {
+		if v == 0 && Reason(r) != ReasonUndrained && Reason(r) != ReasonBreaker {
 			t.Errorf("no shed with reason %v", Reason(r))
 		}
 	}

@@ -61,6 +61,13 @@ func (a *AdmissionQueue) Expire(now Instant, id RequestID) bool {
 	return a.q.Expire(a.at(now), int64(id))
 }
 
+// Refuse removes queued request id because the breaker opened, counting it as
+// shed with ReasonBreaker without queuing a TakeShed entry or marking the
+// tenant queue as shedding.
+func (a *AdmissionQueue) Refuse(now Instant, id RequestID) bool {
+	return a.q.Refuse(a.at(now), int64(id))
+}
+
 // Sweep advances internal admission deadlines up to now.
 func (a *AdmissionQueue) Sweep(now Instant) { a.q.Sweep(a.at(now)) }
 

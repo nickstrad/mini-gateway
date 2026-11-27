@@ -168,6 +168,16 @@ Record: `chunks/c06-walking-skeleton/` (brief, notes, gate extra).
 | `adversarial/c06-walking-skeleton/` | Astra's 46 attacks on the 15 claims. Run: `go test -count=1 ./agent_work/adversarial/c06-walking-skeleton/...`; long and real-server: `ADV_LONG=1` | Astra | 43 held / 3 broken, then 44 pass / 2 settled (`chunks/c06-walking-skeleton/ADVERSARIAL.md`) |
 | `../scripts/counted-growth.sh` | Gate G3 `counted` (and so `scripts/ci-fast.sh`): runs the linear-growth tests with work counting compiled in, `go test -tags clscount -count=1 -run Linearly -v ./internal/pgwire/`. Red when the run fails or when one of the five named growth tests did not pass. `COUNTED_GO` replaces `go`. Test: `go test ./scripts/` (`counted_growth_test.go`) | Opus | CR-3 repair, 2026-11-27: 5 tests pass in about 1 s; the stub tests show it red on a failing run, on "no tests to run" and on each missing test |
 
+## Phase 2, chunk 7 — pool (Opus, 2026-11-27)
+
+Record: `chunks/c07-pool/` (brief in `/root/briefs/zgateway-p2-c07-pool.md`, notes, gate extra).
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../scripts/fuzz-plant.sh` (changed) | Now also plants the pool core's ordering bug (`MG_FUZZ_PLANT=reset-clears-suspect`: a reset clears a suspect flag raised while the connection was lent) and requires `FuzzPoolOps` to find it within `FUZZ_SECONDS`; one NOTE line for both targets | Opus | `FuzzPoolOps` found it in 18–20 s on a host at load 18 (3 runs, 2 found); see NOTES "G9 results" for the gate's run |
+| `chunks/c07-pool/gate/extra.sh` | G10: the pool core's property tests at full size, the pool canaries and ablations (cap, creation rate, check deadline, suspect, on-switch tag, breaker, jitter, the night trickle all-off and each remedy alone), the fault driver's self-test, the engine core-path tests, `scripts/fuzz-plant.sh` | Opus | — |
+| `../test/e2e/c07_faultnet.go` | The G1 fault driver: a relay between the proxy and the fake (blackhole, peer_forgot, idle_drop with modelled keepalive, slots held, polite close, the `setseed` rewrite). Self-test: `go test ./test/e2e -run TestPathFault` | Opus | Blackhole on one connection leaves the other unchanged; clearing idle_drop restores a never-faulted run |
+| `../docs/knowledge/pool-core.md` | Facts for the builders of chunks 8–13: the pool core's API and rules, the engine's core path, the cancel transport action, the tests to copy | Opus | — |
 ## Phase 2, chunk 6a — operator tools (Opus, 2026-11-27)
 
 Record: `chunks/c06a-operator-tools/` (brief, notes with the promotion ledger, gate extra).

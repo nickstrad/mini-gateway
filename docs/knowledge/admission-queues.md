@@ -39,7 +39,7 @@ the engine's queue stage or the admission scenarios. Full record:
 - `proxy.Config.Admission` with `Rule != 0` builds `proxy.AdmissionQueue`; `Rule == 0` keeps
   chunk 6's `FIFO`, so every chunk 6 tier S scenario still runs on `FIFO`. The binary always
   sets a rule (default `timeout`).
-- The seam grew additively: `proxy.ShedQueue` (`RemoveAt`, `Expire`, `Sweep`, `Next`,
+- The seam grew additively: `proxy.ShedQueue` (`RemoveAt`, `Expire`, `Refuse`, `Sweep`, `Next`,
   `TakeShed`, `Unpop`, `Close`). `Engine.Shutdown` sweeps the core at its instant first
   (answering due sheds), then removes the rest as client-gone, then `Close`s the empty
   tenant queues and cancels `tAdmission`; `Invariants()` holds the core's shed total equal to
@@ -72,3 +72,16 @@ the engine's queue stage or the admission scenarios. Full record:
   `--check` reruns the scenarios and diffs against `test/analysis/admission-head-to-head/head-to-head.md`.
 - Tier R runs the chunk 6 tests with a relaxed rule (`RelaxedQueue`: interval 5 s): the
   default 100 ms interval sheds their deliberately long queue waits.
+
+## With chunk 7's pool core (the join, 2026-11-27)
+
+- Shed reason `breaker` (`ReasonBreaker`): `Queues.Refuse(now, id)` takes a queued request out
+  for the caller to answer itself (`53M03`); it is counted in `shed` and `ShedCount`, not left
+  for `TakeShed`, and it does not mark the tenant queue as shedding. Only the engine reaches it
+  (the breaker opening with requests queued), so the random-operation model does not.
+- With the pool core a checkout can refuse while connections are idle (a check or a half-open
+  trial is pending), so `Unpop` (and its kept served-wait sample) is more frequent than with
+  the fixed set.
+- Tier R gateways all get `RelaxedQueue` unless a test names its own queue; that now includes
+  chunk 7's pool tests.
+- Record: `agent_work/chunks/c07-pool/NOTES.md`, "Join with chunk 8".

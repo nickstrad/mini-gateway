@@ -36,7 +36,7 @@ func (f *File) Proxy(r pgwire.Random, keys *pgwire.KeyIssuer) (proxy.Config, err
 	cfg.Client = pgwire.ClientConfig{TLS: f.clientMode(), Auth: pgwire.AuthSCRAM, Tenants: f.res.tenants,
 		Database: f.Database.Name, Random: r, Keys: keys, MockSecret: secret}
 	cfg.Backend = pgwire.BackendConfig{TLS: f.backendMode(), User: f.Database.User, Database: f.Database.Name,
-		Password: f.res.password, Random: r}
+		Password: f.res.password, Random: r, SessionSettings: f.serverKeepalive()}
 	if err := errors.Join(cfg.Validate(), cfg.Client.Validate(), cfg.Backend.Validate()); err != nil {
 		return proxy.Config{}, err
 	}
@@ -86,7 +86,7 @@ func (f *File) BackendTLSConfig() *tls.Config {
 }
 
 // ProxyTimeouts returns the effective engine timeout budget.
-func (f *File) ProxyTimeouts() proxy.Timeouts { return f.Timeouts.Proxy() }
+func (f *File) ProxyTimeouts() proxy.Timeouts { return f.poolTimeouts() }
 
 // PublishInterval returns the configured observability publish interval.
 func (f *File) PublishInterval() time.Duration { return f.Obs.PublishInterval.D() }

@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
+	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
@@ -13,10 +14,12 @@ const (
 	dpIdle
 	dpLent
 	dpResetting
+	dpChecking
+	dpCleaning
 	dpClosed
 )
 
-var dbPhaseNames = [...]string{"dialing", "startup", "idle", "lent", "resetting", "closed"}
+var dbPhaseNames = [...]string{"dialing", "startup", "idle", "lent", "resetting", "checking", "cleaning", "closed"}
 
 func (p dbPhase) String() string {
 	if int(p) < len(dbPhaseNames) {
@@ -49,10 +52,18 @@ type dbConn struct {
 	connectT   *timer
 	stmtT      *timer
 	resetT     *timer
+
+	coreIdx     int
+	got         int64
+	lostReason  CloseReason
+	failCounted bool
+	releasing   bool
+	renew       bool
+	drained     []byte
 }
 
 func (e *Engine) dialMore() {
-	if e.dialing > 0 || e.stopping {
+	if e.core != nil || e.dialing > 0 || e.stopping {
 		return
 	}
 	slot := -1
@@ -133,6 +144,10 @@ func (e *Engine) writeDB(d *dbConn, data []byte) {
 }
 
 func (e *Engine) dbReady(d *dbConn) {
+	if e.core != nil {
+		e.coreOpened(d)
+		return
+	}
 	e.t.cancel(&d.connectT)
 	e.dialing--
 	e.snap.DBConnecting.Add(-1)
@@ -168,6 +183,9 @@ func (e *Engine) dbConnectFailed(d *dbConn, reason CloseReason, class pgwire.Cla
 	e.lastFailed = true
 	e.dialAfter = e.after(e.cfg.Timeouts.RedialDelay)
 	e.closeDB(d, reason)
+	if e.core != nil {
+		e.coreRun(e.core.p.DialFailed(e.pnow(), pool.ConnID(d.id), nil))
+	}
 }
 
 func (e *Engine) dbData(d *dbConn, b []byte) {
@@ -185,10 +203,17 @@ func (e *Engine) dbData(d *dbConn, b []byte) {
 				return
 			}
 		case dpLent:
+			d.got += int64(len(b))
 			b = e.relay(d, b)
 		case dpResetting:
 			b = e.judgeReset(d, b)
+		case dpChecking, dpCleaning:
+			b = e.coreOwn(d, b)
 		case dpIdle:
+			if e.core != nil {
+				e.coreLost(d, CloseDBUnsolicited, pool.LossBytes)
+				return
+			}
 			e.closeDB(d, CloseDBUnsolicited)
 			return
 		default:
@@ -217,9 +242,21 @@ func (e *Engine) dbClosed(d *dbConn) {
 		}
 		e.dbConnectFailed(d, CloseDBConnectFailed, pgwire.ClassLost)
 	case dpIdle:
+		if e.core != nil {
+			e.coreLost(d, CloseDBLost, pool.LossClosed)
+			return
+		}
 		e.closeDB(d, CloseDBLost)
 	case dpResetting:
+		if e.core != nil {
+			e.snap.ResetsFailed[ResetFailConnLost]++
+			d.failCounted = true
+			e.coreLost(d, CloseDBResetFailed, pool.LossClosed)
+			return
+		}
 		e.resetFailed(d, ResetFailConnLost)
+	case dpChecking, dpCleaning:
+		e.coreLost(d, CloseDBLost, pool.LossClosed)
 	case dpLent:
 		if d.cycle != nil {
 			d.cycle.PeerClosed(nil)
@@ -242,6 +279,10 @@ func (e *Engine) dbTimer(t *timer) {
 		}
 	case tDBStatement:
 		d.stmtT = nil
+		if d.phase == dpLent && e.core != nil {
+			e.statementDeadline(d)
+			return
+		}
 		if d.phase == dpLent {
 			e.leaseFailed(d, CloseDBStatementDeadline)
 		}
@@ -280,6 +321,11 @@ func (e *Engine) closeDB(d *dbConn, reason CloseReason) {
 		if reason != CloseDBResetFailed {
 			e.snap.ResetsFailed[ResetFailClosed]++
 		}
+	case dpChecking, dpCleaning:
+		e.snap.DBOpen.Add(-1)
+	}
+	if e.core != nil {
+		e.coreForget(d)
 	}
 	d.phase = dpClosed
 	e.snap.DBCloses[reason]++

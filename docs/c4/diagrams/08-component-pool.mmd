@@ -1,32 +1,41 @@
 flowchart TB
   N_ENGINE["Engine"]:::planned
   N_WORK["Work vocabulary"]:::built
+  N_OBS["Observability"]:::planned
   subgraph SCOPE["Pool"]
-    P_ACCT["Connection accounting"]:::planned
-    P_CREATE["Creation limiter"]:::planned
-    P_LEASE["Lease table"]:::planned
-    P_BREAKER["Database-down breaker"]:::planned
-    P_DIRTY["Dirty-connection table"]:::planned
-    P_REAPER["Idle and lifetime reaper"]:::planned
-    P_CANCEL["Cancel map"]:::planned
-    P_SNAP["Pool snapshot"]:::planned
+    P_ACCT["Connection accounting"]:::built
+    P_CREATE["Creation limiter"]:::built
+    P_LEASE["Lease table"]:::built
+    P_CHECK["Check before reuse"]:::built
+    P_BREAKER["Database-down breaker"]:::built
+    P_DIRTY["Dirty-connection table"]:::built
+    P_REAPER["Idle and lifetime reaper"]:::built
+    P_CANCEL["Cancel table"]:::built
+    P_SNAP["Pool snapshot"]:::built
   end
-  N_ENGINE -.->|1| P_LEASE
-  N_ENGINE -.->|2| P_BREAKER
-  N_ENGINE -.->|3| P_DIRTY
-  N_ENGINE -.->|4| P_CANCEL
-  N_ENGINE -.->|5| P_SNAP
-  P_LEASE -.->|6| P_ACCT
-  P_ACCT -.->|7| P_CREATE
-  P_CREATE -.->|8| P_BREAKER
-  P_DIRTY -.->|9| P_ACCT
-  P_REAPER -.->|10| P_ACCT
-  P_CANCEL -.->|11| P_LEASE
-  P_LEASE -.->|12| N_WORK
+  N_ENGINE -->|1| P_LEASE
+  N_ENGINE -->|2| P_BREAKER
+  N_ENGINE -->|3| P_DIRTY
+  N_ENGINE -->|4| P_CANCEL
+  N_ENGINE -->|5| P_SNAP
+  N_ENGINE -->|6| P_CHECK
+  N_ENGINE -->|7| P_CREATE
+  N_ENGINE -->|8| P_REAPER
+  P_LEASE -->|9| P_ACCT
+  P_LEASE -->|10| P_CHECK
+  P_ACCT -->|11| P_CREATE
+  P_CREATE -->|12| P_BREAKER
+  P_DIRTY -->|13| P_ACCT
+  P_DIRTY -->|14| P_CANCEL
+  P_REAPER -->|15| P_ACCT
+  P_CHECK -->|16| P_ACCT
+  P_BREAKER -->|17| P_CHECK
+  P_CANCEL -->|18| P_LEASE
+  P_LEASE -->|19| N_WORK
+  P_SNAP -->|20| N_OBS
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned
   end
   classDef built fill:#d9ecd9,stroke:#2e6b34,stroke-width:2px,color:#1c1e21
   classDef planned stroke-width:1px,stroke-dasharray:6 4
-  style SCOPE stroke-dasharray:6 4

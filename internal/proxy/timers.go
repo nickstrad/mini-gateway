@@ -14,6 +14,8 @@ const (
 	tDBStatement
 	tDBReset
 	tRedial
+	tPool
+	tClientIdleTx
 	tAdmission
 )
 

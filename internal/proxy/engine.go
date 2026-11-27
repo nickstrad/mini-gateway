@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/obs"
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
+	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
@@ -45,6 +47,12 @@ type Engine struct {
 	queueHist  *obs.Histogram
 	resetHist  *obs.Histogram
 	syncSnap   pgwire.SyncDiscardSnapshot
+
+	core        *CorePool
+	coreConns   []*dbConn
+	cancelConns []ConnID
+	keys        map[pgwire.BackendKey]*client
+	poolT       *timer
 }
 
 // ErrEngine is the sentinel error for engine-level failures.
@@ -69,6 +77,9 @@ func New(cfg Config) (*Engine, error) {
 		return nil, fmt.Errorf("%w: %w", ErrConfig, err)
 	}
 	e.seams = cfg.Seams
+	if err := e.initCore(); err != nil {
+		return nil, err
+	}
 	if e.seams.Classifier == nil {
 		e.classifier = &pgwire.Classifier{Config: pgwire.ClassifierConfig{KeyScope: cfg.KeyScope}}
 		e.seams.Classifier = e.classifier
@@ -134,6 +145,9 @@ func (e *Engine) Shutdown(now Instant, out []Action) []Action {
 	e.sweepAdmission()
 	for len(e.clientList) > 0 {
 		e.closeClient(e.clientList[len(e.clientList)-1], CloseClientShutdown)
+	}
+	if e.core != nil {
+		e.coreShutdown()
 	}
 	for _, d := range e.slots {
 		if d != nil {
@@ -211,6 +225,8 @@ func (e *Engine) Step(now Instant, ev Event, out []Action) []Action {
 		e.emit(Action{Kind: ActPublish})
 	case EvDraining:
 		e.draining = ev.On
+	case EvDBCancelDone:
+		e.cancelDone(ev.Conn)
 	}
 	return e.finish()
 }
@@ -224,6 +240,10 @@ func (e *Engine) begin(now Instant, out []Action) {
 
 func (e *Engine) finish() []Action {
 	e.fireTimers()
+	if e.core != nil && !e.stopping {
+		e.corePump()
+		e.fireTimers()
+	}
 	if next := e.t.next(); next != e.t.woke {
 		e.t.woke = next
 		e.emit(Action{Kind: ActWake, At: next})
@@ -247,8 +267,10 @@ func (e *Engine) fireTimers() {
 
 func (e *Engine) fire(t *timer) {
 	switch t.kind {
-	case tClientStartup, tClientIdle, tClientMid, tClientWrite, tQueueWait:
+	case tClientStartup, tClientIdle, tClientMid, tClientWrite, tQueueWait, tClientIdleTx:
 		e.clientTimer(t)
+	case tPool:
+		e.poolTimer()
 	case tDBConnect, tDBStatement, tDBReset:
 		e.dbTimer(t)
 	case tRedial:
@@ -285,6 +307,9 @@ func (e *Engine) Snapshot() Snapshot {
 }
 
 func (e *Engine) dbDown() bool {
+	if e.core != nil {
+		return !e.coreUsable() && (e.lastFailed || e.core.p.Breaker() != pool.BreakerClosed)
+	}
 	for _, d := range e.slots {
 		if d != nil && d.phase >= dpIdle && d.phase <= dpResetting {
 			return false
@@ -324,9 +349,17 @@ func (e *Engine) Quiesce() error {
 	if n := len(e.waiting); n != 0 {
 		errs = append(errs, fmt.Errorf("%d requests waiting", n))
 	}
-	for _, d := range e.slots {
+	for _, d := range append(slices.Clone(e.slots), e.coreConns...) {
 		if d != nil && d.phase != dpIdle && !(d.phase == dpDialing || d.phase == dpStartup) {
 			errs = append(errs, fmt.Errorf("database connection %d is %s", d.id, d.phase))
+		}
+	}
+	if e.core != nil {
+		if err := e.core.p.Quiesce(); err != nil {
+			errs = append(errs, err)
+		}
+		if n := len(e.cancelConns); n != 0 {
+			errs = append(errs, fmt.Errorf("%d cancel connections open", n))
 		}
 	}
 	if e.snap.InFlight.Value != 0 || e.snap.Queued.Value != 0 {
@@ -350,7 +383,7 @@ func (e *Engine) Invariants() error {
 		return err
 	}
 	lent := 0
-	for _, d := range e.slots {
+	for _, d := range append(slices.Clone(e.slots), e.coreConns...) {
 		if d == nil || d.phase != dpLent {
 			continue
 		}
@@ -379,7 +412,16 @@ func (e *Engine) Invariants() error {
 	if e.wire.Snapshot().Check() != nil {
 		return e.wire.Snapshot().Check()
 	}
-	return e.admissionCheck()
+	if err := e.admissionCheck(); err != nil {
+		return err
+	}
+	if e.core != nil {
+		if err := e.coreAgrees(); err != nil {
+			return err
+		}
+		return e.core.p.Invariants()
+	}
+	return nil
 }
 
 // Tenant returns the authenticated tenant identity for client connection id.

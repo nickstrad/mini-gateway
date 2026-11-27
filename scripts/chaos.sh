@@ -54,13 +54,13 @@ process_failed() {
 
 before=$failed
 src=0
-DST_SEEDS=$seeds RUN_DIR="$dir/sweep" "$gocmd" test -count=1 -timeout 60m -v -run '^TestScenarioE2E$' ./test/e2e >"$slog" 2>&1 || src=$?
+DST_SEEDS=$seeds RUN_DIR="$dir/sweep" "$gocmd" test -count=1 -timeout 60m -v -run '^TestScenario(E2E|Pool)$' ./test/e2e >"$slog" 2>&1 || src=$?
 show "$slog"
-for sc in $(grep -oE -- '--- (PASS|FAIL): TestScenarioE2E/[a-z0-9-]+ ' "$slog" | awk '{print $3}' | sed 's|TestScenarioE2E/||' | sort -u); do
-  pass=$(grep -cE -- "--- PASS: TestScenarioE2E/$sc/seed=" "$slog" || true)
-  fail=$(grep -cE -- "--- FAIL: TestScenarioE2E/$sc/seed=" "$slog" || true)
+for sc in $(grep -oE -- '--- (PASS|FAIL): TestScenario(E2E|Pool)/[a-z0-9-]+ ' "$slog" | awk '{print $3}' | sed -E 's#TestScenario(E2E|Pool)/##' | sort -u); do
+  pass=$(grep -cE -- "--- PASS: TestScenario(E2E|Pool)/$sc/seed=" "$slog" || true)
+  fail=$(grep -cE -- "--- FAIL: TestScenario(E2E|Pool)/$sc/seed=" "$slog" || true)
   verdict=pass
-  if [ "$fail" != 0 ] || grep -qE -- "--- FAIL: TestScenarioE2E/$sc( |\$)" "$slog"; then verdict=FAIL; failed=$((failed + 1)); fi
+  if [ "$fail" != 0 ] || grep -qE -- "--- FAIL: TestScenario(E2E|Pool)/$sc( |\$)" "$slog"; then verdict=FAIL; failed=$((failed + 1)); fi
   if [ "$verdict" = pass ] && [ -d "$dir/sweep/$sc" ] && [ -d "test/analysis/$sc" ]; then
     alog="$dir/sweep/$sc.sql.log"
     if ! scripts/csv-assert.sh "$dir/sweep/$sc" test/analysis/"$sc"/*.sql >"$alog" 2>&1; then verdict="FAIL(sql)"; failed=$((failed + 1)); fi
@@ -68,7 +68,7 @@ for sc in $(grep -oE -- '--- (PASS|FAIL): TestScenarioE2E/[a-z0-9-]+ ' "$slog" |
   fi
   printf 'S  %-28s seeds %-4s %-9s %s\n' "$sc" "$((pass + fail))" "$verdict" "$dir/sweep/$sc"
   case "$verdict" in
-    FAIL) details "$slog" "TestScenarioE2E/$sc" ;;
+    FAIL) details "$slog" "$(grep -oE -- "--- (PASS|FAIL): TestScenario(E2E|Pool)/$sc " "$slog" | head -n 1 | awk '{print $3}')" ;;
     "FAIL(sql)") sql_details "$alog" ;;
   esac
 done

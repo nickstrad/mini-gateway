@@ -61,6 +61,9 @@ const (
 	ErrRowProtocolVersion
 	// ErrRowNoUser is returned when a startup packet omits the user parameter.
 	ErrRowNoUser
+	// ErrRowLostMidStatementInTransaction is returned when a database connection fails
+	// mid-statement inside a transaction and the message holds no COMMIT, END, or PREPARE.
+	ErrRowLostMidStatementInTransaction
 	// ErrRowCount is the sentinel count of rows in ErrorRows.
 	ErrRowCount
 )
@@ -220,6 +223,8 @@ var ErrorRows = [ErrRowCount]ErrorRow{
 		"unsupported frontend protocol", work.No, work.No, "no, change the client", ErrorRowConnClosed, work.RefusalNone, 4},
 	ErrRowNoUser: {"no-user", "Startup packet names no user", ErrorRowFatal, "28000",
 		"no PostgreSQL user name specified in startup packet", work.No, work.No, "no, fix the client", ErrorRowConnClosed, work.RefusalNone, 4},
+	ErrRowLostMidStatementInTransaction: {"lost-mid-statement-in-transaction", "Database connection lost or reply timed out mid-statement inside a transaction, the message holding no COMMIT or END (08007 when it does or the proxy cannot tell)", ErrorRowFatal, "08006",
+		"mini-gateway: database connection lost mid-statement inside a transaction", work.Yes, work.No, "yes, the whole transaction", ErrorRowConnClosed, work.RefusalNone, 7},
 }
 
 // AppendRowFatal encodes a FATAL ErrorResponse using id's SQLSTATE and default

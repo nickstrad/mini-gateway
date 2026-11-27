@@ -140,7 +140,12 @@ func TestCSVAssertBaselineCountsFromFlushedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ran, tierR, short := 0, 0, 0
+	ran, tierR, skipped := 0, 0, 0
+	type job struct {
+		name string
+		sqls []string
+	}
+	var jobs []job
 	for _, d := range dirs {
 		sqls, _ := filepath.Glob(filepath.Join(d, "*.sql"))
 		if len(sqls) == 0 {
@@ -148,7 +153,7 @@ func TestCSVAssertBaselineCountsFromFlushedFiles(t *testing.T) {
 		}
 		name := filepath.Base(d)
 		if testing.Short() && slices.Contains(e2e.AdmissionOverloadScenarios(), name) {
-			short += len(sqls)
+			skipped += len(sqls)
 			continue
 		}
 		if strings.HasPrefix(name, e2e.TierRPrefix) {
@@ -158,17 +163,32 @@ func TestCSVAssertBaselineCountsFromFlushedFiles(t *testing.T) {
 			tierR += len(sqls)
 			continue
 		}
-		out, err := csvAssert(t, nil, append([]string{filepath.Join(root, name)}, sqls...)...)
-		if err != nil {
-			t.Fatalf("%s: %v\n%s", name, err, out)
+		if slices.Contains(shortSkipped(), name) {
+			skipped += len(sqls)
+			continue
 		}
-		if want := fmt.Sprintf("%d SQL files run, 0 failures", len(sqls)); !strings.Contains(out, want) || !strings.Contains(out, "v1.5.") {
-			t.Fatalf("%s: unexpected output\n%s", name, out)
-		}
-		ran += len(sqls)
+		jobs = append(jobs, job{name, sqls})
 	}
-	if ran+tierR+short != analysisFiles(t) || ran == 0 || tierR == 0 {
-		t.Fatalf("%d SQL files run over the simulator runs, %d left to the tier R runs and %d to the full suite, of %d", ran, tierR, short, analysisFiles(t))
+	type result struct {
+		out string
+		err error
+	}
+	results := inParallel(len(jobs), func(i int) result {
+		out, err := csvAssert(t, nil, append([]string{filepath.Join(root, jobs[i].name)}, jobs[i].sqls...)...)
+		return result{out, err}
+	})
+	for i, j := range jobs {
+		out, err := results[i].out, results[i].err
+		if err != nil {
+			t.Fatalf("%s: %v\n%s", j.name, err, out)
+		}
+		if want := fmt.Sprintf("%d SQL files run, 0 failures", len(j.sqls)); !strings.Contains(out, want) || !strings.Contains(out, "v1.5.") {
+			t.Fatalf("%s: unexpected output\n%s", j.name, out)
+		}
+		ran += len(j.sqls)
+	}
+	if ran+tierR+skipped != analysisFiles(t) || ran == 0 || tierR == 0 {
+		t.Fatalf("%d SQL files run over the simulator runs, %d left to the tier R runs and %d to the sweep (-short), of %d", ran, tierR, skipped, analysisFiles(t))
 	}
 }
 
