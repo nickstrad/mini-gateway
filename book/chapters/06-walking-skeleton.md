@@ -133,7 +133,7 @@ PASS
 ok  	github.com/nickstrad/mini-gateway/test/e2e	0.500s
 ```
 
-The same ablation holds on real Postgres 17.11 (tier R, recorded in [`NOTES.md`](../../agent_work/chunks/c06-walking-skeleton/NOTES.md) and [`G6-tier-r.log`](../../agent_work/chunks/c06-walking-skeleton/gate/G6-tier-r.log)):
+The same ablation holds on real Postgres 17.11 (tier R, recorded in [`NOTES.md`](../../agent_work/chunks/c06-walking-skeleton/NOTES.md) and the gate's tier R log (`G6-tier-r.log`, kept on the build machine, not in the repository)):
 
 | Environment | Workload | With `DISCARD ALL` reset | Without reset (`PlantNoReset`) |
 | --- | --- | --- | --- |
@@ -236,7 +236,7 @@ R  (skipped: no Docker)
 chaos: all green; runs under /tmp/c06-prose-chaos
 ```
 
-In tier R (14 tests in [`test/e2e/tierr_test.go`](../../test/e2e/tierr_test.go) against Postgres 17.11 with `ssl=on`, SCRAM-SHA-256, and an ephemeral test CA), the entire suite runs with client TLS on, including `psql` (`sslmode=require`, `verify-full`, `disable` refused with `28000`), `pgbench -S -M simple` (800/800 transactions in [`G6-tier-r.log`](../../agent_work/chunks/c06-walking-skeleton/gate/G6-tier-r.log)), `pg_stat_ssl` verification of `backend_tls.mode` (`disable`, `require`, `verify-full`, and wrong-CA failure), and DuckDB SQL checks over the binary's flushed CSV files (`test/analysis/tierr-*/`).
+In tier R (14 tests in [`test/e2e/tierr_test.go`](../../test/e2e/tierr_test.go) against Postgres 17.11 with `ssl=on`, SCRAM-SHA-256, and an ephemeral test CA), the entire suite runs with client TLS on, including `psql` (`sslmode=require`, `verify-full`, `disable` refused with `28000`), `pgbench -S -M simple` (800/800 transactions in the gate's tier R log (`G6-tier-r.log`, kept on the build machine, not in the repository)), `pg_stat_ssl` verification of `backend_tls.mode` (`disable`, `require`, `verify-full`, and wrong-CA failure), and DuckDB SQL checks over the binary's flushed CSV files (`test/analysis/tierr-*/`).
 
 ### Engine operation fuzzing (`FuzzEngineOps`)
 
