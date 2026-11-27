@@ -28,11 +28,6 @@ if [ -f "$STUB_COUNTS/$key.n" ]; then
 fi
 n=$((n + 1))
 printf '%s\n' "$n" > "$STUB_COUNTS/$key.n"
-if [ -f "$STUB_RECORDINGS/$key.$n.touch" ]; then
-  rel=$(cat "$STUB_RECORDINGS/$key.$n.touch")
-  mkdir -p "$dir/testdata/fuzz/$name"
-  printf 'go test fuzz v1\n[]byte("boom")\n' > "$dir/testdata/fuzz/$name/$rel"
-fi
 if [ -f "$STUB_RECORDINGS/$key.$n.out" ]; then
   cat "$STUB_RECORDINGS/$key.$n.out"
   exit $(cat "$STUB_RECORDINGS/$key.$n.rc" 2>/dev/null || echo 0)
@@ -599,33 +594,188 @@ func TestFuzzShDoesNotRetryNearMisses(t *testing.T) {
 	}
 }
 
-func TestFuzzShDoesNotRetryWhenNewCorpusFileAppears(t *testing.T) {
-	root, err := filepath.Abs("..")
+func runIsolatedFuzzSh(t *testing.T, targetDir, targetName string, setup func(workRoot string), stubBody string, extraEnv []string) fuzzRun {
+	t.Helper()
+	repoRoot, err := filepath.Abs("..")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Run("existing_corpus_dir", func(t *testing.T) {
-		existingDir := filepath.Join(root, "internal", "sim", "world", "testdata", "fuzz", "FuzzWorldSchedule")
-		created := filepath.Join(existingDir, "cr02-test-crasher")
-		t.Cleanup(func() { os.Remove(created) })
+	tmp := t.TempDir()
+	fuzzSrc, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "fuzz.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, "scripts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "scripts", "fuzz.sh"), fuzzSrc, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pkgDir := filepath.Join(tmp, targetDir)
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, "fuzz_test.go"), []byte("package p\n\nimport \"testing\"\n\nfunc "+targetName+"(f *testing.F) {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if setup != nil {
+		setup(tmp)
+	}
+	stubBin := filepath.Join(t.TempDir(), "bin")
+	countsDir := filepath.Join(t.TempDir(), "counts")
+	if err := os.MkdirAll(stubBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(countsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	goStub := `#!/bin/bash
+if [ "$1" = list ]; then
+  if [ "$2" = -m ]; then
+    echo example.invalid/isolated
+    exit 0
+  fi
+  echo example.invalid/isolated/p
+  exit 0
+fi
+dir= name=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -fuzz) name=${2#^}; name=${name%$}; shift ;;
+    ./*) dir=${1#./} ;;
+  esac
+  shift
+done
+key=$(tr / _ <<<"$dir")__$name
+n=0
+if [ -f "$STUB_COUNTS/$key.n" ]; then
+  n=$(cat "$STUB_COUNTS/$key.n")
+fi
+n=$((n + 1))
+printf '%s\n' "$n" > "$STUB_COUNTS/$key.n"
+` + stubBody + "\n"
+	if err := os.WriteFile(filepath.Join(stubBin, "go"), []byte(goStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	report := filepath.Join(t.TempDir(), "report.tsv")
+	cmd := exec.Command("bash", filepath.Join(tmp, "scripts", "fuzz.sh"))
+	env := []string{}
+	for _, e := range os.Environ() {
+		if strings.HasPrefix(e, "FUZZ_") || strings.HasPrefix(e, "PATH=") {
+			continue
+		}
+		env = append(env, e)
+	}
+	env = append(env,
+		"PATH="+stubBin+":"+filepath.Join(runtime.GOROOT(), "bin")+":"+os.Getenv("PATH"),
+		"FUZZ_SECONDS=1",
+		"FUZZ_RATE_FLOOR=100",
+		"FUZZ_REPORT="+report,
+		"STUB_COUNTS="+countsDir,
+	)
+	env = append(env, extraEnv...)
+	cmd.Env = env
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	run := fuzzRun{
+		stdout: string(out),
+		stderr: stderr.String(),
+		rows:   map[string][]string{},
+		calls:  map[string]int{},
+	}
+	if ee, ok := err.(*exec.ExitError); ok {
+		run.code = ee.ExitCode()
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range strings.Split(run.stdout, "\n") {
+		if strings.HasPrefix(l, "NOTE: ") {
+			run.note = l
+		}
+		if strings.HasPrefix(l, "fuzz: RETRY: ") {
+			run.retries = append(run.retries, l)
+		}
+		if l != "" {
+			run.last = l
+		}
+	}
+	entries, err := os.ReadDir(countsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ent := range entries {
+		if !strings.HasSuffix(ent.Name(), ".n") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(countsDir, ent.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		stem := strings.TrimSuffix(ent.Name(), ".n")
+		parts := strings.SplitN(stem, "__", 2)
+		if len(parts) == 2 {
+			run.calls[strings.ReplaceAll(parts[0], "_", "/")+" "+parts[1]] = n
+		}
+	}
+	if run.code == 2 {
+		return run
+	}
+	tsv, err := os.ReadFile(report)
+	if err != nil {
+		t.Fatalf("no report: %v\n%s\n%s", err, out, run.stderr)
+	}
+	lines := strings.Split(strings.TrimSuffix(string(tsv), "\n"), "\n")
+	if lines[0] != "package\ttarget\texecs\texecs_per_sec\tclass\tretried" {
+		t.Fatalf("report header %q", lines[0])
+	}
+	for _, l := range lines[1:] {
+		f := strings.Split(l, "\t")
+		if len(f) != 6 {
+			t.Fatalf("report row %q", l)
+		}
+		run.rows[f[0]+" "+f[1]] = f[2:]
+	}
+	return run
+}
 
-		run := runFuzzSh(t, map[string]string{
-			"internal_sim_world__FuzzWorldSchedule.1.out":   deadlineOut("FuzzWorldSchedule", "fuzz: elapsed: 2s, execs: 400 (200/sec)"),
-			"internal_sim_world__FuzzWorldSchedule.1.rc":    "1",
-			"internal_sim_world__FuzzWorldSchedule.1.touch": "cr02-test-crasher",
-			"internal_sim_world__FuzzWorldSchedule.2.out":   passOut("fuzz: elapsed: 2s, execs: 4000 (2000/sec)"),
-			"internal_sim_world__FuzzWorldSchedule.2.rc":    "0",
-		})
+func isolatedDeadlineScript(target, firstAction string) string {
+	return `if [ "$n" = 1 ]; then
+` + firstAction + `
+cat <<'EOF'
+` + deadlineOut(target, "fuzz: elapsed: 2s, execs: 400 (200/sec)") + `EOF
+exit 1
+fi
+cat <<'EOF'
+` + passOut("fuzz: elapsed: 2s, execs: 4000 (2000/sec)") + `EOF
+exit 0`
+}
+
+func TestFuzzShDoesNotRetryWhenNewCorpusFileAppears(t *testing.T) {
+	t.Run("existing_corpus_dir", func(t *testing.T) {
+		run := runIsolatedFuzzSh(t, "p", "FuzzCorpusNew", func(workRoot string) {
+			corpusDir := filepath.Join(workRoot, "p", "testdata", "fuzz", "FuzzCorpusNew")
+			if err := os.MkdirAll(corpusDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(corpusDir, "seed0"), []byte("go test fuzz v1\n[]byte(\"ok\")\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}, isolatedDeadlineScript("FuzzCorpusNew", `printf 'go test fuzz v1\n[]byte("boom")\n' > p/testdata/fuzz/FuzzCorpusNew/cr02-test-crasher`), nil)
 		if run.code != 1 {
 			t.Fatalf("exit %d, want 1", run.code)
 		}
-		if got := run.calls["internal/sim/world FuzzWorldSchedule"]; got != 1 {
+		if got := run.calls["p FuzzCorpusNew"]; got != 1 {
 			t.Fatalf("calls = %d, want 1", got)
 		}
 		if len(run.retries) != 0 {
 			t.Fatalf("unexpected retries: %v", run.retries)
 		}
-		if got := run.rows["internal/sim/world FuzzWorldSchedule"]; !slices.Equal(got, []string{"400", "200", "fuzz", "0"}) {
+		if got := run.rows["p FuzzCorpusNew"]; !slices.Equal(got, []string{"400", "200", "fuzz", "0"}) {
 			t.Fatalf("row = %v", got)
 		}
 		if !strings.HasSuffix(run.note, ", 0 retried") {
@@ -634,29 +784,159 @@ func TestFuzzShDoesNotRetryWhenNewCorpusFileAppears(t *testing.T) {
 	})
 
 	t.Run("new_corpus_dir", func(t *testing.T) {
-		fuzzDir := filepath.Join(root, "internal", "sim", "simtoy", "testdata", "fuzz")
-		if _, err := os.Stat(fuzzDir); err == nil {
-			t.Fatalf("unexpected pre-existing %s", fuzzDir)
-		}
-		t.Cleanup(func() { os.RemoveAll(fuzzDir) })
-
-		run := runFuzzSh(t, map[string]string{
-			"internal_sim_simtoy__FuzzToySchedule.1.out":   deadlineOut("FuzzToySchedule", "fuzz: elapsed: 2s, execs: 400 (200/sec)"),
-			"internal_sim_simtoy__FuzzToySchedule.1.rc":    "1",
-			"internal_sim_simtoy__FuzzToySchedule.1.touch": "cr02-test-crasher",
-			"internal_sim_simtoy__FuzzToySchedule.2.out":   passOut("fuzz: elapsed: 2s, execs: 4000 (2000/sec)"),
-			"internal_sim_simtoy__FuzzToySchedule.2.rc":    "0",
-		})
+		run := runIsolatedFuzzSh(t, "p", "FuzzCorpusFresh", nil, isolatedDeadlineScript("FuzzCorpusFresh", `mkdir -p p/testdata/fuzz/FuzzCorpusFresh
+printf 'go test fuzz v1\n[]byte("boom")\n' > p/testdata/fuzz/FuzzCorpusFresh/cr02-test-crasher`), nil)
 		if run.code != 1 {
 			t.Fatalf("exit %d, want 1", run.code)
 		}
-		if got := run.calls["internal/sim/simtoy FuzzToySchedule"]; got != 1 {
+		if got := run.calls["p FuzzCorpusFresh"]; got != 1 {
 			t.Fatalf("calls = %d, want 1", got)
 		}
 		if len(run.retries) != 0 {
 			t.Fatalf("unexpected retries: %v", run.retries)
 		}
-		if got := run.rows["internal/sim/simtoy FuzzToySchedule"]; !slices.Equal(got, []string{"400", "200", "fuzz", "0"}) {
+		if got := run.rows["p FuzzCorpusFresh"]; !slices.Equal(got, []string{"400", "200", "fuzz", "0"}) {
+			t.Fatalf("row = %v", got)
+		}
+	})
+}
+
+func TestFuzzShDoesNotRetryOnCorpusChangesOrSnapshotErrors(t *testing.T) {
+	t.Run("existing_file_rewritten", func(t *testing.T) {
+		run := runIsolatedFuzzSh(t, "p", "FuzzTarget", func(workRoot string) {
+			corpusDir := filepath.Join(workRoot, "p", "testdata", "fuzz", "FuzzTarget")
+			if err := os.MkdirAll(corpusDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(corpusDir, "known"), []byte("old seed"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}, isolatedDeadlineScript("FuzzTarget", `printf 'new fail' > p/testdata/fuzz/FuzzTarget/known`), nil)
+		if run.code != 1 || run.calls["p FuzzTarget"] != 1 || len(run.retries) != 0 {
+			t.Fatalf("exit=%d calls=%d retries=%v\n%s", run.code, run.calls["p FuzzTarget"], run.retries, run.stdout)
+		}
+	})
+
+	t.Run("existing_file_removed", func(t *testing.T) {
+		run := runIsolatedFuzzSh(t, "p", "FuzzTarget", func(workRoot string) {
+			corpusDir := filepath.Join(workRoot, "p", "testdata", "fuzz", "FuzzTarget")
+			if err := os.MkdirAll(corpusDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(corpusDir, "known"), []byte("old seed"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}, isolatedDeadlineScript("FuzzTarget", `rm p/testdata/fuzz/FuzzTarget/known`), nil)
+		if run.code != 1 || run.calls["p FuzzTarget"] != 1 || len(run.retries) != 0 {
+			t.Fatalf("exit=%d calls=%d retries=%v\n%s", run.code, run.calls["p FuzzTarget"], run.retries, run.stdout)
+		}
+	})
+
+	t.Run("new_file_behind_symlinked_dir", func(t *testing.T) {
+		run := runIsolatedFuzzSh(t, "p", "FuzzTarget", func(workRoot string) {
+			corpusDir := filepath.Join(workRoot, "p", "testdata", "fuzz", "FuzzTarget")
+			storageDir := filepath.Join(workRoot, "storage")
+			if err := os.MkdirAll(corpusDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(storageDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(storageDir, filepath.Join(corpusDir, "link")); err != nil {
+				t.Fatal(err)
+			}
+		}, isolatedDeadlineScript("FuzzTarget", `printf 'crash\n' > p/testdata/fuzz/FuzzTarget/link/new`), nil)
+		if run.code != 1 || run.calls["p FuzzTarget"] != 1 || len(run.retries) != 0 {
+			t.Fatalf("exit=%d calls=%d retries=%v\n%s", run.code, run.calls["p FuzzTarget"], run.retries, run.stdout)
+		}
+	})
+
+	t.Run("newline_directory_replacement", func(t *testing.T) {
+		run := runIsolatedFuzzSh(t, "p", "FuzzTarget", func(workRoot string) {
+			weird := filepath.Join(workRoot, "p", "testdata", "fuzz", "FuzzTarget", "a\n.", "a")
+			if err := os.MkdirAll(weird, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(weird, "b"), []byte("old seed"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}, isolatedDeadlineScript("FuzzTarget", `rm -rf p/testdata/fuzz/FuzzTarget/*
+mkdir -p p/testdata/fuzz/FuzzTarget/a
+printf 'crash\n' > p/testdata/fuzz/FuzzTarget/a/b`), nil)
+		if run.code != 1 || run.calls["p FuzzTarget"] != 1 || len(run.retries) != 0 {
+			t.Fatalf("exit=%d calls=%d retries=%v\n%s", run.code, run.calls["p FuzzTarget"], run.retries, run.stdout)
+		}
+	})
+
+	t.Run("snapshot_fails_closed_on_broken_symlink", func(t *testing.T) {
+		run := runIsolatedFuzzSh(t, "p", "FuzzTarget", func(workRoot string) {
+			corpusDir := filepath.Join(workRoot, "p", "testdata", "fuzz", "FuzzTarget")
+			if err := os.MkdirAll(corpusDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(workRoot, "does-not-exist"), filepath.Join(corpusDir, "dangling")); err != nil {
+				t.Fatal(err)
+			}
+		}, isolatedDeadlineScript("FuzzTarget", ""), nil)
+		if run.code != 1 || run.calls["p FuzzTarget"] != 1 || len(run.retries) != 0 {
+			t.Fatalf("exit=%d calls=%d retries=%v\n%s", run.code, run.calls["p FuzzTarget"], run.retries, run.stdout)
+		}
+	})
+
+	t.Run("snapshot_fails_closed_on_symlink_loop", func(t *testing.T) {
+		run := runIsolatedFuzzSh(t, "p", "FuzzTarget", func(workRoot string) {
+			corpusDir := filepath.Join(workRoot, "p", "testdata", "fuzz", "FuzzTarget")
+			if err := os.MkdirAll(corpusDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(".", filepath.Join(corpusDir, "loop")); err != nil {
+				t.Fatal(err)
+			}
+		}, isolatedDeadlineScript("FuzzTarget", ""), nil)
+		if run.code != 1 || run.calls["p FuzzTarget"] != 1 || len(run.retries) != 0 {
+			t.Fatalf("exit=%d calls=%d retries=%v\n%s", run.code, run.calls["p FuzzTarget"], run.retries, run.stdout)
+		}
+	})
+
+	t.Run("snapshot_fails_closed_on_non_dir_corpus_path", func(t *testing.T) {
+		run := runIsolatedFuzzSh(t, "p", "FuzzTarget", func(workRoot string) {
+			parent := filepath.Join(workRoot, "p", "testdata", "fuzz")
+			if err := os.MkdirAll(parent, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(parent, "FuzzTarget"), []byte("not a dir"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}, isolatedDeadlineScript("FuzzTarget", ""), nil)
+		if run.code != 1 || run.calls["p FuzzTarget"] != 1 || len(run.retries) != 0 {
+			t.Fatalf("exit=%d calls=%d retries=%v\n%s", run.code, run.calls["p FuzzTarget"], run.retries, run.stdout)
+		}
+	})
+
+	t.Run("unchanged_corpus_with_symlink_still_retries", func(t *testing.T) {
+		run := runIsolatedFuzzSh(t, "p", "FuzzTarget", func(workRoot string) {
+			corpusDir := filepath.Join(workRoot, "p", "testdata", "fuzz", "FuzzTarget")
+			storageDir := filepath.Join(workRoot, "storage")
+			if err := os.MkdirAll(corpusDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(storageDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(corpusDir, "seed0"), []byte("seed-zero"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(storageDir, "seed1"), []byte("seed-one"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(storageDir, filepath.Join(corpusDir, "link")); err != nil {
+				t.Fatal(err)
+			}
+		}, isolatedDeadlineScript("FuzzTarget", ""), nil)
+		if run.code != 0 || run.calls["p FuzzTarget"] != 2 || len(run.retries) != 1 {
+			t.Fatalf("exit=%d calls=%d retries=%v\n%s", run.code, run.calls["p FuzzTarget"], run.retries, run.stdout)
+		}
+		if got := run.rows["p FuzzTarget"]; !slices.Equal(got, []string{"4000", "2000", "fuzz", "1"}) {
 			t.Fatalf("row = %v", got)
 		}
 	})

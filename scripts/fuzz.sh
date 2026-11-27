@@ -36,9 +36,11 @@
 # bare `context deadline exceeded` under `--- FAIL: <target>` and no failing input. A
 # target is retried once when, and only when, ALL five conditions hold: non-zero exit, a
 # `--- FAIL: <target>` block whose only message is `context deadline exceeded`, no
-# "Failing input written to" line, no panic or other failure text, and no new file under
-# the package's testdata/fuzz/<target>/. At most FUZZ_MAX_RETRIES targets are retried in
-# one run; the second run's result and rate stand.
+# "Failing input written to" line, no panic or other failure text, and no change to the
+# package's testdata/fuzz/<target>/ corpus tree (files added, removed, or modified in
+# content, compared NUL-safely through symlinks; fails closed if a snapshot cannot be
+# taken). At most FUZZ_MAX_RETRIES targets are retried in one run; the second run's
+# result and rate stand.
 #
 # Output: the go test output of each target, a `fuzz: RETRY: <dir> <target>: go's own
 # deadline, no failing input` line for each retry, then a table (package, target,
@@ -104,12 +106,34 @@ sim_level() {
   [ "${level_of[$1]}" = sim ]
 }
 
-# list_corpus <dir> <target>: sorted paths under <dir>/testdata/fuzz/<target>/, if present.
-list_corpus() {
-  local d="$1/testdata/fuzz/$2"
-  if [ -d "$d" ]; then
-    (cd "$d" && find . -mindepth 1 | LC_ALL=C sort)
+# snapshot_corpus <dir> <target> <out>: NUL-delimited sorted snapshot of the target's
+# corpus tree (following symlinks, with SHA-256 content hashes for regular files).
+# Fails closed (returns non-zero) if the tree cannot be safely snapshotted.
+snapshot_corpus() {
+  local d="$1/testdata/fuzz/$2" out="$3" paths="$work/corpus.paths" p hash
+  rm -f "$out" "$paths" "$paths.sorted"
+  if [ ! -e "$d" ] && [ ! -L "$d" ]; then
+    printf 'ABSENT\0' > "$out" || return 1
+    return 0
   fi
+  [ -d "$d" ] || return 1
+  (cd -- "$d" && find -L . -mindepth 1 -print0) > "$paths" 2>/dev/null || return 1
+  LC_ALL=C sort -z "$paths" > "$paths.sorted" || return 1
+  {
+    printf 'PRESENT\0'
+    while IFS= read -r -d '' p; do
+      if [ -d "$d/$p" ]; then
+        printf 'D\0%s\0' "$p"
+      elif [ -f "$d/$p" ]; then
+        hash=$(sha256sum < "$d/$p" 2>/dev/null) || return 1
+        hash=${hash%% *}
+        [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || return 1
+        printf 'F\0%s\0%s\0' "$p" "$hash"
+      else
+        return 1
+      fi
+    done < "$paths.sorted"
+  } > "$out" || return 1
 }
 
 # is_deadline_signature <log> <target>: 0 iff the log is Go's own deadline error for
@@ -201,14 +225,19 @@ while read -r dir name; do
   i=$((i + 1))
   log="$work/$i.log"
   retried=0
-  list_corpus "$dir" "$name" > "$work/corpus.before"
+  snap_before_ok=0
+  if snapshot_corpus "$dir" "$name" "$work/corpus.before"; then
+    snap_before_ok=1
+  fi
   echo "fuzz: ./$dir $name"
   run_rc=0
   "$fuzz_go" test -run '^$' -fuzz "^${name}\$" -fuzztime "${secs}s" "./$dir" 2>&1 | tee "$log" || run_rc=$?
   if [ "$run_rc" != 0 ]; then
-    list_corpus "$dir" "$name" > "$work/corpus.after"
-    new_corpus=$(LC_ALL=C comm -13 "$work/corpus.before" "$work/corpus.after")
-    if [ -z "$new_corpus" ] && [ "$retried_total" -lt "$max_retries" ] && is_deadline_signature "$log" "$name"; then
+    corpus_unchanged=0
+    if [ "$snap_before_ok" = 1 ] && snapshot_corpus "$dir" "$name" "$work/corpus.after" && cmp -s "$work/corpus.before" "$work/corpus.after"; then
+      corpus_unchanged=1
+    fi
+    if [ "$corpus_unchanged" = 1 ] && [ "$retried_total" -lt "$max_retries" ] && is_deadline_signature "$log" "$name"; then
       retried=1
       retried_total=$((retried_total + 1))
       echo "fuzz: RETRY: $dir $name: go's own deadline, no failing input"
