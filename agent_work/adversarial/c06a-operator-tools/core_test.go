@@ -123,6 +123,7 @@ func summary(x *lg.Tracker) string {
 	return strings.Join(lg.Summary(x.Snapshot(), lg.Latencies{}, lg.Latencies{}), "\n")
 }
 func TestAdv_3_ZeroIntendedShortfall(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: the input no longer exists: a plan with zero operations is refused at validation, naming the flag (review 1 finding 6), so the summary rule is never reached with zero intended operations. See agent_work/chunks/c06a-operator-tools/ADVERSARIAL.md.")
 	p := plan()
 	p.DurationNs = 1
 	x := tracker(t, p, 1)
