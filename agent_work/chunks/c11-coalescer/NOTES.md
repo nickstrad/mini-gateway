@@ -1,0 +1,377 @@
+# Chunk 11 — Coalescer: builder notes
+
+Builder: Opus (`claude-opus-5-5`), 2026-11-27, branch `work/c11-coalescer`, worktree
+`/root/Software/mini-gateway-work/c11`. No helper agents.
+
+No SPLIT-REQUEST: every deliverable of the brief is built (core, wiring, config, obs, tier S,
+tier R, headline 2). Go added since the brief commit `6cffb0f`: about 2,880 lines in non-test
+files (core 900, proxy wiring 560, `coalsrc` 170, config 90, the tier S scenario file
+`test/e2e/c11_coalesce.go` 660 which is test plumbing in a non-test file, small edits) and about
+2,150 lines in `_test.go` files. Inside the brief's estimate plus the 2,000-line split margin.
+
+## Simulator change requests
+
+None. Nothing under `internal/sim` changed. The scenarios use the fake's `Service.PerKind`
+(time on `KindRead` and `KindUpdate` only, so `DISCARD ALL` stays free) and its statement and
+write logs.
+
+## What was built
+
+| Path | What it is |
+| --- | --- |
+| `internal/coalesce` | The core, sans-I/O, determinism-linted, on the race list: the flight table (keys → at most a current flight and one held flight), leader/followers, strict and relaxed joins, a flight deadline per flight (creation order list, O(1) next wake-up), waiter reference counting with handoff, leaver removal, the waiter cap (`53M04`), the reply cap with a fixed-size expiring no-share list, the unshareable-end detach, shared errors, per-tenant hits (bounded, `other` past 4,096), opt-in per-key hotness, `Snapshot`/`Check`/`Quiesce`, six plants. Imports `internal/work` and `internal/obs` only. |
+| `internal/proxy/coalesce.go` (new) | `FlightTable` (the grown seam: `Coalescer` plus `Admit`, `Started`, `Stored`, `Finish`, `Depart`, `TakeNotice`, …), `CoreCoalescer` (backed by the core), the coalesce stage (`coalJoin`), the answer path (stored reply + own end marker; shared error rows; 53M04; 57014 for a waiter's own cancel), handoff of a queue slot or a lease to a waiter, the flight-deadline timer (`tCoalesce`), `Invariants`/`Quiesce`/`Shutdown` blocks, contract-document rows. |
+| `internal/proxy/{engine,client,lease,corepool,config,snapshot,timers,contracts}.go` | One-line hooks (listed under "Shared files"); `Snapshot` gains `Coalesced` and the `Coalesce*` counters; conservation gains the `coalesced` term. |
+| `internal/config/coalesce.go` (+ one line each in `config.go`, `validate.go`) | `coalesce.mode` (`off`/`auto`/`hinted`, default `auto`), `coalesce.key_scope` (`all-tenants`/`tenant`), `coalesce.join` (`strict` default/`relaxed`), `max_flights`, `max_waiters`, `max_reply_bytes`, `no_share_for`, `no_share_max`, `hot_keys`; zero = default, negative refused naming the key; the `on-switch` × `all-tenants` refusal. |
+| `internal/obs/coalsrc` | Component `coalescer`: every snapshot field, `tenant_hits` and the histogram with `obs.detail`, `hot_key_hits{mode=rank}`, health rule `coalescer` (always `ok`, states the waiting count). Registered in `enginesrc.Sources` and `catalog.Registry`; the engine's new fields mapped in `enginesrc`. |
+| `test/e2e/c11_coalesce.go`, `c11_coalesce_test.go` | 24 tier S scenarios (`CoalesceScenarios()`), replay, ablation arms, the hot-key numbers test. |
+| `test/e2e/c11_tierr_test.go` | Tier R: hot key (strict, relaxed, off, direct), cancel 99 of 100, all 100 cancel, read-your-own-write, results equal direct with `auto`, headline 2 (Zipf). |
+| `test/analysis/coalesce-*` | DuckDB assertions per tier S scenario (conservation per scenario; the hot-key two-arm join). |
+| `scripts/fuzz-plant.sh` | Also requires `FuzzCoalesceOps` to find `PlantLeaverGetsResult`. |
+| `agent_work/chunks/c11-coalescer/gate/extra.sh` | G10: fuzz plants, core tests, engine tests, the 1,000-client scenarios and the numbers test. |
+| `docs/knowledge/coalescer.md` | The knowledge note. |
+| Generated: `docs/timeout-budget.md`, `docs/capacity-table.md`, `docs/csv-schema.md` | Regenerated with `scripts/gen-docs.sh`. |
+
+## Open points decided
+
+1. **Default of `coalesce`** (orchestrator's ruling): the binary runs `coalesce.mode: auto`,
+   `join: strict`, `key_scope: all-tenants`. In the engine a zero `proxy.Config.Coalesce` is
+   `off` (`NoCoalesce`), so every earlier tier S spec is unchanged; tier S specs opt in with
+   `Spec.Coalesce`.
+2. **How the seam grows.** `Coalescer` stays (`NoCoalesce` compiles and is the zero default).
+   `FlightTable` embeds it and adds the verdicts (`Pass`, `Lead`, `Follow`, `Hold`, `Refuse`),
+   `Started`/`Stored`/`Finish`/`Depart` and a notice queue (`TakeNotice`) through which the core
+   tells the engine to answer waiters, start a held flight or fail an expired one. The engine
+   uses the rich path when `Seams.Coalescer` implements `FlightTable`
+   (`CoreCoalescer` does; `Config.Coalesce.Mode != off` builds one).
+3. **The leader does not stream.** The owner's reply is stored (`req.store`) up to
+   `coalesce.max_reply_bytes`; at `ReadyForQuery` the owner gets the stored bytes and the
+   database's end marker, every follower the same stored slice (one copy) and its own
+   `ReadyForQuery 'I'`. Nothing pauses the database read for a slow client while storing, and the
+   cap is at most half of `limits.reply_buffer` (validated), so the relay high-water bound holds.
+   **Past the cap mid-flight**: the followers get `53M04` (nothing reached the database for
+   them), the key goes on the no-share list, and the owner gets the stored bytes and then the rest
+   streamed with ordinary back pressure. A reply ending with a status other than `I` (only
+   possible under `hinted`, e.g. a marked `BEGIN`) is treated the same way (`unshareable`).
+4. **Charging.** The flight's queue slot is pushed under the tenant of the request that started
+   the flight; after a handoff the admission core keeps that tenant for the slot. The lease is
+   checked out (and tagged) for whichever client owns the flight when it is lent. In tenant
+   scope all waiters share the tenant, so both are that tenant.
+5. **A waiter's own cancel** is answered `57014` with the existing row `cancelled-queued`
+   (nothing of its own reached the database; it is pre-forward for that caller). If the owner
+   cancels and others wait, the flight passes to a waiter and the owner gets `57014`. If the
+   last waiter cancels, the cancel is forwarded to Postgres exactly as without coalescing.
+6. **Shed or breaker refusal of a flight's queued request**: every waiter gets the same row
+   (`53M01` / `53M03`), counted `failed` with reached `no` for followers (shared error).
+7. **No separate wait bound for a held (strict next) flight**: its own flight deadline, from its
+   creation, bounds it (it may expire before the running read ends; then all its waiters get
+   `53M01`, never reached).
+8. **The `on-switch` refusal applies only with coalescing on** (orchestrator's ruling):
+   `mode: off` + `on-switch` + `all-tenants` is valid; `key_scope: tenant` + `on-switch` is valid.
+9. **Defaults**: `max_flights` 1,024; `max_waiters` 1,024 (owner included); `max_reply_bytes`
+   64 KiB (at most half of `limits.reply_buffer`); `no_share_for` 10 s; `no_share_max` 256;
+   `hot_keys` 0 (off, at most 64). The flight deadline is `timeouts.statement`.
+10. **Health rule**: `coalescer` is always `ok` and names how many requests wait; a cap refusal
+    is per request (53M04) and passing unshared keeps serving, so the coalescer never degrades
+    the instance.
+11. **Tier R "cancel 99 of 100" made count-exact**: 100 clients are connected first, then their
+    queries are released together; the read lasts 2 s (a view over `pg_sleep(2)`); the 99
+    cancels go at +300 ms. `pg_stat_statements` counts only completed statements, so the verdict
+    is "exactly one completed read" in both modes (strict: the first flight, if only cancelled
+    waiters were on it, is cancelled at Postgres and not counted). Arrival spread (≪ 2 s) and
+    cancel time (300 ms ≪ 2 s) make this hold by margin, not by timing luck.
+
+## Further decisions
+
+- **Followers are neither queued nor in flight**: a new phase `cpCoalesced` and the gauge
+  `Snapshot.Coalesced`; conservation is accepted = completed + failed + shed + queued + in
+  flight + coalesced.
+- **A `53M04` at the waiter cap is a rejection before acceptance** (`requests_rejected`,
+  `stage_refused{coalesce}`); a `53M04` mid-flight (reply cap) is a failure with reached `no`.
+- **Flight deadline outcome**: if the flight never reached the database, every waiter gets
+  `53M01` (reached no); if it is running, the engine runs the statement-deadline path for the
+  owner (dirty-connection table on the core path) and every waiter gets the owner's row
+  (`08006` for the safe shape, `08007` otherwise).
+- **The flight-table cap passes unshared** (overflow `flights`) rather than refusing.
+- **Handoff picks the newest remaining follower** (O(1) from the list's end; the reference model
+  follows the same rule).
+- **Hot keys** are exported as `hot_key_hits{mode=<rank>}` counts only; statement text never
+  leaves the snapshot (label policy 7.4).
+
+## Claims and the tests that prove them
+
+| # | Claim | Tests |
+| --- | --- | --- |
+| 1 | At most one in-flight read per key | `internal/coalesce` `TestFlightTableAgreesWithReferenceModel` (after every op `Running(key) ≤ 1`); tier S `checkHotKey` (`MaxConcurrent` of the fake's statement log = 1); `Table.Check` (held flights never running). Narrowed: see Stated limits 3 |
+| 2 | Writes are never shared | tier S `coalesce-writes-{strict,relaxed}` (every write exactly once in the write log; every in-transaction read reached the database); `coalesce-marked-write-hinted` shows the write check fails when identical marked writes are shared under `hinted`; core `TestOnlyShareableUnitsJoinUnderAutoAndOnlyHintedUnderHinted` |
+| 3 | Sharing never reads SQL | `Table.eligible` reads `Shareable`/`Hinted`/`HasKey` only; importlint (`internal/coalesce` → no `pgwire`, no `pgproto3`); plant `PlantSafeReadDoor` caught by the property test |
+| 4 | Strict is never stale; relaxed shows the window | core `TestStrictJoinsTheNextFlightRelaxedJoinsTheRunningOne`, the driver's strict check; engine `TestStrictHoldsARequestThatArrivesWhileTheReadRuns`; tier S `coalesce-read-your-write-{strict,relaxed}` (strict ablation `PlantStrictJoinsRunning` fails it); tier R `TestTierRCoalesceReadYourWrite` |
+| 5 | One caller's cancel hurts no other | core `TestNinetyNineLeaveAndTheLastGetsTheReply`; engine `TestTheOwnerLeavingHandsTheLeaseToAWaiter`; tier S `coalesce-cancel-99-*` (ablation `PlantAnyLeaveCancels` fails it); tier R `TestTierRCoalesceCancel99` |
+| 6 | A leaver gets its own error even at the result's instant | core `TestLeaveAtTheInstantTheResultArrivesGetsOnlyTheLeaversOwnError`, the driver's `cancel-at-result` op; engine `TestALeaverAtTheInstantOfTheResultIsNotAnswered`; fuzz plant `PlantLeaverGetsResult` |
+| 7 | All leave: work cancelled, dirty table, nothing leaks | core `TestTheLastLeaverCancelsTheFlight`; tier S `coalesce-vanish-all-*` (read aborted `57014` at the fake, `lease_ends{vanished-mid-statement}`, cancels sent, recovery, quiesce) and `coalesce-cancel-all-*`; tier R `TestTierRCoalesceAllCancel` (0 completed reads) |
+| 8 | Flight deadline independent, fires at equality, shared error | core `TestResultAtTheFlightDeadlineIsLate`; tier S `coalesce-shared-error-*` (every client one `08006`) |
+| 9 | Caps, fixed memory | core `TestWaiterCapRefuses`, `TestReplyCapRefusesFollowersAndListsTheKeyForAWhile`, `TestNoShareListIsBoundedAndEvictsTheOldest`, `TestFlightTableCapPassesUnshared`, `TestFuzzExecutionCostIsBounded`; tier S `coalesce-caps-*` (ablation without caps fails); generated capacity rows |
+| 10 | Shared errors, no stampede | core `TestFailedFlightSharesItsErrorOnce`; tier S `coalesce-shared-error-*` (≤ 2 reads for 100 waiters; ablation off fails) |
+| 11 | Followers take no slot or connection; per-tenant; conservation on every path incl. Shutdown | engine `TestFollowerGetsTheSameBytesAsTheRequestThatRanTheRead` (coalesced 1, queued 0, in flight 1); `Snapshot.Check` conservation with `coalesced` (every scenario, every event via `Invariants`); `TestEngineQuiescesWithAnEmptyFlightTableAndNoTimer` (Shutdown); `coalesce-tenant-scope` and `coalsrc` tests (per-tenant hits); SQL `coalescer.sql` |
+| 12 | Complete replies; slow follower delays no one; results equal direct | engine `TestFollowerGetsTheSameBytes…`; tier S `coalesce-slow-follower-*`, `coalesce-results-*` (`ResultsEqual` against the direct arm); tier R `TestTierRCoalesceResultsEqualDirect` |
+| 13 | Hot key: 1–2 reads; ablation 1,000 | tier S `coalesce-hot-key-*` (+ ablation, + SQL two-arm join `reads.sql`); tier R `TestTierRCoalesceHotKey` |
+| 14 | Config | `internal/config/coalesce_test.go` (defaults, keys reach the engine, each refusal names its key, `on-switch` cases); tier S `coalesce-hinted` (marked shared, unmarked not; ablation `auto` fails) |
+| 15 | Entries removed; after quiesce empty, no timer | `Table.Quiesce`, `Engine.Quiesce` (`coalQuiet`), every scenario's `Harness.Finish`; core `TestShutdownEmptiesTheTable`; SQL final-flush checks |
+| 16 | `Invariants` covers flights and waiters, a test fails without the block | `internal/proxy` `TestInvariantsCoverFlightsAndWaiters` (mutation M7) |
+| 17 | Replay and flush | `runCoalesce` (two runs per seed: digests and flushed files byte-identical); core `TestReplayIsBitIdentical`; SQL in `test/analysis/coalesce-*` |
+| 18 | Fuzz target | `FuzzCoalesceOps` (fixed decoding, no seed from a hash, `TestFuzzDecodingIsTotalBoundedAndLocal`, `TestFuzzExecutionCostIsBounded`); `scripts/fuzz-plant.sh` finds `PlantLeaverGetsResult` in about 1 s; unplanted 30 s clean (about 850 execs/s) |
+
+Planted-bug canaries (core property test, `TestPlantedBugsAreCaughtByThePropertyTest`): strict
+join (`PlantStrictJoinsRunning`), the waiter count that guards the cancel
+(`PlantAnyLeaveCancels`), the leaver's own error (`PlantLeaverGetsResult`), the waiter cap
+(`PlantNoWaiterCap`), the reply cap (`PlantNoReplyCap`), `Shareable` as the only door
+(`PlantSafeReadDoor`). Each is also an ablation of a tier S scenario where the engine can reach
+it (strict, waiter count, caps).
+
+## Mutation proofs (scratch copy `/tmp/zgw-c11/mut`, source edits, not plants)
+
+| # | Mutation | Failing tests |
+| --- | --- | --- |
+| M1 | strict treats a running flight as joinable (`running := false && …`) | `TestFlightTableAgreesWithReferenceModel`, `TestStrictJoinsTheNextFlightRelaxedJoinsTheRunningOne`, tier S `coalesce-read-your-write-strict` |
+| M2 | an owner leaving with followers ends the flight (no handoff) | `TestFlightTableAgreesWithReferenceModel`, `TestNinetyNineLeaveAndTheLastGetsTheReply`, tier S `coalesce-cancel-99-*` |
+| M3 | a leaving follower stays on the list | `TestFlightTableAgreesWithReferenceModel`, `TestLeaveAtTheInstantTheResultArrivesGetsOnlyTheLeaversOwnError` |
+| M4 | no waiter cap | `TestWaiterCapRefuses`, tier S `coalesce-caps-strict` |
+| M5 | no reply cap | `TestReplyCapRefusesFollowersAndListsTheKeyForAWhile`, tier S `coalesce-caps-strict` |
+| M6 | `auto` admits `SafeRead` instead of `Shareable` | `TestFlightTableAgreesWithReferenceModel`, `TestOnlyShareableUnitsJoinUnderAutoAndOnlyHintedUnderHinted` |
+| M7 | `Engine.Invariants` block for flights disabled | `TestInvariantsCoverFlightsAndWaiters` |
+| M8 | a follower's own end marker not written | `TestFollowerGetsTheSameBytesAsTheRequestThatRanTheRead`, tier S `coalesce-results-strict` |
+| M9 | the engine ignores a handoff | `TestTheOwnerLeavingHandsTheLeaseToAWaiter`, tier S `coalesce-cancel-99-relaxed` |
+| M10 | no flight deadline | `TestFlightTableAgreesWithReferenceModel`, `TestResultAtTheFlightDeadlineIsLate` |
+| M11 | the deadline fires one tick late (`<` instead of `<=`) | `TestResultAtTheFlightDeadlineIsLate` |
+
+## Why the scenario checks cannot race (derivable bounds)
+
+- **Hot key, 1–2 reads**: 1,000 clients start within 3 ms (3 µs apart) and send at once after a
+  sub-millisecond startup, so every request arrives within W ≈ 5 ms of the first; the read takes
+  S = 50 ms of virtual time. Strict: the requests before the first read is sent join it; every
+  later one arrives before it ends (W < S) and joins the one held flight; that flight starts after
+  the first ends, by which time no request is left: exactly ≤ 2 reads. Relaxed: every request
+  arrives before the single read ends: 1 read. The p99 bounds (1.5 S relaxed, 2.5 S strict) follow
+  from the same W < S. Virtual time; no wall clock.
+- **Cancel 99**: cancels at +100 ms, read 300 ms: every cancel lands while the read runs.
+- **Read-your-write**: the reader's read runs 0–100 ms; the write is acknowledged at about
+  12 ms; the writer's read arrives at about 13 ms, strictly inside the running read.
+- **Shared error**: read 2 s, flight deadline 500 ms from creation: every flight expires before
+  any reply.
+- Tier R uses margins instead (open point 11; a 500 ms hot read against an arrival spread of a
+  few milliseconds after a barrier).
+
+## 200-seed sweeps
+
+Every new tier S scenario was run on 200 distinct seeds (1–200; the pinned seeds 1–3 are
+among them), each seed run twice for the replay law (digests and flushed files byte-identical),
+plus its ablation arm (which must fail its check) and, for the hot key, the direct arm:
+`MG_C11_FULL_SWEEP=1 DST_SEEDS=200 DST_SEED_BASE=1 RUN_DIR=/tmp/zgw-c11/sweep go test -run
+'^TestScenarioCoalesce$' ./test/e2e/` (the env var lifts the test's own caps of 20 seeds, and 3
+for the hot key, that keep the gate's sweep short). Seed counts were confirmed from the run
+directories (200 per scenario).
+
+| Scenarios | Seeds | Result |
+| --- | --- | --- |
+| 19 light scenarios (writes ×2, cancel-99 ×2, cancel-all ×2, vanish-all ×2, read-your-write ×2, slow-follower ×2, caps ×2, results ×2, marked-write-hinted, hinted, tenant-scope) | 200 each | all pass |
+| `coalesce-shared-error-{strict,relaxed}` | 200 each | first sweep: strict failed on 80 of 200 seeds; fixed (below); re-swept: 400 of 400 pass |
+| `coalesce-hot-key-{strict,relaxed}` | 200 each | all pass (seeds 1–103 / 1–72 in the first run, the rest in four parallel ranges, seeds 1–3 re-run alone) |
+
+The one finding: in `coalesce-shared-error-strict` a held (strict next) flight is promoted when
+the first flight expires, then waits in the queue while the first flight's connection is in the
+dirty-connection table, and expires there; its waiters correctly get the never-sent `53M01`
+(open point 7), but the check demanded `08006` from every client. The check now requires
+exactly one shared error per client, `08006` or `53M01`, and at least one `08006` (commit
+`6f07dd5`). Not a product change.
+
+A second artefact, not a finding: two of the parallel hot-key processes both ran the pinned
+seed 2 into one run directory at the same time, so its flushed files did not round-trip; seeds 1–3
+re-run alone passed.
+
+DuckDB over the swept files (`scripts/csv-assert.sh <scenario dir> <sql>`, per scenario):
+`coalesce-hot-key-{strict,relaxed}/reads.sql` over 600 runs each (base, ablation, direct; 200
+seeds) — 0 failures, so every seed's base arm made 1–2 database reads against exactly 1,000 in
+its ablation arm (the two-arm join), flights + hits = shareable reads, and the waiters-per-flight
+histogram matched; `coalescer.sql` over each light scenario's 200 seeds — 0 failures in all 21 (the base arm of every seed balances, and the final flush shows nothing left).
+
+## Headline 2 and the hot key (numbers)
+
+Tier S (exact, virtual time; seed 1; `TestCoalesceHotKeyNumbers`), 1,000 identical reads,
+read time 50 ms, 4 connections:
+
+| Arm | Database reads | p50 | p99 |
+| --- | --- | --- | --- |
+| strict | 2 | 100.2 ms | 101.7 ms |
+| relaxed | 1 | 50.0 ms | 51.5 ms |
+| coalescer off (ablation) | 1,000 | 6.38 s | 12.65 s |
+| direct to the fake (chunk 2's baseline shape, 1,000 connections) | 1,000 | 50.3 ms | 50.3 ms |
+
+Tier R (Postgres 17, `TestTierRCoalesceHotKey`, one run, wall clock, 20 pool connections, the
+read is a view over `pg_sleep(0.5)`; 1,000 clients connected first, then released together):
+
+| Arm | Clients | Database reads (`pg_stat_statements` calls) | p50 | p99 |
+| --- | --- | --- | --- | --- |
+| strict | 1,000 | 1 | 569 ms | 594 ms |
+| relaxed | 1,000 | 1 | 550 ms | 563 ms |
+| coalescer off | 1,000 | 1,000 | 13.85 s | 26.12 s |
+| direct (100 connections; the container allows 200) | 100 | 100 | 541 ms | 563 ms |
+
+Strict gave 1 read in tier R because every request arrived before the cold pool's first
+connection opened, so all joined the queued flight.
+
+**Headline 2, Zipf skew** (tier R, `TestTierRCoalesceHeadlineZipf`): 100 clients, closed loop,
+30 reads each, key drawn by `randdist.NewZipf` with exponent s = 1.100 over 200 keys (seed 11).
+What the generator actually produced: 3,000 reads, the hottest key 656 times (21.9%), the top 10
+keys 58.1%, 192 of 200 keys used. Each read is a view over `pg_sleep(0.01)`, 20 connections.
+
+| Arm | Requests | Database reads | p50 | p99 |
+| --- | --- | --- | --- | --- |
+| off | 3,000 | 3,000 (100%) | 106 ms | 305 ms |
+| strict | 3,000 | 1,235 (41.2%) | 67 ms | 196 ms |
+| relaxed | 3,000 | 1,102 (36.7%) | 57 ms | 171 ms |
+
+(A first run gave off 3,000 / p99 332 ms, strict 1,234 / 171 ms, relaxed 1,078 / 185 ms.)
+The spec's "99/1" is restated as the measured shares above. One run, no repeats, no A/A floor:
+the p99 values are indicative only; the read counts are the headline.
+
+## Fast set
+
+`scripts/ci-fast.sh` took 401 s on 2026-11-27 with the machine's load average at 10–14 on 4
+cores (other builds running); it was not measurable alone. This chunk adds about 6 s of tier S
+scenarios under `-short` (21 light scenarios, one seed; the 1,000-client ones skip), about 1 s of
+core and `coalsrc` tests, and 21 short baseline runs in `internal/obs/simrun` (each under a
+second). The hot-key scenarios and the numbers test skip under `-short` everywhere and run in
+the gate's extra.
+
+## Fleet row (PLAN 8.2, 12.3 item 10)
+
+One read per hot key **weakens** to at most N reads per burst at N instances: flights are per
+instance, nothing is coordinated. Chunk 13 measures it; `CoalesceScenarios` specs are plain
+`Spec`s, so a scenario with N engines can reuse `HotKeySpec` per engine and count reads from the
+one fake's statement log.
+
+## Steady-state row
+
+What grows: flights, waiters, stored reply bytes, the no-share list. What removes them:
+completion, the deadline, the last leaver, expiry (and Shutdown). Gauges: `coalescer.flights`,
+`table_size`, `waiting`, `stored_bytes`, `no_share`; `engine.requests_coalesced`. After quiesce:
+all zero, no `tCoalesce` timer (checked by `Engine.Quiesce` and the SQL final-flush checks).
+
+## Mechanism row (Release It! four parts)
+
+Where: the coalesce stage, after draining, breaker and rate gate, before the queue. Numbers:
+waiters per flight (`max_waiters`), shared-reply bytes (`max_reply_bytes`), flights
+(`max_flights`), no-share expiry (`no_share_for`), flight deadline (`timeouts.statement`). What the
+caller gets: the shared reply with its own end marker, the shared error, `53M04`, or its own
+`57014`. Signal: `coalescer.overflows{reason}`, `flights_started`, `hits`, `waiters_per_flight`,
+`waiter_ends`, `flight_ends`.
+
+## Observability (7.6)
+
+Snapshot: `coalesce.Snapshot` (counters, gauges, histogram, per-tenant hits, hot keys) and the
+engine's `Coalesce*` fields. Exported by `coalsrc` (CSV, Prometheus, JSON, log line through the
+collector), documented in `docs/csv-schema.md`. Conservation: offered = started + hits + refused
++ passed; waiters in = reply + shared error + own error + gone + refused + waiting; started =
+completed + failed + cancelled + expired + live; no-share added = expired + evicted + renewed +
+listed; engine accepted = completed + failed + shed + queued + in flight + coalesced. Coverage-table
+row (7.5, Contention): flights, hits, waiters per flight, cancellations (waiter `own-error`/`gone`,
+flight `cancelled`), overflows by cap. Health rule: open point 10.
+
+## Shared files touched
+
+- `internal/proxy/engine.go` (fields; `initCoalesce` call; `tCoalesce` case; `coalShutdown`,
+  `coalQuiet`, `coalCheck` lines), `client.go` (phase `cpCoalesced`; `fl`, `wid` on client;
+  `fl`, `store`, `stored`, `sawErr` on request; `coalClosing` call), `lease.go` (`coalJoin`,
+  `coalSent`, `coalStoring`, `coalSawError`, `coalReady`, `coalFailed`, `coalRefused` calls),
+  `corepool.go` (`coalCancel`, `coalRefused` calls), `config.go` (`Coalesce` field, defaults,
+  validation line), `snapshot.go` (fields appended, `coalesced` term), `timers.go`
+  (`tCoalesce`), `contracts.go` (appends the coalescer rows).
+- `internal/config/config.go` (field), `validate.go` (defaults call, `proxyCaps` fields,
+  validation call).
+- `internal/obs/catalog/catalog.go`, `internal/obs/enginesrc/enginesrc.go`,
+  `internal/obs/simrun/engine_test.go` (coalescer scenarios as baseline runs; heavy ones skipped
+  under `-short`).
+- `test/e2e/spec.go` (`Coalesce`, `KeyScope`), `simtier.go` (engine config, fingerprint),
+  `realtier.go` (`GatewayOpts.Coalesce`; `mode: off` for `on-switch` gateways).
+- `scripts/fuzz-plant.sh`, `tools/lint-rules/det-packages.txt`, `race-packages.txt`,
+  `agent_work/INDEX.md`.
+
+## Changes to earlier chunks' tests
+
+- `internal/shell/contracts_test.go`: the "Not yet built" lines of the generated timeout and
+  capacity documents no longer list the coalescer (it is built); the capacity line keeps chunk 9's
+  active-tenant states. Text only.
+- `test/e2e/realtier.go` (harness, used by chunks 6–8's tier R tests): a gateway with
+  `lease.reset: on-switch` and no explicit coalesce setting now gets `coalesce.mode: off`. Reason:
+  the binary's new default (`auto`, all tenants) is refused together with `on-switch` by design
+  (D10); without this `TestTierRPoolSessionStateUnderEachReleasePolicy` could not start its
+  on-switch gateways. Every other earlier tier R test runs with the new default (`auto`) and
+  passed (run of 2026-11-27, `/tmp/zgw-c11/tr1.log`: only that test failed, before the change).
+  Not a weakening: the on-switch test's subject is the reset policy, which coalescing does not
+  touch.
+- `internal/obs/simrun/engine_test.go`: adds the coalescer scenarios to the baseline runs.
+
+## Deviations
+
+- **Tier R "all 100 leave" uses cancel requests, not vanishing clients.** The real shell does
+  not read a client socket while that client's request is in progress (D5), so a client that
+  resets its connection mid-request is seen only when the reply is written; the first tier R
+  attempt (100 clients aborting at +300 ms) got 100 replies and 1 completed read. The vanish
+  case and the dirty-connection table are proved in tier S (`coalesce-vanish-all-*`, where the
+  simulated network delivers the reset at once). Tier R proves the work is cancelled when all
+  100 cancel (0 completed reads).
+- **Tier R read time 500 ms, not 50 ms**, so that the arrival spread of 1,000 real clients
+  (released by a barrier) is far below the read time; tier S keeps 50 ms and is exact.
+- **Tier R direct baseline: 100 connections** (the tier R container allows 200; a 400-client
+  direct arm failed with `53300` and left the next test's gateway with a tripped breaker). The
+  1,000-connection direct baseline is tier S's.
+- **No tier R SQL assertions** for the coalescer scenarios; their checks read the gateway's
+  final flush through `stopAndRead` (conservation from the file) and the coalescer counters.
+- **Headline 2 is one run per arm**, not the 10 interleaved runs of section 11 (chunk 14 owns the
+  benchmark discipline). The database read counts are exact; the latencies are indicative.
+
+## Stated limits
+
+1. **Default**: the binary shares by default (`coalesce.mode: auto`, `strict`, all tenants). The
+   safe shape trusts the objects it names: a view, a user-defined operator, a function that
+   shadows an allow-listed name, or a **row-level security policy** with side effects or
+   per-call results is shared like any read. `coalesce.mode: off` and `hinted` exist for
+   databases where that matters (D10).
+2. `hinted` shares whatever carries the mark, writes included (the mark is the client's
+   statement; `coalesce-marked-write-hinted` shows it).
+3. "At most one in-flight read per key" counts flights the coalescer still owns: a flight whose
+   last waiter left is removed at once while its cancel travels to Postgres, so a new flight of
+   the key can start while the cancelled read is still finishing on the database. Keys on the
+   no-share list and requests passed at a full table are not shared and may run concurrently.
+4. Relaxed mode can return data older than the request (the read-your-own-write window); strict
+   costs up to one more read time.
+5. Flights are per instance (fleet row).
+6. Per-key hotness is opt-in and exported by rank only; the key texts are in the snapshot, not in
+   metrics.
+
+## Commands
+
+```
+go test ./internal/coalesce/ ./internal/proxy/ ./internal/obs/coalsrc/ ./internal/config/
+go test -short -run TestScenarioCoalesce ./test/e2e/                       # 21 light scenarios, 1 seed
+go test -run 'TestScenarioCoalesce/coalesce-hot-key|TestCoalesceHotKeyNumbers' ./test/e2e/
+MG_C11_FULL_SWEEP=1 DST_SEEDS=200 RUN_DIR=<dir> go test -run '^TestScenarioCoalesce$' ./test/e2e/
+scripts/csv-assert.sh <dir>                                               # SQL over the sweep
+MG_TIER_R=1 go test -run '^TestTierRCoalesce' ./test/e2e/                 # needs Docker
+go test -run '^$' -fuzz '^FuzzCoalesceOps$' -fuzztime 30s ./internal/coalesce/
+scripts/fuzz-plant.sh
+scripts/gate.sh c11-coalescer   (GATE_BASE=6cffb0f on this branch, whose base carries chunk 7's prose comments)
+```
+
+## Fuzz targets
+
+| Target | Package | Seed source | Rate (vm-1) |
+| --- | --- | --- | --- |
+| `FuzzCoalesceOps` | `internal/coalesce` | none: the input decodes to operations (3 bytes each, at most 96), no simulator, no randomness | about 850/s |
+
+It does not import `internal/sim`, so the pinned inventory in
+`agent_work/adversarial/cr01-shrink-fuzz-rules/` is unchanged.
+
+## Index rows
+
+Added to `agent_work/INDEX.md` under "Phase 2, chunk 11".

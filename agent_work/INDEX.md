@@ -201,3 +201,14 @@ Record: `chunks/c08-admission/` (brief, notes, gate extra).
 | `../scripts/fuzz-plant.sh` (changed) | Also plants `admission.PlantRemoveSwapsTail` (`MG_FUZZ_PLANT=admission-remove-order`) and requires `FuzzAdmissionOps` to find it within `FUZZ_SECONDS` | Opus | Found after 7 s of 20 s (empty cache) |
 | `chunks/c08-admission/gate/extra.sh` | G10: `fuzz-plant.sh` and `admission-head-to-head.sh --check` | Opus | — |
 | `../docs/knowledge/admission-queues.md` | Facts for chunks 9, 10, 13, 14: the core API, the seam, plants, the dispatcher hook, scenario cost | Opus | — |
+## Phase 2, chunk 11 — coalescer (Opus, 2026-11-27)
+
+Record: `chunks/c11-coalescer/` (brief, notes, gate extra).
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../scripts/fuzz-plant.sh` (changed) | Also plants `coalesce.PlantLeaverGetsResult` (`MG_FUZZ_PLANT=coalesce-leaver-result`) and requires `FuzzCoalesceOps` to find it within `FUZZ_SECONDS` | Opus | Found in about 1 s of 20 s (empty cache) |
+| `chunks/c11-coalescer/gate/extra.sh` | G10: fuzz plants, the coalescer core and engine tests, the 1,000-client hot-key scenarios and `TestCoalesceHotKeyNumbers` | Opus | — |
+| `../test/e2e/c11_coalesce.go` | Tier S coalescer scenarios (`CoalesceScenarios()`); full 200-seed sweep with `MG_C11_FULL_SWEEP=1 DST_SEEDS=200 go test -run '^TestScenarioCoalesce$' ./test/e2e` | Opus | See NOTES.md, "200-seed sweeps" |
+| `../test/e2e/c11_tierr_test.go` | Tier R coalescer tests and headline 2 (`MG_TIER_R=1 go test -run '^TestTierRCoalesce' ./test/e2e`) | Opus | Green on Postgres 17; numbers in NOTES.md |
+| `../docs/knowledge/coalescer.md` | Facts for chunks 12–14: the core API, the engine wiring, scenarios and tier R technique | Opus | — |
