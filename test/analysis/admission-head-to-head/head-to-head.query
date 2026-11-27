@@ -1,3 +1,4 @@
+-- Named .query, not .sql, so scripts/csv-assert.sh does not take it for an assertion file.
 -- The admission head-to-head table (chunk 8): both queue rules and both simulator comparison arms
 -- at 1.2x, 2x and 10x of the backend's capacity, one row per (load, arm), from the flushed runs
 -- of the scenarios admission-h2h-l120, admission-h2h-l200 and admission-h2h-l1000.
