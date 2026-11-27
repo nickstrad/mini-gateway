@@ -61,6 +61,8 @@ func (a *AdmissionQueue) TakeShed() (RequestID, bool) {
 
 func (a *AdmissionQueue) Unpop() bool { return a.q.Unpop() }
 
+func (a *AdmissionQueue) Close(now Instant) { a.q.Close(a.at(now)) }
+
 func (a *AdmissionQueue) Len() int { return a.q.Len() }
 
 func (a *AdmissionQueue) Cap() int { return a.q.Cap() }
@@ -101,6 +103,22 @@ func (e *Engine) queueTouched() {
 	}
 }
 
+func (e *Engine) sweepAdmission() {
+	if e.shedQ == nil {
+		return
+	}
+	e.shedQ.Sweep(e.now)
+	e.queueTouched()
+}
+
+func (e *Engine) closeAdmission() {
+	if e.shedQ == nil {
+		return
+	}
+	e.shedQ.Close(e.now)
+	e.queueTouched()
+}
+
 func (e *Engine) admissionCore() *admission.Queues {
 	if a, ok := e.seams.Queue.(*AdmissionQueue); ok {
 		return a.q
@@ -115,6 +133,9 @@ func (e *Engine) admissionCheck() error {
 	}
 	if q.Pending() != 0 {
 		return fmt.Errorf("admission: %d sheds not answered", q.Pending())
+	}
+	if n := q.ShedCount(); n != e.snap.Shed {
+		return fmt.Errorf("admission: the core shed %d, the engine answered %d", n, e.snap.Shed)
 	}
 	if at := q.Next(); at != 0 && (e.admT == nil || e.admT.at != Instant(at)) {
 		return fmt.Errorf("admission: next deadline %d is not armed", at)
