@@ -41,3 +41,4 @@ internal/obs/enginesrc
 internal/loadgen
 # Chunk 8: the admission core (per-tenant queues, the two rules, the comparison arms).
 internal/admission
+internal/obs/admsrc

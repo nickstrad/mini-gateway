@@ -68,6 +68,48 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 
 | Component | Metric | Kind | Labels | Unit | Merge | Help |
 | --- | --- | --- | --- | --- | --- | --- |
+| `admission` | `capacity` | gauge | — | count | sum | Total capacity across the tenant queues (queue.capacity). |
+| `admission` | `lifo_adaptive` | gauge | — | count | sum | 1 when adaptive LIFO is on (queue.lifo adaptive), 0 when off. |
+| `admission` | `lifo_switches` | counter | mode | count | sum | Adaptive LIFO switches (mode: on, off). |
+| `admission` | `lifo_tenants` | gauge | — | count | sum | Tenant queues serving newest first now. |
+| `admission` | `load` | gauge | — | count | sum | Highest 0-100 load gauge over the tenant queues: 100 x min queue delay of the interval / (2 x target). |
+| `admission` | `max_tenants` | gauge | — | count | sum | Cap on tenant queues (queue.max_tenants). |
+| `admission` | `oldest_age` | gauge | — | ns | sum | Age of the oldest queued request at the last queue operation. |
+| `admission` | `pending_sheds` | gauge | — | count | sum | Sheds decided and not yet answered by the engine (0 between events). |
+| `admission` | `pushes` | counter | — | count | sum | Requests offered to the queues. |
+| `admission` | `queue_wait` | histogram | — | ns | by bucket | Time a served request waited in its tenant queue. |
+| `admission` | `queue_wait_clamped_high` | counter | — | count | sum | Values recorded into queue_wait above its range, clamped to the highest bucket. |
+| `admission` | `queue_wait_clamped_low` | counter | — | count | sum | Values recorded into queue_wait below its range, clamped to the lowest bucket. |
+| `admission` | `queued` | gauge | — | count | sum | Requests waiting in the tenant queues now. |
+| `admission` | `queued_peak` | gauge | — | count | max | Most requests waiting at once. |
+| `admission` | `removed` | counter | — | count | sum | Queued requests removed because their client left. |
+| `admission` | `rule` | gauge | mode | count | sum | 1 for the queue rule this instance runs (mode: timeout, control-law, fifo, folly; the last two are simulator arms). |
+| `admission` | `rule_states` | gauge | mode | count | sum | Tenant queues in each rule state (mode: normal, standing, dropping, overloaded). |
+| `admission` | `served` | counter | — | count | sum | Requests taken from a queue to a database connection. |
+| `admission` | `shed` | counter | reason | count | sum | Requests shed with 53M01, by reason (rule, at-pop, overflow, total, tenants, deadline, undrained). |
+| `admission` | `shedding` | gauge | — | count | sum | Tenant queues that shed within the last interval. |
+| `admission` | `tenant_capacity` | gauge | tenant | count | sum | Capacity of this tenant's queue. |
+| `admission` | `tenant_capacity_each` | gauge | — | count | sum | Capacity of one tenant queue (queue.tenant_capacity). |
+| `admission` | `tenant_depth` | gauge | tenant | count | sum | Requests waiting in this tenant's queue now. |
+| `admission` | `tenant_lifo` | gauge | tenant | count | sum | 1 while this tenant queue serves newest first. |
+| `admission` | `tenant_lifo_switches` | counter | tenant, mode | count | sum | Adaptive LIFO switches of this tenant (mode: on, off). |
+| `admission` | `tenant_load` | gauge | tenant | count | sum | This tenant queue's 0-100 load gauge. |
+| `admission` | `tenant_oldest_age` | gauge | tenant | ns | sum | Age of the oldest request in this tenant's queue. |
+| `admission` | `tenant_pushes` | counter | tenant | count | sum | Requests this tenant offered to its queue. |
+| `admission` | `tenant_queue_wait` | histogram | tenant | ns | by bucket | Time a served request of this tenant waited. |
+| `admission` | `tenant_queue_wait_clamped_high` | counter | tenant | count | sum | Values recorded into tenant_queue_wait above its range, clamped to the highest bucket. |
+| `admission` | `tenant_queue_wait_clamped_low` | counter | tenant | count | sum | Values recorded into tenant_queue_wait below its range, clamped to the lowest bucket. |
+| `admission` | `tenant_removed` | counter | tenant | count | sum | Requests of this tenant removed because the client left. |
+| `admission` | `tenant_rule_state` | gauge | tenant, mode | count | sum | 1 for this tenant queue's rule state (mode: normal, standing, dropping, overloaded). |
+| `admission` | `tenant_served` | counter | tenant | count | sum | Requests of this tenant served from its queue. |
+| `admission` | `tenant_shed` | counter | tenant, reason | count | sum | Requests of this tenant shed, by reason. |
+| `admission` | `tenant_shedding` | gauge | tenant | count | sum | 1 while this tenant queue shed within the last interval. |
+| `admission` | `tenants` | gauge | — | count | sum | Tenant queues that exist now. |
+| `admission` | `tenants_created` | counter | — | count | sum | Tenant queues created on first use. |
+| `admission` | `tenants_evicted` | counter | — | count | sum | Empty tenant queues evicted at the tenant cap for a new tenant. |
+| `admission` | `tenants_peak` | gauge | — | count | max | Most tenant queues at once. |
+| `admission` | `tenants_removed` | counter | — | count | sum | Tenant queues removed after 16 quiet intervals. |
+| `admission` | `unpops` | counter | — | count | sum | Taken requests put back because no connection could be lent. |
 | `classifier` | `extended_discarded` | counter | — | count | sum | Messages dropped while discarding until Sync. |
 | `classifier` | `extended_refused` | counter | — | count | sum | Extended-protocol messages refused. |
 | `classifier` | `extended_synced` | counter | — | count | sum | Discards ended by Sync. |

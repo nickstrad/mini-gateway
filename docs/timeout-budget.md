@@ -18,6 +18,11 @@ One rule holds for every deadline: time passes before the event. When an event a
 | Reset after a lease (DISCARD ALL until its ReadyForQuery) | engine, release stage | `timeouts.reset` | 1s | Database connection closed (reset failed: deadline); a late reply is never read |
 | Client write stalled (reply bytes not taken by the client) | engine, relay (the shell sets the same per-write socket deadline) | `timeouts.client_write` | 5s | Client dropped; its lent database connection closed |
 | Socket read backstop | shell, every reader | `timeouts.client_idle + timeouts.statement` | 10m30s | Connection closed; the engine's own timers end every real wait first |
+| Queue wait under the timeout rule, no standing queue (the tenant queue was empty within the last interval) | admission, tenant queue (head sweep at the deadline) | `queue.interval` | 100ms | ERROR 53M01 (shed, reason rule), answered at once; a request waiting exactly the allowed time has expired |
+| Queue wait under the timeout rule while a standing queue exists | admission, tenant queue (head sweep at the deadline) | `queue.target` | 5ms | ERROR 53M01 (shed, reason rule), answered at once |
+| Control law: sojourn above target before dropping starts; then the next drop after interval/sqrt(count) | admission, tenant queue (head sweep at the drop time) | `queue.target, queue.interval` | 100ms | ERROR 53M01 (shed, reason rule) for the oldest request at each drop; no per-request bound (timeouts.queue_wait and the capacity bound it) |
+| Adaptive LIFO hold: newest-first service ends only after the rule reported no overload for this long | admission, tenant queue | `queue.lifo_hold` | 1s | Service returns to oldest first |
+| Quiet tenant queue removal (16 intervals empty) | admission | `16 x queue.interval` | 1.6s | The tenant queue and its rule state are removed |
 
 ## Nesting checked at config load
 

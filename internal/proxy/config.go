@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/nickstrad/mini-gateway/internal/admission"
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
@@ -193,7 +194,16 @@ type Config struct {
 	KeyScope       work.KeyScope
 	Seams          Seams
 	Plant          Plant
+	Admission      admission.Config
 }
+
+func (c Config) admissionConfig() admission.Config {
+	a := c.Admission
+	a.Capacity = c.QueueCap
+	return a.WithDefaults()
+}
+
+func (c Config) AdmissionConfig() admission.Config { return c.WithDefaults().admissionConfig() }
 
 // ErrConfig is wrapped by all engine configuration validation errors.
 var ErrConfig = errors.New("proxy: bad configuration")
@@ -264,6 +274,9 @@ func (c Config) Validate() error {
 		bad("lease.reset", "only always is supported")
 	}
 	errs = append(errs, c.Timeouts.Validate()...)
+	if c.Admission.Rule != 0 {
+		errs = append(errs, c.admissionConfig().Validate())
+	}
 	return errors.Join(errs...)
 }
 

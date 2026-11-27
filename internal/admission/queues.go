@@ -494,7 +494,7 @@ func (q *Queues) Check() error {
 	if len(q.list) > q.cfg.MaxTenants {
 		return fmt.Errorf("admission: %d tenant queues, cap %d", len(q.list), q.cfg.MaxTenants)
 	}
-	return q.Snapshot().Check()
+	return q.light().Check()
 }
 
 func (q *Queues) Quiesce() error {

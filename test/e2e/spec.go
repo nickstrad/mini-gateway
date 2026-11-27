@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nickstrad/mini-gateway/internal/admission"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 	"github.com/nickstrad/mini-gateway/internal/sim"
 	"github.com/nickstrad/mini-gateway/internal/sim/fakepg"
@@ -59,6 +60,7 @@ type Spec struct {
 	Duration  time.Duration
 	SetupSQL  []string
 	ClientTLS bool
+	Admission admission.Config
 }
 
 // ClientResult records the tokenized startup messages, per-step replies, elapsed
