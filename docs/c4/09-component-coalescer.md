@@ -1,6 +1,6 @@
 # C4 Level 3: Components: coalescer
 
-**Built so far: chunks 0–6. Dashed parts are planned.** In this diagram 1 of 9 elements and 0 of 11 relationships are built. Model: diagram `component-coalescer` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–6a. Dashed parts are planned.** In this diagram 1 of 9 elements and 0 of 11 relationships are built. Model: diagram `component-coalescer` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 Followers take no queue slot and no connection. The leader passes through admission like any request.
 
