@@ -10,7 +10,11 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/simtest"
 )
 
-const coalFullSweepEnv = "MG_C11_FULL_SWEEP"
+const (
+	coalFullSweepEnv = "MG_C11_FULL_SWEEP"
+	coalSweepSeeds   = 10
+	coalHeavySeeds   = 1
+)
 
 func coalReplay(name string, seed int64) string {
 	return replayLine(name, seed) + " (TestScenarioCoalesce)"
@@ -70,11 +74,11 @@ func TestScenarioCoalesce(t *testing.T) {
 			}
 			seeds := simtest.Seeds(t)
 			full := os.Getenv(coalFullSweepEnv) == "1"
-			if sc.Heavy && len(seeds) > heavySeeds && !full {
-				seeds = seeds[:heavySeeds]
+			if sc.Heavy && len(seeds) > coalHeavySeeds && !full {
+				seeds = seeds[:coalHeavySeeds]
 			}
-			if len(seeds) > poolSweepSeeds && !full {
-				seeds = seeds[:poolSweepSeeds]
+			if len(seeds) > coalSweepSeeds && !full {
+				seeds = seeds[:coalSweepSeeds]
 			}
 			if testing.Short() && len(seeds) > 1 {
 				seeds = seeds[:1]
