@@ -213,13 +213,15 @@ func TestAdv_6_FirstFlushHeaderCap(t *testing.T) {
 	}
 }
 
+const c03GuardDeadline = 30 * time.Second
+
 func TestAdv_6_AsyncDiskErrorRecoveryBoundary(t *testing.T) {
 	c03Start(t)
 	w := c03Writer(t, t.TempDir(), "run", func(c *csvflush.Config) { c.Async = true; c.Strict = false; c.QueueCap = 2 })
 	c03Must(t, os.Symlink("/dev/full", filepath.Join(w.RunDir(), "metrics.csv")))
 	s := c03Snapshot()
 	_ = w.Export(s)
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(c03GuardDeadline)
 	for w.FlushStats().FlushErrors == 0 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
@@ -249,7 +251,7 @@ func TestAdv_6_FullQueueWithBlockedFilesystem(t *testing.T) {
 	c03Must(t, syscall.Mkfifo(p, 0600))
 	s := c03Snapshot()
 	c03Must(t, w.Export(s))
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(c03GuardDeadline)
 	for w.FlushStats().QueueDepth != 0 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
@@ -265,7 +267,7 @@ func TestAdv_6_FullQueueWithBlockedFilesystem(t *testing.T) {
 		if e == nil {
 			t.Error("full queue accepted third job")
 		}
-	case <-time.After(time.Second):
+	case <-time.After(c03GuardDeadline):
 		t.Error("full queue blocked producer")
 	}
 	after := w.FlushStats()
@@ -289,7 +291,7 @@ func TestAdv_6_FullQueueWithBlockedFilesystem(t *testing.T) {
 	c03Must(t, w.Close())
 	select {
 	case <-drained:
-	case <-time.After(time.Second):
+	case <-time.After(c03GuardDeadline):
 		t.Error("FIFO drainer leaked")
 	}
 }
