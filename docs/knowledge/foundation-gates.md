@@ -98,9 +98,12 @@ and `scripts/gen-docs.sh --check`. Exit 0 is green; anything else is red. A firs
   retries a target once when — and only when — all five conditions hold: (1) non-zero exit,
   (2) a `--- FAIL: <target>` block whose only message is bare `context deadline exceeded`,
   (3) no `Failing input written to` line, (4) no panic or other failure text anywhere in
-  the output, and (5) no new file under the package's `testdata/fuzz/<target>/`. The second
+  the output, and (5) no change to the package's `testdata/fuzz/<target>/` corpus tree
+  (files added, removed, or changed in content, compared NUL-safely through symlinks; fails
+  closed if the snapshot cannot be taken). The second
   run's result and rate stand, whatever its message. At most `FUZZ_MAX_RETRIES` targets are
-  retried per run (default `2`; `0` disables the retry). Each retry prints
+  retried per run (default `2`; `0` disables the retry; a standalone run may set it higher,
+  but any value above `2` makes `counts_for_landing` false). Each retry prints
   `fuzz: RETRY: <dir> <target>: go's own deadline, no failing input`, sets `retried` to `1`
   in the table, and is counted in the `NOTE:` line (`<N> retried`). Any other failure, a
   second failure on the retried target, or a third target hitting the signature when two
