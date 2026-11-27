@@ -36,3 +36,5 @@ internal/work
 internal/proxy
 internal/proxy/proxysim
 internal/obs/enginesrc
+# Chunk 7: the pool core.
+internal/pool
