@@ -395,9 +395,9 @@ dispatcher (with one tenant it chooses exactly as `OldestFirst`).
 - Rule 4 (below-share tenants first at every lend) goes beyond PLAN's "share enforced only when
   the limit is reached". It never leaves a connection idle (only rule 3 can), so "work-conserving
   otherwise" still holds; without it the held-transaction claim failed (decision 2).
-- Repair round: the regression tests were written and shown to fail against the pre-repair
-  code (a scratch copy of `bd0f7cd` with the new test files) before the fixes were committed; the
-  narrowed-claim tests hold behaviour that did not change, so they pass on both.
+- Repair round: the regression tests were written beside the fixes, not before them; each was
+  then shown to fail against the pre-repair code (a scratch copy of `bd0f7cd` with the new test
+  files). The narrowed-claim tests hold behaviour that did not change, so they pass on both.
 - Tests were written beside the code rather than strictly first; every mechanism has a test that
   fails with it removed (mutation table).
 - The scenarios are capped at 10 seeds per call (ablation 3) because each seed costs 30-100 s on
