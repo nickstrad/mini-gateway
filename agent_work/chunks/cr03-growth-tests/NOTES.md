@@ -493,16 +493,22 @@ That is measurable, so (A) fails the cost rule.
 
 **How (B) works.**
 
-- `internal/pgwire/count_off.go` (`//go:build !clscount`) has `const clsCounting = false`.
-  `workTally` and `workRef` are empty structs there, and their methods do nothing.
-- `count_on.go` (`//go:build clscount`) has the constant set to true. `workTally` holds an
-  `int`, and `workRef` holds a `*workTally`.
-- Every count is one statement, `if clsCounting { l.reads.bump() }` (or `reads.bump()` with
-  a `workRef`, or `m.counts.lex.steps.bump()`). When the constant is false the compiler
+- The switch is a separate package, `internal/pgwire/clscount`. Its `off.go`
+  (`//go:build !clscount`) has `const On = false`, and `Tally` and `Ref` are empty structs
+  there whose methods do nothing.
+- `on.go` (`//go:build clscount`) sets the constant to true. `Tally` holds an `int`, and
+  `Ref` holds a `*Tally`.
+- Why a separate package: detlint's `[buildtag]` rule rejects any `//go:build` line in a
+  determinism package, test files included, and type-checks both files of a pair
+  together. My first version put the pair in `internal/pgwire` itself, and the gate's G1
+  detlint went red on it at `007c084`. `internal/pgwire/clscount` is deliberately not on
+  `det-packages.txt`: it imports nothing and holds only the constant and integer tallies.
+- Every count is one statement, `if clscount.On { l.reads.Bump() }` (or `reads.Bump()`
+  with a `clscount.Ref`, or `m.counts.lex.steps.Bump()`). When the constant is false the compiler
   drops the block before it inlines anything, so the default build has no call and no
   inline mark.
 - `Lexer.reads` is a zero-size field placed **first**, so no field offset moves.
-  `lexContinuation` and `lexHasPrefix` take a `workRef` by value. A zero-size argument
+  `lexContinuation` and `lexHasPrefix` take a `clscount.Ref` by value. A zero-size argument
   takes no register, so their ABI is unchanged.
 - The classifier's tagged counts sit in one nested field, `clsCounts.lex`
   (`clsLexCounts`: reads, steps, opRuns, ahead). With them as four separate fields,
@@ -544,7 +550,7 @@ byte level: the hex dump and the relocations of each function. The script is in
 - Default build: the three original tests run unchanged in kind, on the always-on
   counters, and `TestClassifierWorkGrowsLinearly` has the two `$` shapes. They catch the
   first builds' mutations (M1a, M2, M3, M10, M12) and now M11.
-- Tagged build: `internal/pgwire/classify_count_test.go` (`//go:build clscount`) adds
+- Tagged build: `internal/pgwire/classify_count_test.go` adds
   `TestCountedWorkGrowsLinearly`, which runs all 26 shapes of the three tests, and its
   canary `TestCountedCheckRejectsWorkThatDoesNotGrowLinearly`.
 - The rule for `TestCountedWorkGrowsLinearly`: lexer reads and token steps must be
@@ -570,9 +576,9 @@ through it. A new loop written without a count would escape any counter, timed o
 the counting is a rule over the source, enforced by AST tests that run in both builds:
 
 - `TestLexLoopsCountTheirSteps`: in lex.go, every `for` or `range` loop in a `*Lexer`
-  method or in a function taking a `workRef` must start with the count statement, and
+  method or in a function taking a `clscount.Ref` must start with the count statement, and
   `scan` must start with one for the byte it reads first. Such code may call only lex.go
-  functions that take a `workRef` or contain no loop (the `lexIs*` predicates, `cut`), the
+  functions that take a `clscount.Ref` or contain no loop (the `lexIs*` predicates, `cut`), the
   tally methods, and `len`, `max`, `min`, `make` and `append`.
 - `TestClassifierLexLoopsCountTheirSteps`: the same loop rule for `(*clsMsg).lex`.
 - `TestLexLoopGuardRejectsUncountedWork`: the guard's own canary. It plants four
@@ -631,6 +637,10 @@ with it), as the review's form does. M5 to M9 change no output: `TestClassifierC
 
 ### Deviations in this round
 
+- **No test file under the tag.** detlint rejects `//go:build` in `internal/pgwire`, so
+  `classify_count_test.go` is an ordinary test file. Its two tests skip with a pointer to
+  `scripts/counted-growth.sh` when `clscount.On` is false. Under the tag they run, and the
+  gate requires `--- PASS` (not `SKIP`) for both.
 - **The three original tests stay in the default build.** The brief's form (B) puts "the
   three tests in a file built under that tag". I left them in `classify_test.go` and put
   the full counted check in a new tagged test, `TestCountedWorkGrowsLinearly`, that runs
@@ -656,7 +666,7 @@ with it), as the review's form does. M5 to M9 change no output: `TestClassifierC
 - The loop rule is syntactic. Repeated work without a `for` or `range` loop in the guarded
   functions (recursion, `goto`, a call through a function value) is not counted. Neither
   is work in a function the guard does not cover. The guard covers `*Lexer` methods, lex.go
-  functions with a `workRef` parameter, and `(*clsMsg).lex`. It does not cover the rest of
+  functions with a `clscount.Ref` parameter, and `(*clsMsg).lex`. It does not cover the rest of
   classify.go: there the always-on accessor counters (`tokenVisits`, `keywordChecks`,
   `literalBytes`) remain the measure, with the limits listed under "Limits of the
   whole-call count".
