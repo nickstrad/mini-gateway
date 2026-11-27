@@ -99,15 +99,24 @@ and `scripts/gen-docs.sh --check`. Exit 0 is green; anything else is red. A firs
   (2) a `--- FAIL: <target>` block whose only message is bare `context deadline exceeded`,
   (3) no `Failing input written to` line, (4) no panic or other failure text anywhere in
   the output, and (5) no change to the package's `testdata/fuzz/<target>/` corpus tree
-  (files added, removed, or changed in content, compared NUL-safely through symlinks; fails
-  closed if the snapshot cannot be taken). The second
-  run's result and rate stand, whatever its message. At most `FUZZ_MAX_RETRIES` targets are
-  retried per run (default `2`; `0` disables the retry; a standalone run may set it higher,
-  but any value above `2` makes `counts_for_landing` false). Each retry prints
+  (files added, removed, or changed in content, compared NUL-safely through symlinks using
+  SHA-256 hashes; snapshot errors such as broken symlinks, symlink loops, non-directory
+  roots, special files, unreadable entries, or tool errors fail closed and block the retry).
+  The second run's result and rate stand, whatever its message. At most `FUZZ_MAX_RETRIES`
+  targets are retried per run (default `2`; `0` disables the retry; accepts `0` or positive
+  integers up to 9 digits and exits 2 otherwise; a standalone run may set it above `2`, but
+  any value above `2` sets `counts_for_landing` to `false`). Each retry prints
   `fuzz: RETRY: <dir> <target>: go's own deadline, no failing input`, sets `retried` to `1`
   in the table, and is counted in the `NOTE:` line (`<N> retried`). Any other failure, a
-  second failure on the retried target, or a third target hitting the signature when two
-  were already retried fails the run.
+  second failure on the retried target, or another target hitting the signature once
+  `FUZZ_MAX_RETRIES` targets have already been retried (a third target under the default
+  cap of `2`) fails the run. Limits: (a) if a parent of `testdata/fuzz/<target>/` cannot be
+  searched at all before and after the run, the corpus directory is snapshotted as absent
+  rather than as a snapshot error, so the snapshot does not block the retry (`go test`,
+  running as the same user, cannot write a failing input there either, and the log checks
+  still apply); (b) the signature check is written for `gawk` (`awk` on the gate machine),
+  whereas under `mawk` a NUL byte ends a line early and can let forged logs through that
+  `gawk` rejects.
 - The gate writes the table to `gate/G5-fuzz.tsv` (gitignored) and records
   `fuzz_targets`, `fuzz_seed_sweeps`, `fuzz_retries`, `fuzz_rate_floor` and
   `fuzz_max_retries` in `result.json` (counts are `null` when G5 did not run).

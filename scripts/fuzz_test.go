@@ -335,6 +335,9 @@ func TestFuzzShPrintsNoFailedLineWhenGreen(t *testing.T) {
 	}
 }
 
+// Proves a first run matching the deadline-only signature is retried once,
+// reported via a RETRY line, retried=1, and the NOTE count, and uses the second
+// run's execution rate.
 func TestFuzzShRetriesDeadlineSignatureAndUsesSecondRunRate(t *testing.T) {
 	run := runFuzzSh(t, map[string]string{
 		"internal_sim_world__FuzzWorldSchedule.1.out": deadlineOut("FuzzWorldSchedule", "fuzz: elapsed: 20s, execs: 200 (0/sec), new interesting: 0 (total: 3)"),
@@ -366,6 +369,9 @@ func TestFuzzShRetriesDeadlineSignatureAndUsesSecondRunRate(t *testing.T) {
 	}
 }
 
+// Proves a target whose retry also exits with the deadline signature is not
+// retried a second time, fails the run, and reports retried=1 with the second
+// run's rate.
 func TestFuzzShFailsWhenDeadlineSignatureRepeats(t *testing.T) {
 	run := runFuzzSh(t, map[string]string{
 		"internal_pgwire__FuzzFramer.1.out": deadlineOut("FuzzFramer", "fuzz: elapsed: 20s, execs: 1000 (0/sec)"),
@@ -395,6 +401,8 @@ func TestFuzzShFailsWhenDeadlineSignatureRepeats(t *testing.T) {
 	}
 }
 
+// Proves a retried target whose second run fails with any other error fails
+// the run and reports the second run's rate with retried=1.
 func TestFuzzShFailsWhenSecondRunFailsWithOtherMessage(t *testing.T) {
 	run := runFuzzSh(t, map[string]string{
 		"internal_pgwire__FuzzFramer.1.out": deadlineOut("FuzzFramer", "fuzz: elapsed: 20s, execs: 1000 (0/sec)"),
@@ -416,6 +424,10 @@ func TestFuzzShFailsWhenSecondRunFailsWithOtherMessage(t *testing.T) {
 	}
 }
 
+// Proves near-miss failure logs (failing-input lines, panics, other messages,
+// file:line prefixes, extra lines, wrong target or subtest headers, minimizing
+// output, exit status 2) fail without retry, and a passing target logging the
+// deadline text is not retried.
 func TestFuzzShDoesNotRetryNearMisses(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -755,6 +767,8 @@ cat <<'EOF'
 exit 0`
 }
 
+// Proves a first run that writes a new file under testdata/fuzz/<target>/ (in
+// an existing or newly created corpus directory) fails without retry.
 func TestFuzzShDoesNotRetryWhenNewCorpusFileAppears(t *testing.T) {
 	t.Run("existing_corpus_dir", func(t *testing.T) {
 		run := runIsolatedFuzzSh(t, "p", "FuzzCorpusNew", func(workRoot string) {
@@ -801,6 +815,10 @@ printf 'go test fuzz v1\n[]byte("boom")\n' > p/testdata/fuzz/FuzzCorpusFresh/cr0
 	})
 }
 
+// Proves corpus rewrites, removals, files behind symlinked directories,
+// newline-name replacements, and snapshot errors (broken symlink, symlink loop,
+// non-directory corpus path) block retry, while an unchanged corpus containing
+// a valid symlink still retries.
 func TestFuzzShDoesNotRetryOnCorpusChangesOrSnapshotErrors(t *testing.T) {
 	t.Run("existing_file_rewritten", func(t *testing.T) {
 		run := runIsolatedFuzzSh(t, "p", "FuzzTarget", func(workRoot string) {
@@ -942,6 +960,8 @@ printf 'crash\n' > p/testdata/fuzz/FuzzTarget/a/b`), nil)
 	})
 }
 
+// Proves fuzz.sh retries at most two targets by default and fails without
+// retrying a third target that hits the deadline signature.
 func TestFuzzShCapsRetriesAtTwoByDefault(t *testing.T) {
 	run := runFuzzSh(t, map[string]string{
 		"internal_pgwire__FuzzBackendSession.1.out": deadlineOut("FuzzBackendSession", "fuzz: elapsed: 2s, execs: 200 (100/sec)"),
@@ -989,6 +1009,8 @@ func TestFuzzShCapsRetriesAtTwoByDefault(t *testing.T) {
 	}
 }
 
+// Proves FUZZ_MAX_RETRIES=0 disables the deadline retry so the first matching
+// target fails at once.
 func TestFuzzShMaxRetriesZeroDisablesRetry(t *testing.T) {
 	run := runFuzzShEnv(t, map[string]string{
 		"internal_pgwire__FuzzFramer.1.out": deadlineOut("FuzzFramer", "fuzz: elapsed: 2s, execs: 200 (100/sec)"),
@@ -1013,6 +1035,8 @@ func TestFuzzShMaxRetriesZeroDisablesRetry(t *testing.T) {
 	}
 }
 
+// Proves fuzz.sh exits 2 when FUZZ_MAX_RETRIES is negative, non-numeric,
+// leading-zero, or non-integer.
 func TestFuzzShRejectsBadMaxRetries(t *testing.T) {
 	for _, v := range []string{"-1", "abc", "01", "2.5"} {
 		t.Run(v, func(t *testing.T) {
@@ -1024,6 +1048,8 @@ func TestFuzzShRejectsBadMaxRetries(t *testing.T) {
 	}
 }
 
+// Proves a retried target whose second run exits 0 without a readable rate
+// still fails closed as unreadable with retried=1.
 func TestFuzzShRetryUnreadableSecondRunFailsClosed(t *testing.T) {
 	run := runFuzzSh(t, map[string]string{
 		"internal_pgwire__FuzzFramer.1.out": deadlineOut("FuzzFramer", "fuzz: elapsed: 2s, execs: 4000 (2000/sec)"),
@@ -1045,6 +1071,8 @@ func TestFuzzShRetryUnreadableSecondRunFailsClosed(t *testing.T) {
 	}
 }
 
+// Proves gate.sh records fuzz_retries as null when G5 does not run and exits 2
+// on negative or overflowing FUZZ_MAX_RETRIES values.
 func TestGateShRecordsNullFuzzRetriesWhenG5SkippedAndRejectsBadMaxRetries(t *testing.T) {
 	root, err := filepath.Abs("..")
 	if err != nil {
@@ -1294,6 +1322,9 @@ func (g isolatedGateRepo) runGate(t *testing.T, extraEnv ...string) (int, string
 	return code, string(out), res
 }
 
+// Proves gate.sh with all other landing prerequisites satisfied sets
+// counts_for_landing to true for FUZZ_MAX_RETRIES 0..2 and false for 3 or
+// higher.
 func TestGateShLandingCapBlocksWidenedMaxRetriesAlone(t *testing.T) {
 	repo := newIsolatedGateRepo(t, map[string][]string{
 		"p": {"FuzzAlpha"},
@@ -1332,6 +1363,9 @@ exit 0`)
 	}
 }
 
+// Proves gate.sh counts fuzz_retries from column 6 of G5-fuzz.tsv so RETRY
+// lines, TSV retried flags, NOTE count, and result.json agree across distinct
+// target, seed-sweep, and retry totals.
 func TestGateShCountsFuzzRetriesFromColumnSix(t *testing.T) {
 	repo := newIsolatedGateRepo(t, map[string][]string{
 		"p":      {"FuzzAlpha", "FuzzBeta", "FuzzGamma"},
