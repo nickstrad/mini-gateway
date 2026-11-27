@@ -53,7 +53,11 @@ func long(t *testing.T) {
 }
 func run(t *testing.T, dir string, env []string, name string, args ...string) (string, error) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
+	limit := 150 * time.Second
+	if os.Getenv("ADV_LONG") == "1" {
+		limit = 9 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
 	c := exec.CommandContext(ctx, name, args...)
 	c.Dir = dir
@@ -68,7 +72,12 @@ func save(t *testing.T, text string) {
 	t.Helper()
 	p := filepath.Join(root, area, "evidence")
 	os.MkdirAll(p, 0755)
-	if e := os.WriteFile(filepath.Join(p, t.Name()+".log"), []byte(text), 0644); e != nil {
+	f, err := os.OpenFile(filepath.Join(p, t.Name()+".log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if _, e := f.WriteString(text); e != nil {
 		t.Fatal(e)
 	}
 }
@@ -105,7 +114,12 @@ func child(t *testing.T, changes map[string]string, inject, pattern string, real
 	if real {
 		env = append(env, "MG_TIER_R=1")
 	}
-	out, err := run(t, root, env, "go", "test", "-count="+fmt.Sprint(count), "-timeout=140s", "./test/e2e", "-run", pattern, "-v")
+	out, err := run(t, root, env, "go", "test", "-count="+fmt.Sprint(count), "-timeout="+func() string {
+		if os.Getenv("ADV_LONG") == "1" {
+			return "8m"
+		}
+		return "140s"
+	}(), "./test/e2e", "-run", pattern, "-v")
 	save(t, out)
 	return out, err
 }
@@ -137,15 +151,26 @@ func TestAdv_2_AlwaysLargeSecret(t *testing.T) { live(t, "AlwaysLargeSecret") }
 func TestAdv_2_OnSwitchImmediate(t *testing.T) { live(t, "OnSwitchImmediate") }
 func TestAdv_2_OnSwitchReseed(t *testing.T)    { live(t, "OnSwitchReseed") }
 
-func blind(t *testing.T, input string) {
+var blindOnce sync.Once
+var blindOut string
+var blindErr error
+
+func blind(t *testing.T, name string) {
 	begin(t)
-	inject := `func TestProbeBlind(t *testing.T) { r:=sessionResult{columns: []string{"prepared","cursors","listens","adv_locks","session_gucs","temp_rels","role_changed"},moved:make([]int,7)}; r.observe([]string{"0","0","0","0","0","0","f"},` + input + `); for i,n:=range r.moved {if n!=0 {t.Errorf("column %s falsely counted as exercised (%d) by invalid observation",r.columns[i],n)}} }`
-	out, e := child(t, nil, inject, "^TestProbeBlind$", false, 1)
-	expect(t, out, e, false, "--- PASS: TestProbeBlind")
+	blindOnce.Do(func() {
+		inject := `func advBlind(t *testing.T, got []string) {r:=sessionResult{columns: []string{"prepared","cursors","listens","adv_locks","session_gucs","temp_rels","role_changed"},moved:make([]int,7)}; r.observe([]string{"0","0","0","0","0","0","f"},got); for i,n:=range r.moved {if n!=0 {t.Errorf("column %s falsely counted as exercised (%d) by invalid observation",r.columns[i],n)}}}
+func TestProbeBlindError(t *testing.T){advBlind(t,[]string{"E:42501","ZI"})}
+func TestProbeBlindEmpty(t *testing.T){advBlind(t,nil)}
+func TestProbeBlindTruncated(t *testing.T){advBlind(t,[]string{"D:0|0|0","ZI"})}`
+		blindOut, blindErr = child(t, nil, inject, "^TestProbeBlind", false, 1)
+	})
+	if !strings.Contains(blindOut, "--- PASS: TestProbeBlind"+name+" ") {
+		t.Fatalf("invalid observation was counted as movement (%v):\n%s", blindErr, blindOut)
+	}
 }
-func TestAdv_3_ErrorIsNotMovement(t *testing.T)     { blind(t, `[]string{"E:42501", "Z:I"}`) }
-func TestAdv_3_EmptyIsNotMovement(t *testing.T)     { blind(t, `nil`) }
-func TestAdv_3_TruncatedIsNotMovement(t *testing.T) { blind(t, `[]string{"D:0|0|0", "Z:I"}`) }
+func TestAdv_3_ErrorIsNotMovement(t *testing.T)     { blind(t, "Error") }
+func TestAdv_3_EmptyIsNotMovement(t *testing.T)     { blind(t, "Empty") }
+func TestAdv_3_TruncatedIsNotMovement(t *testing.T) { blind(t, "Truncated") }
 
 func omitSetup(t *testing.T, kind string) {
 	long(t)

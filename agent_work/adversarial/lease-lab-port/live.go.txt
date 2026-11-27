@@ -1,4 +1,4 @@
-func advQuery(t *testing.T,c *RealClient,q string) []string {t.Helper();r:=c.Query(q);if HasToken(r,"E:")||!HasToken(r,"Z:"){t.Fatalf("query %q: %v",q,r)};return r}
+func advQuery(t *testing.T,c *RealClient,q string) []string {t.Helper();r:=c.Query(q);if HasToken(r,"E:")||!HasToken(r,"Z"){t.Fatalf("query %q: %v",q,r)};return r}
 func advDial(t *testing.T,env *RealEnv,g *Gateway,tenant int)*RealClient{t.Helper();c,e:=env.Dial(g,tenant,false);if e!=nil{t.Fatal(e)};t.Cleanup(c.Close);return c}
 func advLive(t *testing.T,ending,policy,reseed string,large bool){
  t.Log("seed=271828")
