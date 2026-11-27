@@ -62,10 +62,13 @@ func (OldestFirst) Pick(_ Time, active []TenantView) int {
 }
 
 type popped struct {
-	t    *tenantQueue
-	e    entry
-	back bool
-	ok   bool
+	t       *tenantQueue
+	e       entry
+	back    bool
+	ok      bool
+	emptied bool
+	emptyAt Time
+	rule    ruleState
 }
 
 type Queues struct {
@@ -107,7 +110,7 @@ func New(cfg Config) (*Queues, error) {
 		return nil, err
 	}
 	return &Queues{cfg: cfg, dispatcher: OldestFirst{}, byName: make(map[string]*tenantQueue), where: make(map[int64]*tenantQueue),
-		stats: make(map[string]*tenantStats), pending: make([]Shed, 0, cfg.Capacity+maxPendingShedPad),
+		stats: make(map[string]*tenantStats), pending: make([]Shed, 0, pendingCap(cfg)),
 		hist: obs.NewDurationHistogram()}, nil
 }
 
@@ -226,7 +229,18 @@ func (q *Queues) shedEntry(t *tenantQueue, e entry, now Time, r Reason) {
 	q.total--
 	q.count(t.stats, r)
 	t.shedAt, t.hasShed = now, true
+	q.compactPending()
 	q.pending = append(q.pending, Shed{ID: e.id, Tenant: t.name, Reason: r, Wait: now - e.enq})
+}
+
+func (q *Queues) compactPending() {
+	if q.pendHead == 0 || len(q.pending) < cap(q.pending) {
+		return
+	}
+	n := copy(q.pending, q.pending[q.pendHead:])
+	clear(q.pending[n:])
+	q.pending = q.pending[:n]
+	q.pendHead = 0
 }
 
 func (q *Queues) count(s *tenantStats, r Reason) {
@@ -242,7 +256,12 @@ func (q *Queues) statsFor(name string) *tenantStats {
 	}
 	if len(q.statsList) >= MaxTenantStats {
 		if q.other == nil {
+			q.other = q.stats[OtherTenant]
+		}
+		if q.other == nil {
 			q.other = q.newStats(OtherTenant)
+			q.stats[OtherTenant] = q.other
+			q.statsList = append(q.statsList, q.other)
 		}
 		return q.other
 	}
@@ -279,7 +298,7 @@ func (q *Queues) tenantFor(now Time, name string) *tenantQueue {
 	t.rule = newRule(q.cfg, now)
 	t.emptyAt = now
 	t.lastOverload = 0
-	t.gauge = loadGauge{target: q.cfg.Target, interval: q.cfg.Interval, intervalEnd: now, reset: true}
+	t.gauge = loadGauge{target: q.cfg.Target, interval: q.cfg.Interval, intervalEnd: now + q.cfg.Interval, reset: true}
 	t.stats = q.statsFor(name)
 	q.list = append(q.list, t)
 	q.byName[name] = t
@@ -313,7 +332,7 @@ func (q *Queues) refuse(name string, r Reason) bool {
 
 func (q *Queues) Push(now Time, tenant string, id int64) bool {
 	q.advance(now)
-	if q.Pending() >= cap(q.pending)-1 {
+	if q.Pending() >= pendingRefuseAt(q.cfg) {
 		return q.refuse(tenant, ReasonUndrained)
 	}
 	if _, dup := q.where[id]; dup {
@@ -325,15 +344,12 @@ func (q *Queues) Push(now Time, tenant string, id int64) bool {
 	}
 	q.c.pushes++
 	t.stats.pushes++
+	wasEmpty := t.empty()
 	if t.ring.full() {
 		q.shedEntry(t, t.ring.popFront(), now, ReasonOverflow)
-		if t.empty() {
-			q.emptied(t, now)
-		}
 	} else if q.total >= q.cfg.Capacity {
-		q.shedOldest(now)
+		q.shedOldest(now, t)
 	}
-	wasEmpty := t.empty()
 	q.seq++
 	t.ring.pushBack(entry{id: id, enq: now, seq: q.seq})
 	q.where[id] = t
@@ -344,7 +360,7 @@ func (q *Queues) Push(now Time, tenant string, id int64) bool {
 	return true
 }
 
-func (q *Queues) shedOldest(now Time) {
+func (q *Queues) shedOldest(now Time, arriving *tenantQueue) {
 	var oldest *tenantQueue
 	for _, t := range q.list {
 		if !t.empty() && (oldest == nil || t.ring.front().seq < oldest.ring.front().seq) {
@@ -355,7 +371,7 @@ func (q *Queues) shedOldest(now Time) {
 		return
 	}
 	q.shedEntry(oldest, oldest.ring.popFront(), now, ReasonTotal)
-	if oldest.empty() {
+	if oldest.empty() && oldest != arriving {
 		q.emptied(oldest, now)
 	}
 }
@@ -393,6 +409,7 @@ func (q *Queues) Pop(now Time) (int64, bool) {
 		t.gauge.observe(now, wait)
 		q.lastPop = popped{t: t, e: e, back: back, ok: true}
 		if t.empty() {
+			q.lastPop.emptied, q.lastPop.emptyAt, q.lastPop.rule = true, t.emptyAt, saveRule(t.rule)
 			q.emptied(t, now)
 		}
 		return e.id, true
@@ -428,6 +445,10 @@ func (q *Queues) Unpop() bool {
 		p.t.ring.pushBack(p.e)
 	} else {
 		p.t.ring.pushFront(p.e)
+	}
+	if p.emptied {
+		p.t.emptyAt = p.emptyAt
+		restoreRule(p.t.rule, p.rule)
 	}
 	q.where[p.e.id] = p.t
 	q.total++

@@ -88,8 +88,8 @@ func (s Snapshot) Check() error {
 	var depth, pushes, served, removed int64
 	var shed [NumReasons]int64
 	for _, t := range s.PerTenant {
-		if t.Depth > s.TenantCapacity {
-			return fmt.Errorf("admission: tenant %q depth %d above %d", t.Tenant, t.Depth, s.TenantCapacity)
+		if limit := s.depthLimit(t.Tenant); t.Depth > limit {
+			return fmt.Errorf("admission: tenant %q depth %d above %d", t.Tenant, t.Depth, limit)
 		}
 		depth += t.Depth
 		pushes += t.Pushes
@@ -104,6 +104,13 @@ func (s Snapshot) Check() error {
 			depth, pushes, served, removed, shed, s.Queued.Value, s.Pushes, s.Served, s.Removed, s.Shed)
 	}
 	return nil
+}
+
+func (s Snapshot) depthLimit(tenant string) int64 {
+	if tenant == OtherTenant {
+		return s.Capacity
+	}
+	return s.TenantCapacity
 }
 
 func (q *Queues) Snapshot() Snapshot {
@@ -137,11 +144,7 @@ func (q *Queues) Snapshot() Snapshot {
 			s.Shedding++
 		}
 	}
-	all := slices.Clone(q.statsList)
-	if q.other != nil {
-		all = append(all, q.other)
-	}
-	for _, st := range all {
+	for _, st := range q.statsList {
 		s.LIFOOn += st.lifoOn
 		s.LIFOOff += st.lifoOff
 		ts := TenantSnapshot{Tenant: st.name, LIFOOn: st.lifoOn, LIFOOff: st.lifoOff, Pushes: st.pushes, Served: st.served,
@@ -175,9 +178,6 @@ func (q *Queues) light() Snapshot {
 	}
 	for _, st := range q.statsList {
 		add(st)
-	}
-	if q.other != nil {
-		add(q.other)
 	}
 	return s
 }

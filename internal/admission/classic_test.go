@@ -67,9 +67,6 @@ func TestFirstBurstAfterIdleGetsTheIntervalNotTheShortTarget(t *testing.T) {
 
 func TestCanaryFirstBurstBugShedsTheFirstBurst(t *testing.T) {
 	cfg := Config{Rule: RuleTimeout, LIFO: LIFOOff, Plant: PlantFirstBurst}
-	q := mustNew(t, cfg)
-	q.Push(Millisecond, "a", 99)
-	q.Pop(Millisecond)
 	r := burstAfterIdle(t, cfg, 2*Second, 10, 9*Millisecond)
 	if len(r.shed) == 0 {
 		t.Fatal("with lastEmpty updated only at dequeue the first burst must get the short target and be shed")
