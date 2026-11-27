@@ -25,12 +25,17 @@ run() {
     || { tail -n 20 "$1/h2h.log" >&2; echo "admission-head-to-head: the scenarios failed" >&2; exit 1; }
 }
 
+sql_string() {
+  local q="'"
+  printf "'%s'" "${1//$q/$q$q}"
+}
+
 table() {
   local runs=() d m='' h='' r=''
   for d in "$1"/admission-h2h-l*/*/*; do [ -f "$d/run.csv" ] && runs+=("$d"); done
   [ ${#runs[@]} -gt 0 ] || { echo "admission-head-to-head: no admission-h2h runs under $1" >&2; exit 1; }
   for d in "${runs[@]}"; do
-    m="$m${m:+, }'$d/metrics.csv'"; h="$h${h:+, }'$d/histograms.csv'"; r="$r${r:+, }'$d/run.csv'"
+    m="$m${m:+, }$(sql_string "$d/metrics.csv")"; h="$h${h:+, }$(sql_string "$d/histograms.csv")"; r="$r${r:+, }$(sql_string "$d/run.csv")"
   done
   { printf "SET VARIABLE metrics_files = [%s];\nSET VARIABLE histograms_files = [%s];\nSET VARIABLE run_files = [%s];\n" "$m" "$h" "$r"
     cat test/analysis/views.sql "$dir/head-to-head.query"; } | duckdb -batch -bail -markdown :memory:
