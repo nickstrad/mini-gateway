@@ -3,9 +3,11 @@
 Written by Fable on 2026-11-26. Plan: [../LEASE-EXPERIMENT-PLAN.md](../LEASE-EXPERIMENT-PLAN.md).
 Stage 0: [CALIBRATION-NOTE.md](CALIBRATION-NOTE.md). Scope: the narrowed form Nick ruled on
 2026-11-25 (`/root/briefs/zgateway-lease-stages13-ruling.md`). Chunk 5 stays parked; PLAN.md
-and product code are unchanged. Lab code is on the local, unpushed branch `exp/lease-lab`
-(`5ffc7a3`). Every number below comes from a table or log under [e7/](e7/); the section
-headings name the file.
+and product code are unchanged. Lab code was on the local, unpushed branch `exp/lease-lab`
+(`5ffc7a3`), which was deleted after the port of `agent_work/chunks/lease-lab-port/`; its
+notes and reviews are in [lab-records/](lab-records/) and its report SQL in
+[report-sql/](report-sql/). Every number below comes from a table or log under [e7/](e7/);
+the section headings name the file.
 
 ## Summary
 
@@ -141,8 +143,12 @@ Simulator, cap 20, goodput at 120% offered load:
 | remake-always | 174/s | 174/s |
 
 - The plan's formula S/(S+r) was wrong for short leases (predicted 74%, measured 79%). A
-  lease holds its connection for two round trips beyond S; the corrected formula is in
-  `NOTES-E3.md` on the lab branch and fits within 1%.
+  lease holds its connection for h0 = S + 2 round trips + 21 µs, and a reset adds
+  r = round trip + 89 µs, so the ceiling is cap / (h0 + resets per lease × r + connects per
+  lease × (close lag + connect + fresh-backend penalty)), and the reset/baseline ratio is
+  h0/(h0 + r): 79.7% for short leases against 79.1–79.4% measured (plan 73.9%). Every measured
+  ceiling at 120% load is within 1% of it ([lab-records/NOTES-E3.md](lab-records/NOTES-E3.md),
+  section 3 item 6 and section 7 item 4).
 - The remake rows are consistency checks, not independent predictions: they confirm the run
   sits at the connect ceiling.
 - On real Postgres the baseline's capacity was 2,902 leases/s (median of four saturated ramp
