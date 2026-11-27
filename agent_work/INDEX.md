@@ -180,3 +180,13 @@ Record: `chunks/c06a-operator-tools/` (brief, notes with the promotion ledger, g
 | `../scripts/sweep.sh`, `../scripts/chaos.sh` (changed) | Concise by default (one line per scenario, failures with their REPLAY lines), `VERBOSE=1` raw; `SWEEP_GO`, `CHAOS_GO` test seams | Opus (helper agent) | `scripts/c06a_report_scripts_test.go` green |
 | `../docs/knowledge/operator-tools.md` | Facts for later builders: the load tool's core and runner, mgctl's surface, the dev stack, the report's SQL placement | Opus | — |
 | `chunks/c06a-operator-tools/gate/extra.sh` | G10: the load tool and mgctl packages in full (binary differential, cross-process repeatability, canary), the mgctl tier S model, the report and script tests with DuckDB required | Opus | — |
+## Phase 2, chunk 8 — admission queues (Opus, 2026-11-27)
+
+Record: `chunks/c08-admission/` (brief, notes, gate extra).
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../scripts/admission-head-to-head.sh` | Prints the admission head-to-head table (one DuckDB query, `test/analysis/admission-head-to-head/head-to-head.sql`) over a root of flushed runs; `--run [root]` runs the scenarios first; `--check` reruns them and diffs with the committed `head-to-head.md` | Opus | Table reproduced from seed 1 (both rules, both arms, 1.2×/2×/10×) |
+| `../scripts/fuzz-plant.sh` (changed) | Also plants `admission.PlantRemoveSwapsTail` (`MG_FUZZ_PLANT=admission-remove-order`) and requires `FuzzAdmissionOps` to find it within `FUZZ_SECONDS` | Opus | Found after 7 s of 20 s (empty cache) |
+| `chunks/c08-admission/gate/extra.sh` | G10: `fuzz-plant.sh` and `admission-head-to-head.sh --check` | Opus | — |
+| `../docs/knowledge/admission-queues.md` | Facts for chunks 9, 10, 13, 14: the core API, the seam, plants, the dispatcher hook, scenario cost | Opus | — |
