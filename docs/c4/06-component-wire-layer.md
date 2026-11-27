@@ -1,6 +1,6 @@
 # C4 Level 3: Components: wire layer
 
-**Built so far: chunks 0–6. Dashed parts are planned.** In this diagram 20 of 23 elements and 49 of 52 relationships are built. Model: diagram `component-wire` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–6a. Dashed parts are planned.** In this diagram 20 of 23 elements and 49 of 52 relationships are built. Model: diagram `component-wire` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 pgproto3 provides message structs and nothing else. The framer, session machines, SCRAM, transaction tracking, classification, and error mapping are ours. Everything here is a pure state machine or a pure function. Chunk 4 built the sessions, and chunk 5 built the classifier and the contracts. Because the pool will reset every connection after every lease, session safety does not depend on reading SQL, so the reject list is a courtesy. A recogniser that does not use the lexer decides what may be shared. The machines, trackers, and reply builders code their messages by hand, so no file in the package imports pgproto3 and the codec boundary has no caller yet. Since chunk 6 the engine drives this code. The two test proxies remain as the wire layer's own scenarios in the simulator, between simulated clients and the fake Postgres.
 

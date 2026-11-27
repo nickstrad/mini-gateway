@@ -9,13 +9,13 @@ The set covers three C4 levels plus a deployment view: system context, container
 ## Diagrams
 
 <!-- diagram-table:start -->
-**Built so far: chunks 0–6. Dashed parts are planned.** The Built column counts the elements of each diagram that exist in the code.
+**Built so far: chunks 0–6a. Dashed parts are planned.** The Built column counts the elements of each diagram that exist in the code.
 
 | # | Level | File | Built | Shows |
 | --- | --- | --- | --- | --- |
 | 1 | System context | [01-system-context.md](01-system-context.md) | 5 of 7 | mini-gateway, its clients, its operator, the one Postgres behind it, the readers of its metrics, and its one external library |
 | 2 | Containers | [02-container-request-path.md](02-container-request-path.md) | 4 of 13 | The Go packages inside one mini-gateway process and how a request passes through them |
-| 3 | Containers | [03-container-drivers-and-seams.md](03-container-drivers-and-seams.md) | 5 of 13 | Who drives the engine (the shell or the simulator), where the Postgres codec boundary is, and the work vocabulary the cores are written against |
+| 3 | Containers | [03-container-drivers-and-seams.md](03-container-drivers-and-seams.md) | 8 of 18 | Who drives the engine (the shell or the simulator), where the Postgres codec boundary is, the work vocabulary the cores are written against, and the operator tools that drive a running gateway |
 | 4 | Deployment | [04-deployment-fleet.md](04-deployment-fleet.md) | 0 of 10 | The supported multi-instance deployment: static fleet config, per-instance enforcement, no run-time coordination |
 | 5 | Components | [05-component-engine.md](05-component-engine.md) | 12 of 21 | internal/proxy: the transport seam and its simulator driver, the two connection tables, the request pipeline and its stage seams, the lease end with its reset, the reply relay, the failure classifier, deadlines, the snapshot |
 | 6 | Components | [06-component-wire-layer.md](06-component-wire-layer.md) | 20 of 23 | internal/pgwire: our framer and message coding, both session machines, SCRAM, the two trackers, the wire snapshot, the SQL lexer, the classifier with its courtesy reject list, the safe-shape recogniser, the error contract and reply builders, the test proxies and their scenarios; planned: the pgproto3 codec boundary |
@@ -24,7 +24,7 @@ The set covers three C4 levels plus a deployment view: system context, container
 | 9 | Components | [09-component-coalescer.md](09-component-coalescer.md) | 1 of 9 | internal/coalesce: the join rule, the flight table, waiters, the flight's own deadline, the shared reply |
 | 10 | Components | [10-component-retry.md](10-component-retry.md) | 1 of 7 | internal/retry: the policy interface, its two policies, the budget |
 | 11 | Components | [11-component-simulator.md](11-component-simulator.md) | 19 of 22 | internal/sim and its sub-packages, internal/testclient and internal/randdist: the loop, the clock, simulated byte streams, the simulated TLS handshake, the fake Postgres, simulated clients, the test client, the scenario world with its baselines and fidelity runner, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol |
-| 12 | Components | [12-component-observability.md](12-component-observability.md) | 24 of 32 | internal/obs: the one raw export (snapshots), the metric registry, the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus |
+| 12 | Components | [12-component-observability.md](12-component-observability.md) | 26 of 34 | internal/obs: the one raw export (snapshots), the metric registry, the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests, DuckDB and the story report, and OTLP to a Collector to Prometheus |
 <!-- diagram-table:end -->
 
 ## Where each required part is drawn
@@ -41,17 +41,18 @@ The set covers three C4 levels plus a deployment view: system context, container
 | Simulator harness | 3, 11 |
 | Observability: snapshot → collector → exporters | 2, 12 |
 | Horizontal scale: static fleet config, three instances | 4 |
+| Operator tools (chunk 6a): the client `mgctl`, the load generator, the dev stack with its run targets, the story report | 3, 12 |
 
 ## Format
 
-- [gen.py](gen.py) is the source for this directory. It defines elements, relationships, and diagrams in tables and generates every other file here when run. Edit `gen.py`, not the generated files. What is built lives in one place, the AS BUILT block at the top of the file: `LANDED` names the last landed chunk, `BUILT` maps each built element to its chunk, `PARTIAL` records what exists so far for a partly built element, and `REL_BUILT` lists exceptions to the rule that a relationship is built when both of its ends are.
+- [gen.py](gen.py) is the source for this directory. It defines elements, relationships, and diagrams in tables and generates every other file here when run. Edit `gen.py`, not the generated files. What is built lives in one place, the AS BUILT block at the top of the file: `LANDED` names the last landed chunk (with `LANDED_LETTER` for a lettered chunk such as 6a, which is then written `"6a"` in the tables), `BUILT` maps each built element to its chunk, `PARTIAL` records what exists so far for a partly built element, and `REL_BUILT` lists exceptions to the rule that a relationship is built when both of its ends are.
 - [model.json](model.json) holds the full C4 model — every element, relationship, and diagram — as a `c4-sdk` bundle (`schemaVersion: 1`). It uses the SDK's statuses: `existing` for built items, `planned` for the rest, and `mixed` for a diagram that contains both.
 - Each diagram page contains a Mermaid diagram, an element table, and a numbered relationship table whose row numbers match the edge numbers in the diagram. Solid boxes and arrows represent built parts, dashed ones represent planned parts, and every diagram includes a key. Arrows point to the supplier. An arrow marked "implements" means the source implements the target's interface. Both tables have a Status column showing `built (chunk N)` or `planned`. A partly built element stays `planned`, and its row notes what exists so far.
 - [diagrams/](diagrams/) holds the Mermaid sources, one per diagram.
 
 ## Model notes
 
-1. **Containers are Go packages** inside one `mini-gateway` process, except the simulator harness and the end-to-end suite, which are test code in the same repository.
+1. **Containers are Go packages** inside one `mini-gateway` process, except the simulator harness and the end-to-end suite, which are test code in the same repository, and the operator tools of chunk 6a: `mgctl` and the load generator are binaries of their own, and the dev stack is scripts and a docker-compose file.
 2. **Neighbour elements.** `c4-sdk` 0.1.0 allows a container in another container's component view only if that element is tagged `external`, and tags belong to the element rather than the view. Each container therefore has a twin with the id prefix `n-`, tagged `external` and `neighbour`, that appears only in component views. In the page tables, the twin displays the real container's description.
 3. **Deployment instances** are instances of the container "Shell and binary", which stands for the whole process.
 4. **Terminal (Unicode) renderings** of these diagrams are not included in this first set; see the open item in STATE.md.

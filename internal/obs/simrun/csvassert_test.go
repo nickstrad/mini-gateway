@@ -84,6 +84,9 @@ func baselineRuns(t *testing.T) string {
 		if baselineErr == nil {
 			baselineErr = engineRuns(dir)
 		}
+		if baselineErr == nil {
+			baselineErr = loadgenRuns()
+		}
 	})
 	if baselineErr != nil {
 		t.Fatal(baselineErr)

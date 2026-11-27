@@ -223,6 +223,24 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `fakepg` | `write_log_dropped` | counter | — | count | sum | Write log entries not kept. |
 | `fakepg` | `write_log_len` | gauge | — | count | sum | Entries held in the write log. |
 | `fakepg` | `writes_applied` | counter | — | count | sum | Writes applied to the table. |
+| `loadgen` | `completed` | counter | outcome | count | sum | Sent requests by final outcome (ok, db-error, refused, lost). |
+| `loadgen` | `connect_failures` | counter | — | count | sum | Load connections that failed to connect or log in. |
+| `loadgen` | `conns_open` | gauge | — | count | sum | Load connections open now. |
+| `loadgen` | `could_not_send` | counter | — | count | sum | Intended requests that were never sent (no free connection, connection lost, run ended). |
+| `loadgen` | `errors_by_class` | counter | reason (open: no row until a value exists) | count | sum | Error replies by SQLSTATE class (reason, two characters). |
+| `loadgen` | `in_flight` | gauge | — | count | sum | Requests written and not yet answered. |
+| `loadgen` | `intended` | counter | — | count | sum | Requests whose intended send time has come. |
+| `loadgen` | `late` | counter | — | count | sum | Sent requests written later than the late threshold after their intended send time. |
+| `loadgen` | `latency` | histogram | — | ns | by bucket | Request latency from the intended send time to the end of the reply. |
+| `loadgen` | `latency_clamped_high` | counter | — | count | sum | Values recorded into latency above its range, clamped to the highest bucket. |
+| `loadgen` | `latency_clamped_low` | counter | — | count | sum | Values recorded into latency below its range, clamped to the lowest bucket. |
+| `loadgen` | `latency_from_send` | histogram | — | ns | by bucket | Request latency from the actual send (coordinated-omission control). |
+| `loadgen` | `latency_from_send_clamped_high` | counter | — | count | sum | Values recorded into latency_from_send above its range, clamped to the highest bucket. |
+| `loadgen` | `latency_from_send_clamped_low` | counter | — | count | sum | Values recorded into latency_from_send below its range, clamped to the lowest bucket. |
+| `loadgen` | `planned` | gauge | — | count | sum | Requests in the load plan (rate times duration). |
+| `loadgen` | `queued` | gauge | — | count | sum | Requests given to a connection and not yet written. |
+| `loadgen` | `sent` | counter | — | count | sum | Requests written to a connection. |
+| `loadgen` | `target_rate` | gauge | — | count | sum | Target rate of the load plan, requests per second. |
 | `obs` | `adapter_failing` | gauge | reason (open: no row until a value exists) | count | sum | 1 while the adapter's latest export failed, else 0; reason is the adapter name. |
 | `obs` | `adapters` | gauge | — | count | sum | Adapters attached to the collector. |
 | `obs` | `csv_bytes_written` | gauge | — | bytes | sum | Bytes written to the CSV run directory. |

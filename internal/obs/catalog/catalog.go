@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/nickstrad/mini-gateway/internal/loadgen"
 	"github.com/nickstrad/mini-gateway/internal/obs"
 	"github.com/nickstrad/mini-gateway/internal/obs/clssrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/csvflush"
@@ -39,6 +40,9 @@ func Registry() (*obs.Registry, error) {
 		if err := reg.Declare(d.Component, d.Metrics...); err != nil {
 			return nil, err
 		}
+	}
+	if err := reg.Declare(obs.ComponentLoadgen, loadgen.Metrics()...); err != nil {
+		return nil, err
 	}
 	return &reg, nil
 }

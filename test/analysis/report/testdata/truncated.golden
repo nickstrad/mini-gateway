@@ -1,0 +1,153 @@
+# Story report
+
+1. What the runs prove
+
+Each claim below is checked over the flushed files; the verdict table (section 7) says whether it held.
+An assertion checks one component's own numbers; an oracle check compares the proxy's numbers with an
+independent record (the simulated clients, the fake Postgres or the load tool).
+
+The report's structural checks:
+- DuckDB: DuckDB is installed and is the pinned family 1.5.x (it reads the files)
+- arguments: every argument is an existing directory
+- runs: at least one run directory was found at or below every directory argument
+- finished: every run directory has run.csv (the run finished)
+- files: every run directory has metrics.csv and histograms.csv
+- schema header: every file starts with the schema version 1 header
+- schema guard: the complete runs pass test/analysis/guard.sql: schema version 1 in every row, no empty required field, one run.csv row and a distinct run id per directory, metric rows in every run, and every flush run.csv declares is in metrics.csv
+
+Scenario e2e-queue-full:
+- every metric its checks require is in the final flush of every run
+- oracle completed.sql: e2e-queue-full: two components, one query: the proxy received exactly the requests the clients sent, and the requests it completed (relayed to their end marker) are the clients' successes plus the errors the database itself returned.
+- assertion conservation.sql: e2e-queue-full: conservation per instance from the exported counters: received = accepted + rejected, accepted = completed + failed + shed, and queued and in flight are 0 in the final flush; something was received.
+- assertion faults.sql: e2e-queue-full: more clients than connections plus queue: exactly the three over the bound were shed (53M01).
+- assertion resets.sql: e2e-queue-full: resets completed + resets failed + connections closed at release + connections lent as is = leases ended = leases started; resets started = leases ended with a reset; nothing is resetting in the final flush.
+- oracle rows.sql: e2e-queue-full: every proxy-made error a client saw is counted under its error-contract row, and every counted row for a request reached a client: shed = 53M01, unsupported-feature + unsupported-extended = 0A000, lost-after-read = 08006, lost-after-write = 08007.
+
+2. How the data was collected
+
+- Tiers: S (simulator: the real engine on the event loop with the fake Postgres and simulated clients), 2 runs, 4 flushes.
+- Schema version: 1 (every file header and every row; any other version fails the report).
+- Runs: 2 complete run directories of 3 found under 1 argument(s), 1 scenarios; 4 flushes in all, 2 to 2 per run; 1 to 1 instances per run.
+- Rows: 2508 metric rows and 88 histogram bucket rows.
+- Components in the final flushes: classifier, engine, fakepg, obs, sim, simnet, wire, workload.
+- Source: each run directory holds the CSV flush of PLAN.md section 7.7 (metrics.csv, histograms.csv, run.csv;
+  rows appended at every publish interval and once more at the end, run.csv written last). The files are read
+  with DuckDB 1.5.x through test/analysis/views.sql; "final flush" is the last flush_seq of a run. A run's
+  scenario is the scenario column of its run.csv.
+
+3. Inputs
+
+| scenario       | tier | runs | seeds | arms | flushes | instances |
+|----------------|------|------|-------|------|---------|-----------|
+| e2e-queue-full | S    | 2    | 1-2   | base | 4       | 1         |
+
+Legend: one row per scenario (run.csv scenario), aggregated over its runs. tier: S simulator, R real, bench.
+runs: complete run directories. seeds: lowest-highest seed. arms: the arms present. flushes: flushes written,
+summed over the runs. instances: instances per run (the distinct values).
+
+4. Coverage by scenario, statement class and outcome
+
+4.1 Proxy requests by outcome (engine)
+
+| scenario       | outcome   | total | runs   |
+|----------------|-----------|-------|--------|
+| e2e-queue-full | received  | 24    | 2 of 2 |
+| e2e-queue-full | accepted  | 24    | 2 of 2 |
+| e2e-queue-full | completed | 18    | 2 of 2 |
+| e2e-queue-full | failed    | 0     | 0 of 2 |
+| e2e-queue-full | shed      | 6     | 2 of 2 |
+| e2e-queue-full | rejected  | 0     | 0 of 2 |
+
+Legend: engine requests_<outcome> in the final flush, summed over the scenario's runs. received = accepted + rejected; accepted = completed + failed + shed. runs: runs where it is not 0, of the scenario's runs. Every outcome is shown.
+
+4.2 Proxy-made replies by error-contract row (engine replies)
+
+| scenario       | error-contract row | total | runs   |
+|----------------|--------------------|-------|--------|
+| e2e-queue-full | shed               | 6     | 2 of 2 |
+
+Legend: engine replies by reason, the row of the error contract (docs/error-contract.md) the proxy answered with. Rows that are 0 in every run are left out.
+
+4.3 Statements by class (classifier statements_by_class)
+
+| scenario       | class       | total | runs   |
+|----------------|-------------|-------|--------|
+| e2e-queue-full | start-lease | 24    | 2 of 2 |
+
+Legend: Query messages the classifier classified, by statement class (the outcome label). Classes that are 0 in every run are left out.
+
+4.4 Statements refused by the reject list (classifier rejects)
+
+(no rows: no run exports it)
+
+Legend: Query messages refused by the reject list, by reason. Reasons that are 0 in every run are left out.
+
+4.5 Simulated clients: requests by outcome (workload requests)
+
+| scenario       | outcome | total | runs   |
+|----------------|---------|-------|--------|
+| e2e-queue-full | error   | 6     | 2 of 2 |
+| e2e-queue-full | ok      | 18    | 2 of 2 |
+
+Legend: What the simulated clients saw, the independent record the oracle checks compare the proxy with. Outcomes that are 0 in every run are left out.
+
+4.6 Simulated clients: errors by SQLSTATE (workload errors_by_code)
+
+| scenario       | SQLSTATE | total | runs   |
+|----------------|----------|-------|--------|
+| e2e-queue-full | 53M01    | 6     | 2 of 2 |
+
+Legend: Error replies the simulated clients received, by SQLSTATE. Codes that are 0 in every run are left out.
+
+4.7 Load tool: what was intended and what was sent (loadgen)
+
+(no rows: no run exports it)
+
+Legend: The load tool's own counters in the final flush. achieved on time = sent - late, to read against intended; a shortfall run is one with late + could_not_send > 0 (informative, not a check). queued and in_flight are gauges. Every value is shown.
+
+4.8 Load tool: sent requests by final outcome (loadgen completed)
+
+(no rows: no run exports it)
+
+Legend: ok, db-error (the database answered with an error), refused (the proxy answered with an error), lost (no answer). Every outcome is shown.
+
+4.9 Load tool: error replies by SQLSTATE class (loadgen errors_by_class)
+
+(no rows: no run exports it)
+
+Legend: Error replies by the two-character SQLSTATE class. Classes that are 0 in every run are left out.
+
+5. Failed assertions, in full
+
+- structure: finished
+  claim: every run directory has run.csv (the run finished)
+  1 items:
+    e2e-queue-full/3/base: no run.csv (the run did not finish)
+
+6. Oracle mismatches, in full
+
+None.
+
+7. Verdict
+
+| check                            | claim                                                                                                                                                                                                                                                                   | observed                     | expected                         | pass |
+|----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------|----------------------------------|------|
+| structure: DuckDB                | DuckDB is installed and is the pinned family 1.5.x (it reads the files)                                                                                                                                                                                                 | 1.5.x                        | 1.5.x                            | PASS |
+| structure: arguments             | every argument is an existing directory                                                                                                                                                                                                                                 | 1 of 1                       | 1 of 1                           | PASS |
+| structure: runs                  | at least one run directory was found at or below every directory argument                                                                                                                                                                                               | 3 runs; 1 of 1 arguments     | at least 1 run; 1 of 1 arguments | PASS |
+| structure: finished              | every run directory has run.csv (the run finished)                                                                                                                                                                                                                      | 2 of 3                       | 3 of 3                           | FAIL |
+| structure: files                 | every run directory has metrics.csv and histograms.csv                                                                                                                                                                                                                  | 3 of 3                       | 3 of 3                           | PASS |
+| structure: schema header         | every file starts with the schema version 1 header                                                                                                                                                                                                                      | 8 of 8 files                 | 8 of 8 files                     | PASS |
+| structure: schema guard          | the complete runs pass test/analysis/guard.sql: schema version 1 in every row, no empty required field, one run.csv row and a distinct run id per directory, metric rows in every run, and every flush run.csv declares is in metrics.csv                               | 0 violations over 2 runs     | 0 violations                     | PASS |
+| e2e-queue-full/completed.sql     | e2e-queue-full: two components, one query: the proxy received exactly the requests the clients sent, and the requests it completed (relayed to their end marker) are the clients' successes plus the errors the database itself returned.                               | 0 violating rows over 2 runs | 0 violating rows                 | PASS |
+| e2e-queue-full/conservation.sql  | e2e-queue-full: conservation per instance from the exported counters: received = accepted + rejected, accepted = completed + failed + shed, and queued and in flight are 0 in the final flush; something was received.                                                  | 0 violating rows over 2 runs | 0 violating rows                 | PASS |
+| e2e-queue-full/faults.sql        | e2e-queue-full: more clients than connections plus queue: exactly the three over the bound were shed (53M01).                                                                                                                                                           | 0 violating rows over 2 runs | 0 violating rows                 | PASS |
+| e2e-queue-full/resets.sql        | e2e-queue-full: resets completed + resets failed + connections closed at release + connections lent as is = leases ended = leases started; resets started = leases ended with a reset; nothing is resetting in the final flush.                                         | 0 violating rows over 2 runs | 0 violating rows                 | PASS |
+| e2e-queue-full/rows.sql          | e2e-queue-full: every proxy-made error a client saw is counted under its error-contract row, and every counted row for a request reached a client: shed = 53M01, unsupported-feature + unsupported-extended = 0A000, lost-after-read = 08006, lost-after-write = 08007. | 0 violating rows over 2 runs | 0 violating rows                 | PASS |
+| e2e-queue-full: required metrics | the final flush of every run of e2e-queue-full has rows for every metric its checks require (the -- requires: rule)                                                                                                                                                     | all 18 in all 2 runs         | all 18 in all 2 runs             | PASS |
+
+Legend: one row per check. structure: the report's own checks of the files. <scenario>/<file>.sql: that scenario's
+SQL file from test/analysis/<scenario>/ (zero violating rows is a pass). <scenario>/report:<name>: a built-in check from
+test/analysis/report/sections/check-<name>.sql. "no assertions" rows are not counted.
+
+VERDICT: FAIL (1 of 13 checks failed over 3 runs)
