@@ -13,11 +13,11 @@ import (
 )
 
 const (
-	retryAddr      = "pg-retry"
-	doomDelay      = 2 * time.Millisecond
-	retryRelayFrameMax  = 1 << 20
-	maxRetryRelayBuf    = 1 << 24
-	maxKilledTexts = 1 << 16
+	retryAddr          = "pg-retry"
+	doomDelay          = 2 * time.Millisecond
+	retryRelayFrameMax = 1 << 20
+	maxRetryRelayBuf   = 1 << 24
+	maxKilledTexts     = 1 << 16
 )
 
 type KillPoint uint8

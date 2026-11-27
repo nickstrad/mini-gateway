@@ -205,6 +205,7 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `engine` | `retry_asked` | counter | — | count | sum | Failures the retry policy granted a retry (policy off: always 0). |
 | `engine` | `retry_ends` | counter | outcome | count | sum | Requests run again, by how they ended (outcome: completed, failed, shed, gone). |
 | `engine` | `retry_offered` | counter | — | count | sum | Failed statements offered to the retry policy. |
+| `engine` | `retry_rows` | counter | reason | count | sum | Retries granted, by the error-contract row the failure would have been answered with (reason). |
 | `engine` | `shell_accept_errors` | counter | — | count | sum | Errors returned by the client listener's Accept. |
 | `engine` | `shell_accept_refused` | counter | — | count | sum | Accepted sockets closed at once because the shell was full or closing. |
 | `engine` | `shell_accepted` | counter | — | count | sum | Client sockets accepted by the listener. |

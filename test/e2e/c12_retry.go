@@ -94,15 +94,15 @@ func SweepPattern(n int64) (KillPoint, bool) {
 
 func RetryStormSpec() RetrySpec {
 	return RetrySpec{Name: "retry-storm", Clients: 8, Tenants: 4, Conns: 4, Duration: 4 * time.Second,
-		Phases: []Phase{{0, 450 * time.Millisecond}, {700 * time.Millisecond, 3500 * time.Millisecond}},
-		Relay:  RelayPlan{From: 700 * time.Millisecond, Until: 1700 * time.Millisecond, DoomAllAt: 600 * time.Millisecond, Pattern: StormPattern},
+		Phases:  []Phase{{0, 450 * time.Millisecond}, {700 * time.Millisecond, 3500 * time.Millisecond}},
+		Relay:   RelayPlan{From: 700 * time.Millisecond, Until: 1700 * time.Millisecond, DoomAllAt: 600 * time.Millisecond, Pattern: StormPattern},
 		Breaker: 3, Recovery: 3200 * time.Millisecond}
 }
 
 func RetrySweepSpec() RetrySpec {
 	return RetrySpec{Name: "retry-no-double-apply", Clients: 6, Tenants: 2, Conns: 4, Duration: 3 * time.Second,
-		Phases: []Phase{{0, 250 * time.Millisecond}, {400 * time.Millisecond, 2500 * time.Millisecond}},
-		Relay:  RelayPlan{From: 400 * time.Millisecond, Until: 1200 * time.Millisecond, DoomAllAt: 300 * time.Millisecond, Pattern: SweepPattern},
+		Phases:  []Phase{{0, 250 * time.Millisecond}, {400 * time.Millisecond, 2500 * time.Millisecond}},
+		Relay:   RelayPlan{From: 400 * time.Millisecond, Until: 1200 * time.Millisecond, DoomAllAt: 300 * time.Millisecond, Pattern: SweepPattern},
 		Breaker: pool.MaxBreakerFailures, Recovery: 1700 * time.Millisecond}
 }
 
