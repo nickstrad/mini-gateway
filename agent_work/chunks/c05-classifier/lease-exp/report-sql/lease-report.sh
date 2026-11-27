@@ -1,23 +1,23 @@
 #!/bin/bash
 # Lease-lab report (plan section 9): run every report SQL file over a campaign directory.
 #
-# Usage: scripts/lease-report.sh <campaign-dir> <out-dir> [name=value ...]
+# Usage: lease-report.sh <campaign-dir> <out-dir> [name=value ...]
 #
 #   <campaign-dir>  root of the run directories (any depth; NOTES-E2.md section 3 contract)
 #   <out-dir>       created if needed; gets report.duckdb, one <table>.csv and <table>.md per
 #                   SQL file, and index.md
 #   name=value      a report parameter, as `SET VARIABLE name = value;` (value is SQL:
 #                   quote text, e.g. verdict_load=80 aa_arm="'base-aa'"); see
-#                   test/analysis/lease/report/params.sql and the top of each table file
+#                   params.sql in this folder and the top of each table file
 #
-# Environment: LEASE_REPORT_SQL_DIR (default test/analysis/lease/report; the self-test points
-# it at a planted-bug copy), LEASE_REPORT_CALIBRATION (default the lease-exp calibration.json).
+# Environment: LEASE_REPORT_SQL_DIR (default this script's own folder; the self-test pointed
+# it at a planted-bug copy), LEASE_REPORT_CALIBRATION (default ../calibration.json from here).
 #
 # Table 00 runs first. Exit status: 0 every table written and table 00 is empty; 1 every table
 # written but table 00 has rows (the campaign is not readable as is); 2 usage or DuckDB error.
 set -u
 set -o pipefail
-root=$(cd "$(dirname "$0")/.." && pwd -P)
+here=$(cd "$(dirname "$0")" && pwd -P)
 command -v duckdb >/dev/null 2>&1 || PATH="$PATH:$HOME/.local/bin"
 die() { echo "lease-report: $*" >&2; exit 2; }
 [ $# -ge 2 ] || { sed -n '2,19p' "$0" >&2; exit 2; }
@@ -28,8 +28,8 @@ camp=$(cd "$1" && pwd -P)
 mkdir -p "$2" || die "cannot create $2"
 out=$(cd "$2" && pwd -P)
 shift 2
-sqldir=${LEASE_REPORT_SQL_DIR:-$root/test/analysis/lease/report}
-calib=${LEASE_REPORT_CALIBRATION:-$root/agent_work/chunks/c05-classifier/lease-exp/calibration.json}
+sqldir=${LEASE_REPORT_SQL_DIR:-$here}
+calib=${LEASE_REPORT_CALIBRATION:-$(dirname "$here")/calibration.json}
 [ -f "$sqldir/params.sql" ] && [ -f "$sqldir/views.sql" ] || die "$sqldir has no params.sql / views.sql"
 [ -f "$calib" ] || die "calibration file $calib does not exist"
 case "$camp/" in "$out"/*) die "the output directory may not contain the campaign" ;; esac
