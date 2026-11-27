@@ -217,7 +217,11 @@ func TestAdv_4_ContinuousBetterGroup(t *testing.T) {
 
 func held(t *testing.T, mode int) {
 	q := core(t, 8)
-	for range 6 {
+	for i := int64(100); i < 106; i++ {
+		push(t, q, "held", i)
+		if id, ok := q.Pop(0); !ok || id != i {
+			t.Fatalf("initial solo lend %d/%v", id, ok)
+		}
 		lend(t, q, "held")
 	}
 	switch mode {
@@ -367,6 +371,10 @@ func invariant(t *testing.T, n int) {
 	eng := w.Proxy.Engine
 	if e = eng.Invariants(); e != nil {
 		t.Fatal(e)
+	}
+	if n == 3 {
+		aq.Core().LeaseStart(0, "prior")
+		aq.Core().LeaseEnd(0, "prior")
 	}
 	for i := 0; i < n; i++ {
 		aq.Core().LeaseStart(0, fmt.Sprint(i))

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	a "github.com/nickstrad/mini-gateway/internal/admission"
+	"github.com/nickstrad/mini-gateway/internal/obs/csvflush"
 	"github.com/nickstrad/mini-gateway/internal/sim/fakepg"
 	"github.com/nickstrad/mini-gateway/test/e2e"
 )
@@ -85,6 +86,7 @@ func many(t *testing.T, n int, offset time.Duration) {
 		t.Skip("ADV_LONG=1: many-tenant CSV campaign")
 	}
 	s := spec(n, offset, 36)
+	s.Flush = time.Second // Totals are checked at final flush; avoid exporting 158 redundant idle snapshots.
 	r := run(t, s, seed, scratch(t))
 	s.Clients = s.Clients[36:]
 	alone := run(t, s, seed, scratch(t))
@@ -93,8 +95,35 @@ func many(t *testing.T, n int, offset time.Duration) {
 			t.Errorf("tenant=%d alone success, mixed=%v", i+1, r.Clients[36+i])
 		}
 	}
-	if len(r.Flush.Final.Points) == 0 {
-		t.Fatal("empty flushed snapshot")
+	for _, rr := range []*e2e.SimRun{r, alone} {
+		disk, e := csvflush.Read(rr.Flush.RunDir)
+		if e != nil {
+			t.Fatal(e)
+		}
+		final := disk.Snapshot(rr.Final.Instance, rr.Final.Seq)
+		for i := 1; i <= n; i++ {
+			name := fmt.Sprint("tenant", i)
+			found := false
+			for _, p := range final.Points {
+				if p.Component == "admission" && p.Metric == "tenant_served" && p.Labels.Tenant == name {
+					found = true
+					idx := i - 1
+					if rr == r {
+						idx += 36
+					}
+					want := int64(0)
+					if success(rr.Clients[idx]) {
+						want = 1
+					}
+					if p.Value != want {
+						t.Errorf("CSV %s served=%d successful replies=%d", name, p.Value, want)
+					}
+				}
+			}
+			if !found {
+				t.Errorf("CSV omits quiet tenant %s", name)
+			}
+		}
 	}
 }
 func TestAdv_7_SynchronizedQuietTenants(t *testing.T) { many(t, 41, 10*time.Millisecond) }
@@ -107,19 +136,38 @@ func ablation(t *testing.T, burst int, offset time.Duration) {
 	s.Admission = a.Config{}
 	fifo := run(t, s, seed, "")
 	a, b := latency(t, fair.Clients[burst]), latency(t, fifo.Clients[burst])
-	if b <= a {
-		t.Fatalf("single queue quiet=%v fair=%v; no degradation", b, a)
+	s.Clients = s.Clients[burst:]
+	alone := run(t, s, seed, "")
+	base := latency(t, alone.Clients[0])
+	if b <= a || b <= 10*base {
+		t.Fatalf("single queue quiet=%v fair=%v alone=%v; need >10x alone", b, a, base)
 	}
 }
-func TestAdv_9_SingleQueueBurst(t *testing.T)       { ablation(t, 32, 10*time.Millisecond) }
-func TestAdv_9_SingleQueueLargerBurst(t *testing.T) { ablation(t, 64, 10*time.Millisecond) }
-func TestAdv_9_SingleQueueLateQuiet(t *testing.T)   { ablation(t, 48, 60*time.Millisecond) }
+func TestAdv_9_SingleQueueBurst(t *testing.T) { ablation(t, 32, 10*time.Millisecond) }
+func TestAdv_9_SingleQueueHeldTransactions(t *testing.T) {
+	s := spec(1, 10*time.Millisecond, 24)
+	for i := 0; i < 24; i++ {
+		s.Clients[i].Steps = []e2e.Step{{SQL: "BEGIN"}, {SQL: "COMMIT", Delay: 50 * time.Millisecond}}
+	}
+	fair := run(t, s, seed, "")
+	s.Admission = a.Config{}
+	fifo := run(t, s, seed, "")
+	a, b := latency(t, fair.Clients[24]), latency(t, fifo.Clients[24])
+	s.Clients = s.Clients[24:]
+	alone := run(t, s, seed, "")
+	base := latency(t, alone.Clients[0])
+	if b <= a || b <= 10*base {
+		t.Fatalf("held-transaction FIFO quiet=%v fair=%v alone=%v; need >10x alone", b, a, base)
+	}
+}
+func TestAdv_9_SingleQueueLateQuiet(t *testing.T) { ablation(t, 48, 60*time.Millisecond) }
 
 func replay(t *testing.T, fragment bool, cancel bool) {
 	if os.Getenv("ADV_LONG") != "1" {
 		t.Skip("ADV_LONG=1: full CSV replay campaign")
 	}
 	s := spec(3, 11*time.Millisecond, 12)
+	s.Flush = 137 * time.Millisecond
 	s.Fragment = fragment
 	if cancel {
 		s.Clients[0].Steps[0].Cancel = time.Millisecond

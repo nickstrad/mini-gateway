@@ -16,12 +16,7 @@ import (
 func overlayProbe(t *testing.T, body string) {
 	t.Helper()
 	t.Logf("seed=%d", seed)
-	root, e := filepath.Abs("../../../..")
-	if e != nil {
-		t.Fatal(e)
-	}
-	// Package is agent_work/adversarial/c09-fairness: three parents to root.
-	root, e = filepath.Abs("../../..")
+	root, e := filepath.Abs("../../..")
 	if e != nil {
 		t.Fatal(e)
 	}
