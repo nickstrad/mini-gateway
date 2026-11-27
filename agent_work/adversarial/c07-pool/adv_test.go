@@ -69,6 +69,7 @@ func invariant(t *testing.T, p *pool.Pool) {
 }
 
 func TestAdv_1_CloseOutstanding(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 1 narrowed: a connection counts toward the cap until its close is issued, not until the driver confirms it. See agent_work/chunks/c07-pool/ADVERSARIAL.md.")
 	c := cfg()
 	c.Cap = 1
 	p := fresh(t, c)
