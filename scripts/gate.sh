@@ -40,7 +40,8 @@
 #   G1  lints     detlint (tools/lint-rules/det-packages.txt), importlint, boundlint,
 #                 paniccheck
 #   G2  comments  see GATE_STAGE
-#   G3  tests     go test -count=1 ./... ; go test -race for tools/lint-rules/race-packages.txt
+#   G3  tests     go test -count=1 ./... ; scripts/counted-growth.sh (the growth tests under
+#                 -tags clscount) ; go test -race for tools/lint-rules/race-packages.txt
 #   G4  markers   every scripts/.not-built/ marker is legitimate (see below)
 #   G4  sweep     scripts/sweep.sh
 #   G5  fuzz      scripts/fuzz.sh, with its rate table written to gate/G5-fuzz.tsv; red
@@ -358,6 +359,10 @@ g3_unit() {
     go test -count=1 -timeout 30m ./...
   fi
 }
+g3_counted() {
+  no_go && return 0
+  scripts/counted-growth.sh
+}
 g3_race() {
   local pkgs p; pkgs=$(list_file tools/lint-rules/race-packages.txt) || return 1
   [ -n "$pkgs" ] || { echo "NOTE: race-packages.txt lists no package yet"; return 0; }
@@ -409,6 +414,7 @@ if want G2; then
 fi
 if want G3; then
   check G3 unit g3_unit
+  check G3 counted g3_counted
   check G3 race g3_race
 fi
 want G4 && check G4 markers g4_markers

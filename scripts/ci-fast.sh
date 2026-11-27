@@ -9,7 +9,8 @@
 #       tests), go mod tidy -diff
 #   G1  detlint, importlint, boundlint, paniccheck
 #   G3  go test -short -count=1 ./... (a package that honours -short trims itself; fuzz
-#       seed corpora run as plain tests, which is what `go test` does with them), then the
+#       seed corpora run as plain tests, which is what `go test` does with them), then
+#       scripts/counted-growth.sh (the growth tests under -tags clscount), then the
 #       packages of tools/lint-rules/race-packages.txt under the race detector
 #
 # Deliberately NOT here (PLAN.md section 6.3: CI runs fast tests only): the comment rule
