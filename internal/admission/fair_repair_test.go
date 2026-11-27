@@ -213,3 +213,77 @@ func TestUnpopRestoresTheHeldFlag(t *testing.T) {
 		t.Fatal("unpop must restore the held flag of the pick before it")
 	}
 }
+
+func TestATenantAtItsShareWaitsWhileBelowShareTenantsArriveUntilItsOwnLeaseEnds(t *testing.T) {
+	q, _ := fairCore(t, 4)
+	owner := map[int64]string{1: "a", 2: "a", 3: "a", 4: "b"}
+	for i := int64(1); i <= 3; i++ {
+		mustPush(t, q, 1, "a", i)
+	}
+	mustPush(t, q, 1, "b", 4)
+	for range 3 {
+		lendNext(t, q, 1, owner)
+	}
+	id := int64(4)
+	for round := range 20 {
+		id++
+		owner[id] = "b"
+		mustPush(t, q, Time(2+round), "b", id)
+		name, ok := lendNext(t, q, Time(2+round), owner)
+		if !ok || name != "b" {
+			t.Fatalf("round %d: b below its share must be lent before a at its share, got %q %v", round, name, ok)
+		}
+		q.LeaseEnd(Time(2+round), "b")
+	}
+	if q.Depth("a") != 1 || q.TenantInFlight("a") != 2 {
+		t.Fatalf("a waited through 20 lends to b: depth %d, in flight %d", q.Depth("a"), q.TenantInFlight("a"))
+	}
+	q.LeaseEnd(30, "a")
+	id++
+	owner[id] = "b"
+	mustPush(t, q, 30, "b", id)
+	if name, _ := lendNext(t, q, 30, owner); name != "a" {
+		t.Fatalf("one of a's leases ended: a is below its share and its turn is older than b's, got %q", name)
+	}
+}
+
+func TestTheShareBoundsNewLendsAndPreemptsNothing(t *testing.T) {
+	q, f := fairCore(t, 6)
+	owner := map[int64]string{}
+	floodTenants(t, q, owner, 1, 8)
+	for range 6 {
+		lendNext(t, q, 1, owner)
+	}
+	owner[100] = "tb"
+	mustPush(t, q, 2, "tb", 100)
+	if f.Share("ta") != 3 || q.TenantInFlight("ta") != 6 {
+		t.Fatalf("premise: ta holds 6 with share 3, got %d share %d", q.TenantInFlight("ta"), f.Share("ta"))
+	}
+	if _, ok := q.Pop(2); ok {
+		t.Fatal("at the limit nothing is lent")
+	}
+	if q.TenantInFlight("ta") != 6 {
+		t.Fatal("a newcomer took nothing from ta's leases")
+	}
+	q.LeaseEnd(3, "ta")
+	if name, _ := lendNext(t, q, 3, owner); name != "tb" {
+		t.Fatalf("the freed lease goes to the newcomer below its share, got %q", name)
+	}
+	q.LeaseEnd(4, "ta")
+	if _, ok := q.Pop(4); ok {
+		t.Fatalf("ta holds %d, above its share 3, and the free lease is the last: it is held for tb, below its share", q.TenantInFlight("ta"))
+	}
+	if !q.SetLimit(5, 2) || q.TenantInFlight("ta") != 4 || q.InFlight() != 5 {
+		t.Fatalf("lowering the limit ends no lease: in flight %d", q.InFlight())
+	}
+	for range 3 {
+		q.LeaseEnd(6, "ta")
+		if _, ok := q.Pop(6); ok {
+			t.Fatalf("%d in flight at limit 2: nothing is lent until the total falls below the limit", q.InFlight())
+		}
+	}
+	q.LeaseEnd(7, "tb")
+	if _, ok := q.Pop(7); !ok {
+		t.Fatal("below the lowered limit lending resumes")
+	}
+}
