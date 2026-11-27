@@ -36,6 +36,7 @@ func TestInvariantsCatchAPendingRetryNoRequestHolds(t *testing.T) {
 	e := retryEngine(t)
 	e.snap.RetryOffered++
 	e.snap.RetryAsked++
+	e.snap.RetryRows[0]++
 	e.snap.RetriedRequests++
 	e.snap.RetryPending.Add(1)
 	e.seams.Retry.Retry(1, Failure{Reached: 0, Deadline: 2})
