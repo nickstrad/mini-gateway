@@ -93,7 +93,7 @@ and the wide function allow-list behind them; `AllowList`/`AllowLookup`;
   loop in a `*Lexer` method, and in every lex.go function that takes a `workRef`, must be
   `if clsCounting { l.reads.bump() }` (`reads.bump()` with a `workRef`). `(*Lexer).scan`
   must also start with it. The same holds for every loop in `(*clsMsg).lex`, with
-  `m.counts.tokenSteps.bump()`. Lexer code may call only lex.go functions that either take a
+  `m.counts.lex.steps.bump()`. Lexer code may call only lex.go functions that either take a
   `workRef` or have no loop. `TestLexLoopsCountTheirSteps` and
   `TestClassifierLexLoopsCountTheirSteps` enforce these rules by parsing the source. Counting
   is compiled in only under `-tags clscount`. `TestCountedWorkGrowsLinearly` runs there,
