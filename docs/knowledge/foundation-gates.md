@@ -79,12 +79,13 @@ Contract for the scripts when they are built (their headers repeat it): the gate
 and `scripts/gen-docs.sh --check`. Exit 0 is green; anything else is red. A first line
 `NOTE: text` in a script's output becomes the note of its row in `result.json`.
 
-## G5: fuzz rates and seed sweeps (CR-1, 2026-11-26)
+## G5: fuzz rates and seed sweeps (CR-1, 2026-11-26; CR-2, 2026-11-27)
 
 - `scripts/fuzz.sh` prints, after all targets, a table: package, target, executions,
-  executions per second, class. The rate is the executions of Go's last
-  `fuzz: elapsed: <d>, execs: <N> (<M>/sec)` line divided by its elapsed seconds (Go's own
-  `M` covers only the last interval and is often 0 on the final line).
+  executions per second, class, retried (`0` or `1`; the first five columns are unchanged).
+  The rate is the executions of Go's last `fuzz: elapsed: <d>, execs: <N> (<M>/sec)` line
+  divided by its elapsed seconds (Go's own `M` covers only the last interval and is often 0
+  on the final line). The rate comes from the run that stands.
 - A target is simulation-level when `go list -deps -test ./<pkg>` lists `internal/sim`
   (the package itself counts). Simulation-level and below `FUZZ_RATE_FLOOR` (default 100
   per second) is class `seed-sweep`: reported, not failed, and not fuzzing in any claim.
@@ -92,13 +93,29 @@ and `scripts/gen-docs.sh --check`. Exit 0 is green; anything else is red. A firs
   target never gets past Go's baseline coverage pass in the time budget (a large cached
   corpus on a slow target), or when the go tool fuzzes nothing (a `//go:build` line that
   excludes the file).
+- **Deadline-only retry (CR-2).** Go's fuzz coordinator sometimes ends a target at
+  `-fuzztime` with `context deadline exceeded` and writes no failing input. `scripts/fuzz.sh`
+  retries a target once when — and only when — all five conditions hold: (1) non-zero exit,
+  (2) a `--- FAIL: <target>` block whose only message is bare `context deadline exceeded`,
+  (3) no `Failing input written to` line, (4) no panic or other failure text anywhere in
+  the output, and (5) no new file under the package's `testdata/fuzz/<target>/`. The second
+  run's result and rate stand, whatever its message. At most `FUZZ_MAX_RETRIES` targets are
+  retried per run (default `2`; `0` disables the retry). Each retry prints
+  `fuzz: RETRY: <dir> <target>: go's own deadline, no failing input`, sets `retried` to `1`
+  in the table, and is counted in the `NOTE:` line (`<N> retried`). Any other failure, a
+  second failure on the retried target, or a third target hitting the signature when two
+  were already retried fails the run.
 - The gate writes the table to `gate/G5-fuzz.tsv` (gitignored) and records
-  `fuzz_targets`, `fuzz_seed_sweeps` and `fuzz_rate_floor` in `result.json` (counts are
-  `null` when G5 did not run). A `FUZZ_RATE_FLOOR` under 100 never counts for landing.
-  `FUZZ_GO` is a test seam of `fuzz.sh` (`scripts/fuzz_test.go`); the gate unsets it.
-- Canaries: `g5-unreadable-rate` (red) and `g5-seed-sweep-reported` (green control). The
-  older `g5-built-with-marker` cannot be caught any more: chunk 1 deleted the `fuzz`
-  marker, so no stage the gate runs has a marker left.
+  `fuzz_targets`, `fuzz_seed_sweeps`, `fuzz_retries`, `fuzz_rate_floor` and
+  `fuzz_max_retries` in `result.json` (counts are `null` when G5 did not run).
+  `fuzz_retries` does not change `counts_for_landing` by itself; a `FUZZ_RATE_FLOOR` under
+  100 or a `FUZZ_MAX_RETRIES` above 2 never counts for landing. `FUZZ_GO` is a test seam of
+  `fuzz.sh` (`scripts/fuzz_test.go`); the gate unsets it.
+- Canaries: `g5-unreadable-rate` (red), `g5-seed-sweep-reported` (green control),
+  `g5-retry-reported` (green: planted first-run deadline signature is retried, reported and
+  counted), and `g5-crasher-not-retried` (red: planted failing input is never retried and
+  fails G5). The older `g5-built-with-marker` cannot be caught any more: chunk 1 deleted
+  the `fuzz` marker, so no stage the gate runs has a marker left.
 
 ## When a result counts for landing
 
@@ -106,7 +123,7 @@ and `scripts/gen-docs.sh --check`. Exit 0 is green; anything else is red. A firs
 `pass`; the tree was clean when the gate started (the chunk's own `gate/result.json` is
 the one path that is ignored, so the result file can be rewritten; `gate/extra.sh` and
 `gate/canaries.json` are inputs and count); HEAD is a full commit id; and none of
-`GATE_SHORT`, `GATE_OUT`, `SWEEP_SEEDS` under 200 or `FUZZ_SECONDS` under 20 was used.
+`GATE_SHORT`, `GATE_OUT`, `SWEEP_SEEDS` under 200, `FUZZ_SECONDS` under 20, `FUZZ_RATE_FLOOR` under 100 or `FUZZ_MAX_RETRIES` above 2 was used.
 
 A run that is refused (exit 2: bad stage, bad `GATE_ONLY`, no baseline, a tool missing)
 removes any `result.json` already in its output folder before it exits, and a run that
