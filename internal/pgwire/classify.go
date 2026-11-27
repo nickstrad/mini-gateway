@@ -647,11 +647,14 @@ func (m *clsMsg) setConfigLocal(open int) bool {
 	if p.match < 0 || p.comma2 < 0 || int(p.comma1) != open+2 {
 		return false
 	}
+	if !m.isString(open + 1) {
+		return false
+	}
 	lit := m.toks[open+1]
+	m.counts.literalBytes += lit.End - lit.Start
 	if lit.Kind != TokenString || m.src[lit.Start] != '\'' || clsContinued(m.src[lit.Start:lit.End]) {
 		return false
 	}
-	m.counts.literalBytes += lit.End - lit.Start
 	setting := clsLowerASCII(lexUnquote(m.src[lit.Start+1:lit.End-1], '\''))
 	if clsInList(rejLexingSettings, setting) {
 		return false

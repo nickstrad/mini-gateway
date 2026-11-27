@@ -587,3 +587,15 @@ func clsCheckGrowth(t *testing.T, unit, what string, small, large int) {
 func TestClassifierWorkGrowsLinearly(t *testing.T) {
 	clsCheckLinearShapes(t, "", TokenKind.Significant, func(w clsWork) int { return w.tokenVisits }, clsWholeCallShapes)
 }
+
+func TestClassifierCountsTheSetConfigLiteralItScans(t *testing.T) {
+	for _, local := range []string{"false", "0"} {
+		plain := []byte("SELECT set_config('abcdef', 'x', " + local + ")")
+		continued := []byte("SELECT set_config('ab'\n'c', 'x', " + local + ")")
+		_, plainCounts := clsRunCounted(plain, false, false)
+		_, continuedCounts := clsRunCounted(continued, false, false)
+		if continuedCounts.literalBytes < plainCounts.literalBytes {
+			t.Errorf("%q: %d literal bytes counted, %d for the plain literal of the same length in %q", continued, continuedCounts.literalBytes, plainCounts.literalBytes, plain)
+		}
+	}
+}
