@@ -530,7 +530,7 @@ func (e *Engine) clientCancel(key pgwire.BackendKey) {
 			e.snap.CancelsRefused++
 		}
 	case t.phase == cpQueued && t.req != nil:
-		e.seams.Queue.Remove(t.req.id)
+		e.unqueue(t.req.id)
 		delete(e.waiting, t.req.id)
 		e.t.cancel(&t.queueT)
 		e.snap.Queued.Add(-1)
@@ -540,6 +540,7 @@ func (e *Engine) clientCancel(key pgwire.BackendKey) {
 		t.req = nil
 		t.phase = cpIdle
 		e.reply(t, pgwire.ErrRowCancelledQueued)
+		e.queueTouched()
 		if t.phase != cpClosed {
 			e.pump(t)
 		}
@@ -549,6 +550,10 @@ func (e *Engine) clientCancel(key pgwire.BackendKey) {
 }
 
 func (e *Engine) refuseQueued() {
+	if e.shedQ != nil && e.cfg.Plant&PlantBreakerFlushPops == 0 {
+		e.refuseAdmitted()
+		return
+	}
 	for e.seams.Queue.Len() > 0 {
 		id, ok := e.seams.Queue.Pop(e.now)
 		if !ok {
@@ -559,16 +564,38 @@ func (e *Engine) refuseQueued() {
 		if c == nil || c.phase != cpQueued || c.req == nil || c.req.id != id {
 			continue
 		}
-		e.t.cancel(&c.queueT)
-		e.snap.Queued.Add(-1)
-		e.snap.Shed++
-		e.snap.BreakerFlushed++
-		c.req = nil
-		c.phase = cpIdle
-		e.reply(c, pgwire.ErrRowBreakerOpen)
-		if c.phase != cpClosed {
-			e.pump(c)
+		e.refuseWaiting(c)
+	}
+}
+
+func (e *Engine) refuseAdmitted() {
+	e.sweepAdmission()
+	ids := make([]RequestID, 0, len(e.waiting))
+	for id := range e.waiting {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	for _, id := range ids {
+		c := e.waiting[id]
+		if c == nil || c.phase != cpQueued || c.req == nil || c.req.id != id || !e.shedQ.Refuse(e.now, id) {
+			continue
 		}
+		delete(e.waiting, id)
+		e.refuseWaiting(c)
+	}
+	e.queueTouched()
+}
+
+func (e *Engine) refuseWaiting(c *client) {
+	e.t.cancel(&c.queueT)
+	e.snap.Queued.Add(-1)
+	e.snap.Shed++
+	e.snap.BreakerFlushed++
+	c.req = nil
+	c.phase = cpIdle
+	e.reply(c, pgwire.ErrRowBreakerOpen)
+	if c.phase != cpClosed {
+		e.pump(c)
 	}
 }
 

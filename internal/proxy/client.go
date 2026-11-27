@@ -461,16 +461,20 @@ func (e *Engine) closeClient(c *client, reason CloseReason) {
 	e.dispatch()
 }
 
+func (e *Engine) unqueue(id RequestID) {
+	if e.shedQ != nil {
+		e.shedQ.RemoveAt(e.now, id)
+		return
+	}
+	e.seams.Queue.Remove(id)
+}
+
 func (e *Engine) dequeueGone(c *client) {
 	if c.req == nil {
 		return
 	}
 	if e.cfg.Plant&PlantQueuedVanishKeepsSlot == 0 {
-		if e.shedQ != nil {
-			e.shedQ.RemoveAt(e.now, c.req.id)
-		} else {
-			e.seams.Queue.Remove(c.req.id)
-		}
+		e.unqueue(c.req.id)
 		delete(e.waiting, c.req.id)
 		e.queueTouched()
 	}

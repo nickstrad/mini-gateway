@@ -140,6 +140,7 @@ const (
 	// PlantSkipCourtesy bypasses the courtesy reject list so session-mutating statements
 	// reach the fake database in tier S reset tests.
 	PlantSkipCourtesy
+	PlantBreakerFlushPops
 )
 
 // Timeouts configures every deadline enforced by the engine (docs/timeout-budget.md).

@@ -87,7 +87,7 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `admission` | `rule` | gauge | mode | count | sum | 1 for the queue rule this instance runs (mode: timeout, control-law, fifo, folly; the last two are simulator arms). |
 | `admission` | `rule_states` | gauge | mode | count | sum | Tenant queues in each rule state (mode: normal, standing, dropping, overloaded). |
 | `admission` | `served` | counter | — | count | sum | Requests taken from a queue to a database connection. |
-| `admission` | `shed` | counter | reason | count | sum | Requests shed with 53M01, by reason (rule, at-pop, overflow, total, tenants, deadline, undrained). |
+| `admission` | `shed` | counter | reason | count | sum | Requests shed, by reason (rule, at-pop, overflow, total, tenants, deadline, undrained: 53M01; breaker: 53M03, refused while queued because the breaker opened). |
 | `admission` | `shedding` | gauge | — | count | sum | Tenant queues that shed within the last interval. |
 | `admission` | `tenant_capacity` | gauge | tenant | count | sum | Capacity of this tenant's queue. |
 | `admission` | `tenant_depth` | gauge | tenant | count | sum | Requests waiting in this tenant's queue now. |

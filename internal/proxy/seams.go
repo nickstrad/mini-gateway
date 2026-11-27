@@ -297,6 +297,7 @@ type ShedQueue interface {
 	Queue
 	RemoveAt(now Instant, id RequestID) bool
 	Expire(now Instant, id RequestID) bool
+	Refuse(now Instant, id RequestID) bool
 	Sweep(now Instant)
 	Next() Instant
 	TakeShed() (RequestID, bool)

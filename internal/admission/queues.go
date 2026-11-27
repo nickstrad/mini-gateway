@@ -25,11 +25,12 @@ const (
 	ReasonDeadline
 	// ReasonUndrained means Push refused an arrival because pending sheds reached the safety cap.
 	ReasonUndrained
+	ReasonBreaker
 	// NumReasons is the number of defined Reason values.
 	NumReasons
 )
 
-var reasonNames = [NumReasons]string{"rule", "at-pop", "overflow", "total", "tenants", "deadline", "undrained"}
+var reasonNames = [NumReasons]string{"rule", "at-pop", "overflow", "total", "tenants", "deadline", "undrained", "breaker"}
 
 // String returns the canonical lowercase name of r, or "?" if unknown.
 func (r Reason) String() string {
@@ -518,7 +519,24 @@ func (q *Queues) Remove(now Time, id int64) bool { return q.take(now, id, false)
 // it as shed with ReasonDeadline.
 func (q *Queues) Expire(now Time, id int64) bool { return q.take(now, id, true) }
 
+func (q *Queues) Refuse(now Time, id int64) bool { return q.takeAs(now, id, takeRefused) }
+
+type takeKind uint8
+
+const (
+	takeRemoved takeKind = iota
+	takeExpired
+	takeRefused
+)
+
 func (q *Queues) take(now Time, id int64, expired bool) bool {
+	if expired {
+		return q.takeAs(now, id, takeExpired)
+	}
+	return q.takeAs(now, id, takeRemoved)
+}
+
+func (q *Queues) takeAs(now Time, id int64, kind takeKind) bool {
 	q.advance(now)
 	t, ok := q.where[id]
 	if !ok {
@@ -536,10 +554,13 @@ func (q *Queues) take(now Time, id int64, expired bool) bool {
 	}
 	delete(q.where, e.id)
 	q.total--
-	if expired {
+	switch kind {
+	case takeExpired:
 		q.count(t.stats, ReasonDeadline)
 		t.shedAt, t.hasShed = now, true
-	} else {
+	case takeRefused:
+		q.count(t.stats, ReasonBreaker)
+	default:
 		q.c.removed++
 		t.stats.removed++
 	}
