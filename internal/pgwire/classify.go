@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 
+	"github.com/nickstrad/mini-gateway/internal/pgwire/clscount"
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
@@ -122,10 +123,10 @@ type clsCounts struct {
 }
 
 type clsLexCounts struct {
-	reads  workTally
-	steps  workTally
-	opRuns workTally
-	ahead  workTally
+	reads  clscount.Tally
+	steps  clscount.Tally
+	opRuns clscount.Tally
+	ahead  clscount.Tally
 }
 
 func clsRun(text []byte, inTx, plant bool) work.Unit {
@@ -170,8 +171,8 @@ func (m *clsMsg) lex() {
 	n := 0
 	l := LexerFor(m.src)
 	for {
-		if clsCounting {
-			m.counts.lex.steps.bump()
+		if clscount.On {
+			m.counts.lex.steps.Bump()
 		}
 		t, ok := l.Next()
 		if !ok {
@@ -181,18 +182,18 @@ func (m *clsMsg) lex() {
 			n++
 		}
 	}
-	if clsCounting {
+	if clscount.On {
 		m.countPass(&l)
 	}
 	m.toks = make([]Token, 0, n)
 	l = LexerFor(m.src)
 	for {
-		if clsCounting {
-			m.counts.lex.steps.bump()
+		if clscount.On {
+			m.counts.lex.steps.Bump()
 		}
 		t, ok := l.Next()
 		if !ok {
-			if clsCounting {
+			if clscount.On {
 				m.countPass(&l)
 			}
 			return
@@ -207,9 +208,9 @@ func (m *clsMsg) lex() {
 }
 
 func (m *clsMsg) countPass(l *Lexer) {
-	m.counts.lex.reads.add(l.reads.value())
-	m.counts.lex.opRuns.add(l.opRunBytes)
-	m.counts.lex.ahead.add(l.lookahead)
+	m.counts.lex.reads.Add(l.reads.Value())
+	m.counts.lex.opRuns.Add(l.opRunBytes)
+	m.counts.lex.ahead.Add(l.lookahead)
 }
 
 func (m *clsMsg) isPunct(i int, c byte) bool {

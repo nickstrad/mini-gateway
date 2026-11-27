@@ -1,11 +1,11 @@
-//go:build clscount
-
 package pgwire
 
 import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/nickstrad/mini-gateway/internal/pgwire/clscount"
 )
 
 const clsReadsGrowthFloor = clsWorkLargeInput/clsWorkSmallInput - 1
@@ -20,7 +20,15 @@ type clsCountedWork struct {
 	small, large int
 }
 
+func clsSkipUncounted(t *testing.T) {
+	t.Helper()
+	if !clscount.On {
+		t.Skip("work counting is compiled in only under -tags clscount: run scripts/counted-growth.sh")
+	}
+}
+
 func TestCountedWorkGrowsLinearly(t *testing.T) {
+	clsSkipUncounted(t)
 	groups := []clsCountedGroup{
 		{"SELECT ", clsOperatorRunShapes},
 		{"SELECT ", clsSpanKeywordShapes},
@@ -38,6 +46,7 @@ func TestCountedWorkGrowsLinearly(t *testing.T) {
 }
 
 func TestCountedCheckRejectsWorkThatDoesNotGrowLinearly(t *testing.T) {
+	clsSkipUncounted(t)
 	healthy := clsCountedPairs(clsCountedSizes("SELECT ", "'x'"))
 	if p := clsCountedProblems(healthy); len(p) != 0 {
 		t.Fatalf("a healthy shape was rejected: %v", p)
@@ -68,10 +77,10 @@ func clsCountedSizes(prefix, unit string) (clsCounts, clsCounts) {
 
 func clsCountedPairs(small, large clsCounts) []clsCountedWork {
 	return []clsCountedWork{
-		{"lexer reads", small.lex.reads.value(), large.lex.reads.value()},
-		{"token steps", small.lex.steps.value(), large.lex.steps.value()},
-		{"operator-run bytes", small.lex.opRuns.value(), large.lex.opRuns.value()},
-		{"lookahead bytes", small.lex.ahead.value(), large.lex.ahead.value()},
+		{"lexer reads", small.lex.reads.Value(), large.lex.reads.Value()},
+		{"token steps", small.lex.steps.Value(), large.lex.steps.Value()},
+		{"operator-run bytes", small.lex.opRuns.Value(), large.lex.opRuns.Value()},
+		{"lookahead bytes", small.lex.ahead.Value(), large.lex.ahead.Value()},
 		{"keyword checks", small.keywordChecks, large.keywordChecks},
 		{"token visits", small.tokenVisits, large.tokenVisits},
 		{"literal bytes", small.literalBytes, large.literalBytes},
