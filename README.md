@@ -2,7 +2,7 @@
 
 `mini-gateway` is a Go proxy that sits in front of one ordinary Postgres server. It speaks the Postgres wire protocol (the message format clients use to talk to Postgres), so applications connect to it as if it were Postgres. It collapses many client connections into a bounded pool lent one transaction at a time (transaction pooling), terminates client TLS (encrypted connections), and lets identical in-flight read-only statements share one database round trip.
 
-Under overload, it enforces per-tenant admission control: bounded per-tenant queues, fair shares between tenants, and an adaptive limit on concurrent database work. Two selectable CoDel (Controlled Delay) modes drop stale queued work, and overloaded queues switch to newest-first service (adaptive LIFO, last-in first-out). The proxy is built testing-first: a deterministic simulator (a single-threaded test harness with a virtual clock and seeded randomness) lands before any proxy code.
+Under overload, it enforces per-tenant admission control. That control has five parts: bounded per-tenant queues, two selectable CoDel (Controlled Delay) modes for dropping stale queued work, newest-first service while overloaded (adaptive LIFO, last-in first-out), fair shares between tenants, and an adaptive limit on concurrent database work. The proxy is built testing-first: a deterministic simulator (a single-threaded test harness with a virtual clock and seeded randomness) lands before any proxy code.
 
 **Status:** Plan approved by Nick on 2026-11-24, as amended by his rulings ([PLAN.md](PLAN.md#18-nicks-rulings-the-decision-record)). Build in progress. Landed chunks:
 
@@ -29,7 +29,7 @@ Under overload, it enforces per-tenant admission control: bounded per-tenant que
 
 ## Building and running the proxy binary
 
-Building requires Go 1.26. Optional tools cover the extra checks: Python 3 builds the site, Docker with `postgres:17` runs tier R, and the DuckDB CLI `1.5.x` (on `PATH` or in `~/.local/bin`) runs `scripts/csv-assert.sh` and the DuckDB Go tests.
+Needs Go 1.26. Three other tools are needed for specific tasks: Python 3 to build the site, Docker with `postgres:17` for tier R, and the DuckDB CLI `1.5.x` (on `PATH` or in `~/.local/bin`) for `scripts/csv-assert.sh` and the DuckDB Go tests.
 
 - Build the binary:
   `go build -o /tmp/mini-gateway ./cmd/mini-gateway`

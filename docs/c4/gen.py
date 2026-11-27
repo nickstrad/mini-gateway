@@ -1239,7 +1239,7 @@ component_diagram("component-wire", "Components: wire layer", "06-component-wire
                   "machine or a pure function. Chunk 4 built the sessions, and chunk 5 built the classifier and the "
                   "contracts. Because the pool will reset every connection after every lease, session safety does not "
                   "depend on reading SQL, so the reject list is a courtesy. A recogniser that does not use the lexer "
-                  "decides what may be shared. The session machines, trackers, and reply builders code their messages "
+                  "decides what may be shared. The machines, trackers, and reply builders code their messages "
                   "by hand, so no file in the package imports pgproto3 and the codec boundary has no caller yet. Since "
                   "chunk 6 the engine drives this code. The two test proxies remain as the wire layer's own scenarios "
                   "in the simulator, between simulated clients and the fake Postgres.",

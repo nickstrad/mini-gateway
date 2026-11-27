@@ -33,7 +33,7 @@ marked. Numbers marked *(probe)* come from our own toy scripts, not a published 
 - On Apollo's post, one reader saw the date "October 7, 2026" on the page while the other saw no date. The post itself exists and was read in full by both.
 - Canva's "Worker Backpressure" Part 2 (the actual control law) has not been published.
 - Live `queue.acm.org` and `blog.acolyer.org` return 403, so "Fail at Scale", the CoDel paper, and the Morning Paper write-up were read from Wayback Machine copies.
-- Several items rely on memory only because no primary source was read: ServiceRouter / Akkio / Shard Manager, ITU-T I.371 (the standard for GCRA, the generic cell rate algorithm; Wikipedia's quotation and one implementation were read), Chiu & Jain 1989 (a scan with no text layer), Gil Tene's talk (not watched), the WFQ papers, Dragonfly / KeyDB, Uber QALM's own post, and Linkerd's retry-budget default values.
+- Several items come from memory only, with no source read: ServiceRouter / Akkio / Shard Manager, ITU-T I.371 (the standard for GCRA, the generic cell rate algorithm; Wikipedia's quotation and one implementation were read), Chiu & Jain 1989 (a scan with no text layer), Gil Tene's talk (not watched), the WFQ papers, Dragonfly / KeyDB, Uber QALM's own post, and Linkerd's retry-budget default values.
 
 **Three facts the spec gets wrong or oversells** (each is acted on below):
 
@@ -47,12 +47,12 @@ marked. Numbers marked *(probe)* come from our own toy scripts, not a published 
 
 These eight influences should shape the project most, listed in priority order.
 
-1. **"Fail at Scale" request-queue CoDel + Adaptive LIFO — not the CoDel paper's control law** (S7, F2, F4). This is the admission queue. It keeps one timestamp of state per tenant queue. The paper's `interval/√count` drop schedule assumes TCP senders that slow down on drops, and in our probe it let the queue grow without bound at 10× overload.
+1. **"Fail at Scale" request-queue CoDel + Adaptive LIFO — not the CoDel paper's control law** (S7, F2, F4). This is the admission queue. It keeps one timestamp of state per tenant queue. The paper's `interval/√count` drop schedule assumes TCP senders that slow down, and in our probe it let the queue grow without bound at 10× overload.
 2. **Meta ZGateway's fairness structure + Netflix's "share binds only under saturation"** (S1, I12, F8). Requests enter per-tenant queues drained round-robin, and a tenant's share is enforced only when the global limit is reached. This mechanism—not a per-tenant rate limit—is what makes the noisy-neighbor invariant pass. GCRA drops to an optional outer gate.
-3. **Nick's own mansio admission code and the object-store / zeromq-go simulator lessons** (P11, P13, P14, P8, P4, P9). These projects are already built and tested under adversarial checks, and they settle the simulator architecture: pure decision cores with thin concurrent wrappers, a generated retry contract with a "write may have applied" column, a generated capacity table, and scenario ownership per chunk.
+3. **Nick's own mansio admission code and the object-store / zeromq-go simulator lessons** (P11, P13, P14, P8, P4, P9). These mechanisms are measured and have already been attacked, and they decide the simulator architecture: pure decision cores with thin concurrent wrappers, a generated retry contract with a "write may have applied" column, a generated capacity table, and scenario ownership per chunk.
 4. **The singleflight lineage: x/sync's seven pitfalls → Tailscale's refcount-and-detach → Vitess's waiter cap** (I24, I25, I26), plus the Hyperdrive MySQL bug's rule "canonical form in the shared slot, encode per recipient" (S4). Together they supply the complete coalescer specification that the spec only sketches.
 5. **Twemproxy + Envoy's Redis filter + the Redis protocol rules** (I18, I10, I20). Together they provide a source-backed command allow-list for Variant A (Redis RESP) and establish the precedent that stateful commands are refused rather than pinned. They are also the strongest argument for making Variant A the MVP.
-6. **Google SRE book + Finagle retry budget + metastable-failure papers** (I16, I17, I14, F22). The spec's 10% cap comes from the SRE book, Finagle supplies the integer deposit/withdraw mechanics, and the metastability papers sharpen the retry-storm pass criterion to "goodput recovers after the trigger is removed".
+6. **Google SRE book + Finagle retry budget + metastable-failure papers** (I16, I17, I14, F22). The spec's 10% cap comes from the SRE book, Finagle supplies the integer deposit/withdraw mechanics, and the metastability papers change the retry-storm pass criterion to "goodput recovers after the trigger is removed".
 7. **Coordinated omission + Apollo's gates, scaled to one noisy VM** (F16, S10, P3). Use an open-loop generator measured from intended send time, treat simulator results as primary evidence, run A/A baselines, allow "inconclusive" as a verdict, and headline exact counts (connections, backend reads, and shed attribution) ahead of latency percentiles.
 8. **Netflix AIMD with the in-flight guard, sized by Little's Law** (I11, F11, F14). The adaptive limit takes four lines and one integer. Little's Law shows that the spec's scenarios need a pool of 32 connections, not 20, if the quiet tenant is to have any margin during the 200 ms stall.
 
@@ -66,7 +66,7 @@ These eight influences should shape the project most, listed in priority order.
 
 ## 2. The full list
 
-Each entry lists Source, Verified, Key idea, Borrow (mechanism and spec part), Do not copy, Strength, and Recommendation. Recommendations assume Variant A (Redis RESP) unless stated otherwise; Variant B is Postgres wire and Variant C covers multi-backend features and caching. IDs use prefixes by bucket: S = spec-named, P = prior projects, I = industry systems, F = foundations.
+Each entry lists Source, Verified, Key idea, Borrow (mechanism and spec part), Do not copy, Strength, and Recommendation. Recommendations assume Variant A (Redis RESP) unless stated otherwise; Variant B is Postgres wire, and Variant C holds caching, replicas, hedging and P2C. IDs use prefixes by bucket: S = spec-named, P = prior projects, I = industry systems, F = foundations.
 
 ### Bucket 1 — Spec-named influences (spec §6)
 
@@ -215,7 +215,7 @@ A standing rule, confirmed in three repos' own files, is that each project imple
 - **Verified:** read directly (plan and kb entry; probe code by declarations; probes not re-run). **Plan and probes only — no product code.**
 - **Key idea:** `synctest` virtualises time but does not control the scheduling order of goroutines woken at the same instant (4 goroutines produced all 24 orders across 2,000 runs). A baton scheduler that runs one simulated goroutine at a time, chosen by a seeded generator, produced a single trace digest across 8 processes.
 - **Borrow:** For testing (which shapes the pool, coalescer, and admission), bring forward the three-option architectural decision—synctest only, everything single-threaded, or a baton scheduler plus a seam. This project has to make that choice because the spec asks for a single-threaded seeded harness *and* tests for goroutine leaks and 99-of-100 cancellation. Also borrow the digest design: fold every decision, delivered byte range, and fault into SHA-256.
-- **Do not copy:** Do not copy the 250-line probe. Its costs are steep: no `go`, `select`, channels, `time`, or `net` below the seam, throughput around ~530,000 scheduler steps/s, and a direct conflict with idiomatic `context` cancellation, which is how the coalescer rule is written.
+- **Do not copy:** Do not copy the 250-line probe. Its costs: no `go`, `select`, channels, `time`, or `net` below the seam, throughput of ~530,000 scheduler steps/s, and a conflict with idiomatic `context` cancellation, which is how the coalescer rule is written.
 - **Strength:** CORE (as a decision) · **Recommendation:** ADOPT WITH CHANGE — bring the decision to Nick (question 8); the recommended answer is sans-I/O cores, not a baton.
 
 #### P5 · zeromq-go — sans-I/O framing tests and the simulated connection
@@ -230,7 +230,7 @@ A standing rule, confirmed in three repos' own files, is that each project imple
 - **Source:** `PLAN.md` §2.5, §8.2, §8.3
 - **Verified:** read directly
 - **Key idea:** Every asserted bound must name its "transit term"—the items in hand-off between stages—or an adversarial tester will break it. Prove that a stalled consumer is isolated by comparing healthy peers' virtual delivery times against a control run.
-- **Borrow:** For admission, the pool, and testing, state every bound with its transit term. Assert "healthy tenant unaffected" exactly in virtual time against a control run without the noisy tenant, rather than using a loose tolerance. Enforce that zero never means unlimited, declare a fallback ahead of time (if the clever variant fails its one repair round, land the simple one and narrow the claim), and adopt the goroutine-leak oracle (simulator registry empty *and* `runtime.NumGoroutine()` back at baseline).
+- **Borrow:** For admission, the pool, and testing, state every bound with its transit term. Assert "healthy tenant unaffected" exactly in virtual time against a control run without the noisy tenant, rather than with a tolerance. Enforce that zero never means unlimited, declare a fallback ahead of time (if the clever variant fails its one repair round, land the simple one and narrow the claim), and adopt the goroutine-leak oracle (simulator registry empty *and* `runtime.NumGoroutine()` back at baseline).
 - **Do not copy:** Do not block forever at the high-water mark; this spec sheds with a distinct error instead.
 - **Strength:** SECONDARY · **Recommendation:** ADOPT WITH CHANGE — take the bound discipline and control-run comparison.
 
@@ -239,7 +239,7 @@ A standing rule, confirmed in three repos' own files, is that each project imple
 - **Verified:** read directly
 - **Key idea:** Run ordered landing gates, prove each gate script with a canary that fails on a planted violation, and run adversarial testing after review so its findings target claims.
 - **Borrow:** (process) gate order — hygiene and determinism lint → unit and pinned-seed sims → property → short fuzz → race and real-mode stress → seed sweep and replay meta-test → adversarial → review → prose → acceptance; a broken claim is either repaired or narrowed in writing; plain testing vocabulary in briefs to Astra (an earlier project lost runs to a provider filter over attack wording); done-marker lines because a cut-off can exit 0 silently.
-- **Do not copy:** Do not copy the time budgets as written, because the two plans disagree and neither was run. Use the object store's measured budgets instead.
+- **Do not copy:** Do not copy the budgets as written, because the two plans disagree and neither was run. Use the object store's measured budgets instead.
 - **Strength:** SECONDARY · **Recommendation:** ADOPT WITH CHANGE — take the gate list; take the numbers from P10.
 
 #### P8 · object-store — simulator kernel (`internal/env`, `internal/sim`, `simtest`)
@@ -270,9 +270,9 @@ A standing rule, confirmed in three repos' own files, is that each project imple
 #### P11 · mansio — nested admission caps with a pure decision core
 - **Source:** `/root/Software/mansio/server/internal/front/limiter.go`, `admission.go`
 - **Verified:** read directly (`limiter.go` lines 1–200; `admission.go` signatures). **Working, measured code.**
-- **Key idea:** A request runs only when its database, its tenant, and the whole process are all under their in-flight caps. Otherwise it queues if every queue has room; if not, it is shed and consumes no slot. The decision state has "no locks, no clock, no channels", and a thin wrapper adds concurrency around it.
+- **Key idea:** A request runs only when its database, its tenant, and the whole process are all under their in-flight caps. Otherwise it queues if every queue has room; if not, it is shed and consumes no slot. The decision state has "no locks, no clock, no channels", and a thin wrapper adds them.
 - **Borrow:** For fairness and admission, borrow the two-layer split—a pure decision core inside a concurrent wrapper—as the sans-I/O answer for the admission queue. Adopt its written invariants: per-tenant in-flight ≤ cap, global in-flight equals the sum, work-conserving dispatch, and deleting all-zero tenant entries so memory stays bounded by active tenants. Keep the reason for a global cap ("without the VM cap the process's in-flight count would be tenants × TenantInFlight"); here the hierarchy collapses to tenant ≤ global.
-- **Do not copy:** Do not copy the code or rely on fixed caps as the entire policy. As mansio's own note points out, fixed caps are "unrelated to the deadline": a flooding tenant under a static cap still holds its slots, which gives isolation rather than fair share.
+- **Do not copy:** Do not copy the code or rely on fixed caps as the entire policy; mansio's own note says fixed caps are "unrelated to the deadline". A flooding tenant under a static cap still takes slots, which gives isolation rather than fair share.
 - **Strength:** CORE · **Recommendation:** ADOPT WITH CHANGE — take the core/wrapper shape and invariants, and add fair-share shedding.
 
 #### P12 · mansio — shed at admission what would expire in the queue
@@ -295,7 +295,7 @@ A standing rule, confirmed in three repos' own files, is that each project imple
 - **Source:** `server/knowledge/backpressure/2026-11-10-controld-pool-budget.md`, `…-edge-admission.md`, `…-capacity-table.md`; `server/internal/slots/slots.go`
 - **Verified:** read directly (the rule and measurement sections of each entry; code signatures)
 - **Key idea:** Budget callers *below* the backend pool size, or the excess waits invisibly inside the pool and times out—in mansio, "256 resolve slots + 16 admin slots sat in front of a 20-connection pool".
-- **Borrow:** For the pool, admission, and observability, check at config-parse time that admission gates sum to less than the pool. Follow the rule that "callers that join a load already in flight take no slot", so coalesced waiters consume no admission or pool slot. Hold no slot while a slow client sends, use one counted slot type instead of ad-hoc channel semaphores, and ship a capacity document **generated from defaults by a test** with one row per queue: what it protects, capacity and config key, full-queue policy, deadline, and metric.
+- **Borrow:** For the pool, admission, and observability, check at config-parse time that admission gates sum to less than the pool. Follow the rule that "callers that join a load already in flight take no slot", so coalesced waiters consume no admission or pool slot. Hold nothing while a slow client sends, use one counted slot type instead of ad-hoc channel semaphores, and ship a capacity document **generated from defaults by a test** with one row per queue: what it protects, capacity and config key, full-queue policy, deadline, and metric.
 - **Do not copy:** Skip pgxpool, Prometheus rule files, and HTTP admin levers.
 - **Strength:** CORE · **Recommendation:** ADOPT — a generated, test-checked table is the cheapest strong proof of "bounded everything".
 
@@ -436,7 +436,7 @@ GitHub sources were read at the default-branch head on 2026-11-24. Defaults quot
 - **Verified:** read directly (all five files and the README)
 - **Key idea:** Treat in-flight requests like a TCP congestion window: each completed request reports its latency, in-flight count, and whether it was dropped, and a small pure function computes the new limit.
 - **Borrow:** For the concurrency limit, adopt the deterministic signature `update(rtt, inflight, didDrop) → newLimit`. In AIMD, on a drop or `rtt > timeout`, set `limit = limit × 0.9`; otherwise, if `inflight × 2 ≥ limit`, increment to `limit + 1`, then clamp. Keep Gradient2 as the documented upgrade: compare the current sample against a long exponential average (600 samples), compute `gradient = clamp(1.5 × long/short, 0.5, 1.0)`, set `new = limit × gradient + queueSize`, and smooth the result. Keep the guard "only grow when in-flight ≥ limit/2" that appears in all four algorithms, because without it the limit drifts to maximum while idle.
-- **Do not copy:** Avoid minimum-RTT baselines (Vegas and Gradient v1), where a single fast `PING` sets a baseline that makes normal requests look congested. Skip the defaults (minimum 20, timeout 5 s), which are sized for a service rather than a 20-connection pool, and avoid floats in the decision path.
+- **Do not copy:** Avoid minimum-RTT baselines (Vegas and Gradient v1), where a single fast `PING` sets a baseline that makes every normal request look congested. Skip the defaults (minimum 20, timeout 5 s), which are sized for a service rather than a 20-connection pool, and avoid floats in the decision path.
 - **Strength:** CORE · **Recommendation:** ADOPT WITH CHANGE — ship AIMD first and keep Gradient2 as a labelled stretch, both in fixed-point arithmetic.
 
 #### I12 · Netflix concurrency-limits — partitioned limiter
@@ -451,7 +451,7 @@ GitHub sources were read at the default-branch head on 2026-11-24. Defaults quot
 - **Source:** https://netflixtechblog.medium.com/performance-under-load-3e6fa9a60581
 - **Verified:** read directly (via the local renderer)
 - **Key idea:** Fixed concurrency limits go stale; infer the limit from latency the way TCP infers a congestion window.
-- **Borrow:** For the docs, borrow the rationale and the Little's-law framing: the limit equals steady-state concurrency plus the queue allowed before latency degrades.
+- **Borrow:** For the docs, borrow the rationale and the Little's-law framing: the limit equals concurrency plus the queue allowed before latency degrades.
 - **Do not copy:** Do not copy its reassurance that a retry "is nearly 100% successful at reaching an instance with available capacity". That assumes many instances; with one backend, a shed request has nowhere else to go.
 - **Strength:** BACKGROUND · **Recommendation:** ADOPT — as cited rationale; I11 supplies the mechanism.
 
@@ -483,7 +483,7 @@ GitHub sources were read at the default-branch head on 2026-11-24. Defaults quot
 - **Source:** https://sre.google/sre-book/addressing-cascading-failures/
 - **Verified:** read directly
 - **Key idea:** Overload feeds itself: queues add latency, latency causes timeouts, and timeouts trigger retries. Break the loop with short queues, early rejection, deadline propagation, and bounded jittered retries.
-- **Borrow:** For admission, borrow the queue-sizing rule of thumb: keep the queue small relative to the worker pool, "e.g., 50% or less", as the starting point for `MaxQueueDepth`. For testing, borrow the non-linear recovery check: a service that tipped at 11,000 QPS will not automatically recover at 9,000, so assert how long goodput takes to return after overload ends.
+- **Borrow:** For admission, borrow the queue-sizing rule of thumb: keep the queue small relative to the worker pool, "e.g., 50% or less", as the starting point for `MaxQueueDepth`. For testing, borrow the non-linear recovery check: a service that tipped at 11,000 QPS will not recover at 9,000, so assert how long goodput takes to return after overload ends.
 - **Do not copy:** Skip the capacity-planning and restart-orchestration sections.
 - **Strength:** CORE · **Recommendation:** ADOPT — take the queue-depth default and the recovery assertion.
 
@@ -498,7 +498,7 @@ GitHub sources were read at the default-branch head on 2026-11-24. Defaults quot
 #### I19 · McRouter (Meta)
 - **Source:** https://github.com/facebook/mcrouter (`README.md`, wiki Features and Home)
 - **Verified:** read directly
-- **Key idea:** A memcached router where each proxy thread holds one persistent connection per destination, with most of its value in routing policy.
+- **Key idea:** A memcached router where each proxy thread holds exactly one persistent connection per destination, with most of its value in routing policy.
 - **Borrow:** Take it as a second precedent for lazy, tiny pools and probe-based recovery, and borrow its framing of a proxy as "a series of queues" where each queue has its own limit.
 - **Do not copy:** Skip route handles, failover pools, and especially the reliable delete stream—replying success now and replaying later contradicts honest post-forward error semantics.
 - **Strength:** BACKGROUND · **Recommendation:** WATCH ONLY — nothing unique to borrow.
@@ -564,14 +564,14 @@ GitHub sources were read at the default-branch head on 2026-11-24. Defaults quot
 - **Verified:** read directly
 - **Key idea:** Instead of forbidding session state, detect it and pin the client to a dedicated backend connection—correct, but it "reduces the effectiveness of connection reuse".
 - **Borrow:** For Variant B only, borrow the trigger list as a reject list, and a "currently pinned connections" gauge if pinning is ever added.
-- **Do not copy:** Skip pinning in v1, since the spec lists session pinning as the main way pooling fails.
+- **Do not copy:** Skip pinning in v1, since the spec lists session pinning as the way pooling fails.
 - **Strength:** SECONDARY (Variant B) · **Recommendation:** WATCH ONLY — becomes ADOPT WITH CHANGE if Variant B is chosen.
 
 #### I28 · Uber — Cinnamon load shedder (and QALM through it)
 - **Source:** https://www.uber.com/blog/cinnamon-using-century-old-tech-to-build-a-mean-load-shedder/
 - **Verified:** read directly (part 1 of 3; parts 2–3 not read). QALM: secondary only.
 - **Key idea:** A Go load-shedding middleware where a controller chooses what fraction of requests to reject so the queue drains, an auto-tuner sets the in-flight limit, and requests carry a priority.
-- **Borrow:** For admission, adopt the pipeline order—tag, rejector, queue, scheduler under an in-flight limit, and queue timeout—and overload detection based on "the last time the request queue was empty", crediting the same Facebook article. Heed its Go-specific warning that channels used as the shedding mechanism become expensive synchronisation points. According to this post, QALM was CoDel plus a *manually configured* concurrency limit (the spec's design), and maintaining that manual limit became its adoption problem, which argues for an adaptive limit. For benchmarking, report goodput by priority tier.
+- **Borrow:** For admission, adopt the pipeline order—tag, rejector, queue, scheduler under an in-flight limit, and queue timeout—and overload detection based on "the last time the request queue was empty", crediting the same Facebook article. Heed its Go-specific warning that channels used as the shedding mechanism become expensive synchronisation points. According to this post, QALM was CoDel plus a *manually configured* concurrency limit (the spec's design), and that manual limit was its adoption problem, which argues for the adaptive limit. For benchmarking, report goodput by priority tier.
 - **Do not copy:** Skip the PID controller (tuning three gains is a project of its own) and cross-service priority propagation.
 - **Strength:** SECONDARY · **Recommendation:** ADOPT WITH CHANGE — take the pipeline order and the QALM lesson, and skip the PID controller.
 
@@ -586,7 +586,7 @@ GitHub sources were read at the default-branch head on 2026-11-24. Defaults quot
 #### I30 · Kubernetes API Priority and Fairness
 - **Source:** Kubernetes flow-control docs; KEP-1040
 - **Verified:** read directly, partially (queuing/seats sections; the KEP's shuffle-sharding section)
-- **Key idea:** Guards a concurrency limit measured in "seats" with a fixed set of queues: each flow hashes to a small hand of queues, joins the shortest, and borrows unused concurrency across levels.
+- **Key idea:** Guards a concurrency limit measured in "seats" with a fixed set of queues: each flow hashes to a small hand of queues and joins the shortest, and unused concurrency is lent between levels.
 - **Borrow:** For fairness, borrow request "width"—letting an expensive request occupy more than one seat—as the way to charge a 100-key `MGET`. Keep shuffle-sharded queues as the documented scale-out path if the tenant set ever grows unbounded.
 - **Do not copy:** Skip the rest of the machinery: for a handful of tenants, one queue per tenant with round-robin is simpler and exactly fair.
 - **Strength:** SECONDARY · **Recommendation:** WATCH ONLY — keep the width idea in mind; nothing to build now.
@@ -666,7 +666,7 @@ orchestrator with identical output. They are a reason to test this in Commit 0, 
 #### F2 · Request-queue CoDel — the "Fail at Scale" timeout rule
 - **Source:** "Fail at Scale" (S7); constants confirmed there
 - **Verified:** read directly (Wayback copy)
-- **Key idea:** Instead of dropping on a schedule, shorten each request's allowed queue wait: if the queue has not been empty in the last N = 100 ms, allow M = 5 ms; otherwise allow N.
+- **Key idea:** Instead of dropping on a schedule, set each request's allowed queue wait: if the queue has not been empty in the last N = 100 ms, allow M = 5 ms; otherwise allow N.
 - **Borrow:** For admission, keep one `int64` `lastEmptyTime` per queue. On enqueue, if the queue is empty, set `lastEmptyTime = now`, then assign deadline = now + (M if `lastEmptyTime < now − N` else N). On dequeue, shed any request past its deadline with a pre-forward `OVERLOADED`, and if the queue is found empty, set `lastEmptyTime = now`. On the virtual clock, test four invariants: every served request waited ≤ N (exact); queue depth stays the same for a run of length T and a run of 4T; served count stays ≥ 0.95 × capacity so shedding never idles the backend; and a FIFO control on the same seed grows linearly. *(probe)* At 10× overload: p50 wait was 4.3 ms, max was 100.0 ms, depth stayed ≤ 580, and no capacity went idle.
 - **Do not copy:** Do not hard-code 5 ms / 100 ms as universal truths—make M and N configurable and size them against backend service time. Avoid the classic bug of updating `lastEmptyTime` only at dequeue, which wrongly gives the first burst after an idle period the short timeout.
 - **Strength:** CORE · **Recommendation:** ADOPT — one word of state, and its detector does not depend on dequeue order.
@@ -676,7 +676,7 @@ orchestrator with identical output. They are a reason to test this in Commit 0, 
 - **Verified:** read directly (both files; header comment re-fetched by the orchestrator)
 - **Key idea:** Track the minimum queueing delay per 100 ms interval. If it exceeded the 5 ms target, mark the queue overloaded and shed any dequeued request that waited more than 2 × target. The header notes this replaces the √n law because it "empirically works better for our services".
 - **Borrow:** For observability, borrow the load gauge `min(100, 100 × minDelay / (2 × target))` as a free 0–100 overload metric per tenant, along with the rule that the first sample of an interval is never shed. For testing, keep it as a comparison arm in the simulator.
-- **Do not copy:** Do not pair this detector with LIFO dequeue. Because it reads the delay of the *dequeued* request—which under LIFO is the freshest one—the minimum looks healthy even while old requests pile up. *(probe)* Pairing folly detection with LIFO at 10× overload shed zero requests and let the queue grow without bound. It also decides only at dequeue, so a fully stalled backend dequeues nothing and sheds nothing.
+- **Do not copy:** Do not pair this detector with LIFO dequeue. Because it reads the delay of the *dequeued* request—which under LIFO is the freshest one—the minimum looks healthy. *(probe)* Pairing folly detection with LIFO at 10× overload shed zero requests and let the queue grow without bound. It also decides only at dequeue, so a fully stalled backend dequeues nothing and sheds nothing.
 - **Strength:** SECONDARY · **Recommendation:** ADOPT WITH CHANGE — take the gauge and comparison arm; use F2 as the detector. (The two research agents split on this; see C1.)
 
 #### F4 · Adaptive LIFO — HHVM's job queue, plus a switch rule and head sweep of our own
@@ -754,7 +754,7 @@ orchestrator with identical output. They are a reason to test this in Commit 0, 
 #### F13 · Little's Law
 - **Source:** Little 1961, `L = λ × W`
 - **Verified:** secondary only (statement); the arithmetic is ours *(probe: `calc.py`)*
-- **Key idea:** A concurrency limit L and mean service time W cap throughput at L/W.
+- **Key idea:** A concurrency limit L and service time W cap throughput at L/W.
 - **Borrow:** For the pool, concurrency limit, and benchmarking, use this as both the sizing identity and a test oracle: simulated throughput must equal `min(offered, L/W)`. Applying it to the spec's numbers: 20 connections at 50 ms yield 400 QPS and 32 yield 640 QPS; during a 200 ms stall, those drop to 100 and 160 QPS. Tenant A at 5,000 QPS plus Tenant B at 50 QPS is 12.6× or 7.9× overload normally, rising to 50× or 32× during the stall. **B needs 10 in-flight slots during the stall—exactly half of a 20-connection pool with zero margin—whereas with 32 connections, B's fair share is 16.** At 500 clients, ÷ 32 gives 15.6× (matching the spec's "~15×"), and ÷ 20 gives 25×.
 - **Do not copy:** Do not assume one in-flight request per connection: with RESP pipelining, the in-flight limit and pool size are separate knobs.
 - **Strength:** CORE · **Recommendation:** ADOPT — and publish the headline scenarios at pool size 32 (question 7).
@@ -924,10 +924,10 @@ Each entry states the two competing pulls, what each side costs, and the recomme
 The spec cites the CoDel paper as the algorithm, yet its sources actually contain three different ones: the paper's drop schedule, the "Fail at Scale" queue timeout, and folly's minimum-delay rule. The paper's law produces an unbounded queue under heavy open-loop overload *(probe)*. Folly's rule is the best-specified in code, but it goes blind when paired with LIFO dequeue *(probe)*—and the spec requires LIFO. The timeout rule needs only one timestamp and does not depend on dequeue order, though it produces a saw-tooth (shed until empty, relax for N, repeat) instead of smooth convergence. The two research agents split (one recommended folly, one the timeout rule). **Resolution:** Ship the timeout rule (F2), and keep folly's detector and the RFC law only as simulator comparison arms. Reword the spec's invariant from "wait converges to the CoDel target" to "served wait ≤ N, queue depth bounded regardless of overload duration, backend never idled by shedding". Question 3.
 
 **C2 · Hyperdrive-style query caching vs a no-cache proxy (S3 vs the spec's thesis)**
-Caching would cut read QPS more than anything else on the list. Its cost is read-after-write semantics, an invalidation design, and a wide correctness surface—the Hyperdrive MySQL bug (S4) shows what that surface looks like in production. Coalescing shares a result only among requests that overlap in time, so it needs no staleness contract. **Resolution:** Ship no cache in v1, use coalescing only, and leave caching to Variant C. Question 5.
+Caching would cut read QPS more than anything else on the list. Its cost is read-after-write semantics, an invalidation design, and a correctness surface—the Hyperdrive MySQL bug (S4) shows what that surface looks like in production. Coalescing shares a result only among requests that overlap in time, so it needs no staleness contract. **Resolution:** Ship no cache in v1, use coalescing only, and leave caching to Variant C. Question 5.
 
 **C3 · Transaction-mode lending (PgBouncer, Hyperdrive) vs RESP multiplexing (Twemproxy, Envoy)**
-Postgres poolers lend an entire connection to one client until the transaction ends, whereas a Redis proxy multiplexes commands from many clients onto one connection at once. They share the fan-in goal but almost no mechanism: Variant B has no cross-client pipelining and no micro-batching, and its hardest part is tracking transaction boundaries, whereas Variant A exercises every mechanism in the spec. Carrying both models inside one pool abstraction would fit neither. **Resolution:** Build the multiplexing pool for Variant A, and borrow only pool-*management* ideas from the Postgres side (limit taxonomy, bounded concurrent connects, lockout after connect failure, and the dirty-connection table). Questions 1 and 6.
+Postgres poolers lend an entire connection to one client until the transaction ends, whereas a Redis proxy multiplexes commands from many clients onto one connection at once. They share the fan-in goal but almost no mechanism: Variant B has no cross-client pipelining and no micro-batching, and its hard part is tracking transaction boundaries, whereas Variant A exercises every mechanism in the spec. Carrying both models inside one pool abstraction would fit neither. **Resolution:** Build the multiplexing pool for Variant A, and borrow only pool-*management* ideas from the Postgres side (limit taxonomy, bounded concurrent connects, lockout after connect failure, and the dirty-connection table). Questions 1 and 6.
 
 **C4 · Static CoDel targets vs adaptive concurrency replacing them (S7 vs I11 / I6 / I28)**
 One camp argues fixed 5 ms / 100 ms targets need no tuning; Netflix and Envoy argue fixed limits go stale and should be inferred; Uber reports that CoDel plus a *manual* concurrency limit was QALM's adoption problem. Yet the two mechanisms control different things: the queue rule decides *which waiting requests to shed*, while the concurrency limit decides *how much work the backend receives*. Dropping the queue rule leaves a standing queue of stale requests; dropping the adaptive limit leaves a pool hammering a stalled backend at full width. The real hazard is letting two control loops read the same signal. **Resolution:** Keep both with separate signals—queue wait for CoDel, and backend round-trip time (measured per batch, excluding queue wait) for AIMD—under static caps as the hard outer bound, with M and N configurable because 5 ms does not fit a 50–200 ms backend.
@@ -951,13 +951,13 @@ The spec calls for a single-threaded seed-driven harness *and* for goroutine-lea
 Rejecting stateful commands keeps the fan-in arithmetic exact and the pool invariant simple, at the cost of breaking applications that rely on `MULTI` or `BLPOP`. Pinning preserves compatibility but lets a handful of clients drain the pool. **Resolution:** Reject stateful commands in v1 with a clear error, and document connection pinning with a hard cap as a v2 option. Question 9.
 
 **C11 · Linger-window batching (spec, ZGateway, Envoy) vs timer-free smart batching (F25)**
-A linger window is easy to explain and tune, but unless guarded it adds its full duration to idle latency, makes "queue wait" ambiguous for CoDel, and inflates the latency AIMD observes. Timer-free batching has no knob and adds no idle cost, though batch size becomes an emergent outcome rather than a setting. **Resolution:** Default to timer-free batching bounded by `maxBatch` and `maxBytes`, treat a linger window as a measured experiment only, and exclude batch wait from queue sojourn time.
+A linger window is easy to explain and tune, but it adds its full duration to idle latency unless guarded. It also makes "queue wait" ambiguous for CoDel and inflates the latency AIMD observes. Timer-free batching has no knob and adds no idle cost, though batch size becomes an emergent outcome rather than a setting. **Resolution:** Default to timer-free batching bounded by `maxBatch` and `maxBytes`, treat a linger window as a measured experiment only, and exclude batch wait from queue sojourn time.
 
 **C12 · Coalescing: shared errors, waiter caps, and who pays (I24, I26 vs the spec's invariants)**
 Sharing the leader's error fails N clients on one transient fault, yet letting waiters re-drive breaks "at most 1 in-flight per key". An uncapped waiter set leaks unbounded memory, yet Vitess's run-independently overflow breaks that same invariant. Finally, when one backend read serves several tenants, charging only the initiator lets others ride free, while charging every waiter over-counts backend load. **Resolution:** Share errors, reject duplicates past a per-key waiter cap, and charge coalesced followers no admission or pool slot (P14) while counting them per tenant as coalesced hits.
 
 **C13 · Model vs measurement; statistical thresholds vs exact checks (S1 vs S10; spec §4.2 vs P6, P10)**
-Meta headlines a modelled 19× figure, while Apollo rejects any result that fails its validation gates. Meanwhile, the spec's invariants are statistical ("> 99%", "within 2× baseline"), yet the object store proved that sweep-level statistics cause false failures during single-seed replay. **Resolution:** In simulation, make exact per-run comparisons against a control run. Reserve percentage thresholds for the real-backend benchmark, report measured connection counts in the README, and label any formula-derived number as a model.
+Meta headlines a modelled 19× figure, while Apollo rejects any result that fails its validation gates. Meanwhile, the spec's invariants are statistical ("> 99%", "within 2× baseline"), yet the object store learned that sweep-level statistics cause false failures during single-seed replay. **Resolution:** In simulation, make exact per-run comparisons against a control run. Reserve percentage thresholds for the real-backend benchmark, report measured connection counts in the README, and label any formula-derived number as a model.
 
 **C14 · Patient queues vs honest queues (PgBouncer 120 s, nginx 60 s vs SRE, Cinnamon, CoDel)**
 Connection poolers optimise to avoid ever showing an error to the application, whereas the overload literature warns that patience is how a standing queue forms. **Resolution:** Keep queues short and honest, and state that explicitly in the README because PgBouncer users will expect the opposite.
@@ -990,7 +990,7 @@ A minimum-latency baseline must be re-measured periodically by pinning concurren
 - Variant A exercises every mechanism in the spec. Variant B drops micro-batching and turns a "multiplexed pool" into "transaction-mode lending"; coalescing in Variant B also requires a SQL volatility classifier and must stay outside transactions.
 - Three production proxies we can cite have already done the command-classification work for Variant A. Nothing in Nick's prior work includes a Postgres wire parser or transaction-boundary logic, so Variant B would start from zero on its hardest component.
 - Evidence from prior projects shows the main cost sits in integration and end-to-end work rather than primitives, and Variant A lets us spend the budget there.
-- What Variant B has that Variant A lacks is drama: the fan-in story is clearest against a process-per-connection database (5–7 round trips per connect), and "PgBouncer with CoDel and per-tenant fairness" is a sharper pitch to database-infrastructure teams. That is a strong argument for **B as v2**, built on the same admission, fairness, coalescing, and simulator cores—which is why the plan should keep those cores protocol-free.
+- What Variant B has that Variant A lacks is drama: the fan-in story is clearest against a process-per-connection database (5–7 round trips per connect), and "PgBouncer with CoDel and per-tenant fairness" is a sharper pitch to database-infrastructure teams. That is a real argument for **B as v2**, built on the same admission, fairness, coalescing, and simulator cores—which is why the plan should keep those cores protocol-free.
 
 One scope note inside Variant A: the list argues for **RESP2-only, stateful commands rejected** in v1 (S4, I10, I18, I20). That is narrower than the spec's "RESP2/3" and is question 9.
 

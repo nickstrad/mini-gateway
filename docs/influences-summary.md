@@ -1,6 +1,6 @@
 # Influences summary
 
-Phase 0 produced [INFLUENCES.md](../INFLUENCES.md), a survey of 100 influences read from their sources where possible, recording what to borrow, what not to copy, and a recommendation for each. Nick then answered 14 steering questions to settle the design. This page is the short version. The full document was written before those answers, under the old project name and with Redis as the working assumption. Where it and the plan disagree, the plan follows the steering.
+Phase 0 produced [INFLUENCES.md](../INFLUENCES.md), a survey of 100 influences read from their sources where possible, recording what to borrow, what not to copy, and a recommendation for each. Nick then answered 14 steering questions. This page is the short version. The full document was written before those answers, under the old project name and with Redis as the working assumption. Where it and the plan disagree, the plan follows the steering.
 
 ## What is in the list
 
