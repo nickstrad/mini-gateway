@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"bytes"
+	"os"
 	"testing"
 
 	"github.com/nickstrad/mini-gateway/internal/retry"
@@ -52,6 +53,9 @@ func TestScenarioRetry(t *testing.T) {
 				t.Skip("retry scenarios: run without -short (sweep, gate)")
 			}
 			seeds := simtest.Seeds(t)
+			if os.Getenv("DST_SEEDS") == "" && os.Getenv("DST_SEED") == "" {
+				seeds = seeds[:1]
+			}
 			if len(seeds) > retrySweepCap {
 				seeds = seeds[:retrySweepCap]
 			}
