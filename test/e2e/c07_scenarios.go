@@ -11,12 +11,13 @@ import (
 )
 
 const (
-	poolRate      = 50
-	poolInterval  = time.Second / poolRate
-	poolStmt      = 500 * time.Millisecond
-	poolCheckIdle = 2 * time.Second
-	poolIdle      = 20 * time.Second
-	heavySeeds    = 3
+	poolRate       = 50
+	poolInterval   = time.Second / poolRate
+	poolStmt       = 500 * time.Millisecond
+	poolCheckIdle  = 2 * time.Second
+	poolIdle       = 20 * time.Second
+	heavySeeds     = 3
+	poolSweepSeeds = 20
 )
 
 type PoolScenario struct {

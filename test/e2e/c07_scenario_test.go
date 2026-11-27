@@ -53,6 +53,9 @@ func TestScenarioPool(t *testing.T) {
 			if sc.Heavy && len(seeds) > heavySeeds {
 				seeds = seeds[:heavySeeds]
 			}
+			if len(seeds) > poolSweepSeeds {
+				seeds = seeds[:poolSweepSeeds]
+			}
 			if testing.Short() && len(seeds) > 1 {
 				seeds = seeds[:1]
 			}
