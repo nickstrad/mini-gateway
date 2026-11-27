@@ -298,4 +298,5 @@ type ShedQueue interface {
 	Next() Instant
 	TakeShed() (RequestID, bool)
 	Unpop() bool
+	Close(now Instant)
 }

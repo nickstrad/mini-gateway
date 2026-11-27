@@ -129,6 +129,7 @@ func (e *Engine) Start(now Instant, out []Action) []Action {
 func (e *Engine) Shutdown(now Instant, out []Action) []Action {
 	e.begin(now, out)
 	e.stopping = true
+	e.sweepAdmission()
 	for len(e.clientList) > 0 {
 		e.closeClient(e.clientList[len(e.clientList)-1], CloseClientShutdown)
 	}
@@ -138,6 +139,7 @@ func (e *Engine) Shutdown(now Instant, out []Action) []Action {
 		}
 	}
 	e.t.cancel(&e.redialT)
+	e.closeAdmission()
 	return e.finish()
 }
 

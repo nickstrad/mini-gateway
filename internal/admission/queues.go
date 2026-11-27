@@ -493,6 +493,26 @@ func (q *Queues) take(now Time, id int64, expired bool) bool {
 	return true
 }
 
+func (q *Queues) Close(now Time) {
+	q.advance(now)
+	for i := 0; i < len(q.list); {
+		if !q.list[i].empty() {
+			i++
+			continue
+		}
+		q.removeTenant(i)
+		q.c.removedTenants++
+	}
+}
+
+func (q *Queues) ShedCount() int64 {
+	n := int64(0)
+	for _, v := range q.c.shed {
+		n += v
+	}
+	return n
+}
+
 func (q *Queues) Contains(id int64) bool {
 	_, ok := q.where[id]
 	return ok
