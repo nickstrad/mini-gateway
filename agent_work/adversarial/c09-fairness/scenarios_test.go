@@ -16,7 +16,7 @@ import (
 
 func scratch(t *testing.T) string {
 	t.Helper()
-	d, e := os.MkdirTemp(".", "scratch-")
+	d, e := os.MkdirTemp(".", ".scratch-")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -81,6 +81,9 @@ func TestAdv_5_QuietAtLeaseBoundary(t *testing.T)     { noisy(t, 39*time.Millise
 func TestAdv_5_QuietEarlyInFlood(t *testing.T)        { noisy(t, 3*time.Millisecond, seed+2) }
 
 func many(t *testing.T, n int, offset time.Duration) {
+	if os.Getenv("ADV_LONG") != "1" {
+		t.Skip("ADV_LONG=1: many-tenant CSV campaign")
+	}
 	s := spec(n, offset, 36)
 	r := run(t, s, seed, scratch(t))
 	s.Clients = s.Clients[36:]
@@ -90,7 +93,7 @@ func many(t *testing.T, n int, offset time.Duration) {
 			t.Errorf("tenant=%d alone success, mixed=%v", i+1, r.Clients[36+i])
 		}
 	}
-	if len(r.Flush.Final.Components) == 0 {
+	if len(r.Flush.Final.Points) == 0 {
 		t.Fatal("empty flushed snapshot")
 	}
 }
@@ -113,6 +116,9 @@ func TestAdv_9_SingleQueueLargerBurst(t *testing.T) { ablation(t, 64, 10*time.Mi
 func TestAdv_9_SingleQueueLateQuiet(t *testing.T)   { ablation(t, 48, 60*time.Millisecond) }
 
 func replay(t *testing.T, fragment bool, cancel bool) {
+	if os.Getenv("ADV_LONG") != "1" {
+		t.Skip("ADV_LONG=1: full CSV replay campaign")
+	}
 	s := spec(3, 11*time.Millisecond, 12)
 	s.Fragment = fragment
 	if cancel {
