@@ -124,12 +124,11 @@ the fake also charges it to every `DISCARD ALL` and halves the capacity.
 
 | Target | Package | Seed source | Decoding | Rate |
 | --- | --- | --- | --- | --- |
-| `FuzzAdmissionOps` | `internal/admission` | none: the core takes no randomness; the input decodes directly (3 bytes per op: kind, tenant/pick, time step) | at most 64 ops, trailing bytes ignored, one-byte change alters one op; every op runs against the reference model for all four rules on a small config (tenant cap 3, total 5, 3 tenants) | about 137/s on vm-1 (not simulation-level) |
+| `FuzzAdmissionOps` | `internal/admission` | none: the core takes no randomness; the input decodes directly (3 bytes per op: kind, tenant/pick, time step) | at most 64 ops, trailing bytes ignored, one-byte change alters one op; every op runs against the reference model for all four rules on a small config (tenant cap 3, total 5, 3 tenants) | 976/s in the gate's G5 (137/s on a loaded host; not simulation-level) |
 
 The pinned fuzz inventory in `agent_work/adversarial/cr01-shrink-fuzz-rules/adv_test.go`
-counts simulator-level targets; this target does not import `internal/sim`. Whether
-`TestAdv_6_GateSeedSweepCounts` / `TestAdv_7_InventoryAndHiddenHashImports` go red is
-recorded in "Gate result".
+counts simulator-level targets; this target does not import `internal/sim`, so
+`TestAdv_6_GateSeedSweepCounts` and `TestAdv_7_InventoryAndHiddenHashImports` stay green.
 
 ## The head-to-head table (`test/analysis/admission-head-to-head/head-to-head.md`, seed 1)
 
@@ -231,4 +230,25 @@ scripts/gate.sh c08-admission
 
 ## Gate result
 
-(filled in after the run)
+`scripts/gate.sh c08-admission` (build stage) at `10516b7`, 2026-11-27, clean tree:
+**overall pass, counts_for_landing true.** `result.json` is not committed (the orchestrator
+runs the landing gate).
+
+| Check | Result |
+| --- | --- |
+| G0 tools, gofmt, build, vet, tools-vet, tools-test, tidy | pass |
+| G1 detlint (24 patterns, `internal/admission` and `internal/obs/admsrc` added), importlint, boundlint, paniccheck | pass |
+| G2 comments | pass |
+| G3 unit | pass (725 s), including every adversarial package; the two pinned fuzz-inventory tests did not go red (they count simulation-level targets, and `FuzzAdmissionOps` is not one) |
+| G3 race | pass (`./internal/admission/...` added) |
+| G4 markers, sweep (200 seeds) | pass (sweep 1,174 s) |
+| G5 fuzz | pass: 17 targets, 15 fuzz, 2 seed sweeps (not this chunk's); `FuzzAdmissionOps` 20,512 executions, 976/s |
+| G6 tier R | pass (339 s), including `TestTierRAdmissionOverloadWithPgSleep` |
+| G7 CSV assertions | pass (4,687 run directories, 66 scenarios with SQL files) |
+| G8 generated documents, G9 site | pass |
+| G10 extra | pass: both planted fuzz bugs found (3 s and 1 s), head-to-head table reproduced exactly |
+
+Earlier full `go test ./...` runs on the shared host saw two timing-based tests of other
+chunks fail under load (`TestAdv_5_OperatorSuffixRescanning`, `TestClassifierTimeGrowsLinearly`)
+and one external kill of `test/e2e`; none recurred in the gate run. No fuzz `context deadline
+exceeded` occurred.
