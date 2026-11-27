@@ -1,5 +1,5 @@
 -- requires: fakepg.statements workload.requests
--- claim: coalesce-hot-key-relaxed: a burst of 1,000 identical reads costs 1 or 2 database reads through the coalescer and 1,000 with it off (the ablation arm of the same seed); flights started + hits = the shareable reads the classifier saw; the waiters-per-flight histogram counts every flight that ended and its total lies between the bucket bounds of the waiters answered; the final flush shows nothing waiting.
+-- claim: coalesce-hot-key-relaxed: a burst of 1,000 identical reads costs 1 or 2 database reads through the coalescer and 1,000 with it off (the ablation arm of the same seed); flights started + hits = the shareable reads the classifier saw (the 1,000 hot reads and the 1,000 recovery reads); the waiters-per-flight histogram counts every flight that ended and its total lies between the bucket bounds of the waiters answered; the final flush shows nothing waiting.
 SELECT run_id || ': schema_version ' || schema_version AS violation FROM runs WHERE schema_version <> 1
 UNION ALL
 (WITH arms AS (
@@ -33,7 +33,7 @@ SELECT c.run_id || ': flights ' || coalesce(flights, -1) || ' + hits ' || coales
        || coalesce(h.hi, -1) || ') for ' || coalesce(ended, -1) || ' ended flights and ' || coalesce(answered, -1) || ' answered waiters; left over '
        || coalesce(left_over, -1) || ', coalesced ' || coalesce(coalesced, -1)
 FROM c LEFT JOIN h USING (run_id)
-WHERE flights + hits IS DISTINCT FROM shareable OR offered IS DISTINCT FROM shareable OR shareable IS DISTINCT FROM 1000
+WHERE flights + hits IS DISTINCT FROM shareable OR offered IS DISTINCT FROM shareable OR shareable IS DISTINCT FROM 2000
    OR h.n IS DISTINCT FROM ended OR answered < h.lo OR answered > h.hi OR left_over <> 0 OR coalesced <> 0)
 UNION ALL
 SELECT 'no base run of coalesce-hot-key-relaxed' WHERE NOT EXISTS (SELECT 1 FROM runs WHERE scenario = 'coalesce-hot-key-relaxed' AND arm = 'base');
