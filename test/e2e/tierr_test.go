@@ -114,9 +114,13 @@ func realConservation(s obs.InstanceSnapshot) error {
 		return fmt.Errorf("conservation from the file: received %d accepted %d rejected %d completed %d failed %d shed %d", rec, acc, rej, comp, fail, shed)
 	}
 	ended := ev(s, "leases_ended", none)
-	if ended != ev(s, "leases_started", none) || ended != ev(s, "resets_completed", none)+s.Sum(obs.ComponentEngine, "resets_failed")+
-		ev(s, "leases_ended_by", obs.Labels{Outcome: "close"})+ev(s, "leases_ended_by", obs.Labels{Outcome: "as-is"}) {
+	by := func(o string) int64 { return ev(s, "leases_ended_by", obs.Labels{Outcome: o}) }
+	if ended != ev(s, "leases_started", none) || ended != by("reset")+by("close")+by("as-is")+by("dirty") {
 		return fmt.Errorf("lease accounting from the file: started %d ended %d", ev(s, "leases_started", none), ended)
+	}
+	started := ev(s, "resets_started", none)
+	if started != by("reset")+ev(s, "resets_not_at_release", none) || started != ev(s, "resets_completed", none)+s.Sum(obs.ComponentEngine, "resets_failed") {
+		return fmt.Errorf("reset accounting from the file: started %d, at release %d, completed %d", started, by("reset"), ev(s, "resets_completed", none))
 	}
 	return nil
 }

@@ -262,7 +262,7 @@ func checkCancel(r *SimRun) error {
 	return quietPool(r)
 }
 
-func lentAt(r *SimRun) int64 { return int64(r.Spec.Conns) }
+func lentAt(*SimRun) int64 { return pathLoopers }
 
 func checkMassDeath(r *SimRun) error {
 	s := poolSnap(r)
@@ -276,8 +276,8 @@ func checkMassDeath(r *SimRun) error {
 	if s.ChecksByResult[pool.CheckOK] == 0 && s.Closes[pool.CloseCheckFailed] == 0 && s.Closes[pool.CloseNoReply] == 0 && s.Closes[pool.CloseError] == 0 {
 		return failf("no dead connection was found: closes %v", s.Closes)
 	}
-	if okSteps(r, 6*time.Second) == 0 {
-		return failf("goodput did not return")
+	if okSteps(r, pathDeath+r.Spec.Timeouts.Statement+r.Spec.Timeouts.Cleanup+time.Second) == 0 {
+		return failf("goodput did not return within the statement deadline and the clean-up")
 	}
 	if most := maxIn(r.Path.accepts, time.Second); most > poolRate+1 {
 		return failf("a dial spike of %d in one second above the creation rate %d", most, poolRate)
@@ -332,7 +332,7 @@ func checkNight(remedied bool) func(r *SimRun) error {
 		if !remedied && s.NoReply == 0 {
 			return failf("with every remedy off the morning ramp hung no statement: the scenario cannot fail (%s)", r.Path)
 		}
-		if r.Path.stats.IdleDrops == 0 && r.Spec.Path.Keepalive == 0 {
+		if !remedied && r.Path.stats.IdleDrops == 0 {
 			return failf("the middlebox dropped nothing: %s", r.Path)
 		}
 		return quietPool(r)

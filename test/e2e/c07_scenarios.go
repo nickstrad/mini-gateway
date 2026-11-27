@@ -157,17 +157,24 @@ func PolicySpec(reset proxy.ResetPolicy, reseed bool, plant pool.Plant) Spec {
 	return sp
 }
 
+const (
+	pathLoopers   = 2
+	pathLoopStart = time.Second
+	pathDeath     = 1500 * time.Millisecond
+)
+
 func pathSpec(name string, plan PathPlan, edit func(*pool.Config)) Spec {
 	sp := Spec{Name: name, Tenants: 4, Conns: 6, QueueCap: 64, Rows: clientRows(6), Timeouts: poolTimeouts(), Duration: 15 * time.Second,
 		Service: fakepg.Service{PerKind: []fakepg.KindTime{{Kind: fakepg.KindRead, Time: 30 * time.Millisecond}}}}
 	for c := 0; c < 6; c++ {
 		sp.Clients = append(sp.Clients, Script{Tenant: c % 4, Start: time.Duration(c) * 3 * time.Millisecond,
-			Steps: steps(read(c, "a"), read(c, "b"))})
+			Steps: []Step{{SQL: "SELECT pg_sleep(0.3)", Delay: 100 * time.Millisecond}}})
 	}
-	for c := 0; c < 6; c++ {
-		sp.Clients = append(sp.Clients, loopScript(c%4, 3*time.Second+time.Duration(c)*7*time.Millisecond, 40*time.Millisecond, 60,
+	for c := 0; c < pathLoopers; c++ {
+		sp.Clients = append(sp.Clients, loopScript(c%4, pathLoopStart+time.Duration(c)*7*time.Millisecond, 40*time.Millisecond, 100,
 			func(i int) string { return read(c, "a") }))
 	}
+	sp.Timeouts.QueueWait = 5 * time.Second
 	p := plan
 	sp.Path = &p
 	return withCore(sp, name, edit)
@@ -175,8 +182,8 @@ func pathSpec(name string, plan PathPlan, edit func(*pool.Config)) Spec {
 
 func MassDeathSpec(f PathFault, plant pool.Plant) Spec {
 	name := "pool-mass-" + f.String()
-	ev := PathEvent{At: 3500 * time.Millisecond, Fault: f}
-	return pathSpec(name, PathPlan{Events: []PathEvent{ev}}, func(c *pool.Config) { c.Plant = plant })
+	ev := PathEvent{At: pathDeath, Fault: f}
+	return pathSpec(name, PathPlan{Events: []PathEvent{ev}}, func(c *pool.Config) { c.Plant = plant; c.CheckAfterIdle = 5 * time.Second })
 }
 
 func PoliteCloseSpec() Spec {
@@ -196,9 +203,9 @@ func CheckHangsSpec(plant pool.Plant) Spec {
 }
 
 func SlotsHeldSpec() Spec {
-	ev := PathEvent{At: 3500 * time.Millisecond, Fault: PathBlackhole}
+	ev := PathEvent{At: pathDeath, Fault: PathBlackhole}
 	sp := pathSpec("pool-slots-held", PathPlan{Events: []PathEvent{ev}, ReapAfter: 4 * time.Second}, func(c *pool.Config) { c.RatePerSec = 10 })
-	sp.FakeConns = 6
+	sp.FakeConns = 5
 	sp.Duration = 20 * time.Second
 	return sp
 }
