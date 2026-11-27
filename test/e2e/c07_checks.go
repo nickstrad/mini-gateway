@@ -315,6 +315,15 @@ func checkCheckHangs(r *SimRun) error {
 }
 
 func checkSlotsHeld(r *SimRun) error {
+	late := len(r.Clients) - 1
+	if err := allSteps(r, late); err != nil {
+		return err
+	}
+	for i, st := range r.Clients[late].Steps {
+		if HasToken(st, "E:") || HasToken(st, "closed:") || !HasToken(st, "C:SELECT 1") {
+			return failf("post-reap client step %d did not succeed: %v", i, st)
+		}
+	}
 	refused := int64(clientErrors(r, "53M03"))
 	if other := int64(anyClientErrors(r)) - refused; other > lentAt(r) {
 		return failf("%d client errors other than 53M03 after the mass death, at most the %d connections that could be lent", other, lentAt(r))
