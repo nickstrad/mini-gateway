@@ -1096,3 +1096,316 @@ func TestGateShRecordsNullFuzzRetriesWhenG5SkippedAndRejectsBadMaxRetries(t *tes
 		}
 	}
 }
+
+type isolatedGateRepo struct {
+	root    string
+	stubBin string
+	counts  string
+}
+
+func newIsolatedGateRepo(t *testing.T, targets map[string][]string, stubFuzzBody string) isolatedGateRepo {
+	t.Helper()
+	repoRoot, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	stubBin := filepath.Join(t.TempDir(), "bin")
+	countsDir := filepath.Join(t.TempDir(), "counts")
+	if err := os.MkdirAll(stubBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(countsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile := func(rel, content string, mode os.FileMode) {
+		p := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitCmd := func(args ...string) {
+		c := exec.Command("git", args...)
+		c.Dir = dir
+		out, err := c.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	writeFile(".gitignore", "agent_work/chunks/*/gate/*.log\nagent_work/chunks/*/gate/*.tsv\n", 0o644)
+	writeFile("go.mod", "module example.invalid/gatetest\n\ngo 1.26\n", 0o644)
+	writeFile("tools/detlint/go.mod", "module example.invalid/gatetest/tools/detlint\n\ngo 1.26\n", 0o644)
+	writeFile("tools/detlint/main.go", "package main\n\nfunc main() {}\n", 0o644)
+	for _, rule := range []string{
+		"det-packages.txt",
+		"detlint-allow.txt",
+		"imports.txt",
+		"boundlint-allow.txt",
+		"panic-allow.txt",
+		"race-packages.txt",
+	} {
+		writeFile(filepath.Join("tools", "lint-rules", rule), "", 0o644)
+	}
+	writeFile("tools/lint-rules/shell-packages.txt", "p\n", 0o644)
+
+	gitCmd("init")
+	gitCmd("checkout", "-b", "main")
+	gitCmd("add", ".")
+	gitCmd("-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "-m", "base")
+	gitCmd("checkout", "-b", "work/test-chunk")
+
+	for _, name := range []string{"gate.sh", "fuzz.sh"} {
+		src, err := os.ReadFile(filepath.Join(repoRoot, "scripts", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeFile(filepath.Join("scripts", name), string(src), 0o755)
+	}
+	for _, name := range []string{"sweep.sh", "tier-r.sh", "csv-assert.sh", "gen-docs.sh"} {
+		writeFile(filepath.Join("scripts", name), "#!/bin/bash\nexit 0\n", 0o755)
+	}
+	writeFile("scripts/site.sh", "#!/bin/bash\nmkdir -p \"$1/book\"\necho ok > \"$1/book/index.html\"\necho book/index.html > \"$1/pages.txt\"\n", 0o755)
+
+	for pkg, funcs := range targets {
+		var sb strings.Builder
+		sb.WriteString("package " + filepath.Base(pkg) + "\n\nimport \"testing\"\n")
+		for _, fn := range funcs {
+			sb.WriteString("\nfunc " + fn + "(f *testing.F) {}\n")
+		}
+		writeFile(filepath.Join(pkg, "fuzz_test.go"), sb.String(), 0o644)
+	}
+
+	gitCmd("add", ".")
+	gitCmd("-c", "user.name=test", "-c", "user.email=test@example.invalid", "commit", "-m", "chunk")
+
+	goStub := `#!/bin/bash
+case "$1" in
+  version)
+    echo 'go version go1.26.8 linux/amd64'
+    exit 0
+    ;;
+  build)
+    if [ "$2" = -o ]; then
+      out=$3
+      mkdir -p "$out"
+      for tool in detlint importlint boundlint paniccheck nocomments astdiff; do
+        printf '#!/bin/bash\nexit 0\n' > "$out/$tool"
+        chmod +x "$out/$tool"
+      done
+    fi
+    exit 0
+    ;;
+  vet|mod)
+    exit 0
+    ;;
+  list)
+    if [ "$2" = -m ]; then
+      echo example.invalid/gatetest
+      exit 0
+    fi
+    if [ "$2" = -deps ]; then
+      pkg=${4#./}
+      echo "example.invalid/gatetest/$pkg"
+      if [ "$pkg" = simpkg ]; then
+        echo example.invalid/gatetest/internal/sim
+      fi
+      exit 0
+    fi
+    echo example.invalid/gatetest/p
+    exit 0
+    ;;
+  test)
+    fuzz=0
+    dir= name=
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -fuzz) fuzz=1; name=${2#^}; name=${name%$}; shift ;;
+        ./*) dir=${1#./} ;;
+      esac
+      shift
+    done
+    if [ "$fuzz" = 0 ]; then
+      exit 0
+    fi
+    key=$(tr / _ <<<"$dir")__$name
+    n=0
+    if [ -f "$STUB_COUNTS/$key.n" ]; then
+      n=$(cat "$STUB_COUNTS/$key.n")
+    fi
+    n=$((n + 1))
+    printf '%s\n' "$n" > "$STUB_COUNTS/$key.n"
+` + stubFuzzBody + `
+    ;;
+esac
+exit 0
+`
+	if err := os.WriteFile(filepath.Join(stubBin, "go"), []byte(goStub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return isolatedGateRepo{root: dir, stubBin: stubBin, counts: countsDir}
+}
+
+func (g isolatedGateRepo) runGate(t *testing.T, extraEnv ...string) (int, string, map[string]any) {
+	t.Helper()
+	entries, err := os.ReadDir(g.counts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ent := range entries {
+		if err := os.Remove(filepath.Join(g.counts, ent.Name())); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmd := exec.Command("bash", filepath.Join(g.root, "scripts", "gate.sh"), "test-chunk")
+	cmd.Dir = g.root
+	env := []string{}
+	for _, e := range os.Environ() {
+		k := strings.SplitN(e, "=", 2)[0]
+		if strings.HasPrefix(k, "GATE_") || strings.HasPrefix(k, "FUZZ_") || strings.HasPrefix(k, "SWEEP_") || k == "PATH" || k == "GOFLAGS" || k == "GOWORK" {
+			continue
+		}
+		env = append(env, e)
+	}
+	env = append(env,
+		"PATH="+g.stubBin+":"+filepath.Join(runtime.GOROOT(), "bin")+":"+os.Getenv("PATH"),
+		"STUB_COUNTS="+g.counts,
+	)
+	env = append(env, extraEnv...)
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	code := 0
+	if ee, ok := err.(*exec.ExitError); ok {
+		code = ee.ExitCode()
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(g.root, "agent_work", "chunks", "test-chunk", "gate", "result.json"))
+	if err != nil {
+		t.Fatalf("missing result.json (exit=%d): %v\n%s", code, err, out)
+	}
+	var res map[string]any
+	if err := json.Unmarshal(raw, &res); err != nil {
+		t.Fatal(err)
+	}
+	return code, string(out), res
+}
+
+func TestGateShLandingCapBlocksWidenedMaxRetriesAlone(t *testing.T) {
+	repo := newIsolatedGateRepo(t, map[string][]string{
+		"p": {"FuzzAlpha"},
+	}, `echo "fuzz: elapsed: 20s, execs: 40000 (2000/sec), new interesting: 0 (total: 1)"
+echo PASS
+exit 0`)
+
+	cases := []struct {
+		maxRetries string
+		wantVal    float64
+		wantCounts bool
+	}{
+		{maxRetries: "0", wantVal: 0, wantCounts: true},
+		{maxRetries: "1", wantVal: 1, wantCounts: true},
+		{maxRetries: "2", wantVal: 2, wantCounts: true},
+		{maxRetries: "3", wantVal: 3, wantCounts: false},
+		{maxRetries: "999999999", wantVal: 999999999, wantCounts: false},
+	}
+
+	for _, tc := range cases {
+		t.Run("FUZZ_MAX_RETRIES="+tc.maxRetries, func(t *testing.T) {
+			code, out, res := repo.runGate(t, "FUZZ_MAX_RETRIES="+tc.maxRetries)
+			if code != 0 {
+				t.Fatalf("gate.sh exit %d:\n%s", code, out)
+			}
+			if res["overall"] != "pass" || res["partial"] != false || res["dirty_tree"] != false || res["short"] != false {
+				t.Fatalf("unexpected prerequisites in result.json: %v\n%s", res, out)
+			}
+			if res["fuzz_max_retries"] != tc.wantVal {
+				t.Fatalf("fuzz_max_retries = %v, want %v", res["fuzz_max_retries"], tc.wantVal)
+			}
+			if res["counts_for_landing"] != tc.wantCounts {
+				t.Fatalf("FUZZ_MAX_RETRIES=%s: counts_for_landing = %v, want %v\n%s", tc.maxRetries, res["counts_for_landing"], tc.wantCounts, out)
+			}
+		})
+	}
+}
+
+func TestGateShCountsFuzzRetriesFromColumnSix(t *testing.T) {
+	repo := newIsolatedGateRepo(t, map[string][]string{
+		"p":      {"FuzzAlpha", "FuzzBeta", "FuzzGamma"},
+		"simpkg": {"FuzzSimSlow"},
+	}, `if [ "$name" = FuzzAlpha ] || [ "$name" = FuzzBeta ]; then
+  if [ "$n" = 1 ]; then
+    echo "fuzz: elapsed: 20s, execs: 1000 (0/sec)"
+    echo "--- FAIL: $name (20.50s)"
+    echo "    context deadline exceeded"
+    echo "FAIL"
+    exit 1
+  fi
+  echo "fuzz: elapsed: 20s, execs: 4000 (200/sec)"
+  echo PASS
+  exit 0
+fi
+if [ "$name" = FuzzSimSlow ]; then
+  echo "fuzz: elapsed: 20s, execs: 1000 (50/sec)"
+  echo PASS
+  exit 0
+fi
+echo "fuzz: elapsed: 20s, execs: 6000 (300/sec)"
+echo PASS
+exit 0`)
+
+	code, out, res := repo.runGate(t)
+	if code != 0 {
+		t.Fatalf("gate.sh exit %d:\n%s", code, out)
+	}
+	if res["overall"] != "pass" || res["counts_for_landing"] != true {
+		t.Fatalf("overall=%v counts_for_landing=%v\n%s", res["overall"], res["counts_for_landing"], out)
+	}
+	if res["fuzz_targets"] != float64(4) {
+		t.Fatalf("fuzz_targets = %v, want 4", res["fuzz_targets"])
+	}
+	if res["fuzz_seed_sweeps"] != float64(1) {
+		t.Fatalf("fuzz_seed_sweeps = %v, want 1", res["fuzz_seed_sweeps"])
+	}
+	if res["fuzz_retries"] != float64(2) {
+		t.Fatalf("fuzz_retries = %v, want 2", res["fuzz_retries"])
+	}
+
+	gateDir := filepath.Join(repo.root, "agent_work", "chunks", "test-chunk", "gate")
+	tsvRaw, err := os.ReadFile(filepath.Join(gateDir, "G5-fuzz.tsv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSuffix(string(tsvRaw), "\n"), "\n")
+	if len(lines) != 5 {
+		t.Fatalf("tsv lines = %d, want 5:\n%s", len(lines), tsvRaw)
+	}
+	tsvRetries := 0
+	for _, l := range lines[1:] {
+		cols := strings.Split(l, "\t")
+		if len(cols) != 6 {
+			t.Fatalf("row %q has %d cols, want 6", l, len(cols))
+		}
+		if cols[5] == "1" {
+			tsvRetries++
+		}
+	}
+	if tsvRetries != 2 {
+		t.Fatalf("tsv retried count = %d, want 2\n%s", tsvRetries, tsvRaw)
+	}
+
+	logRaw, err := os.ReadFile(filepath.Join(gateDir, "G5-fuzz.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	logStr := string(logRaw)
+	if got := strings.Count(logStr, "fuzz: RETRY:"); got != 2 {
+		t.Fatalf("RETRY line count = %d, want 2\n%s", got, logStr)
+	}
+	if !strings.Contains(logStr, ", 2 retried") {
+		t.Fatalf("NOTE line missing ', 2 retried':\n%s", logStr)
+	}
+}
