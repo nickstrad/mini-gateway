@@ -96,6 +96,19 @@ func (f *File) ratePerInstance() int {
 	return 0
 }
 
+func (f *File) divideFleetConnections() {
+	if f.Pool.Connections != 0 || f.Fleet.BackendConnections <= 0 {
+		return
+	}
+	instances := f.Fleet.Instances
+	if instances == 0 {
+		instances = DefaultFleetInstances
+	}
+	if share, err := pool.Share(f.Fleet.BackendConnections, instances); err == nil {
+		f.Pool.Connections = share
+	}
+}
+
 func (f *File) poolCore() *pool.Config {
 	return &pool.Config{MaxConnecting: f.Pool.MaxConnecting, RatePerSec: f.ratePerInstance(), IdleTimeout: f.Pool.IdleTimeout.D(),
 		MaxLifetime: f.Pool.MaxLifetime.D(), JitterPermille: f.Pool.JitterPercent * 10, CheckAfterIdle: f.Pool.CheckAfterIdle.D(),
@@ -121,9 +134,15 @@ func (f *File) validatePool() error {
 	if f.Backend.ServerKeepalive != KeepaliveOn && f.Backend.ServerKeepalive != KeepaliveOff {
 		errs = append(errs, bad("backend.server_keepalive", "%q: must be on or off", f.Backend.ServerKeepalive))
 	}
-	if ka.Mode == KeepaliveOn && (ka.Idle.D()%time.Second != 0 || ka.Interval.D()%time.Second != 0) {
-		errs = append(errs, bad("backend.tcp_keepalive.idle", "idle %s and interval %s must be whole seconds (Postgres takes tcp_keepalives_* in seconds)",
-			ka.Idle.D(), ka.Interval.D()))
+	if ka.Mode == KeepaliveOn || f.Backend.ServerKeepalive == KeepaliveOn {
+		for _, d := range []struct {
+			key string
+			v   time.Duration
+		}{{"backend.tcp_keepalive.idle", ka.Idle.D()}, {"backend.tcp_keepalive.interval", ka.Interval.D()}} {
+			if d.v < time.Second || d.v%time.Second != 0 {
+				errs = append(errs, bad(d.key, "%s must be a whole number of seconds, at least 1s, while backend.tcp_keepalive.mode or backend.server_keepalive is on (Postgres takes tcp_keepalives_* in seconds)", d.v))
+			}
+		}
 	}
 	limit := f.Backend.PathIdleLimit.D()
 	if ka.Mode == KeepaliveOn && ka.Idle.D() > limit/2 {

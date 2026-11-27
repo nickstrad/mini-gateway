@@ -26,6 +26,7 @@ func (f *File) applyDefaults() {
 	setString(&f.BackendTLS.Mode, DefaultBackendTLS)
 	setString(&f.Lease.Reset, DefaultLeaseReset)
 	f.applyPoolDefaults()
+	f.divideFleetConnections()
 	p := f.proxyCaps().WithDefaults()
 	f.Pool.Connections = p.Connections
 	f.Queue.Capacity = p.QueueCap
