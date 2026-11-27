@@ -287,6 +287,14 @@ func connectMany(env *RealEnv, n int, dial func() (*RealClient, error)) ([]*Real
 	return clients, refused.Load()
 }
 
+func oneTenantQueue() map[string]any {
+	q := map[string]any{"tenant_capacity": headlineClients}
+	for k, v := range RelaxedQueue {
+		q[k] = v
+	}
+	return q
+}
+
 func queryAll(clients []*RealClient, sql string) int64 {
 	var ok atomic.Int64
 	var wg sync.WaitGroup
@@ -313,7 +321,7 @@ func TestTierRPoolHeadlineDatabaseConnectionsDirectAgainstProxy(t *testing.T) {
 		c.Close()
 	}
 	time.Sleep(500 * time.Millisecond)
-	g := gateway(t, env, GatewayOpts{Scenario: "tierr-pool-headline", Conns: headlinePool, QueueCap: headlineClients,
+	g := gateway(t, env, GatewayOpts{Scenario: "tierr-pool-headline", Conns: headlinePool, QueueCap: headlineClients, Queue: oneTenantQueue(),
 		MaxClients: 2 * headlineClients, Timeouts: map[string]string{"queue_wait": "20s"}})
 	proxied, prefused := connectMany(env, headlineClients, func() (*RealClient, error) { return env.Dial(g, 0, false) })
 	proxyOK := queryAll(proxied, "SELECT pg_sleep(0.05)")
@@ -339,7 +347,7 @@ func TestTierRPoolHeadlineDatabaseConnectionsDirectAgainstProxy(t *testing.T) {
 func TestTierRPoolReconnectionStormWithClientTLS(t *testing.T) {
 	env := tierR(t)
 	base := backends(t, env)
-	g := gateway(t, env, GatewayOpts{Scenario: "tierr-pool-storm", Conns: headlinePool, QueueCap: headlineClients,
+	g := gateway(t, env, GatewayOpts{Scenario: "tierr-pool-storm", Conns: headlinePool, QueueCap: headlineClients, Queue: oneTenantQueue(),
 		MaxClients: 2 * headlineClients, MaxStartup: stormMaxStartup, Timeouts: map[string]string{"queue_wait": "20s"}})
 	dial := func() (*RealClient, error) { return env.Dial(g, 1, false) }
 	first, _ := connectMany(env, headlineClients, dial)
