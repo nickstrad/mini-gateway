@@ -21,7 +21,7 @@ func Metrics() []obs.MetricDesc {
 		obs.GaugeDesc("rule", lm, "1 for the queue rule this instance runs (mode: timeout, control-law, fifo, folly; the last two are simulator arms)."),
 		obs.GaugeDesc("lifo_adaptive", 0, "1 when adaptive LIFO is on (queue.lifo adaptive), 0 when off."),
 		obs.GaugeDesc("capacity", 0, "Total capacity across the tenant queues (queue.capacity)."),
-		obs.GaugeDesc("tenant_capacity_each", 0, "Capacity of one tenant queue (queue.tenant_capacity)."),
+		obs.GaugeDesc("per_tenant_capacity", 0, "Capacity of one tenant queue (queue.tenant_capacity)."),
 		obs.GaugeDesc("max_tenants", 0, "Cap on tenant queues (queue.max_tenants)."),
 		obs.GaugeDesc("queued", 0, "Requests waiting in the tenant queues now.").AsHeadline(),
 		obs.HighWaterDesc("queued_peak", 0, "Most requests waiting at once."),
@@ -72,7 +72,7 @@ func Map(s admission.Snapshot, e *obs.Emitter) {
 	}
 	e.Gauge("lifo_adaptive", none, b(s.LIFOMode == admission.LIFOAdaptive))
 	e.Gauge("capacity", none, s.Capacity)
-	e.Gauge("tenant_capacity_each", none, s.TenantCapacity)
+	e.Gauge("per_tenant_capacity", none, s.TenantCapacity)
 	e.Gauge("max_tenants", none, s.MaxTenants)
 	e.Gauge("queued", none, s.Queued.Value)
 	e.Gauge("queued_peak", none, s.Queued.Peak)

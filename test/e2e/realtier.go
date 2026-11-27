@@ -85,6 +85,7 @@ type GatewayOpts struct {
 	ServerName string
 	DBAddr     string
 	Tenants    int
+	Queue      map[string]any
 }
 
 // Gateway represents a running mini-gateway process (or in-process shell for ablations).
@@ -139,8 +140,18 @@ func (env *RealEnv) gatewayConfig(o GatewayOpts, dir string) map[string]any {
 		"obs":         map[string]any{"publish_interval": "200ms", "detail": true, "csv": map[string]any{"dir": dir, "scenario": o.Scenario}},
 		"fleet":       map[string]any{"instances": 1, "backend_connections": o.Conns, "connect_rate_per_s": 10, "backend_max_connections": 100},
 	}
-	if o.QueueCap > 0 {
-		cfg["queue"] = map[string]any{"capacity": o.QueueCap}
+	if o.Queue == nil {
+		o.Queue = RelaxedQueue
+	}
+	{
+		q := map[string]any{}
+		for k, v := range o.Queue {
+			q[k] = v
+		}
+		if o.QueueCap > 0 {
+			q["capacity"] = o.QueueCap
+		}
+		cfg["queue"] = q
 	}
 	if o.ReplyCap > 0 {
 		cfg["limits"] = map[string]any{"reply_buffer": o.ReplyCap}
