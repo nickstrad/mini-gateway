@@ -1,0 +1,7 @@
+=== RUN   TestTierRSessionAblationWithoutResetCrosses
+    tierr_test.go:426: dirty-check column cursors never differed from its clean value with the reset switched off: the hostile set leaves it blind
+    tierr_test.go:432: tier R ablation: 67 dirty observations without the reset (prepared 21, cursors 0, listens 20, adv_locks 22, session_gucs 24, temp_rels 23, role_changed 18, secret read back 17)
+--- FAIL: TestTierRSessionAblationWithoutResetCrosses (3.21s)
+FAIL
+FAIL	github.com/nickstrad/mini-gateway/test/e2e	21.487s
+FAIL

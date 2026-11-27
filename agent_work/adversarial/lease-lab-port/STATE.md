@@ -6,3 +6,5 @@ Done: initial harness commit 447d043; default live session-reset probes pass.
 Next: finish long campaign, classify failures, write RESULTS.md and evidence.json, commit.
 Environment: kb default and --global searches failed before returning a search ID; feedback cannot target them. No store initialized or changed.
 Resume: branch work/lease-port-adv. Outputs default.jsonl and long.jsonl; subprocess deadlines apply. Temporary overlays are under .scratch, removed by TestMain.
+
+Long checkpoint: 8 of 15 completed; 0 failures. Current results in long.jsonl.

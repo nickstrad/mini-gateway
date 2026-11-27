@@ -58,7 +58,7 @@ report += ['## Execution and limits', '']
 for c in campaigns:
     report += [f"- `{c['file']}`: {c['result']}, {c['seconds']} seconds."]
 report += [
-    '- Default: 21 executed checks and 15 explicitly deferred checks; the recorded test duration is below three minutes on this shared host. This is measured evidence, not a universal timing guarantee.',
+    '- Default: 21 executed checks and 15 explicitly deferred checks; the recorded package-test duration is below three minutes on this shared host. Go reports package execution time; initial compilation is not included. This is measured evidence, not a universal timing guarantee.',
     '- Long campaign selects C4–C8; it includes 20 consecutive executions of each of the three builder scenarios, plus setup/removal/reset mutations. Each subprocess owns a database and has a deadline. No additional artificial CPU load was injected; other work shares this host.',
     '- Reset mutations use Go overlays and intentionally relax the reset-tag judge to isolate reset effectiveness. They are experiments against the test suite, not deployable product changes. C5 and two C6 checks run the pre-port tests at `98cee87` as comparison controls.',
     '- C9 validates all 44 recorded Git blob hashes. The report script is compared at its copy commit, before its documented relocation edit; C10 tests the relocated version.',

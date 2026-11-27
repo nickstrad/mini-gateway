@@ -1,0 +1,7 @@
+=== RUN   TestTierRSessionAblationWithoutResetCrosses
+    tierr_test.go:426: dirty-check column role_changed never differed from its clean value with the reset switched off: the hostile set leaves it blind
+    tierr_test.go:432: tier R ablation: 69 dirty observations without the reset (prepared 21, cursors 19, listens 20, adv_locks 22, session_gucs 24, temp_rels 23, role_changed 0, secret read back 17)
+--- FAIL: TestTierRSessionAblationWithoutResetCrosses (3.78s)
+FAIL
+FAIL	github.com/nickstrad/mini-gateway/test/e2e	20.480s
+FAIL

@@ -1,0 +1,47 @@
+=== RUN   TestProbeLive_CommitMixed
+    tierr_test.go:890: seed=271828
+    tierr_test.go:895: query "BEGIN": [C:BEGIN ZT]
+--- FAIL: TestProbeLive_CommitMixed (0.34s)
+=== RUN   TestProbeLive_RollbackMixed
+    tierr_test.go:890: seed=271828
+    tierr_test.go:895: query "BEGIN": [C:BEGIN ZT]
+--- FAIL: TestProbeLive_RollbackMixed (0.32s)
+=== RUN   TestProbeLive_SavepointMixed
+    tierr_test.go:890: seed=271828
+    tierr_test.go:895: query "BEGIN": [C:BEGIN ZT]
+--- FAIL: TestProbeLive_SavepointMixed (0.32s)
+=== RUN   TestProbeLive_AlwaysLargeSecret
+    tierr_test.go:890: seed=271828
+    tierr_test.go:895: query "BEGIN": [C:BEGIN ZT]
+--- FAIL: TestProbeLive_AlwaysLargeSecret (0.30s)
+=== RUN   TestProbeLive_OnSwitchImmediate
+    tierr_test.go:890: seed=271828
+    tierr_test.go:895: query "BEGIN": [C:BEGIN ZT]
+--- FAIL: TestProbeLive_OnSwitchImmediate (0.29s)
+=== RUN   TestProbeLive_OnSwitchReseed
+    tierr_test.go:890: seed=271828
+    tierr_test.go:895: query "BEGIN": [C:BEGIN ZT]
+--- FAIL: TestProbeLive_OnSwitchReseed (0.38s)
+FAIL
+FAIL	github.com/nickstrad/mini-gateway/test/e2e	20.289s
+FAIL
+=== RUN   TestProbeLive_CommitMixed
+    tierr_test.go:890: seed=271828
+--- PASS: TestProbeLive_CommitMixed (0.42s)
+=== RUN   TestProbeLive_RollbackMixed
+    tierr_test.go:890: seed=271828
+--- PASS: TestProbeLive_RollbackMixed (0.31s)
+=== RUN   TestProbeLive_SavepointMixed
+    tierr_test.go:890: seed=271828
+--- PASS: TestProbeLive_SavepointMixed (0.73s)
+=== RUN   TestProbeLive_AlwaysLargeSecret
+    tierr_test.go:890: seed=271828
+--- PASS: TestProbeLive_AlwaysLargeSecret (0.49s)
+=== RUN   TestProbeLive_OnSwitchImmediate
+    tierr_test.go:890: seed=271828
+--- PASS: TestProbeLive_OnSwitchImmediate (0.60s)
+=== RUN   TestProbeLive_OnSwitchReseed
+    tierr_test.go:890: seed=271828
+--- PASS: TestProbeLive_OnSwitchReseed (0.45s)
+PASS
+ok  	github.com/nickstrad/mini-gateway/test/e2e	17.116s
