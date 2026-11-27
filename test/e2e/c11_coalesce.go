@@ -527,6 +527,7 @@ func checkSharedError(r *SimRun) error {
 	if err := everyClientFinished(r); err != nil {
 		return err
 	}
+	lost := 0
 	for c := range r.Clients {
 		st := stepOf(r, c, 0)
 		n := 0
@@ -535,9 +536,16 @@ func checkSharedError(r *SimRun) error {
 				n++
 			}
 		}
-		if n != 1 || !HasToken(st, "E:ERROR:08006") {
-			return failf("client %d: %v, want the shared 08006 once", c, st)
+		switch {
+		case n == 1 && HasToken(st, "E:ERROR:08006"):
+			lost++
+		case n == 1 && HasToken(st, "E:ERROR:53M01"):
+		default:
+			return failf("client %d: %v, want one shared error (08006 from the read that ran, 53M01 from a flight that expired before it was sent)", c, st)
 		}
+	}
+	if lost == 0 {
+		return failf("no client got the running flight's 08006")
 	}
 	if reads := readsOf(r, hotRead()); len(reads) > 2 || len(reads) == 0 {
 		return failf("%d database reads for the burst: the failure was re-driven", len(reads))
