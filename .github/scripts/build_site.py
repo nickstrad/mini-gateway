@@ -20,7 +20,8 @@ The book manifest lists every chapter with its number, chunk, title, file and st
 ("planned" or "live"). A live chapter is published and linked from the contents; a planned
 chapter is listed as plain text. The build fails if a live chapter's file is missing, if a
 planned chapter's file exists, or if book/chapters/ holds a file the manifest does not list.
-A relative link from a published page to another published page is rewritten to the
+A relative link must name a file or folder git tracks (one that exists only in the working
+tree, such as an ignored gate log, fails the build). A relative link from a published page to another published page is rewritten to the
 built page; a relative link to anything else in the repository goes to GitHub.
 Never published: agent_work/, STATE.md, docs/knowledge/.
 Exit status: 0 on success; 1 with a message if a source is missing, a link is broken or the
@@ -31,6 +32,7 @@ import json
 import posixpath
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -223,6 +225,22 @@ def pages(chapters):
 COPIES = {"docs/c4/model.json": "c4/model.json", "docs/c4/gen.py": None}
 
 
+_TRACKED = {}
+
+
+def tracked(target):
+    """Whether git tracks the file, or a file below the folder, at target: a link to a file
+    git ignores exists in a working tree but not in the published repository."""
+    if ROOT not in _TRACKED:
+        try:
+            out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], check=True, capture_output=True).stdout
+        except (OSError, subprocess.CalledProcessError) as e:
+            raise BuildError("cannot list the tracked files with git ls-files: %s" % e)
+        _TRACKED[ROOT] = set(out.decode("utf-8").split("\0")) - {""}
+    files = _TRACKED[ROOT]
+    return target in files or target == "." or any(f.startswith(target + "/") for f in files)
+
+
 TAG = re.compile(r"<[A-Za-z][^<>]*>")
 LINK_ATTR = re.compile(r"""(\s)(href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>]+))""", re.I)
 
@@ -246,6 +264,8 @@ def rewrite_links(body, src, out, page_map):
             raise BuildError("%s: link leaves the repository: %s" % (src, href))
         if not (ROOT / target).exists():
             raise BuildError("%s: broken link: %s" % (src, href))
+        if not tracked(target):
+            raise BuildError("%s: link to a file git does not track: %s" % (src, href))
         if target in page_map:
             new = posixpath.relpath(page_map[target], out_dir or ".")
         elif COPIES.get(target):
