@@ -620,7 +620,19 @@ dials; a sixth period with no refusal sends none.
 
 ### Repair results
 
-RESULTS-PLACEHOLDER
+All on 2026-11-27, host load 5–8 (other agents and a landing gate on the machine).
+
+| Check | Tree | Result |
+| --- | --- | --- |
+| `pool-admission-restart`, seeds 1–200: `DST_SEED_BASE=b DST_SEEDS=17` for b = 4, 21, …, 191 (the pool scenarios run at most `poolSweepSeeds` = 20 seeds per call, pinned seeds 1–3 first, so `DST_SEEDS=200` alone runs only 20), then `scripts/csv-assert.sh` per window over `test/analysis/pool-admission-restart/*.sql` | `687cbaa` and later | 233 runs (200 distinct seeds) all pass, replay law included; SQL 0 failures in every window |
+| the same scenario, `DST_SEED=42`, `99`, `1001`, and their SQL | `e742621` | pass, pass, pass; SQL 0 failures |
+| `go build ./... && go vet ./...`, `gofmt -l .`, `scripts/gen-docs.sh --check` | `c3ba3ea` | pass, empty, current |
+| adversarial `c06a-operator-tools`, `c07-pool`, `c08-admission` (unchanged) | `c3ba3ea` | pass, pass, pass |
+| 20-seed sweep: `DST_SEEDS=20 RUN_DIR=… go test -run '^(TestScenarioPool|TestScenarioAdmission.*)$' ./test/e2e`, then `csv-assert.sh` per scenario directory over its `test/analysis/<scenario>/*.sql` | `86537ce` | pass (250 s); 28 directories (22 pool incl. `pool-admission-restart` with 20 seeds, 6 admission), every SQL file 0 failures. Heavy pool scenarios run 3 seeds, chunk 8's overload scenarios 1 (both by design) |
+| `go test -count=1 ./internal/... ./test/... ./scripts/ ./cmd/...` | `86537ce` | all 43 packages pass (`internal/obs/simrun` 443 s, `test/e2e` 345 s, `test/analysis/report` 62 s, `scripts` 27 s); none of the wall-clock growth tests failed |
+| `GATE_ONLY=G0,G1,G2,G3 GATE_BASE=work/c08-admission scripts/gate.sh c07-pool`, once | `86537ce` (clean) | **overall pass** (`counts_for_landing=false`): G0 all 7 pass; G1 detlint (27 patterns), importlint, boundlint, paniccheck pass; G2 comments pass against `3f38a1d`; G3 unit pass (493 s), race pass (6 patterns). `result.json` not committed |
+
+No Go comment was added (G2). No deviation from the repair brief.
 
 ## Commands
 
