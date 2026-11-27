@@ -1,0 +1,20 @@
+package main
+import (
+ "encoding/json"
+ "os"
+ "testing"
+ p "github.com/nickstrad/mini-gateway/internal/pgwire"
+)
+type Request struct { SQL []byte; Tx bool }
+type Answer struct { Counts [5]int; Tokens []p.Token; Clean bool; Unit any; Share bool; Snapshot p.ClassifierSnapshot; Alloc [3]float64 }
+var sink any
+func main() {
+ dec, enc := json.NewDecoder(os.Stdin), json.NewEncoder(os.Stdout)
+ for { var q Request; if dec.Decode(&q)!=nil {return}; toks,clean:=p.LexAll(q.SQL); c:=p.Classifier{}; c.Classify("adv",q.SQL,q.Tx)
+ a:=Answer{Counts:p.AdvCounts(q.SQL), Tokens:toks,Clean:clean,Unit:p.ClassifyQuery(q.SQL,q.Tx),Share:p.ShareFits(q.SQL),Snapshot:c.Snapshot()}
+ a.Alloc[0]=testing.AllocsPerRun(3,func(){sink=p.ClassifyQuery(q.SQL,q.Tx)})
+ a.Alloc[1]=testing.AllocsPerRun(3,func(){x,_:=p.LexAll(q.SQL);sink=x})
+ a.Alloc[2]=testing.AllocsPerRun(3,func(){sink=p.ShareFits(q.SQL)})
+ if enc.Encode(a)!=nil {panic("encode")}
+ }
+}
