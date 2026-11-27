@@ -21,6 +21,7 @@ flowchart TB
     E_DRAIN["Drain controller"]:::planned
     E_PUBLISH["Snapshot publisher"]:::built
     E_PROXYSIM["Simulator driver"]:::built
+    E_ADMQ["Admission queue adapter"]:::built
   end
   N_SHELL -->|1 implements| E_TRANSPORT
   E_PROXYSIM -->|2 implements| E_TRANSPORT
@@ -33,23 +34,27 @@ flowchart TB
   E_PIPELINE -->|9| N_PGWIRE
   E_PIPELINE -->|10| E_SEAMS
   E_PIPELINE -.->|11| N_ADM
-  E_PIPELINE -.->|12| N_COAL
-  E_PIPELINE -.->|13| N_POOL
-  E_PIPELINE -.->|14| N_RETRY
-  E_PIPELINE -->|15| E_BACKENDS
-  E_BACKENDS -->|16| E_RELAY
-  E_RELAY -->|17| E_SESSIONS
-  E_RELAY -.->|18| E_RESET
-  E_RESET -->|19| E_BACKENDS
-  E_RESET -->|20| E_SEAMS
-  E_RESET -->|21| N_PGWIRE
-  E_PIPELINE -->|22| E_FAIL
-  E_FAIL -->|23| N_PGWIRE
-  E_FAIL -->|24| E_SEAMS
-  E_CLOCK -->|25| E_PIPELINE
-  E_DRAIN -->|26| E_PIPELINE
-  E_PUBLISH -->|27| N_OBS
-  E_PIPELINE -->|28| N_WORK
+  E_ADMQ -->|12 implements| E_SEAMS
+  E_ADMQ -->|13| N_ADM
+  E_ADMQ -->|14| E_FAIL
+  E_CLOCK -->|15| E_ADMQ
+  E_PIPELINE -.->|16| N_COAL
+  E_PIPELINE -.->|17| N_POOL
+  E_PIPELINE -.->|18| N_RETRY
+  E_PIPELINE -->|19| E_BACKENDS
+  E_BACKENDS -->|20| E_RELAY
+  E_RELAY -->|21| E_SESSIONS
+  E_RELAY -.->|22| E_RESET
+  E_RESET -->|23| E_BACKENDS
+  E_RESET -->|24| E_SEAMS
+  E_RESET -->|25| N_PGWIRE
+  E_PIPELINE -->|26| E_FAIL
+  E_FAIL -->|27| N_PGWIRE
+  E_FAIL -->|28| E_SEAMS
+  E_CLOCK -->|29| E_PIPELINE
+  E_DRAIN -->|30| E_PIPELINE
+  E_PUBLISH -->|31| N_OBS
+  E_PIPELINE -->|32| N_WORK
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned

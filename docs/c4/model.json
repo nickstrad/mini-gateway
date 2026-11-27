@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "id": "mini-gateway",
  "title": "mini-gateway — target architecture",
- "revision": "target-approved-2026-11-24-rulings+built-through-chunk-6a",
+ "revision": "target-approved-2026-11-24-rulings+built-through-chunk-6a+8",
  "defaultDiagramId": "context",
  "model": {
   "elements": [
@@ -53,7 +53,7 @@
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunk 6: a working proxy, the walking skeleton — cmd/mini-gateway terminates client TLS, logs clients in with SCRAM-SHA-256, lends one of a fixed set of database connections per transaction, resets it after every lease, queues waiting requests in one bounded first-come queue, and serves health, stats and metrics from snapshots. Not built: the pool with its breaker, per-tenant admission with the two CoDel modes, read coalescing, the retry policy, the OTLP push, and the fleet division and drain of N instances. Chunk 6a built the operator tools around it: the client mgctl, the load generator, the dev stack with its run targets, and the story report."
+     "Built in chunk 6: a working proxy, the walking skeleton — cmd/mini-gateway terminates client TLS, logs clients in with SCRAM-SHA-256, lends one of a fixed set of database connections per transaction, resets it after every lease, queues waiting requests, and serves health, stats and metrics from snapshots. Chunk 6a built the operator tools around it: the client mgctl, the load generator, the dev stack with its run targets, and the story report. Chunk 8 built the admission queues: one bounded queue per tenant with the two CoDel modes (the config file selects one), adaptive LIFO, and every shed request answered at once with 53M01. Not built: the pool with its breaker (chunk 7 is built but has not landed), fairness between tenants, the adaptive limit and the rate gate, read coalescing, the retry policy, the OTLP push, and the fleet division and drain of N instances."
     ],
     "docIds": [],
     "sourceIds": [
@@ -217,7 +217,7 @@
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). The stages that belong to cores not built yet run their stand-ins: a breaker that is always closed, a rate gate that always allows, no coalescing, one bounded first-come queue, a fixed set of connections, retry off."
+     "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). Chunk 8 put the admission queues behind the queue seam (admission.go). The stages that belong to cores not landed yet run their stand-ins: a breaker that is always closed, a rate gate that always allows, no coalescing, a fixed set of connections, retry off."
     ],
     "docIds": [],
     "sourceIds": [
@@ -238,7 +238,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). The stages that belong to cores not built yet run their stand-ins: a breaker that is always closed, a rate gate that always allows, no coalescing, one bounded first-come queue, a fixed set of connections, retry off."
+     "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). Chunk 8 put the admission queues behind the queue seam (admission.go). The stages that belong to cores not landed yet run their stand-ins: a breaker that is always closed, a rate gate that always allows, no coalescing, a fixed set of connections, retry off."
     ],
     "docIds": [],
     "sourceIds": [
@@ -326,10 +326,12 @@
     "id": "c-adm",
     "kind": "container",
     "name": "Admission",
-    "description": "internal/admission. Rate gate, per-tenant queues with two selectable queue rules, adaptive LIFO, round-robin dispatcher with shares that bind under saturation, adaptive concurrency limit.",
+    "description": "internal/admission. Rate gate, per-tenant queues with two selectable queue rules, adaptive LIFO, a load gauge, round-robin dispatcher with shares that bind under saturation, adaptive concurrency limit.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 8 (internal/admission): the per-tenant queues, the QueueRule interface, the timeout rule, the control-law rule and the two comparison arms, all of what is said of them here; the Dispatcher interface with one default (oldest head first); and Snapshot() for the queues. The engine runs them behind its queue seam, and the config file always selects one of the two rules. The core does not import internal/work so far: it takes a tenant as a string and a request as an integer id, and the engine converts. Not built: round robin with shares (chunk 9), the adaptive limit and the rate gate (chunk 10), and the tenant table's in-flight counts, shares and gate state."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -348,7 +350,9 @@
      "external",
      "neighbour"
     ],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 8 (internal/admission): the per-tenant queues, the QueueRule interface, the timeout rule, the control-law rule and the two comparison arms, all of what is said of them here; the Dispatcher interface with one default (oldest head first); and Snapshot() for the queues. The engine runs them behind its queue seam, and the config file always selects one of the two rules. The core does not import internal/work so far: it takes a tenant as a string and a request as an integer id, and the engine converts. Not built: round robin with shares (chunk 9), the adaptive limit and the rate gate (chunk 10), and the tenant table's in-flight counts, shares and gate state."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -466,11 +470,11 @@
     "id": "c-obs",
     "kind": "container",
     "name": "Observability",
-    "description": "internal/obs and its sub-packages; test/analysis; scripts/csv-assert.sh; scripts/report.sh. Snapshot conventions (the one raw export), integer histogram, metric registry, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health, the SQL assertions over flushed files, and the story report over the same files.",
+    "description": "internal/obs and its sub-packages; test/analysis; scripts/csv-assert.sh; scripts/report.sh; scripts/admission-head-to-head.sh. Snapshot conventions (the one raw export), integer histogram, metric registry, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health, the SQL assertions over flushed files, and the story report and the admission head-to-head table over the same files.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunks 1, 3, 4, 5 and 6: everything except the OTLP push adapter (chunk 15) and the health rules for shedding, an open breaker, the limit's floor and draining (chunk 7 on). Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness. Chunk 6a: the story report, and the load generator's metrics in the catalog."
+     "Built in chunks 1, 3, 4, 5, 6 and 8: everything except the OTLP push adapter (chunk 15) and the health rules for an open breaker, the limit's floor and draining. Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness. Chunk 6a: the story report, and the load generator's metrics in the catalog. Chunk 8: the admission source with the health rule for shedding, and the head-to-head table."
     ],
     "docIds": [],
     "sourceIds": [
@@ -491,7 +495,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunks 1, 3, 4, 5 and 6: everything except the OTLP push adapter (chunk 15) and the health rules for shedding, an open breaker, the limit's floor and draining (chunk 7 on). Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness. Chunk 6a: the story report, and the load generator's metrics in the catalog."
+     "Built in chunks 1, 3, 4, 5, 6 and 8: everything except the OTLP push adapter (chunk 15) and the health rules for an open breaker, the limit's floor and draining. Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness. Chunk 6a: the story report, and the load generator's metrics in the catalog. Chunk 8: the admission source with the health rule for shedding, and the head-to-head table."
     ],
     "docIds": [],
     "sourceIds": [
@@ -505,11 +509,11 @@
     "id": "c-config",
     "kind": "container",
     "name": "Configuration",
-    "description": "internal/config. The config file (JSON), the client_tls and backend_tls blocks, the static fleet block (instance count N; fleet budgets divided by N), load-time validation that fails closed and names the key, and the config fingerprint.",
+    "description": "internal/config. The config file (JSON), the client_tls and backend_tls blocks, the queue block (the rule and its times, the capacities, adaptive LIFO), the static fleet block (instance count N; fleet budgets divided by N), load-time validation that fails closed and names the key, and the config fingerprint.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunk 6 (internal/config): the JSON config file with its defaults, validation that fails closed and names the key (the timeout nesting too), the client_tls and backend_tls blocks, the config fingerprint, and the fleet block parsed and checked (pool.connections must fit fleet.backend_connections / fleet.instances, which must divide evenly and fit the database's limit with a reserve). Not built: nothing takes its budget from the division yet (chunk 7 on; the fleet configuration is chunk 13)."
+     "Built in chunk 6 (internal/config): the JSON config file with its defaults, validation that fails closed and names the key (the timeout nesting too), the client_tls and backend_tls blocks, the config fingerprint, and the fleet block parsed and checked (pool.connections must fit fleet.backend_connections / fleet.instances, which must divide evenly and fit the database's limit with a reserve). Built in chunk 8 (queue.go): the queue keys rule, target, interval, tenant_capacity, max_tenants, lifo and lifo_hold, with their defaults; queue.rule accepts only timeout and control-law. Not built: nothing takes its budget from the division yet (chunk 7 on; the fleet configuration is chunk 13)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -530,7 +534,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunk 6 (internal/config): the JSON config file with its defaults, validation that fails closed and names the key (the timeout nesting too), the client_tls and backend_tls blocks, the config fingerprint, and the fleet block parsed and checked (pool.connections must fit fleet.backend_connections / fleet.instances, which must divide evenly and fit the database's limit with a reserve). Not built: nothing takes its budget from the division yet (chunk 7 on; the fleet configuration is chunk 13)."
+     "Built in chunk 6 (internal/config): the JSON config file with its defaults, validation that fails closed and names the key (the timeout nesting too), the client_tls and backend_tls blocks, the config fingerprint, and the fleet block parsed and checked (pool.connections must fit fleet.backend_connections / fleet.instances, which must divide evenly and fit the database's limit with a reserve). Built in chunk 8 (queue.go): the queue keys rule, target, interval, tenant_capacity, max_tenants, lifo and lifo_hold, with their defaults; queue.rule accepts only timeout and control-law. Not built: nothing takes its budget from the division yet (chunk 7 on; the fleet configuration is chunk 13)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -550,7 +554,7 @@
      "test"
     ],
     "plannedNotes": [
-     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Since chunk 6 the engine runs on it, through the engine's own test package internal/proxy/proxysim. Not built: no synthetic workload drives the cores (no core exists yet)."
+     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Since chunk 6 the engine runs on it, through the engine's own test package internal/proxy/proxysim. Not built: no synthetic workload drives the cores (the one core that has landed, admission, is driven by its own reference-model tests and through the engine)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -571,7 +575,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Since chunk 6 the engine runs on it, through the engine's own test package internal/proxy/proxysim. Not built: no synthetic workload drives the cores (no core exists yet)."
+     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Since chunk 6 the engine runs on it, through the engine's own test package internal/proxy/proxysim. Not built: no synthetic workload drives the cores (the one core that has landed, admission, is driven by its own reference-model tests and through the engine)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -591,7 +595,7 @@
      "test"
     ],
     "plannedNotes": [
-     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Built in chunk 6a: the load generator (cmd/loadgen, internal/loadgen with its runner live and its test fake loadgentest), all of what is said of it here; the seeded mgctl model test in both tiers; and a tier R test of the run targets (16 tier R tests now). Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14)."
+     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Built in chunk 6a: the load generator (cmd/loadgen, internal/loadgen with its runner live and its test fake loadgentest), all of what is said of it here; the seeded mgctl model test in both tiers; and a tier R test of the run targets (16 tier R tests). Built in chunk 8: the admission world (open-loop clients through the engine on the simulator, one connection, a fixed read time) with the head-to-head scenarios (four arms at 1.2×, 2× and 10× load), anti-bufferbloat with recovery for both rules against a first-come control, the first burst after idle, two canaries, and a tier R overload test against Postgres with pg_sleep (17 tier R tests now). Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -612,7 +616,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Built in chunk 6a: the load generator (cmd/loadgen, internal/loadgen with its runner live and its test fake loadgentest), all of what is said of it here; the seeded mgctl model test in both tiers; and a tier R test of the run targets (16 tier R tests now). Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14)."
+     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Built in chunk 6a: the load generator (cmd/loadgen, internal/loadgen with its runner live and its test fake loadgentest), all of what is said of it here; the seeded mgctl model test in both tiers; and a tier R test of the run targets (16 tier R tests). Built in chunk 8: the admission world (open-loop clients through the engine on the simulator, one connection, a fixed read time) with the head-to-head scenarios (four arms at 1.2×, 2× and 10× load), anti-bufferbloat with recovery for both rules against a first-come control, the first burst after idle, two canaries, and a tier R overload test against Postgres with pg_sleep (17 tier R tests now). Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -626,7 +630,7 @@
     "id": "c-mgctl",
     "kind": "container",
     "name": "Operator client (mgctl)",
-    "description": "cmd/mgctl and internal/mgctl. A read-only client for a running gateway. Subcommands: health, stats (with -watch), metrics, tenants (the tenant-labelled points of the stats — none until a component exports a tenant label — and the configured tenant users), config show (instance, build, fingerprint and the capacity gauges; with a file, its effective settings and whether its fingerprint matches), config check (a file checked offline with the gateway's own validation), verifier (a tenant's SCRAM verifier from a password, which it never prints), and query (one statement through the proxy as a tenant: the rows, or the SQLSTATE with its error-contract row). Every admin request is a GET, so it changes nothing in a running gateway. Standard-library flag; the logic in internal/mgctl imports neither flag nor net/http. MGCTL_TRANSCRIPT=<file> writes a step log with passwords hidden.",
+    "description": "cmd/mgctl and internal/mgctl. A read-only client for a running gateway. Subcommands: health, stats (with -watch), metrics, tenants (the tenant-labelled points of the stats — the admission queues' per-tenant rows, present when obs.detail is on — and the configured tenant users), config show (instance, build, fingerprint and the capacity gauges; with a file, its effective settings and whether its fingerprint matches), config check (a file checked offline with the gateway's own validation), verifier (a tenant's SCRAM verifier from a password, which it never prints), and query (one statement through the proxy as a tenant: the rows, or the SQLSTATE with its error-contract row). Every admin request is a GET, so it changes nothing in a running gateway. Standard-library flag; the logic in internal/mgctl imports neither flag nor net/http. MGCTL_TRANSCRIPT=<file> writes a step log with passwords hidden.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -741,7 +745,7 @@
     "id": "e-pipeline",
     "kind": "component",
     "name": "Request pipeline",
-    "description": "The fixed order every request takes: classify, reject list, draining, breaker, rate gate, coalesce, queue, lease, forward, release. Each stage is counted as passed or refused, and each refusal is answered with its error-contract row. A queued request has a wait deadline. Statements inside an open transaction skip from the reject list straight to forward on the connection the client already holds.",
+    "description": "The fixed order every request takes: classify, reject list, draining, breaker, rate gate, coalesce, queue, lease, forward, release. Each stage is counted as passed or refused, and each refusal is answered with its error-contract row. A queued request has a wait deadline, the outer bound whatever the queue rule; a request the queue sheds is answered at once with 53M01. Statements inside an open transaction skip from the reject list straight to forward on the connection the client already holds.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -756,7 +760,7 @@
     "id": "e-seams",
     "kind": "component",
     "name": "Stage seams and stand-ins",
-    "description": "The small interfaces the pipeline calls: classifier, breaker, rate gate, coalescer, queue, pool, release policy, retry policy. Also the implementations used until each core lands: a breaker that is always closed, a rate gate that always allows, no coalescing, one bounded first-come queue, a fixed set of connections, reset after every lease, retry off. The engine's config can replace any of them.",
+    "description": "The small interfaces the pipeline calls: classifier, breaker, rate gate, coalescer, queue, pool, release policy, retry policy. The queue seam has an extension for a queue that sheds: remove or expire at an instant, sweep, next deadline, take the shed requests, put back a popped one, close. Also the implementations used until each core lands: a breaker that is always closed, a rate gate that always allows, no coalescing, a fixed set of connections, reset after every lease, retry off; and one bounded first-come queue, which an engine configured without a queue rule still uses (tests only: the config file always names a rule). The engine's config can replace any of them.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -818,7 +822,7 @@
     "id": "e-clock",
     "kind": "component",
     "name": "Deadline table",
-    "description": "Every wait the engine has, as deadlines on the clock passed in with each event: one heap, and the next wake-up time returned as an action. Timers due at or before an event's time fire before the event is processed, so whatever arrives at the instant of its deadline is late.",
+    "description": "Every wait the engine has, as deadlines on the clock passed in with each event: one heap, and the next wake-up time returned as an action. The admission queues' next deadline is one timer in it. Timers due at or before an event's time fire before the event is processed, so whatever arrives at the instant of its deadline is late.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -850,7 +854,7 @@
     "id": "e-publish",
     "kind": "component",
     "name": "Snapshot publisher",
-    "description": "Snapshot(): the engine's counters as one plain struct — clients, requests by stage and outcome, replies by row, leases, resets, relay, connections, three histograms — with its conservation check, beside the wire, classifier and reply snapshots the engine holds. On a publish event the engine returns a publish action; its driver then has the collector read the snapshots, between events.",
+    "description": "Snapshot(): the engine's counters as one plain struct — clients, requests by stage and outcome, replies by row, leases, resets, relay, connections, three histograms — with its conservation check, beside the wire, classifier, reply and admission snapshots the engine holds. On a publish event the engine returns a publish action; its driver then has the collector read the snapshots, between events.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -870,6 +874,21 @@
     "tags": [
      "test"
     ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go"
+   },
+   {
+    "id": "e-admq",
+    "kind": "component",
+    "name": "Admission queue adapter",
+    "description": "internal/proxy/admission.go. Puts the admission queues behind the queue seam and its shedding extension. After every queue operation the engine takes the sheds the core decided, answers each at once with 53M01 and an end marker, and arms its one admission timer at the core's next deadline. With it no connection is lent directly: every request is pushed and popped, so the rule sees zero-wait requests too. At a stop it sweeps first and answers what was due, then removes the rest as client-gone. The engine's invariants require the core's shed count to equal the sheds answered.",
+    "status": "existing",
+    "tags": [],
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -1176,7 +1195,9 @@
     "description": "State for tenants that are active now: queue, in-flight count, share, gate state. Created on first use, removed when all-zero, so memory follows active tenants.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 8 (internal/admission: tenantFor, dropQuiet, evictEmpty and statsFor in queues.go; tenant.go): one entry per tenant with a queue (its ring, rule state, LIFO state and load gauge), created on first use and removed after 16 quiet intervals, its ring reused. At most queue.max_tenants entries: at the cap an empty queue is evicted for a new tenant, and if none is empty the arrival is shed. A tenant's counters outlive its entry, for at most 4,096 tenants; later ones are counted as other. Not built: in-flight count and share (chunk 9), gate state (chunk 10)."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -1188,8 +1209,8 @@
     "id": "a-queues",
     "kind": "component",
     "name": "Per-tenant queues",
-    "description": "A fixed-capacity ring per tenant. Age is measured on the oldest item; expired items are swept from the head and answered at once; overflow sheds the head. Serves newest-first while the rule reports overload (adaptive LIFO).",
-    "status": "planned",
+    "description": "A fixed-capacity ring per tenant, under one total capacity. Age is measured on the oldest item; expired items are swept from the head, at every operation and at the core's own next deadline, and answered at once. A full ring sheds its head, not the arrival; a full total sheds the oldest request of all. Serves newest-first while the rule reports overload (adaptive LIFO), and oldest-first again once the rule has reported no overload for a hold time. Keeps folly's minimum-delay figure as a load gauge, 0 to 100.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1203,8 +1224,8 @@
     "id": "a-rule",
     "kind": "component",
     "name": "QueueRule",
-    "description": "The interface both shedding rules implement; chosen by config.",
-    "status": "planned",
+    "description": "The interface both shedding rules implement; chosen by config (queue.rule: timeout or control-law), per instance.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1218,8 +1239,8 @@
     "id": "a-rule-timeout",
     "kind": "component",
     "name": "Timeout rule",
-    "description": "Mode 1, from \"Fail at Scale\": one last-empty timestamp per queue; allowed wait is the short target while a standing queue exists, otherwise the interval.",
-    "status": "planned",
+    "description": "Mode 1, from \"Fail at Scale\": one last-empty timestamp per queue; allowed wait is the short target while a standing queue exists, otherwise the interval. It is evaluated at the instant, on the oldest item, so the first burst after idle gets the interval.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1233,8 +1254,8 @@
     "id": "a-rule-law",
     "kind": "component",
     "name": "Control-law rule",
-    "description": "Mode 2, from the CoDel paper and RFC 8289: sojourn above target for an interval starts dropping; next drop after interval / sqrt(count), in integer arithmetic.",
-    "status": "planned",
+    "description": "Mode 2, from the CoDel paper and RFC 8289: sojourn above target for an interval starts dropping; next drop after interval / sqrt(count), in integer arithmetic (an exact floor). Its checks run at every queue operation and at the core's next deadline, not only at a pop; a drop sheds the oldest request.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1248,8 +1269,8 @@
     "id": "a-arms",
     "kind": "component",
     "name": "Comparison arms",
-    "description": "Simulator only: plain FIFO and folly's minimum-delay detector, for the head-to-head table.",
-    "status": "planned",
+    "description": "Plain FIFO and folly's minimum-delay detector, for the head-to-head table. Only tests and the simulator can select them: the config file's parser accepts neither.",
+    "status": "existing",
     "tags": [
      "test"
     ],
@@ -1268,7 +1289,9 @@
     "description": "Chooses whose request runs next: round robin across tenants with waiting work; a tenant's share binds only when the limit is reached; otherwise work-conserving.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 8 (internal/admission: Dispatcher, OldestFirst and SetDispatcher in queues.go): the interface the queues ask at each pop, and one default that picks the tenant whose head is oldest. Not built: round robin and shares (chunk 9), the limit they bind under (chunk 10)."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -1295,10 +1318,12 @@
     "id": "a-snap",
     "kind": "component",
     "name": "Admission snapshot",
-    "description": "Snapshot(): per tenant and total — depth, oldest-item age, queue-wait histogram, rule state, LIFO switches, sheds by reason, in flight, share, limit and its changes, gate refusals.",
+    "description": "Snapshot(): per tenant and total — depth, capacity, oldest-item age, queue-wait histogram, rule state, LIFO switches, sheds by reason, the load gauge, in flight, share, limit and its changes, gate refusals.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 8 (internal/admission: snapshot.go): per tenant and total — depth, capacity, oldest-item age, queue-wait histogram, rule state, LIFO state and switches, sheds by reason, the load gauge, shedding — with a conservation check (pushes = served + shed + removed + queued). Not built: in flight and share (chunk 9), the limit and its changes, gate refusals (chunk 10)."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -2006,7 +2031,7 @@
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunks 3 and 6. Chunk 3 (internal/obs: health.go): the three states, the rule table (overall state is the worst rule), the collector rule and the JSON body. Chunk 6: the rule database (internal/obs/enginesrc: degraded while no database connection is usable and the last connect failed) and the rule listener (internal/shell: failed while the client listener is down). Not built: the rules for shedding, an open breaker, the limit's floor and draining (chunk 7 on)."
+     "Built in chunks 3, 6 and 8. Chunk 3 (internal/obs: health.go): the three states, the rule table (overall state is the worst rule), the collector rule and the JSON body. Chunk 6: the rule database (internal/obs/enginesrc: degraded while no database connection is usable and the last connect failed) and the rule listener (internal/shell: failed while the client listener is down). Chunk 8: the rule admission (internal/obs/admsrc: degraded while a tenant queue shed within the last interval). Not built: the rules for an open breaker, the limit's floor and draining."
     ],
     "docIds": [],
     "sourceIds": [
@@ -2141,7 +2166,7 @@
     "id": "o-enginesrc",
     "kind": "component",
     "name": "Engine source mapping",
-    "description": "internal/obs/enginesrc. The metric declarations of component engine and the mapping to points from two snapshots: the engine's, and the shell's (mailbox depth and peak, goroutines, readers and writers, deadlines; names shell_...). Labels are outcome, reason and mode; no tenant label so far. Registers the engine's wire and classifier sources beside its own. Holds the health rule database: degraded while no database connection is usable and the last connect failed.",
+    "description": "internal/obs/enginesrc. The metric declarations of component engine and the mapping to points from two snapshots: the engine's, and the shell's (mailbox depth and peak, goroutines, readers and writers, deadlines; names shell_...). Labels are outcome, reason and mode; no tenant label so far. Registers the engine's wire, classifier and admission sources beside its own. Holds the health rule database: degraded while no database connection is usable and the last connect failed; hands on the admission rule with it.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -2151,6 +2176,38 @@
     ],
     "parentId": "c-obs",
     "technology": "Go"
+   },
+   {
+    "id": "o-admsrc",
+    "kind": "component",
+    "name": "Admission source mapping",
+    "description": "internal/obs/admsrc. The metric declarations of component admission and the mapping from the admission snapshot to points. Totals always: the rule, capacities, queued, tenant queues, pushes, served, removed, sheds by reason, LIFO switches, queues by rule state, the load gauge, shedding. With obs.detail on: the queue-wait histogram and a row set per tenant, the gateway's first metrics with a tenant label. Holds the health rule admission: degraded while a tenant queue shed within the last interval.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
+    "id": "o-h2h",
+    "kind": "component",
+    "name": "Admission head-to-head table",
+    "description": "scripts/admission-head-to-head.sh and test/analysis/admission-head-to-head. One DuckDB query over the flushed runs of the head-to-head scenarios prints the table: both rules and the two comparison arms at 1.2×, 2× and 10× load, with served-wait percentiles, depth, served, shed, shed by the rule, and idle share. --check reruns the scenarios and requires the output to equal the committed table.",
+    "status": "existing",
+    "tags": [
+     "test"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Bash, SQL"
    },
    {
     "id": "o-catalog",
@@ -2188,7 +2245,7 @@
     "id": "o-assert",
     "kind": "component",
     "name": "SQL assertions and their runner",
-    "description": "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The assertion files check the direct baselines' counts and, for each wire scenario, that startup failures by reason, TLS requests by answer and handshake failures equal what was injected and sent, and for the classifier scenarios that rejects equal the statements sent and the fake Postgres started only what was forwarded (nothing in the reject-only scenario). For the end-to-end scenarios of both tiers: conservation per instance, the resets against the leases ended and, where the scenario has a fault, error-contract replies by row = faults injected; in tier S also proxy completed = workload completed and replies by row = what the clients saw.",
+    "description": "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The assertion files check the direct baselines' counts and, for each wire scenario, that startup failures by reason, TLS requests by answer and handshake failures equal what was injected and sent, and for the classifier scenarios that rejects equal the statements sent and the fake Postgres started only what was forwarded (nothing in the reject-only scenario). For the end-to-end scenarios of both tiers: conservation per instance, the resets against the leases ended and, where the scenario has a fault, error-contract replies by row = faults injected; in tier S also proxy completed = workload completed and replies by row = what the clients saw. For the admission scenarios: conservation (the engine's sheds = the queues' sheds too), served-wait bounds from the histogram buckets, depth, and 53M01 replies = sheds.",
     "status": "existing",
     "tags": [
      "test"
@@ -2645,6 +2702,19 @@
      "plan"
     ],
     "technology": "Go, in-process"
+   },
+   {
+    "id": "c16",
+    "sourceId": "c-adm",
+    "targetId": "c-obs",
+    "label": "Keeps its counters as one plain snapshot (gauges with peaks, queue-wait histograms, a conservation check); the admission source mapping reads it",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, plain structs"
    },
    {
     "id": "s1",
@@ -3172,6 +3242,58 @@
     "targetId": "n-adm",
     "label": "Gate, queue, dispatch, limit",
     "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e31",
+    "sourceId": "e-admq",
+    "targetId": "e-seams",
+    "label": "Implements the queue seam and its shedding extension",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, interface implementation"
+   },
+   {
+    "id": "e30",
+    "sourceId": "e-admq",
+    "targetId": "n-adm",
+    "label": "Push, pop, remove, expire, sweep; takes the sheds and the next deadline",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e32",
+    "sourceId": "e-admq",
+    "targetId": "e-fail",
+    "label": "Each shed request, answered at once with 53M01",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e33",
+    "sourceId": "e-clock",
+    "targetId": "e-admq",
+    "label": "The admission deadline was reached: sweep",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4093,8 +4215,8 @@
     "id": "a2",
     "sourceId": "n-engine",
     "targetId": "a-queues",
-    "label": "Enqueue; sweep expired",
-    "status": "planned",
+    "label": "Enqueue, pop, remove; sweep expired; take the shed requests and the next deadline",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4133,7 +4255,7 @@
     "sourceId": "n-engine",
     "targetId": "a-snap",
     "label": "Snapshot()",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4146,7 +4268,7 @@
     "sourceId": "a-queues",
     "targetId": "a-rule",
     "label": "Allowed wait; overloaded or not",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4159,7 +4281,7 @@
     "sourceId": "a-rule-timeout",
     "targetId": "a-rule",
     "label": "Implements",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4172,7 +4294,7 @@
     "sourceId": "a-rule-law",
     "targetId": "a-rule",
     "label": "Implements",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4185,7 +4307,7 @@
     "sourceId": "a-arms",
     "targetId": "a-rule",
     "label": "Implement (simulator only)",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4195,10 +4317,10 @@
    },
    {
     "id": "a10",
-    "sourceId": "a-dispatch",
-    "targetId": "a-queues",
-    "label": "Pops the chosen tenant's next request",
-    "status": "planned",
+    "sourceId": "a-queues",
+    "targetId": "a-dispatch",
+    "label": "At each pop: which tenant's queue is served next",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4250,7 +4372,7 @@
     "sourceId": "a-queues",
     "targetId": "a-tenants",
     "label": "Per-tenant queue",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4270,6 +4392,19 @@
      "plan"
     ],
     "technology": "Go types"
+   },
+   {
+    "id": "a16",
+    "sourceId": "a-snap",
+    "targetId": "n-obs",
+    "label": "Uses the gauge, the histogram and the conservation check; the admission source mapping reads the snapshot",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, plain structs"
    },
    {
     "id": "p1",
@@ -6056,7 +6191,7 @@
     "id": "o63",
     "sourceId": "o-enginesrc",
     "targetId": "o-collector",
-    "label": "Registers the engine source (shell metrics included) and the engine's wire and classifier sources",
+    "label": "Registers the engine source (shell metrics included) and the engine's wire, classifier and admission sources",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -6220,6 +6355,97 @@
      "plan"
     ],
     "technology": "Bash, read_csv"
+   },
+   {
+    "id": "o76",
+    "sourceId": "o-admsrc",
+    "targetId": "n-adm",
+    "label": "Reads the admission snapshot",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o77",
+    "sourceId": "o-enginesrc",
+    "targetId": "o-admsrc",
+    "label": "Takes the admission source for the engine's admission snapshot",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o78",
+    "sourceId": "o-catalog",
+    "targetId": "o-admsrc",
+    "label": "Lists every metric it declares",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o79",
+    "sourceId": "o-admsrc",
+    "targetId": "o-health",
+    "label": "Supplies the rule admission",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o80",
+    "sourceId": "o-h2h",
+    "targetId": "duckdb",
+    "label": "Runs its one query",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "DuckDB CLI"
+   },
+   {
+    "id": "o81",
+    "sourceId": "o-h2h",
+    "targetId": "csvfiles",
+    "label": "Reads the flushed runs of every arm and load",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "read_csv"
+   },
+   {
+    "id": "o82",
+    "sourceId": "o-h2h",
+    "targetId": "n-e2e",
+    "label": "--run and --check run the head-to-head scenarios into a run directory",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "go test"
    },
    {
     "id": "o50",
@@ -6617,6 +6843,9 @@
     },
     {
      "relationshipId": "c15"
+    },
+    {
+     "relationshipId": "c16"
     }
    ],
    "legend": {
@@ -7129,6 +7358,9 @@
      "elementId": "e-proxysim"
     },
     {
+     "elementId": "e-admq"
+    },
+    {
      "elementId": "n-shell"
     },
     {
@@ -7189,6 +7421,18 @@
     },
     {
      "relationshipId": "e8"
+    },
+    {
+     "relationshipId": "e31"
+    },
+    {
+     "relationshipId": "e30"
+    },
+    {
+     "relationshipId": "e32"
+    },
+    {
+     "relationshipId": "e33"
     },
     {
      "relationshipId": "e9"
@@ -7657,6 +7901,9 @@
     },
     {
      "elementId": "n-work"
+    },
+    {
+     "elementId": "n-obs"
     }
    ],
    "edges": [
@@ -7704,6 +7951,9 @@
     },
     {
      "relationshipId": "a15"
+    },
+    {
+     "relationshipId": "a16"
     }
    ],
    "legend": {
@@ -8553,6 +8803,12 @@
      "elementId": "o-enginesrc"
     },
     {
+     "elementId": "o-admsrc"
+    },
+    {
+     "elementId": "o-h2h"
+    },
+    {
      "elementId": "o-catalog"
     },
     {
@@ -8581,6 +8837,9 @@
     },
     {
      "elementId": "n-pgwire"
+    },
+    {
+     "elementId": "n-adm"
     },
     {
      "elementId": "csvfiles"
@@ -8811,6 +9070,27 @@
     },
     {
      "relationshipId": "o75"
+    },
+    {
+     "relationshipId": "o76"
+    },
+    {
+     "relationshipId": "o77"
+    },
+    {
+     "relationshipId": "o78"
+    },
+    {
+     "relationshipId": "o79"
+    },
+    {
+     "relationshipId": "o80"
+    },
+    {
+     "relationshipId": "o81"
+    },
+    {
+     "relationshipId": "o82"
     }
    ],
    "legend": {
@@ -8890,7 +9170,7 @@
    "id": "plan",
    "title": "mini-gateway PLAN.md (approved 2026-11-24)",
    "url": "https://github.com/nickstrad/mini-gateway/blob/main/PLAN.md",
-   "notes": "Target architecture. Built so far: chunks 0–6a. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
+   "notes": "Target architecture. Built so far: chunks 0–6a and chunk 8 (chunk 7 has not landed yet). Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
   }
  ]
 }
