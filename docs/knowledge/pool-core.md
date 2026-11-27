@@ -114,3 +114,22 @@ core path in `internal/proxy`, or the pool scenarios. Full record:
   blackhole, peer_forgot, polite close, idle_drop with modelled keepalive, slots held,
   and the `setseed` rewrite that lets the fake answer the re-seed. It classifies cancel
   connections and does not count them as dials.
+
+## With chunk 8's admission queue (the join, 2026-11-27)
+
+- The binary runs the pool core behind chunk 8's timeout rule. In tier S a spec chooses: the
+  core with `Spec.Pool`, the admission queue with `Spec.Admission.Rule != 0`;
+  `pool-admission-restart` is the scenario with both.
+- The breaker's flush of queued work goes through the admission core when there is one: sweep
+  at the instant, then `Queues.Refuse` per queued request in request-id order (shed reason
+  `breaker`, answered `53M03`). Never `Pop` for a refusal: a pop is a served request and breaks
+  chunk 8's "core shed = engine shed" invariant (`proxy.PlantBreakerFlushPops` plants exactly
+  that).
+- Remove a queued request with `e.unqueue(id)` (`RemoveAt` at `e.now` behind the admission
+  core), then `e.queueTouched()`.
+- With a `ShedQueue` there is no direct lend in `enqueue`; `dispatch` pops, checks out once and
+  `Unpop`s on refusal, so chunk 7's one-checkout-per-enqueue bound holds.
+- To run chunk 7's engine tests behind the admission queue set the package variable
+  `coreAdmission` (`internal/proxy/core_test.go`); a test that calls `Quiesce` right after
+  traffic fails there by chunk 8's design (the tenant queue's 16-interval quiet window).
+- Record: `agent_work/chunks/c07-pool/NOTES.md`, "Join with chunk 8".
