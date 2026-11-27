@@ -23,7 +23,8 @@ where the chunk brief and this file disagree, the chunk brief wins.
   comments, no inline comments, no TODOs (allowed: `//go:build`, `//go:embed`,
   `//go:generate`, `//go:noinline` directives and `// Output:` blocks in examples). All
   comments and all reader-facing prose (book, README, docs pages) are written later by a
-  different seat. The gate rejects comments. Make the code readable without them: plain
+  different seat (Neon, with the Clarity skill; PLAN.md section 19.4). Anything you write
+  that a reader would see is a draft for that seat, not a finished write-up. The gate rejects comments. Make the code readable without them: plain
   names, small functions, named constants.
 - Operational notes ARE yours: `agent_work/chunks/<chunk-dir>/NOTES.md` — what you built,
   each decision the brief left open, each claim in the brief with the test that proves it

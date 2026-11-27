@@ -18,7 +18,7 @@ example `c01-sim-kernel`.
 ## The comment rule and the three stages (G2)
 
 The builder writes Go with **no comments**. All comments are written later, once, by the
-prose seat. "Product Go" is every `.go` file outside `tools/` and `agent_work/`. Go files in
+prose seat (Neon, using the Clarity skill; PLAN.md section 19.4). "Product Go" is every `.go` file outside `tools/` and `agent_work/`. Go files in
 `testdata` folders are checked too (a fixture that must not parse needs a name that does
 not end in `.go`). Allowed in product Go at any time: `//go:build` (before the
 package clause), `//go:embed`, `//go:generate`, `//go:noinline`, and `// Output:` blocks
