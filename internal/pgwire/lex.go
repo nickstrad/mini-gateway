@@ -70,6 +70,7 @@ type Lexer struct {
 	pos        int
 	run        lexOpRun
 	opRunBytes int
+	lookahead  int
 }
 
 // lexOpRun caches one scanned operator run so repeated trailing '+'/'-' cuts
@@ -256,7 +257,9 @@ func (l *Lexer) quoted(q byte, backslash bool, kind TokenKind) TokenKind {
 			}
 			l.pos++
 			if q == '\'' {
-				if next, ok := lexContinuation(l.src, l.pos); ok {
+				next, ok := lexContinuation(l.src, l.pos)
+				l.lookahead += next - l.pos
+				if ok {
 					l.pos = next
 					continue
 				}
@@ -290,10 +293,10 @@ func lexContinuation(src []byte, i int) (int, bool) {
 		case c == '\'' && newline:
 			return i + 1, true
 		default:
-			return 0, false
+			return i, false
 		}
 	}
-	return 0, false
+	return i, false
 }
 
 func (l *Lexer) number() {
@@ -349,6 +352,7 @@ func (l *Lexer) dollar() TokenKind {
 			end++
 		}
 	}
+	l.lookahead += end - l.pos
 	if end >= len(l.src) || l.src[end] != '$' {
 		l.pos++
 		return TokenBad

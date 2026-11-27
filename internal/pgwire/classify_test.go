@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
@@ -509,22 +508,6 @@ func FuzzClassify(f *testing.F) {
 	})
 }
 
-const clsTimeGrowthLimit = 96
-
-func clsFastest(q []byte) time.Duration {
-	best := time.Duration(1<<63 - 1)
-	for k := 0; k < 3; k++ {
-		start := time.Now()
-		ClassifyQuery(q, false)
-		ShareFits(q)
-		LexAll(q)
-		if d := time.Since(start); d < best {
-			best = d
-		}
-	}
-	return best
-}
-
 const (
 	clsWorkSmallInput  = 1 << 12
 	clsWorkLargeInput  = 1 << 16
@@ -532,8 +515,9 @@ const (
 )
 
 type clsWork struct {
-	opRunBytes    int
-	keywordChecks int
+	opRunBytes int
+	lookahead  int
+	clsCounts
 }
 
 func clsMeasureWork(q []byte) clsWork {
@@ -543,37 +527,44 @@ func clsMeasureWork(q []byte) clsWork {
 			break
 		}
 	}
-	_, keywordChecks := clsRunCounted(q, false, false)
-	return clsWork{opRunBytes: l.opRunBytes, keywordChecks: keywordChecks}
+	_, counts := clsRunCounted(q, false, false)
+	return clsWork{opRunBytes: l.opRunBytes, lookahead: l.lookahead, clsCounts: counts}
 }
 
 func TestLexOperatorRunsGrowLinearly(t *testing.T) {
-	clsCheckLinearShapes(t, TokenOperator, func(w clsWork) int { return w.opRunBytes }, []string{"+", "-", "-+", "+-", "*+", "=-", "<+-", "+ ", "1+"})
+	clsCheckLinearShapes(t, "SELECT ", clsKindIs(TokenOperator), func(w clsWork) int { return w.opRunBytes }, []string{"+", "-", "-+", "+-", "*+", "=-", "<+-", "+ ", "1+"})
 }
 
 func TestClassifierSpanKeywordChecksGrowLinearly(t *testing.T) {
-	clsCheckLinearShapes(t, TokenWord, func(w clsWork) int { return w.keywordChecks }, []string{"pg_settings ", "standard_conforming_strings ", "client_encoding ", `"pg_settings" `, "pg_settings, ", "SELECT pg_settings "})
+	clsCheckLinearShapes(t, "SELECT ", clsKindIs(TokenWord), func(w clsWork) int { return w.keywordChecks }, []string{"pg_settings ", "standard_conforming_strings ", "client_encoding ", `"pg_settings" `, "pg_settings, ", "SELECT pg_settings "})
 }
 
-func clsCheckLinearShapes(t *testing.T, kind TokenKind, measured func(clsWork) int, units []string) {
+func clsCheckLinearShapes(t *testing.T, prefix string, measuredKind func(TokenKind) bool, measured func(clsWork) int, units []string) {
 	t.Helper()
 	for _, unit := range units {
-		smallQuery := []byte("SELECT " + strings.Repeat(unit, clsWorkSmallInput/len(unit)))
-		small := clsMeasureWork(smallQuery)
-		large := clsMeasureWork([]byte("SELECT " + strings.Repeat(unit, clsWorkLargeInput/len(unit))))
+		smallUnits := []byte(strings.Repeat(unit, clsWorkSmallInput/len(unit)))
+		small := clsMeasureWork(append([]byte(prefix), smallUnits...))
+		large := clsMeasureWork([]byte(prefix + strings.Repeat(unit, clsWorkLargeInput/len(unit))))
 		t.Logf("%q: 4 KiB %+v, 64 KiB %+v", unit, small, large)
-		if measured(small) == 0 && clsHasKind(smallQuery[len("SELECT "):], kind) {
-			t.Errorf("%q: the input has %v tokens but the measured path did no work (%+v)", unit, kind, small)
+		if measured(small) == 0 && clsHasKind(smallUnits, measuredKind) {
+			t.Errorf("%q: the input has tokens of the measured kind but the measured path did no work (%+v)", unit, small)
 		}
 		clsCheckGrowth(t, unit, "operator-run bytes", small.opRunBytes, large.opRunBytes)
+		clsCheckGrowth(t, unit, "lookahead bytes", small.lookahead, large.lookahead)
 		clsCheckGrowth(t, unit, "keyword checks", small.keywordChecks, large.keywordChecks)
+		clsCheckGrowth(t, unit, "token visits", small.tokenVisits, large.tokenVisits)
+		clsCheckGrowth(t, unit, "literal bytes", small.literalBytes, large.literalBytes)
 	}
 }
 
-func clsHasKind(q []byte, kind TokenKind) bool {
+func clsKindIs(kind TokenKind) func(TokenKind) bool {
+	return func(k TokenKind) bool { return k == kind }
+}
+
+func clsHasKind(q []byte, wanted func(TokenKind) bool) bool {
 	toks, _ := LexAll(q)
 	for _, tok := range toks {
-		if tok.Kind == kind {
+		if wanted(tok.Kind) {
 			return true
 		}
 	}
@@ -587,23 +578,6 @@ func clsCheckGrowth(t *testing.T, unit, what string, small, large int) {
 	}
 }
 
-// TestClassifierTimeGrowsLinearly proves that nine adversarial token shapes
-// scale linearly from 64 KiB to 1 MiB (16x input <= 96x time).
-func TestClassifierTimeGrowsLinearly(t *testing.T) {
-	if testing.Short() {
-		t.Skip("timing test")
-	}
-	for _, unit := range []string{"(", "a ", ";", "'x'", "set_config(1,2,", `U&"a" `, "SELECT abs(t.a) FROM t; ", "'a'\n", "-- c\n"} {
-		small := []byte(strings.Repeat(unit, (1<<16)/len(unit)))
-		large := []byte(strings.Repeat(unit, (1<<20)/len(unit)))
-		a, b := clsFastest(small), clsFastest(large)
-		if a < time.Microsecond {
-			a = time.Microsecond
-		}
-		ratio := int64(b / a)
-		t.Logf("%q: 64 KiB %v, 1 MiB %v, ratio %d", unit, a, b, ratio)
-		if ratio > clsTimeGrowthLimit {
-			t.Errorf("%q: 16 times the input took %d times as long (%v against %v); want at most %d", unit, ratio, b, a, clsTimeGrowthLimit)
-		}
-	}
+func TestClassifierWorkGrowsLinearly(t *testing.T) {
+	clsCheckLinearShapes(t, "", TokenKind.Significant, func(w clsWork) int { return w.tokenVisits }, []string{"(", "a ", ";", "'x'", "set_config(1,2,", `U&"a" `, "SELECT abs(t.a) FROM t; ", "'a'\n", "-- c\n"})
 }

@@ -111,7 +111,13 @@ type clsMsg struct {
 	plant   bool
 	scratch [clsNameMax]byte
 
+	counts clsCounts
+}
+
+type clsCounts struct {
 	keywordChecks int
+	tokenVisits   int
+	literalBytes  int
 }
 
 func clsRun(text []byte, inTx, plant bool) work.Unit {
@@ -119,7 +125,7 @@ func clsRun(text []byte, inTx, plant bool) work.Unit {
 	return u
 }
 
-func clsRunCounted(text []byte, inTx, plant bool) (work.Unit, int) {
+func clsRunCounted(text []byte, inTx, plant bool) (work.Unit, clsCounts) {
 	m := clsMsg{src: text, plant: plant}
 	m.lex()
 	m.matchParens()
@@ -138,11 +144,11 @@ func clsRunCounted(text []byte, inTx, plant bool) (work.Unit, int) {
 		if r := m.rejectReason(s); r != work.RejectNone {
 			u.Class = work.ClassReject
 			u.Reason = r
-			return u, m.keywordChecks
+			return u, m.counts
 		}
 	}
 	u.Shareable = u.SafeRead && !inTx
-	return u, m.keywordChecks
+	return u, m.counts
 }
 
 type clsSpan struct{ lo, hi int }
@@ -181,6 +187,7 @@ func (m *clsMsg) lex() {
 }
 
 func (m *clsMsg) isPunct(i int, c byte) bool {
+	m.counts.tokenVisits++
 	return i >= 0 && i < len(m.toks) && m.toks[i].Kind == TokenPunct && m.src[m.toks[i].Start] == c
 }
 
@@ -243,10 +250,13 @@ func (m *clsMsg) split() []clsSpan {
 	return out
 }
 
-func (m *clsMsg) word(i int) bool { return i >= 0 && i < len(m.toks) && m.toks[i].Kind == TokenWord }
+func (m *clsMsg) word(i int) bool {
+	m.counts.tokenVisits++
+	return i >= 0 && i < len(m.toks) && m.toks[i].Kind == TokenWord
+}
 
 func (m *clsMsg) is(i int, kw string) bool {
-	m.keywordChecks++
+	m.counts.keywordChecks++
 	if !m.word(i) {
 		return false
 	}
@@ -282,6 +292,7 @@ func clsFold(c byte) byte {
 }
 
 func (m *clsMsg) isName(i int) bool {
+	m.counts.tokenVisits++
 	if i < 0 || i >= len(m.toks) {
 		return false
 	}
@@ -291,6 +302,7 @@ func (m *clsMsg) isName(i int) bool {
 
 func (m *clsMsg) name(i, hi int) ([]byte, int, bool) {
 	t := m.toks[i]
+	m.counts.literalBytes += t.End - t.Start
 	switch t.Kind {
 	case TokenWord:
 		k := min(t.End-t.Start, clsNameMax)
@@ -519,6 +531,7 @@ func (m *clsMsg) setConfigPathMayNameTemp(open int) bool {
 }
 
 func (m *clsMsg) isString(i int) bool {
+	m.counts.tokenVisits++
 	if i < 0 || i >= len(m.toks) {
 		return false
 	}
@@ -532,6 +545,7 @@ func (m *clsMsg) stringMayContain(i int, words ...string) bool {
 	}
 	t := m.toks[i]
 	raw := m.src[t.Start:t.End]
+	m.counts.literalBytes += len(raw)
 	if t.Kind == TokenString && clsContinued(raw) {
 		return true
 	}
@@ -615,6 +629,7 @@ func (m *clsMsg) setConfigLocal(open int) bool {
 	if lit.Kind != TokenString || m.src[lit.Start] != '\'' || clsContinued(m.src[lit.Start:lit.End]) {
 		return false
 	}
+	m.counts.literalBytes += lit.End - lit.Start
 	setting := clsLowerASCII(lexUnquote(m.src[lit.Start+1:lit.End-1], '\''))
 	if clsInList(rejLexingSettings, setting) {
 		return false
