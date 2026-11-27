@@ -15,6 +15,10 @@ const (
 
 func (s *Shell) cancelRequest(id proxy.ConnID, data []byte) {
 	if len(s.cancels) >= maxCancels || s.stopping() {
+		if len(s.deferred) >= maxDeferred {
+			s.stats.dropped.Add(1)
+			return
+		}
 		s.deferred = append(s.deferred, proxy.Event{Kind: proxy.EvDBCancelDone, Conn: id})
 		return
 	}
