@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/nickstrad/mini-gateway/internal/admission"
+	"github.com/nickstrad/mini-gateway/internal/obs"
 	"github.com/nickstrad/mini-gateway/internal/sim/simtest"
 )
 
@@ -54,7 +55,44 @@ func runAdm(t *testing.T, spec AdmSpec, seed int64) *AdmRun {
 
 func servedAtPhaseEnd(r *AdmRun) int64 { return r.Samples[0].Adm.Served }
 
-func checkHeadToHead(r *AdmRun, fifoServed int64) error {
+func waitQuantile(h obs.HistogramSnapshot, pct int64) int64 {
+	var seen int64
+	for _, b := range h.Buckets {
+		seen += b.Count
+		if 100*seen >= pct*h.Count {
+			return b.Hi
+		}
+	}
+	return h.Max
+}
+
+func isProductRule(k admission.RuleKind) bool {
+	return k == admission.RuleTimeout || k == admission.RuleControlLaw
+}
+
+func checkRuleSheds(s admission.Snapshot, k admission.RuleKind) error {
+	if isProductRule(k) && s.Shed[admission.ReasonRule] == 0 {
+		return failf("the %v rule shed nothing by the rule (sheds %v): overflow alone held the bound", k, s.Shed)
+	}
+	return nil
+}
+
+func checkModerateConvergence(r *AdmRun, fifo *AdmRun) error {
+	if r.Spec.Arm.Rule != admission.RuleControlLaw || r.Spec.LoadPct > 150 {
+		return nil
+	}
+	h, f := r.Samples[0].Adm.QueueWait, fifo.Samples[0].Adm.QueueWait
+	if p50 := waitQuantile(h, 50); p50 > int64(admission.DefaultTarget) {
+		return failf("claim 3: under moderate overload the control law's median served wait %d did not return to the target %d", p50, admission.DefaultTarget)
+	}
+	if p99, fp50 := waitQuantile(h, 99), waitQuantile(f, 50); p99 >= fp50 {
+		return failf("claim 3: the control law's p99 served wait %d is not below the FIFO control's median %d", p99, fp50)
+	}
+	return nil
+}
+
+func checkHeadToHead(r *AdmRun, fifo *AdmRun) error {
+	fifoServed := servedAtPhaseEnd(fifo)
 	s := r.Samples[0].Adm
 	if s.Pushes == 0 || s.Served == 0 {
 		return failf("counters did not move: %+v", s)
@@ -71,7 +109,10 @@ func checkHeadToHead(r *AdmRun, fifoServed int64) error {
 	if r.Spec.LoadPct >= 200 && r.Spec.Arm.Rule != admission.RuleFIFO && s.ShedTotal() == 0 {
 		return failf("an overloaded arm shed nothing")
 	}
-	return nil
+	if err := checkRuleSheds(s, r.Spec.Arm.Rule); err != nil {
+		return err
+	}
+	return checkModerateConvergence(r, fifo)
 }
 
 func TestScenarioAdmissionHeadToHead(t *testing.T) {
@@ -92,7 +133,7 @@ func TestScenarioAdmissionHeadToHead(t *testing.T) {
 					if arm != ArmFIFO {
 						r = runAdm(t, HeadToHeadSpec(arm, load), seed)
 					}
-					if err := checkHeadToHead(r, servedAtPhaseEnd(fifo)); err != nil {
+					if err := checkHeadToHead(r, fifo); err != nil {
 						t.Fatalf("%s: %v\n%s", arm.Name, err, admReplay(r.Spec.Scenario, arm.Name, seed))
 					}
 				}
@@ -128,6 +169,9 @@ func checkAntiBloat(r *AdmRun) error {
 	}
 	if last.Adm.ShedTotal() == 0 {
 		return failf("nothing shed under 10x overload")
+	}
+	if err := checkRuleSheds(last.Adm, r.Spec.Arm.Rule); err != nil {
+		return err
 	}
 	return checkRecovery(r)
 }
@@ -179,7 +223,7 @@ func TestCanaryAdmissionWithoutTheHeadSweepServesLate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := checkHeadToHead(r, servedAtPhaseEnd(r)); err == nil {
+	if err := checkHeadToHead(r, r); err == nil {
 		t.Fatal("with the head sweep planted out the timeout rule still bounded the served wait")
 	}
 	spec.Plant = 0
@@ -187,7 +231,7 @@ func TestCanaryAdmissionWithoutTheHeadSweepServesLate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := checkHeadToHead(r, servedAtPhaseEnd(r)); err != nil {
+	if err := checkHeadToHead(r, r); err != nil {
 		t.Fatal(err)
 	}
 }
