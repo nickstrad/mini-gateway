@@ -130,7 +130,26 @@ Review 1 (`REVIEW-1.md`) and adversarial results (`agent_work/adversarial/cr02-f
 - **New expectation:** Every row of `FUZZ_REPORT` has `6` tab-separated columns (`len(strings.Split(row, "\t")) != 6`).
 - **Reason:** CR-2 adds the `retried` column (`0` or `1`) at the end of `scripts/fuzz.sh`'s TSV report while keeping the first five columns unchanged. Nothing else under `agent_work/adversarial/` was modified (including during the repair round).
 
+## After review 2 (NITS; closed by the orchestrator)
+
+- `TestAdv_2_WidenedStandaloneBudget` is no longer red: the orchestrator settled it with a
+  skip at `1c0171c` (claim 2 narrowed; `ADVERSARIAL.md`). The attack suite is 20 pass,
+  1 skip, and `G3 unit` passes. Lines in this file that say "stays red by design" or
+  "20 of 21 PASS, 1 expected FAIL" describe the tree before that commit.
+- Review 2 findings 1 and 2 are accepted as stated limits (below, and in the header of
+  `scripts/fuzz.sh`); no code changed after review 2.
+- Review 2 finding 3 is open: no test holds "a failed snapshot BEFORE the first run blocks
+  the retry" by itself (the code is right; mutation D4 survives). Carried in STATE.md.
+
 ## Stated limits
+
+- A corpus directory whose parent cannot be searched at all (before and after the run) is
+  snapshotted as absent, not as a failed snapshot, so the retry is not blocked by the
+  snapshot in that one case. `go test` runs as the same user and cannot write a failing
+  input there; the log conditions still apply. (Review 2 finding 1.)
+- The signature test is written for gawk (`awk` on the gate's machine). Under mawk a NUL
+  byte ends a line early and two forged logs that gawk refuses are accepted. (Review 2
+  finding 2.)
 
 - `is_deadline_signature` whitelists the exact output lines Go 1.26.8's `testing` and
   `internal/fuzz` packages emit during a deadline-only exit. If a future Go version adds a

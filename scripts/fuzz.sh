@@ -41,6 +41,11 @@
 # content, compared NUL-safely through symlinks; fails closed if a snapshot cannot be
 # taken). At most FUZZ_MAX_RETRIES targets are retried in one run; the second run's
 # result and rate stand.
+# Two limits of that check (review 2): a corpus directory whose parent cannot be searched
+# at all, before and after, is read as absent rather than as a failed snapshot (go test,
+# running as the same user, cannot write a failing input there either); and the signature
+# test is written for gawk, the awk on the gate's machine - mawk ends a line at a NUL byte
+# and could accept a forged log that gawk refuses.
 #
 # Output: the go test output of each target, a `fuzz: RETRY: <dir> <target>: go's own
 # deadline, no failing input` line for each retry, then a table (package, target,
