@@ -52,12 +52,13 @@ const (
 	// at the last acknowledged offset; it must precede EvDBClosed so rule G8 can
 	// prove zero bytes of a request were accepted.
 	EvDBWriteRefused
+	EvDBCancelDone
 	numEventKinds
 )
 
 var eventNames = [numEventKinds]string{"?", "client-accepted", "client-data", "client-closed", "client-wrote",
 	"client-tls", "db-opened", "db-dial-failed", "db-data", "db-closed", "db-wrote", "db-tls", "timer", "publish",
-	"draining", "db-write-refused"}
+	"draining", "db-write-refused", "db-cancel-done"}
 
 // String returns the canonical hyphenated name of the event kind.
 func (k EventKind) String() string {
@@ -109,11 +110,13 @@ const (
 	ActWake
 	// ActPublish instructs the driver to publish the current observability snapshot.
 	ActPublish
+	ActDBCancel
 	numActionKinds
 )
 
 var actionNames = [numActionKinds]string{"?", "client-write", "client-close", "client-start-tls", "client-pause",
-	"client-resume", "db-open", "db-write", "db-close", "db-start-tls", "db-pause", "db-resume", "wake", "publish"}
+	"client-resume", "db-open", "db-write", "db-close", "db-start-tls", "db-pause", "db-resume", "wake", "publish",
+	"db-cancel"}
 
 // String returns the canonical hyphenated name of the action kind.
 func (k ActionKind) String() string {

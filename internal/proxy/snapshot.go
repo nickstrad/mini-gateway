@@ -138,6 +138,21 @@ type Snapshot struct {
 	Publishes     int64
 	Draining      bool
 	Events        int64
+
+	LeasesEndedDirty   int64
+	ResetsNotAtRelease int64
+	Reseeds            int64
+	NoReply            int64
+	CancelsSent        int64
+	CancelsDone        int64
+	CancelConns        obs.Gauge
+	CancelsForwarded   int64
+	CancelsQueued      int64
+	CancelsRefused     int64
+	CancelsUnmatched   int64
+	CancelsIgnored     int64
+	BreakerFlushed     int64
+	IdleInTxRolledBack int64
 }
 
 // Check enforces exact counter conservation and capacity invariants on s.
@@ -168,12 +183,16 @@ func (s Snapshot) Check() error {
 		errs = append(errs, fmt.Errorf("resets started %d != completed %d + failed %d + resetting %d", s.ResetsStarted,
 			s.ResetsCompleted, failed, s.Resetting.Value))
 	}
-	if s.LeasesEnded != s.LeasesEndedReset+s.LeasesEndedClose+s.LeasesEndedAsIs {
-		errs = append(errs, fmt.Errorf("leases ended %d != reset %d + closed %d + as-is %d", s.LeasesEnded,
-			s.LeasesEndedReset, s.LeasesEndedClose, s.LeasesEndedAsIs))
+	if s.LeasesEnded != s.LeasesEndedReset+s.LeasesEndedClose+s.LeasesEndedAsIs+s.LeasesEndedDirty {
+		errs = append(errs, fmt.Errorf("leases ended %d != reset %d + closed %d + as-is %d + dirty %d", s.LeasesEnded,
+			s.LeasesEndedReset, s.LeasesEndedClose, s.LeasesEndedAsIs, s.LeasesEndedDirty))
 	}
-	if s.LeasesEndedReset != s.ResetsStarted {
-		errs = append(errs, fmt.Errorf("leases ended with a reset %d != resets started %d", s.LeasesEndedReset, s.ResetsStarted))
+	if s.LeasesEndedReset+s.ResetsNotAtRelease != s.ResetsStarted {
+		errs = append(errs, fmt.Errorf("leases ended with a reset %d + other resets %d != resets started %d", s.LeasesEndedReset,
+			s.ResetsNotAtRelease, s.ResetsStarted))
+	}
+	if s.CancelsSent != s.CancelsDone+s.CancelConns.Value {
+		errs = append(errs, fmt.Errorf("cancels sent %d != done %d + open %d", s.CancelsSent, s.CancelsDone, s.CancelConns.Value))
 	}
 	if s.DBOpen.Value+s.DBConnecting.Value > s.DBCap {
 		errs = append(errs, fmt.Errorf("database connections %d open + %d connecting above the cap %d", s.DBOpen.Value,

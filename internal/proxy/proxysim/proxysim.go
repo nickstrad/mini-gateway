@@ -63,7 +63,10 @@ type side uint8
 const (
 	sideClient side = iota
 	sideDB
+	sideCancel
 )
+
+const cancelWait = time.Second
 
 type conn struct {
 	h         *Harness
@@ -283,6 +286,8 @@ func (h *Harness) do(a proxy.Action) {
 		}
 	case proxy.ActDBOpen:
 		h.dial(a)
+	case proxy.ActDBCancel:
+		h.cancel(a)
 	}
 }
 
@@ -311,6 +316,13 @@ func (h *Harness) dial(a proxy.Action) {
 	c.end = h.Net.Dial(h.cfg.DBAddr, h.cfg.Options, c)
 }
 
+func (h *Harness) cancel(a proxy.Action) {
+	c := &conn{h: h, id: a.Conn, side: sideCancel, permitted: true, out: append([]byte(nil), a.Data...)}
+	h.dbs[c.id] = c
+	c.hsTimer = h.S.After(cancelWait, c.gone)
+	c.end = h.Net.Dial(h.cfg.DBAddr, h.cfg.Options, c)
+}
+
 func (c *conn) OnEvent(_ *simnet.End, ev simnet.Event) {
 	if c.closed {
 		return
@@ -318,6 +330,11 @@ func (c *conn) OnEvent(_ *simnet.End, ev simnet.Event) {
 	switch ev {
 	case simnet.EvConnected:
 		c.connected = true
+		if c.side == sideCancel {
+			c.flush()
+			c.read()
+			return
+		}
 		c.h.post(proxy.Event{Kind: proxy.EvDBOpened, Conn: c.id})
 		c.read()
 	case simnet.EvRefused:
@@ -344,10 +361,15 @@ func (c *conn) gone() {
 	// EvDBClosed so the engine knows no byte at or past the acked offset went out.
 	unwritten := len(c.out) > 0
 	c.out = nil
+	if c.side == sideCancel {
+		unwritten = false
+	}
 	if unwritten && c.side == sideDB && c.connected {
 		c.h.post(proxy.Event{Kind: proxy.EvDBWriteRefused, Conn: c.id})
 	}
 	switch {
+	case c.side == sideCancel:
+		c.h.post(proxy.Event{Kind: proxy.EvDBCancelDone, Conn: c.id})
 	case c.side == sideClient:
 		c.h.post(proxy.Event{Kind: proxy.EvClientClosed, Conn: c.id})
 	case !c.connected:
@@ -405,6 +427,9 @@ func (c *conn) readChunk() bool {
 }
 
 func (c *conn) deliver(b []byte) {
+	if c.side == sideCancel {
+		return
+	}
 	kind := proxy.EvClientData
 	if c.side == sideDB {
 		kind = proxy.EvDBData
@@ -474,7 +499,9 @@ func (c *conn) flush() {
 		return
 	}
 	n, err := c.end.Write(c.out)
-	if n > 0 {
+	if n > 0 && c.side == sideCancel {
+		c.out = c.out[n:]
+	} else if n > 0 {
 		c.out = c.out[n:]
 		kind := proxy.EvClientWrote
 		if c.side == sideDB {

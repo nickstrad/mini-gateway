@@ -29,6 +29,7 @@ Every reply the proxy makes itself is an `ErrorResponse` with the severity, SQLS
 | `unknown-database` | Startup names a database other than the pool's | `FATAL` — FATAL, then close | `3D000` | database does not exist | no | no | no, fix the database name | closed | `reply_unknown-database` | 4 |
 | `protocol-version` | Startup asks for a protocol major version other than 3 (version 2 and older get the old-format error) | `FATAL` — FATAL, then close | `0A000` | unsupported frontend protocol | no | no | no, change the client | closed | `reply_protocol-version` | 4 |
 | `no-user` | Startup packet names no user | `FATAL` — FATAL, then close | `28000` | no PostgreSQL user name specified in startup packet | no | no | no, fix the client | closed | `reply_no-user` | 4 |
+| `lost-mid-statement-in-transaction` | Database connection lost or reply timed out mid-statement inside a transaction, the message holding no COMMIT or END (08007 when it does or the proxy cannot tell) | `FATAL` — FATAL, then close | `08006` | mini-gateway: database connection lost inside a transaction | yes | no | yes, the whole transaction | closed | `reply_lost-mid-statement-in-transaction` | 7 |
 
 "Reached the database? no" means no write of the request was attempted, or its first write was refused with zero bytes accepted (rule G8); once a write was handed to a database connection the request may have reached the database. The proxy's own retry may act only on rows where that column is "no".
 

@@ -280,7 +280,11 @@ func (p *Pool) Allow(now Instant) bool {
 		p.now = now
 	}
 	p.brk.tick(p.now)
-	return p.brk.allow()
+	if !p.brk.allow() {
+		p.brk.wanted = true
+		return false
+	}
+	return true
 }
 
 func (p *Pool) Breaker() BreakerState { return p.brk.state }
@@ -327,7 +331,7 @@ func (p *Pool) maybeDial() {
 			p.limited = false
 			return
 		case BreakerHalfOpen:
-			if p.brk.trialSent {
+			if p.brk.trialSent || (!p.brk.wanted && p.waiting == 0) {
 				return
 			}
 			trial = true

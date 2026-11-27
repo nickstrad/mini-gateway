@@ -437,6 +437,23 @@ func TestBreakerOpensOnConnectionFailuresSendsOneTrialAndRecovers(t *testing.T) 
 	}
 }
 
+func TestHalfOpenSendsNoTrialWhileNoWorkWasRefused(t *testing.T) {
+	p, err := New(Config{Cap: 2, RatePerSec: 1000, BreakerFailures: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	acts := p.Demand(0, 1, nil)
+	p.DialFailed(0, acts[0].Conn, nil)
+	p.Demand(0, 0, nil)
+	if acts := p.Tick(Instant(5*time.Second), nil); len(acts) != 0 || p.Breaker() != BreakerHalfOpen {
+		t.Fatalf("idle half-open breaker dialled: %v %s", acts, p.Breaker())
+	}
+	p.Allow(Instant(5 * time.Second))
+	if acts := p.Tick(Instant(5*time.Second), nil); len(acts) != 1 || acts[0].Kind != ActDial {
+		t.Fatalf("a refused request did not start the trial: %v", acts)
+	}
+}
+
 func TestCreationRateSpacesDialsAndConcurrentConnectsAreCapped(t *testing.T) {
 	p, err := New(Config{Cap: 50, MaxConnecting: 3, RatePerSec: 10})
 	if err != nil {

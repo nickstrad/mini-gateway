@@ -45,6 +45,7 @@ type breaker struct {
 	openUntil Instant
 	trial     ConnID
 	trialSent bool
+	wanted    bool
 	trans     [NumTransitions]int64
 	trials    int64
 	observed  int64
@@ -73,6 +74,7 @@ func (b *breaker) open(now Instant, t Transition) {
 	b.trans[t]++
 	b.openUntil = now + b.openFor
 	b.trialSent = false
+	b.wanted = false
 	b.trial = 0
 }
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
+	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
@@ -68,6 +69,13 @@ const (
 	CloseClientShutdown
 	// CloseDBShutdown records a database connection closed by Engine.Shutdown.
 	CloseDBShutdown
+	CloseClientIdleInTx
+	CloseDBIdle
+	CloseDBLifetime
+	CloseDBCheckFailed
+	CloseDBNoReply
+	CloseDBCleanupFailed
+	CloseDBCancelCap
 	// NumCloseReasons is the cardinality of CloseReason for fixed-size metric arrays.
 	NumCloseReasons
 )
@@ -76,7 +84,8 @@ var closeNames = [NumCloseReasons]string{"none", "client-gone", "client-terminat
 	"client-protocol-violation", "client-idle", "client-mid-message", "client-write-stalled", "partial-reply",
 	"lost-in-transaction", "too-many-clients", "draining", "cancel-request", "connect-failed", "connect-deadline",
 	"connection-lost", "statement-deadline", "client-vanished", "reset-failed", "release-dirty", "unsolicited-bytes",
-	"protocol-violation", "server-fatal", "database-write-stalled", "client-shutdown", "database-shutdown"}
+	"protocol-violation", "server-fatal", "database-write-stalled", "client-shutdown", "database-shutdown",
+	"idle-in-transaction", "idle-timeout", "lifetime", "check-failed", "no-reply", "cleanup-failed", "cancel-cap"}
 
 // String returns the canonical metric label name for the close reason.
 func (r CloseReason) String() string {
@@ -88,7 +97,7 @@ func (r CloseReason) String() string {
 
 // ClientSide reports whether r classifies a client-leg close rather than a database-leg close.
 func (r CloseReason) ClientSide() bool {
-	return (r >= CloseClientGone && r <= CloseClientCancelRequest) || r == CloseClientShutdown
+	return (r >= CloseClientGone && r <= CloseClientCancelRequest) || r == CloseClientShutdown || r == CloseClientIdleInTx
 }
 
 // ResetPolicy selects the lease-release reset behaviour (decision D8).
@@ -97,12 +106,16 @@ type ResetPolicy uint8
 const (
 	// ResetAlways sends DISCARD ALL after every cleanly ended lease.
 	ResetAlways ResetPolicy = iota + 1
+	ResetOnSwitch
 )
 
 // String returns the config string for the reset policy.
 func (p ResetPolicy) String() string {
-	if p == ResetAlways {
+	switch p {
+	case ResetAlways:
 		return "always"
+	case ResetOnSwitch:
+		return "on-switch"
 	}
 	return "?"
 }
@@ -139,6 +152,9 @@ type Timeouts struct {
 	Reset            time.Duration
 	ClientWrite      time.Duration
 	RedialDelay      time.Duration
+	IdleInTx         time.Duration
+	Cleanup          time.Duration
+	CheckTimeout     time.Duration
 }
 
 // Default timeout budget values (PLAN.md section 9.2).
@@ -152,6 +168,9 @@ const (
 	DefaultReset            = time.Second
 	DefaultClientWrite      = 5 * time.Second
 	DefaultRedialDelay      = 100 * time.Millisecond
+	DefaultIdleInTx         = 5 * time.Second
+	DefaultCleanup          = time.Second
+	DefaultCheckTimeout     = 250 * time.Millisecond
 )
 
 // DefaultTimeouts returns the initial timeout budget before tuning.
@@ -159,7 +178,7 @@ func DefaultTimeouts() Timeouts {
 	return Timeouts{ClientStartup: DefaultClientStartup, ClientMidMessage: DefaultClientMidMessage,
 		ClientIdle: DefaultClientIdle, QueueWait: DefaultQueueWait, DBConnect: DefaultDBConnect,
 		Statement: DefaultStatement, Reset: DefaultReset, ClientWrite: DefaultClientWrite,
-		RedialDelay: DefaultRedialDelay}
+		RedialDelay: DefaultRedialDelay, IdleInTx: DefaultIdleInTx, Cleanup: DefaultCleanup, CheckTimeout: DefaultCheckTimeout}
 }
 
 // Default and hard-limit capacity constants (docs/capacity-table.md).
@@ -193,6 +212,8 @@ type Config struct {
 	KeyScope       work.KeyScope
 	Seams          Seams
 	Plant          Plant
+	Pool           *pool.Config
+	Reseed         bool
 }
 
 // ErrConfig is wrapped by all engine configuration validation errors.
@@ -227,7 +248,8 @@ func (c Config) WithDefaults() Config {
 		def time.Duration
 	}{{&t.ClientStartup, d.ClientStartup}, {&t.ClientMidMessage, d.ClientMidMessage}, {&t.ClientIdle, d.ClientIdle},
 		{&t.QueueWait, d.QueueWait}, {&t.DBConnect, d.DBConnect}, {&t.Statement, d.Statement}, {&t.Reset, d.Reset},
-		{&t.ClientWrite, d.ClientWrite}, {&t.RedialDelay, d.RedialDelay}} {
+		{&t.ClientWrite, d.ClientWrite}, {&t.RedialDelay, d.RedialDelay}, {&t.IdleInTx, d.IdleInTx}, {&t.Cleanup, d.Cleanup},
+		{&t.CheckTimeout, d.CheckTimeout}} {
 		if *p.v == 0 {
 			*p.v = p.def
 		}
@@ -260,8 +282,16 @@ func (c Config) Validate() error {
 	if c.ReplyBufferCap < MinReplyBufferCap || c.ReplyBufferCap > MaxReplyBufferCap {
 		bad("limits.reply_buffer", "must be %d to %d bytes, got %d", MinReplyBufferCap, MaxReplyBufferCap, c.ReplyBufferCap)
 	}
-	if c.Reset != ResetAlways {
-		bad("lease.reset", "only always is supported")
+	switch {
+	case c.Reset != ResetAlways && c.Reset != ResetOnSwitch:
+		bad("lease.reset", "must be always or on-switch")
+	case c.Pool == nil && (c.Reset != ResetAlways || c.Reseed):
+		bad("lease.reset", "on-switch and lease.reseed need the pool core, not the fixed set")
+	}
+	if c.Pool != nil {
+		if err := c.poolConfig().Validate(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	errs = append(errs, c.Timeouts.Validate()...)
 	return errors.Join(errs...)
@@ -291,6 +321,9 @@ func (t Timeouts) Nesting() []TimeoutNest {
 		n("client startup", "client idle between transactions", "timeouts.client_startup", "timeouts.client_idle", t.ClientStartup, t.ClientIdle),
 		n("redial delay", "queue wait", "timeouts.redial_delay", "timeouts.queue_wait", t.RedialDelay, t.QueueWait),
 		n("client write stalled", "client idle between transactions", "timeouts.client_write", "timeouts.client_idle", t.ClientWrite, t.ClientIdle),
+		n("client idle inside a transaction", "client idle between transactions", "timeouts.idle_in_transaction", "timeouts.client_idle", t.IdleInTx, t.ClientIdle),
+		n("cancel and clean-up of a dirty connection", "client idle between transactions", "timeouts.cleanup", "timeouts.client_idle", t.Cleanup, t.ClientIdle),
+		n("check before reuse", "database statement", "pool.check_timeout", "timeouts.statement", t.CheckTimeout, t.Statement),
 	}
 }
 
@@ -304,7 +337,8 @@ func (t Timeouts) Validate() []error {
 	}{{"timeouts.client_startup", t.ClientStartup}, {"timeouts.client_mid_message", t.ClientMidMessage},
 		{"timeouts.client_idle", t.ClientIdle}, {"timeouts.queue_wait", t.QueueWait},
 		{"timeouts.database_connect", t.DBConnect}, {"timeouts.statement", t.Statement}, {"timeouts.reset", t.Reset},
-		{"timeouts.client_write", t.ClientWrite}, {"timeouts.redial_delay", t.RedialDelay}} {
+		{"timeouts.client_write", t.ClientWrite}, {"timeouts.redial_delay", t.RedialDelay},
+		{"timeouts.idle_in_transaction", t.IdleInTx}, {"timeouts.cleanup", t.Cleanup}, {"pool.check_timeout", t.CheckTimeout}} {
 		if f.v <= 0 || f.v > maxTimeout {
 			errs = append(errs, fmt.Errorf("%w: %s: must be above 0 and at most %s, got %s", ErrConfig, f.key, maxTimeout, f.v))
 		}
