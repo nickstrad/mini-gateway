@@ -260,6 +260,9 @@ plant_extra_symlink() {
   mkdir -p "$copy/agent_work/chunks/canary/gate" && ln -s missing.sh "$copy/agent_work/chunks/canary/gate/extra.sh" && commit plant
 }
 plant_broken_html_link() { printf "\n<a href='no-such-page.md'>the missing page</a>\n" >> "$copy/docs/index.md" && commit plant; }
+plant_ignored_link() {
+  printf 'an ignored gate log\n' > "$copy/docs/ignored-gate.out" && printf '\nSee [the gate log](ignored-gate.out).\n' >> "$copy/docs/index.md" && commit plant
+}
 plant_broken_img_src() { printf '\n<img alt="missing" src=no-such-picture.png>\n' >> "$copy/docs/index.md" && commit plant; }
 plant_untracked_extra() {
   printf '#!/bin/bash\nexit 0\n' | put agent_work/chunks/canary/gate/extra.sh && chmod +x "$copy/agent_work/chunks/canary/gate/extra.sh"
@@ -423,6 +426,7 @@ canary g6-built-stage-fails red "a built stage (marker deleted) whose script fai
 canary g9-broken-link      red "a broken link in a site page" G9 site 'broken link: no-such-page\.md' plant_broken_link
 canary g9-broken-html-link red "a broken link in a single-quoted raw HTML anchor" G9 site 'broken link: no-such-page\.md' plant_broken_html_link
 canary g9-broken-img-src   red "a broken unquoted src attribute in raw HTML" G9 site 'broken link: no-such-picture\.png' plant_broken_img_src
+canary g9-ignored-link     red "a link to a file that exists but git ignores" G9 site 'link to a file git does not track: ignored-gate\.out' plant_ignored_link
 canary g9-live-missing     red "a chapter marked live whose file is missing" G9 site 'chapter 1 is live but' plant_live_missing
 canary g9-planned-exists   red "a chapter file that exists while the manifest says planned" G9 site 'chapter 2 is planned but' plant_planned_exists
 canary g10-extra-fails     red "a failing gate/extra.sh" G10 extra 'PLANTED-EXTRA-FAILURE' plant_extra_fails
