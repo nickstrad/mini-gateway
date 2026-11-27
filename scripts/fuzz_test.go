@@ -1,11 +1,13 @@
 package scripts_test
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -20,6 +22,21 @@ while [ $# -gt 0 ]; do
   shift
 done
 key=$(tr / _ <<<"$dir")__$name
+n=0
+if [ -f "$STUB_COUNTS/$key.n" ]; then
+  n=$(cat "$STUB_COUNTS/$key.n")
+fi
+n=$((n + 1))
+printf '%s\n' "$n" > "$STUB_COUNTS/$key.n"
+if [ -f "$STUB_RECORDINGS/$key.$n.touch" ]; then
+  rel=$(cat "$STUB_RECORDINGS/$key.$n.touch")
+  mkdir -p "$dir/testdata/fuzz/$name"
+  printf 'go test fuzz v1\n[]byte("boom")\n' > "$dir/testdata/fuzz/$name/$rel"
+fi
+if [ -f "$STUB_RECORDINGS/$key.$n.out" ]; then
+  cat "$STUB_RECORDINGS/$key.$n.out"
+  exit $(cat "$STUB_RECORDINGS/$key.$n.rc" 2>/dev/null || echo 0)
+fi
 echo "fuzz: elapsed: 0s, gathering baseline coverage: 0/3 completed"
 if [ -f "$STUB_RECORDINGS/$key.out" ]; then cat "$STUB_RECORDINGS/$key.out"; else echo "$STUB_DEFAULT"; fi
 echo PASS
@@ -29,14 +46,45 @@ exit $(cat "$STUB_RECORDINGS/$key.rc" 2>/dev/null || echo 0)
 const fastLine = "fuzz: elapsed: 1s, execs: 5000 (5000/sec), new interesting: 0 (total: 3)"
 
 type fuzzRun struct {
-	code   int
-	stderr string
-	rows   map[string][]string
-	note   string
-	last   string
+	code    int
+	stdout  string
+	stderr  string
+	rows    map[string][]string
+	calls   map[string]int
+	retries []string
+	note    string
+	last    string
+}
+
+func deadlineOut(target, rateLine string) string {
+	return strings.Join([]string{
+		"fuzz: elapsed: 0s, gathering baseline coverage: 0/3 completed",
+		"fuzz: elapsed: 0s, gathering baseline coverage: 3/3 completed, now fuzzing with 4 workers",
+		rateLine,
+		"--- FAIL: " + target + " (20.83s)",
+		"    context deadline exceeded",
+		"FAIL",
+		"exit status 1",
+		"FAIL\tgithub.com/nickstrad/mini-gateway/pkg\t20.910s",
+		"",
+	}, "\n")
+}
+
+func passOut(rateLine string) string {
+	return strings.Join([]string{
+		"fuzz: elapsed: 0s, gathering baseline coverage: 0/3 completed",
+		rateLine,
+		"PASS",
+		"",
+	}, "\n")
 }
 
 func runFuzzSh(t *testing.T, recordings map[string]string) fuzzRun {
+	t.Helper()
+	return runFuzzShEnv(t, recordings, nil)
+}
+
+func runFuzzShEnv(t *testing.T, recordings map[string]string, extraEnv []string) fuzzRun {
 	t.Helper()
 	root, err := filepath.Abs("..")
 	if err != nil {
@@ -45,11 +93,15 @@ func runFuzzSh(t *testing.T, recordings map[string]string) fuzzRun {
 	tmp := t.TempDir()
 	stub := filepath.Join(tmp, "go-stub")
 	rec := filepath.Join(tmp, "rec")
+	counts := filepath.Join(tmp, "counts")
 	report := filepath.Join(tmp, "report.tsv")
 	if err := os.WriteFile(stub, []byte(stubGo), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(rec, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(counts, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for key, body := range recordings {
@@ -58,37 +110,79 @@ func runFuzzSh(t *testing.T, recordings map[string]string) fuzzRun {
 		}
 	}
 	cmd := exec.Command("bash", filepath.Join(root, "scripts", "fuzz.sh"))
-	cmd.Env = append(os.Environ(), "PATH="+filepath.Join(runtime.GOROOT(), "bin")+":"+os.Getenv("PATH"),
+	env := []string{}
+	for _, e := range os.Environ() {
+		if strings.HasPrefix(e, "FUZZ_MAX_RETRIES=") {
+			continue
+		}
+		env = append(env, e)
+	}
+	env = append(env, "PATH="+filepath.Join(runtime.GOROOT(), "bin")+":"+os.Getenv("PATH"),
 		"FUZZ_GO="+stub, "FUZZ_SECONDS=1", "FUZZ_RATE_FLOOR=100", "FUZZ_REPORT="+report,
-		"STUB_RECORDINGS="+rec, "STUB_DEFAULT="+fastLine)
+		"STUB_RECORDINGS="+rec, "STUB_COUNTS="+counts, "STUB_DEFAULT="+fastLine)
+	env = append(env, extraEnv...)
+	cmd.Env = env
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
-	run := fuzzRun{stderr: stderr.String(), rows: map[string][]string{}}
+	run := fuzzRun{
+		stdout: string(out),
+		stderr: stderr.String(),
+		rows:   map[string][]string{},
+		calls:  map[string]int{},
+	}
 	if ee, ok := err.(*exec.ExitError); ok {
 		run.code = ee.ExitCode()
 	} else if err != nil {
 		t.Fatal(err)
 	}
-	for _, l := range strings.Split(string(out), "\n") {
+	for _, l := range strings.Split(run.stdout, "\n") {
 		if strings.HasPrefix(l, "NOTE: ") {
 			run.note = l
+		}
+		if strings.HasPrefix(l, "fuzz: RETRY: ") {
+			run.retries = append(run.retries, l)
 		}
 		if l != "" {
 			run.last = l
 		}
+	}
+	entries, err := os.ReadDir(counts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ent := range entries {
+		if !strings.HasSuffix(ent.Name(), ".n") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(counts, ent.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		stem := strings.TrimSuffix(ent.Name(), ".n")
+		parts := strings.SplitN(stem, "__", 2)
+		if len(parts) == 2 {
+			run.calls[strings.ReplaceAll(parts[0], "_", "/")+" "+parts[1]] = n
+		}
+	}
+	if run.code == 2 {
+		return run
 	}
 	tsv, err := os.ReadFile(report)
 	if err != nil {
 		t.Fatalf("no report: %v\n%s\n%s", err, out, run.stderr)
 	}
 	lines := strings.Split(strings.TrimSuffix(string(tsv), "\n"), "\n")
-	if lines[0] != "package\ttarget\texecs\texecs_per_sec\tclass" {
+	if lines[0] != "package\ttarget\texecs\texecs_per_sec\tclass\tretried" {
 		t.Fatalf("report header %q", lines[0])
 	}
 	for _, l := range lines[1:] {
 		f := strings.Split(l, "\t")
-		if len(f) != 5 {
+		if len(f) != 6 {
 			t.Fatalf("report row %q", l)
 		}
 		run.rows[f[0]+" "+f[1]] = f[2:]
@@ -140,7 +234,7 @@ func TestFuzzShReportsEveryTargetWithItsRate(t *testing.T) {
 		t.Fatalf("report has %d rows, the tree has %d targets", len(run.rows), len(want))
 	}
 	for _, k := range want {
-		if r := run.rows[k]; !slices.Equal(r, []string{"5000", "5000", "fuzz"}) {
+		if r := run.rows[k]; !slices.Equal(r, []string{"5000", "5000", "fuzz", "0"}) {
 			t.Fatalf("%s: %v", k, r)
 		}
 	}
@@ -166,12 +260,12 @@ func TestFuzzShClassesSlowSimulationTargetsAsSeedSweeps(t *testing.T) {
 		t.Fatalf("a seed sweep failed the run: exit %d: %s", run.code, run.stderr)
 	}
 	for k, want := range map[string][]string{
-		"internal/sim/world FuzzWorldSchedule": {"1995", "95", "seed-sweep"},
-		"internal/sim/simtoy FuzzToySchedule":  {"6000", "100", "fuzz"},
-		"internal/testclient FuzzSession":      {"20", "1", "fuzz"},
-		"internal/sim FuzzScheduleFromBytes":   {"359999", "99", "seed-sweep"},
-		"internal/sim/fakepg FuzzServerInput":  {"7", "7", "seed-sweep"},
-		"internal/pgwire FuzzFramer":           {"5000", "5000", "fuzz"},
+		"internal/sim/world FuzzWorldSchedule": {"1995", "95", "seed-sweep", "0"},
+		"internal/sim/simtoy FuzzToySchedule":  {"6000", "100", "fuzz", "0"},
+		"internal/testclient FuzzSession":      {"20", "1", "fuzz", "0"},
+		"internal/sim FuzzScheduleFromBytes":   {"359999", "99", "seed-sweep", "0"},
+		"internal/sim/fakepg FuzzServerInput":  {"7", "7", "seed-sweep", "0"},
+		"internal/pgwire FuzzFramer":           {"5000", "5000", "fuzz", "0"},
 	} {
 		if got := run.rows[k]; !slices.Equal(got, want) {
 			t.Errorf("%s: got %v, want %v", k, got, want)
@@ -189,10 +283,10 @@ func TestFuzzShFailsClosedWithoutARate(t *testing.T) {
 	if run.code != 1 || !strings.Contains(run.stderr, "FuzzToySchedule in ./internal/sim/simtoy: no execution rate") {
 		t.Fatalf("exit %d: %s", run.code, run.stderr)
 	}
-	if got := run.rows["internal/sim/simtoy FuzzToySchedule"]; !slices.Equal(got, []string{"-", "-", "unreadable"}) {
+	if got := run.rows["internal/sim/simtoy FuzzToySchedule"]; !slices.Equal(got, []string{"-", "-", "unreadable", "0"}) {
 		t.Fatalf("row %v", got)
 	}
-	if got := run.rows["internal/sim/world FuzzWorldSchedule"]; !slices.Equal(got, []string{"5000", "5000", "fuzz"}) {
+	if got := run.rows["internal/sim/world FuzzWorldSchedule"]; !slices.Equal(got, []string{"5000", "5000", "fuzz", "0"}) {
 		t.Fatalf("the other targets were not reported: %v", got)
 	}
 }
@@ -205,7 +299,7 @@ func TestFuzzShFailsWhenATargetFails(t *testing.T) {
 	if run.code != 1 || !strings.Contains(run.stderr, "FuzzWorldSchedule in ./internal/sim/world FAILED") {
 		t.Fatalf("exit %d: %s", run.code, run.stderr)
 	}
-	if got := run.rows["internal/sim/world FuzzWorldSchedule"]; !slices.Equal(got, []string{"300", "150", "fuzz"}) {
+	if got := run.rows["internal/sim/world FuzzWorldSchedule"]; !slices.Equal(got, []string{"300", "150", "fuzz", "0"}) {
 		t.Fatalf("row %v", got)
 	}
 }
@@ -217,7 +311,7 @@ func TestFuzzShTakesNoRateFromALineBeforeAnUnreadableLastOne(t *testing.T) {
 	if run.code != 1 || !strings.Contains(run.stderr, "FuzzToySchedule in ./internal/sim/simtoy: no execution rate") {
 		t.Fatalf("a stale rate was accepted: exit %d: %s", run.code, run.stderr)
 	}
-	if got := run.rows["internal/sim/simtoy FuzzToySchedule"]; !slices.Equal(got, []string{"-", "-", "unreadable"}) {
+	if got := run.rows["internal/sim/simtoy FuzzToySchedule"]; !slices.Equal(got, []string{"-", "-", "unreadable", "0"}) {
 		t.Fatalf("row %v", got)
 	}
 }
@@ -234,14 +328,491 @@ func TestFuzzShNamesEveryFailedTargetOnItsLastLine(t *testing.T) {
 	if want := "fuzz: FAILED: internal/sim/simtoy FuzzToySchedule, internal/sim/world FuzzWorldSchedule"; run.last != want {
 		t.Fatalf("last line %q, want %q", run.last, want)
 	}
-	if !strings.HasSuffix(run.note, " 1 without a rate, 0 unclassified") {
+	if !strings.HasSuffix(run.note, " 1 without a rate, 0 unclassified, 0 retried") {
 		t.Fatalf("note %q", run.note)
 	}
 }
 
 func TestFuzzShPrintsNoFailedLineWhenGreen(t *testing.T) {
 	run := runFuzzSh(t, nil)
-	if run.code != 0 || strings.Contains(run.last, "FAILED") || !strings.HasSuffix(run.note, " 0 without a rate, 0 unclassified") {
+	if run.code != 0 || strings.Contains(run.last, "FAILED") || !strings.HasSuffix(run.note, " 0 without a rate, 0 unclassified, 0 retried") {
 		t.Fatalf("exit %d, last %q, note %q", run.code, run.last, run.note)
+	}
+}
+
+func TestFuzzShRetriesDeadlineSignatureAndUsesSecondRunRate(t *testing.T) {
+	run := runFuzzSh(t, map[string]string{
+		"internal_sim_world__FuzzWorldSchedule.1.out": deadlineOut("FuzzWorldSchedule", "fuzz: elapsed: 20s, execs: 200 (0/sec), new interesting: 0 (total: 3)"),
+		"internal_sim_world__FuzzWorldSchedule.1.rc":  "1",
+		"internal_sim_world__FuzzWorldSchedule.2.out": passOut("fuzz: elapsed: 20s, execs: 4000 (200/sec), new interesting: 1 (total: 4)"),
+		"internal_sim_world__FuzzWorldSchedule.2.rc":  "0",
+	})
+	if run.code != 0 {
+		t.Fatalf("exit %d: %s\n%s", run.code, run.stderr, run.stdout)
+	}
+	if got := run.calls["internal/sim/world FuzzWorldSchedule"]; got != 2 {
+		t.Fatalf("calls = %d, want 2", got)
+	}
+	wantRetry := []string{"fuzz: RETRY: internal/sim/world FuzzWorldSchedule: go's own deadline, no failing input"}
+	if !slices.Equal(run.retries, wantRetry) {
+		t.Fatalf("retries = %v, want %v", run.retries, wantRetry)
+	}
+	if got := run.rows["internal/sim/world FuzzWorldSchedule"]; !slices.Equal(got, []string{"4000", "200", "fuzz", "1"}) {
+		t.Fatalf("row = %v, want [4000 200 fuzz 1]", got)
+	}
+	if got := run.rows["internal/pgwire FuzzFramer"]; !slices.Equal(got, []string{"5000", "5000", "fuzz", "0"}) {
+		t.Fatalf("other row = %v", got)
+	}
+	if !strings.HasSuffix(run.note, ", 1 retried") {
+		t.Fatalf("note = %q", run.note)
+	}
+	if strings.Contains(run.last, "FAILED") {
+		t.Fatalf("unexpected failed line %q", run.last)
+	}
+}
+
+func TestFuzzShFailsWhenDeadlineSignatureRepeats(t *testing.T) {
+	run := runFuzzSh(t, map[string]string{
+		"internal_pgwire__FuzzFramer.1.out": deadlineOut("FuzzFramer", "fuzz: elapsed: 20s, execs: 1000 (0/sec)"),
+		"internal_pgwire__FuzzFramer.1.rc":  "1",
+		"internal_pgwire__FuzzFramer.2.out": deadlineOut("FuzzFramer", "fuzz: elapsed: 20s, execs: 2400 (0/sec)"),
+		"internal_pgwire__FuzzFramer.2.rc":  "1",
+		"internal_pgwire__FuzzFramer.3.out": passOut("fuzz: elapsed: 1s, execs: 5000 (5000/sec)"),
+		"internal_pgwire__FuzzFramer.3.rc":  "0",
+	})
+	if run.code != 1 {
+		t.Fatalf("exit %d, want 1", run.code)
+	}
+	if got := run.calls["internal/pgwire FuzzFramer"]; got != 2 {
+		t.Fatalf("calls = %d, want 2", got)
+	}
+	if len(run.retries) != 1 {
+		t.Fatalf("retries = %v, want 1", run.retries)
+	}
+	if got := run.rows["internal/pgwire FuzzFramer"]; !slices.Equal(got, []string{"2400", "120", "fuzz", "1"}) {
+		t.Fatalf("row = %v, want [2400 120 fuzz 1]", got)
+	}
+	if !strings.HasSuffix(run.note, ", 1 retried") {
+		t.Fatalf("note = %q", run.note)
+	}
+	if want := "fuzz: FAILED: internal/pgwire FuzzFramer"; run.last != want {
+		t.Fatalf("last = %q, want %q", run.last, want)
+	}
+}
+
+func TestFuzzShFailsWhenSecondRunFailsWithOtherMessage(t *testing.T) {
+	run := runFuzzSh(t, map[string]string{
+		"internal_pgwire__FuzzFramer.1.out": deadlineOut("FuzzFramer", "fuzz: elapsed: 20s, execs: 1000 (0/sec)"),
+		"internal_pgwire__FuzzFramer.1.rc":  "1",
+		"internal_pgwire__FuzzFramer.2.out": "fuzz: elapsed: 2s, execs: 400 (200/sec)\n--- FAIL: FuzzFramer (2.01s)\n    framer_test.go:10: boom\nFAIL\n",
+		"internal_pgwire__FuzzFramer.2.rc":  "1",
+	})
+	if run.code != 1 {
+		t.Fatalf("exit %d, want 1", run.code)
+	}
+	if got := run.calls["internal/pgwire FuzzFramer"]; got != 2 {
+		t.Fatalf("calls = %d, want 2", got)
+	}
+	if got := run.rows["internal/pgwire FuzzFramer"]; !slices.Equal(got, []string{"400", "200", "fuzz", "1"}) {
+		t.Fatalf("row = %v", got)
+	}
+	if want := "fuzz: FAILED: internal/pgwire FuzzFramer"; run.last != want {
+		t.Fatalf("last = %q, want %q", run.last, want)
+	}
+}
+
+func TestFuzzShDoesNotRetryNearMisses(t *testing.T) {
+	cases := []struct {
+		name     string
+		out      string
+		rc       string
+		wantCode int
+	}{
+		{
+			name: "failing_input_written",
+			out: strings.Join([]string{
+				"fuzz: elapsed: 1s, execs: 1000 (1000/sec)",
+				"--- FAIL: FuzzFramer (1.02s)",
+				"    context deadline exceeded",
+				"    Failing input written to testdata/fuzz/FuzzFramer/deadbeef",
+				"    To re-run:",
+				"    go test -run=FuzzFramer/deadbeef",
+				"FAIL",
+				"",
+			}, "\n"),
+			rc:       "1",
+			wantCode: 1,
+		},
+		{
+			name: "deadline_plus_panic_after",
+			out: strings.Join([]string{
+				"fuzz: elapsed: 1s, execs: 1000 (1000/sec)",
+				"--- FAIL: FuzzFramer (1.02s)",
+				"    context deadline exceeded",
+				"panic: boom",
+				"FAIL",
+				"",
+			}, "\n"),
+			rc:       "1",
+			wantCode: 1,
+		},
+		{
+			name: "deadline_plus_panic_before",
+			out: strings.Join([]string{
+				"fuzz: elapsed: 1s, execs: 1000 (1000/sec)",
+				"panic: boom",
+				"--- FAIL: FuzzFramer (1.02s)",
+				"    context deadline exceeded",
+				"FAIL",
+				"",
+			}, "\n"),
+			rc:       "1",
+			wantCode: 1,
+		},
+		{
+			name: "different_message_under_fail",
+			out: strings.Join([]string{
+				"fuzz: elapsed: 1s, execs: 1000 (1000/sec)",
+				"--- FAIL: FuzzFramer (1.02s)",
+				"    fuzzing process hung or terminated unexpectedly: exit status 2",
+				"FAIL",
+				"",
+			}, "\n"),
+			rc:       "1",
+			wantCode: 1,
+		},
+		{
+			name: "file_line_prefixed_deadline",
+			out: strings.Join([]string{
+				"fuzz: elapsed: 1s, execs: 1000 (1000/sec)",
+				"--- FAIL: FuzzFramer (1.02s)",
+				"    frame_fuzz_test.go:19: context deadline exceeded",
+				"FAIL",
+				"",
+			}, "\n"),
+			rc:       "1",
+			wantCode: 1,
+		},
+		{
+			name: "extra_message_under_fail",
+			out: strings.Join([]string{
+				"fuzz: elapsed: 1s, execs: 1000 (1000/sec)",
+				"--- FAIL: FuzzFramer (1.02s)",
+				"    context deadline exceeded",
+				"    context deadline exceeded",
+				"FAIL",
+				"",
+			}, "\n"),
+			rc:       "1",
+			wantCode: 1,
+		},
+		{
+			name: "wrong_target_name",
+			out: strings.Join([]string{
+				"fuzz: elapsed: 1s, execs: 1000 (1000/sec)",
+				"--- FAIL: FuzzOther (1.02s)",
+				"    context deadline exceeded",
+				"FAIL",
+				"",
+			}, "\n"),
+			rc:       "1",
+			wantCode: 1,
+		},
+		{
+			name: "subtest_fail_block",
+			out: strings.Join([]string{
+				"fuzz: elapsed: 1s, execs: 1000 (1000/sec)",
+				"--- FAIL: FuzzFramer/seed0 (0.01s)",
+				"    context deadline exceeded",
+				"FAIL",
+				"",
+			}, "\n"),
+			rc:       "1",
+			wantCode: 1,
+		},
+		{
+			name: "minimizing_before_deadline",
+			out: strings.Join([]string{
+				"fuzz: elapsed: 1s, execs: 1000 (1000/sec)",
+				"fuzz: minimizing 12-byte failing input file",
+				"--- FAIL: FuzzFramer (1.02s)",
+				"    context deadline exceeded",
+				"FAIL",
+				"",
+			}, "\n"),
+			rc:       "1",
+			wantCode: 1,
+		},
+		{
+			name: "exit_status_2_after_fail",
+			out: strings.Join([]string{
+				"fuzz: elapsed: 1s, execs: 1000 (1000/sec)",
+				"--- FAIL: FuzzFramer (1.02s)",
+				"    context deadline exceeded",
+				"FAIL",
+				"exit status 2",
+				"",
+			}, "\n"),
+			rc:       "1",
+			wantCode: 1,
+		},
+		{
+			name: "passing_target_with_message_in_log",
+			out: strings.Join([]string{
+				"fuzz: elapsed: 1s, execs: 1000 (1000/sec)",
+				"    frame_fuzz_test.go:19: context deadline exceeded",
+				"--- FAIL: FuzzFramer (1.02s)",
+				"    context deadline exceeded",
+				"PASS",
+				"",
+			}, "\n"),
+			rc:       "0",
+			wantCode: 0,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			run := runFuzzSh(t, map[string]string{
+				"internal_pgwire__FuzzFramer.1.out": tc.out,
+				"internal_pgwire__FuzzFramer.1.rc":  tc.rc,
+				"internal_pgwire__FuzzFramer.2.out": passOut("fuzz: elapsed: 1s, execs: 9000 (9000/sec)"),
+				"internal_pgwire__FuzzFramer.2.rc":  "0",
+			})
+			if run.code != tc.wantCode {
+				t.Fatalf("exit %d, want %d\nstderr: %s", run.code, tc.wantCode, run.stderr)
+			}
+			if got := run.calls["internal/pgwire FuzzFramer"]; got != 1 {
+				t.Fatalf("calls = %d, want 1", got)
+			}
+			if len(run.retries) != 0 {
+				t.Fatalf("unexpected retries: %v", run.retries)
+			}
+			if got := run.rows["internal/pgwire FuzzFramer"]; got[3] != "0" {
+				t.Fatalf("retried col = %q, want 0 (row %v)", got[3], got)
+			}
+			if !strings.HasSuffix(run.note, ", 0 retried") {
+				t.Fatalf("note = %q", run.note)
+			}
+		})
+	}
+}
+
+func TestFuzzShDoesNotRetryWhenNewCorpusFileAppears(t *testing.T) {
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Run("existing_corpus_dir", func(t *testing.T) {
+		existingDir := filepath.Join(root, "internal", "sim", "world", "testdata", "fuzz", "FuzzWorldSchedule")
+		created := filepath.Join(existingDir, "cr02-test-crasher")
+		t.Cleanup(func() { os.Remove(created) })
+
+		run := runFuzzSh(t, map[string]string{
+			"internal_sim_world__FuzzWorldSchedule.1.out":   deadlineOut("FuzzWorldSchedule", "fuzz: elapsed: 2s, execs: 400 (200/sec)"),
+			"internal_sim_world__FuzzWorldSchedule.1.rc":    "1",
+			"internal_sim_world__FuzzWorldSchedule.1.touch": "cr02-test-crasher",
+			"internal_sim_world__FuzzWorldSchedule.2.out":   passOut("fuzz: elapsed: 2s, execs: 4000 (2000/sec)"),
+			"internal_sim_world__FuzzWorldSchedule.2.rc":    "0",
+		})
+		if run.code != 1 {
+			t.Fatalf("exit %d, want 1", run.code)
+		}
+		if got := run.calls["internal/sim/world FuzzWorldSchedule"]; got != 1 {
+			t.Fatalf("calls = %d, want 1", got)
+		}
+		if len(run.retries) != 0 {
+			t.Fatalf("unexpected retries: %v", run.retries)
+		}
+		if got := run.rows["internal/sim/world FuzzWorldSchedule"]; !slices.Equal(got, []string{"400", "200", "fuzz", "0"}) {
+			t.Fatalf("row = %v", got)
+		}
+		if !strings.HasSuffix(run.note, ", 0 retried") {
+			t.Fatalf("note = %q", run.note)
+		}
+	})
+
+	t.Run("new_corpus_dir", func(t *testing.T) {
+		fuzzDir := filepath.Join(root, "internal", "sim", "simtoy", "testdata", "fuzz")
+		if _, err := os.Stat(fuzzDir); err == nil {
+			t.Fatalf("unexpected pre-existing %s", fuzzDir)
+		}
+		t.Cleanup(func() { os.RemoveAll(fuzzDir) })
+
+		run := runFuzzSh(t, map[string]string{
+			"internal_sim_simtoy__FuzzToySchedule.1.out":   deadlineOut("FuzzToySchedule", "fuzz: elapsed: 2s, execs: 400 (200/sec)"),
+			"internal_sim_simtoy__FuzzToySchedule.1.rc":    "1",
+			"internal_sim_simtoy__FuzzToySchedule.1.touch": "cr02-test-crasher",
+			"internal_sim_simtoy__FuzzToySchedule.2.out":   passOut("fuzz: elapsed: 2s, execs: 4000 (2000/sec)"),
+			"internal_sim_simtoy__FuzzToySchedule.2.rc":    "0",
+		})
+		if run.code != 1 {
+			t.Fatalf("exit %d, want 1", run.code)
+		}
+		if got := run.calls["internal/sim/simtoy FuzzToySchedule"]; got != 1 {
+			t.Fatalf("calls = %d, want 1", got)
+		}
+		if len(run.retries) != 0 {
+			t.Fatalf("unexpected retries: %v", run.retries)
+		}
+		if got := run.rows["internal/sim/simtoy FuzzToySchedule"]; !slices.Equal(got, []string{"400", "200", "fuzz", "0"}) {
+			t.Fatalf("row = %v", got)
+		}
+	})
+}
+
+func TestFuzzShCapsRetriesAtTwoByDefault(t *testing.T) {
+	run := runFuzzSh(t, map[string]string{
+		"internal_pgwire__FuzzBackendSession.1.out": deadlineOut("FuzzBackendSession", "fuzz: elapsed: 2s, execs: 200 (100/sec)"),
+		"internal_pgwire__FuzzBackendSession.1.rc":  "1",
+		"internal_pgwire__FuzzBackendSession.2.out": passOut("fuzz: elapsed: 2s, execs: 2000 (1000/sec)"),
+		"internal_pgwire__FuzzBackendSession.2.rc":  "0",
+		"internal_pgwire__FuzzClientSession.1.out":  deadlineOut("FuzzClientSession", "fuzz: elapsed: 2s, execs: 200 (100/sec)"),
+		"internal_pgwire__FuzzClientSession.1.rc":   "1",
+		"internal_pgwire__FuzzClientSession.2.out":  passOut("fuzz: elapsed: 2s, execs: 3000 (1500/sec)"),
+		"internal_pgwire__FuzzClientSession.2.rc":   "0",
+		"internal_pgwire__FuzzCycle.1.out":          deadlineOut("FuzzCycle", "fuzz: elapsed: 2s, execs: 200 (100/sec)"),
+		"internal_pgwire__FuzzCycle.1.rc":           "1",
+		"internal_pgwire__FuzzCycle.2.out":          passOut("fuzz: elapsed: 2s, execs: 4000 (2000/sec)"),
+		"internal_pgwire__FuzzCycle.2.rc":           "0",
+	})
+	if run.code != 1 {
+		t.Fatalf("exit %d, want 1", run.code)
+	}
+	if got := run.calls["internal/pgwire FuzzBackendSession"]; got != 2 {
+		t.Fatalf("first target calls = %d, want 2", got)
+	}
+	if got := run.calls["internal/pgwire FuzzClientSession"]; got != 2 {
+		t.Fatalf("second target calls = %d, want 2", got)
+	}
+	if got := run.calls["internal/pgwire FuzzCycle"]; got != 1 {
+		t.Fatalf("third target calls = %d, want 1", got)
+	}
+	if len(run.retries) != 2 {
+		t.Fatalf("retries = %v, want 2", run.retries)
+	}
+	if got := run.rows["internal/pgwire FuzzBackendSession"]; !slices.Equal(got, []string{"2000", "1000", "fuzz", "1"}) {
+		t.Fatalf("first row = %v", got)
+	}
+	if got := run.rows["internal/pgwire FuzzClientSession"]; !slices.Equal(got, []string{"3000", "1500", "fuzz", "1"}) {
+		t.Fatalf("second row = %v", got)
+	}
+	if got := run.rows["internal/pgwire FuzzCycle"]; !slices.Equal(got, []string{"200", "100", "fuzz", "0"}) {
+		t.Fatalf("third row = %v", got)
+	}
+	if !strings.HasSuffix(run.note, ", 2 retried") {
+		t.Fatalf("note = %q", run.note)
+	}
+	if want := "fuzz: FAILED: internal/pgwire FuzzCycle"; run.last != want {
+		t.Fatalf("last = %q, want %q", run.last, want)
+	}
+}
+
+func TestFuzzShMaxRetriesZeroDisablesRetry(t *testing.T) {
+	run := runFuzzShEnv(t, map[string]string{
+		"internal_pgwire__FuzzFramer.1.out": deadlineOut("FuzzFramer", "fuzz: elapsed: 2s, execs: 200 (100/sec)"),
+		"internal_pgwire__FuzzFramer.1.rc":  "1",
+		"internal_pgwire__FuzzFramer.2.out": passOut("fuzz: elapsed: 2s, execs: 4000 (2000/sec)"),
+		"internal_pgwire__FuzzFramer.2.rc":  "0",
+	}, []string{"FUZZ_MAX_RETRIES=0"})
+	if run.code != 1 {
+		t.Fatalf("exit %d, want 1", run.code)
+	}
+	if got := run.calls["internal/pgwire FuzzFramer"]; got != 1 {
+		t.Fatalf("calls = %d, want 1", got)
+	}
+	if len(run.retries) != 0 {
+		t.Fatalf("retries = %v, want none", run.retries)
+	}
+	if got := run.rows["internal/pgwire FuzzFramer"]; !slices.Equal(got, []string{"200", "100", "fuzz", "0"}) {
+		t.Fatalf("row = %v", got)
+	}
+	if !strings.HasSuffix(run.note, ", 0 retried") {
+		t.Fatalf("note = %q", run.note)
+	}
+}
+
+func TestFuzzShRejectsBadMaxRetries(t *testing.T) {
+	for _, v := range []string{"-1", "abc", "01", "2.5"} {
+		t.Run(v, func(t *testing.T) {
+			run := runFuzzShEnv(t, nil, []string{"FUZZ_MAX_RETRIES=" + v})
+			if run.code != 2 {
+				t.Fatalf("FUZZ_MAX_RETRIES=%s: exit %d, want 2", v, run.code)
+			}
+		})
+	}
+}
+
+func TestFuzzShRetryUnreadableSecondRunFailsClosed(t *testing.T) {
+	run := runFuzzSh(t, map[string]string{
+		"internal_pgwire__FuzzFramer.1.out": deadlineOut("FuzzFramer", "fuzz: elapsed: 2s, execs: 4000 (2000/sec)"),
+		"internal_pgwire__FuzzFramer.1.rc":  "1",
+		"internal_pgwire__FuzzFramer.2.out": "fuzz: elapsed: 3s, gathering baseline coverage: 1/3 completed\nPASS\n",
+		"internal_pgwire__FuzzFramer.2.rc":  "0",
+	})
+	if run.code != 1 {
+		t.Fatalf("exit %d, want 1", run.code)
+	}
+	if got := run.calls["internal/pgwire FuzzFramer"]; got != 2 {
+		t.Fatalf("calls = %d, want 2", got)
+	}
+	if got := run.rows["internal/pgwire FuzzFramer"]; !slices.Equal(got, []string{"-", "-", "unreadable", "1"}) {
+		t.Fatalf("row = %v, want [- - unreadable 1]", got)
+	}
+	if !strings.HasSuffix(run.note, " 1 without a rate, 0 unclassified, 1 retried") {
+		t.Fatalf("note = %q", run.note)
+	}
+}
+
+func TestGateShRecordsNullFuzzRetriesWhenG5SkippedAndRejectsBadMaxRetries(t *testing.T) {
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outDir := t.TempDir()
+	cmd := exec.Command("bash", filepath.Join(root, "scripts", "gate.sh"), "cr02-fuzz-deadline-retry")
+	cmd.Env = append(os.Environ(),
+		"PATH="+filepath.Join(runtime.GOROOT(), "bin")+":"+os.Getenv("PATH"),
+		"GATE_ONLY=G10",
+		"GATE_OUT="+outDir,
+		"FUZZ_MAX_RETRIES=3",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("gate.sh failed: %v\n%s", err, out)
+	}
+	raw, err := os.ReadFile(filepath.Join(outDir, "result.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var res map[string]any
+	if err := json.Unmarshal(raw, &res); err != nil {
+		t.Fatal(err)
+	}
+	val, exists := res["fuzz_retries"]
+	if !exists || val != nil {
+		t.Fatalf("fuzz_retries = %v (exists=%v), want null", val, exists)
+	}
+	if res["fuzz_max_retries"] != float64(3) {
+		t.Fatalf("fuzz_max_retries = %v, want 3", res["fuzz_max_retries"])
+	}
+	if res["counts_for_landing"] != false {
+		t.Fatalf("counts_for_landing = %v, want false", res["counts_for_landing"])
+	}
+
+	for _, badVal := range []string{"-1", "18446744073709551616"} {
+		bad := exec.Command("bash", filepath.Join(root, "scripts", "gate.sh"), "cr02-fuzz-deadline-retry")
+		bad.Env = append(os.Environ(),
+			"PATH="+filepath.Join(runtime.GOROOT(), "bin")+":"+os.Getenv("PATH"),
+			"GATE_ONLY=G10",
+			"GATE_OUT="+outDir,
+			"FUZZ_MAX_RETRIES="+badVal,
+		)
+		if err := bad.Run(); err == nil {
+			t.Fatalf("expected exit 2 for FUZZ_MAX_RETRIES=%s", badVal)
+		} else if ee, ok := err.(*exec.ExitError); !ok || ee.ExitCode() != 2 {
+			t.Fatalf("FUZZ_MAX_RETRIES=%s: exit = %v, want 2", badVal, err)
+		}
 	}
 }
