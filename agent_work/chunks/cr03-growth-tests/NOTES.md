@@ -453,3 +453,12 @@ G1 detlint (22 package patterns)/importlint/boundlint/paniccheck pass; G2 commen
 (baseline `ac91a01`); G3 unit pass (524 s, includes `agent_work/adversarial/...`), G3 race
 pass (19 s). `gate/result.json` is left uncommitted, as the brief asks. The only change after the gate run is
 this section of NOTES.md.
+
+Follow-up build: `GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh cr03-growth-tests` on the clean
+tree at `767247b` (`dirty_tree=false`, stage build), load average 13 to 16 on 4 cores.
+**overall=pass**, partial, so `counts_for_landing=false`; 698 s. G0
+tools/gofmt/build/vet/tools-vet/tools-test/tidy pass; G1 detlint (22 package
+patterns)/importlint/boundlint/paniccheck pass; G2 comments pass (baseline `ac91a01`); G3
+unit pass (630 s, includes `agent_work/adversarial/...`, so `TestAdv_5_*` passed this time),
+G3 race pass (34 s). `gate/result.json` was not committed, and the `gate/` directory was
+removed. The only change after the gate run is this paragraph.
