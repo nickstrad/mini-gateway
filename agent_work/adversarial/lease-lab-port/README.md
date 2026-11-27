@@ -16,6 +16,6 @@ C1–C2 use new combinations and immediate observations within a lease, not copi
 
 Failures remain failing. See RESULTS.md for classification and evidence.json for machine-readable outcomes.
 
-After both recorded campaigns finish, `python3 agent_work/adversarial/lease-lab-port/report.py` regenerates RESULTS.md and evidence.json. It refuses incomplete campaigns or fewer than 36 completed attacks. STATE.md carries the local checkpoint; the repository root state is outside this brief’s edit scope.
+After the recorded campaigns and retry finish, `python3 agent_work/adversarial/lease-lab-port/report.py` regenerates RESULTS.md and evidence.json. It refuses incomplete campaigns or fewer than 36 completed attacks. STATE.md carries the local checkpoint; the repository root state is outside this brief’s edit scope.
 
 The recorded long run exhausted its original eight-minute child-test deadline on policy repetition 20 (19 passed). The long-only timeout is now 20 minutes, and the one retry is recorded in retry.jsonl. Reproduce it with `PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -json -count=1 -timeout=25m ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_8_RepeatPolicies$' > agent_work/adversarial/lease-lab-port/retry.jsonl 2>&1`. The report generator retains the original failed attempt and uses the completed retry for final counts.

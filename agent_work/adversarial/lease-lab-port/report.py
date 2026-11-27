@@ -1,4 +1,4 @@
-"""Summarize the two recorded robustness campaigns without hiding failures."""
+"""Summarize the recorded robustness campaigns without hiding failures."""
 import json
 from pathlib import Path
 
