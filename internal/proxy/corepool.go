@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 
@@ -16,6 +17,7 @@ const (
 	maxCorePumps   = 8
 	maxCancelConns = pool.MaxCancelsLimit
 	drainHeader    = headerLen + 1
+	drainMidFrame  = 0
 )
 
 type CorePool struct {
@@ -303,6 +305,12 @@ func (e *Engine) coreSync(d *dbConn) {
 	}
 }
 
+func (e *Engine) coreSyncAll() {
+	for _, d := range e.coreConns {
+		e.coreSync(d)
+	}
+}
+
 func (e *Engine) coreOpened(d *dbConn) {
 	e.t.cancel(&d.connectT)
 	e.dialing--
@@ -421,9 +429,12 @@ func (e *Engine) coreDirty(d *dbConn, kind pool.EndKind, mid, inTx bool) {
 	d.judge = resetJudge{mode: judgeDone}
 	if mid {
 		d.judge = resetJudge{mode: judgeDrain}
-		if d.holding {
+		switch {
+		case d.holding:
 			d.drained = append(d.drained[:0], d.hold[:min(len(d.hold), drainHeader)]...)
-		} else {
+		case d.cur.mid():
+			d.drained = append(d.drained[:0], drainMidFrame)
+		default:
 			d.drained = d.drained[:0]
 		}
 		d.hold = nil
@@ -490,6 +501,7 @@ func (e *Engine) coreOwn(d *dbConn, b []byte) []byte {
 func (e *Engine) sendCancel(d *dbConn, cancel ConnID) {
 	if d.sess == nil || len(e.cancelConns) >= maxCancelConns {
 		e.coreRun(e.core.p.CancelDone(e.pnow(), pool.ConnID(cancel), nil))
+		e.coreSyncAll()
 		return
 	}
 	e.cancelConns = append(e.cancelConns, cancel)
@@ -507,6 +519,7 @@ func (e *Engine) cancelDone(id ConnID) {
 	e.snap.CancelConns.Set(int64(len(e.cancelConns)))
 	e.snap.CancelsDone++
 	e.coreRun(e.core.p.CancelDone(e.pnow(), pool.ConnID(id), nil))
+	e.coreSyncAll()
 	e.dispatch()
 }
 
@@ -650,4 +663,43 @@ func (e *Engine) ClientKey(id ConnID) (pgwire.BackendKey, bool) {
 		return pgwire.BackendKey{}, false
 	}
 	return c.sess.Key(), true
+}
+
+func corePhase(s pool.State) (dbPhase, dbPhase) {
+	switch s {
+	case pool.StateConnecting:
+		return dpDialing, dpStartup
+	case pool.StateIdle:
+		return dpIdle, dpIdle
+	case pool.StateChecking:
+		return dpChecking, dpChecking
+	case pool.StateLent:
+		return dpLent, dpLent
+	case pool.StateCleaning:
+		return dpCleaning, dpCleaning
+	case pool.StateResetting:
+		return dpResetting, dpResetting
+	}
+	return dpClosed, dpClosed
+}
+
+func (e *Engine) coreAgrees() error {
+	idle := 0
+	for _, d := range e.coreConns {
+		if d.phase == dpIdle {
+			idle++
+		}
+		st := e.core.p.State(pool.ConnID(d.id))
+		if a, b := corePhase(st); d.phase != a && d.phase != b {
+			return fmt.Errorf("database connection %d is in engine phase %d but the pool core has it %s", d.id, d.phase, st)
+		}
+	}
+	if int64(idle) != e.snap.DBIdle.Value {
+		return fmt.Errorf("%d core connections idle, gauge says %d", idle, e.snap.DBIdle.Value)
+	}
+	if s := e.core.p.Snapshot(); s.Idle.Value != int64(idle) || s.Open.Value+s.Connecting.Value != int64(len(e.coreConns)) {
+		return fmt.Errorf("the pool core has %d idle and %d open or connecting, the engine %d idle of %d", s.Idle.Value,
+			s.Open.Value+s.Connecting.Value, idle, len(e.coreConns))
+	}
+	return nil
 }

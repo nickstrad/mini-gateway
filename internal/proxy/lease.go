@@ -587,6 +587,7 @@ func (e *Engine) judgeReset(d *dbConn, b []byte) []byte {
 	if e.core != nil && v == rvDone && n == len(b) {
 		e.snap.ResetsCompleted++
 		e.resetHist.Record(int64(e.now - d.resetAt))
+		e.coreSetPhase(d, dpCleaning)
 		e.coreStepDone(d, pgwire.StatusIdle)
 		return nil
 	}

@@ -391,6 +391,9 @@ func (e *Engine) Invariants() error {
 		return e.wire.Snapshot().Check()
 	}
 	if e.core != nil {
+		if err := e.coreAgrees(); err != nil {
+			return err
+		}
 		return e.core.p.Invariants()
 	}
 	return nil
