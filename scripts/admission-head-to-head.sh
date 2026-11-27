@@ -1,6 +1,6 @@
 #!/bin/bash
 # Prints the chunk 8 admission head-to-head table: one DuckDB query
-# (test/analysis/admission-head-to-head/head-to-head.sql) over the flushed runs of
+# (test/analysis/admission-head-to-head/head-to-head.query) over the flushed runs of
 # admission-h2h-l120, -l200 and -l1000 found under a root.
 #
 # Usage:
@@ -33,7 +33,7 @@ table() {
     m="$m${m:+, }'$d/metrics.csv'"; h="$h${h:+, }'$d/histograms.csv'"; r="$r${r:+, }'$d/run.csv'"
   done
   { printf "SET VARIABLE metrics_files = [%s];\nSET VARIABLE histograms_files = [%s];\nSET VARIABLE run_files = [%s];\n" "$m" "$h" "$r"
-    cat test/analysis/views.sql "$dir/head-to-head.sql"; } | duckdb -batch -bail -markdown :memory:
+    cat test/analysis/views.sql "$dir/head-to-head.query"; } | duckdb -batch -bail -markdown :memory:
 }
 
 case "${1:-}" in

@@ -187,7 +187,7 @@ Record: `chunks/c08-admission/` (brief, notes, gate extra).
 
 | Path | Purpose and how to run | Author seat | What it proved / last result |
 | --- | --- | --- | --- |
-| `../scripts/admission-head-to-head.sh` | Prints the admission head-to-head table (one DuckDB query, `test/analysis/admission-head-to-head/head-to-head.sql`) over a root of flushed runs; `--run [root]` runs the scenarios first; `--check` reruns them and diffs with the committed `head-to-head.md` | Opus | Table reproduced from seed 1 (both rules, both arms, 1.2×/2×/10×) |
+| `../scripts/admission-head-to-head.sh` | Prints the admission head-to-head table (one DuckDB query, `test/analysis/admission-head-to-head/head-to-head.query`) over a root of flushed runs; `--run [root]` runs the scenarios first; `--check` reruns them and diffs with the committed `head-to-head.md` | Opus | Table reproduced from seed 1 (both rules, both arms, 1.2×/2×/10×) |
 | `../scripts/fuzz-plant.sh` (changed) | Also plants `admission.PlantRemoveSwapsTail` (`MG_FUZZ_PLANT=admission-remove-order`) and requires `FuzzAdmissionOps` to find it within `FUZZ_SECONDS` | Opus | Found after 7 s of 20 s (empty cache) |
 | `chunks/c08-admission/gate/extra.sh` | G10: `fuzz-plant.sh` and `admission-head-to-head.sh --check` | Opus | — |
 | `../docs/knowledge/admission-queues.md` | Facts for chunks 9, 10, 13, 14: the core API, the seam, plants, the dispatcher hook, scenario cost | Opus | — |

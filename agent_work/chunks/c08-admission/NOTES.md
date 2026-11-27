@@ -23,7 +23,7 @@ the fake also charges it to every `DISCARD ALL` and halves the capacity.
 | `internal/config/queue.go` (+ `config.go`, `validate.go` one line each) | `queue.rule`, `queue.target`, `queue.interval`, `queue.tenant_capacity`, `queue.max_tenants`, `queue.lifo`, `queue.lifo_hold`; defaults; fail closed naming the key. |
 | `internal/obs/admsrc` | Component `admission` mapping (totals always; per-tenant rows and histograms with `obs.detail`), health rule `admission`. Registered through `enginesrc.Sources` and `catalog.Registry`. |
 | `test/e2e/c08_admission.go`, `c08_admission_test.go`, `c08_tierr_test.go` | The admission world (`RunAdmission`: open-loop workload through the real engine on the simulator, CSV flush), the head-to-head, anti-bloat, recovery, first-burst and canary scenarios, tier R overload. |
-| `test/analysis/admission-*`, `tierr-admission-overload` | SQL assertions per scenario; `admission-head-to-head/head-to-head.sql` and its committed output `head-to-head.md`. |
+| `test/analysis/admission-*`, `tierr-admission-overload` | SQL assertions per scenario; `admission-head-to-head/head-to-head.query` (named .query so csv-assert does not run it as an assertion) and its committed output `head-to-head.md`. |
 | `scripts/admission-head-to-head.sh` | Prints the table (one DuckDB query); `--check` reruns the scenarios and diffs with the committed table. |
 | `scripts/fuzz-plant.sh` (appended) | Also requires `FuzzAdmissionOps` to find `PlantRemoveSwapsTail`. |
 | `agent_work/chunks/c08-admission/gate/extra.sh` | G10: `fuzz-plant.sh` and `admission-head-to-head.sh --check`. |

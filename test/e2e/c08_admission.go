@@ -261,3 +261,43 @@ func CheckFirstBurst(r *SimRun) error {
 }
 
 var RelaxedQueue = map[string]any{"interval": "5s", "target": "1s"}
+
+func AdmissionBaseline(dir string) ([]obs.InstanceSnapshot, error) {
+	var out []obs.InstanceSnapshot
+	add := func(r *AdmRun, err error) error {
+		if err != nil {
+			return err
+		}
+		if err := r.Flush.Check(); err != nil {
+			return err
+		}
+		out = append(out, r.Flush.Final)
+		return nil
+	}
+	for _, load := range HeadToHeadLoads() {
+		for _, arm := range AdmArms() {
+			if err := add(RunAdmission(HeadToHeadSpec(arm, load), 1, dir, "")); err != nil {
+				return nil, err
+			}
+		}
+	}
+	for _, arm := range AntiBloatArms() {
+		if err := add(RunAdmission(AntiBloatSpec(arm), 1, dir, "")); err != nil {
+			return nil, err
+		}
+	}
+	for _, rule := range []admission.RuleKind{admission.RuleTimeout, admission.RuleControlLaw} {
+		r, err := RunSim(FirstBurstSpec(rule, 0), 1, SimOptions{Dir: dir})
+		if err == nil {
+			err = CheckFirstBurst(r)
+		}
+		if err == nil {
+			err = r.Flush.Check()
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r.Final)
+	}
+	return out, nil
+}
