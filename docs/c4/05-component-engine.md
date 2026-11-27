@@ -2,7 +2,7 @@
 
 **Built so far: chunks 0–6. Dashed parts are planned.** In this diagram 12 of 21 elements and 23 of 28 relationships are built. Model: diagram `component-engine` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
-The engine is where the seams meet. The transport seam below it has two implementations. The pipeline above calls each core through a small stage interface, so a core can be replaced by a pass-through (which is how each scenario's ablation run is made). Chunk 6 built the walking skeleton: the whole path of a request with a stand-in at every stage whose core is not built, which is why the arrows to admission, the coalescer, the pool and the retry policy are still dashed.
+The engine is where the seams meet. Below it, the transport seam has two implementations. Above it, the pipeline calls each core through a small stage interface, so a core can be replaced by a pass-through. That is how each scenario's ablation run is made. Chunk 6 built the walking skeleton: the whole path of a request, with a stand-in at every stage whose core is not built yet. As a result, the arrows to admission, the coalescer, the pool, and the retry policy are still dashed.
 
 A solid box or arrow is built; a dashed one is planned. An arrow points to the supplier. An arrow marked "implements" means the source implements the target's interface; every other arrow means "uses".
 

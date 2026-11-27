@@ -1186,7 +1186,7 @@ diagram("container", "container", "Containers: the request path", "02-container-
         shows="The Go packages inside one mini-gateway process and how a request passes through them",
         intro="Containers are Go packages inside one process. The shell does all socket I/O and makes no decisions. The "
               "engine is one single-threaded state machine that calls the wire layer and the four pure cores. "
-              "Observability hangs off the side: the engine publishes snapshots, the admin listener serves them.",
+              "Observability hangs off the side: the engine publishes snapshots, and the admin listener serves them.",
         nodes=["app", "operator", "c-shell", "c-engine", "c-pgwire", "c-adm", "c-coal", "c-pool", "c-retry",
                "c-obs", "c-config", "pg", "telemetry"],
         rels=["c%d" % i for i in range(1, 16) if i != 8], boundary="mini-gateway process",
@@ -1196,10 +1196,11 @@ diagram("container", "container", "Containers: the request path", "02-container-
 
 diagram("container-seams", "container", "Containers: drivers and seams", "03-container-drivers-and-seams", scope="gw", parent="context",
         shows="Who drives the engine (the shell or the simulator), where the Postgres codec boundary is, and the work vocabulary the cores are written against",
-        intro="The verdict on the backend interface, drawn. There is no generic backend interface. There are three seams: "
-              "the engine's byte transport (implemented by the shell with TCP and, on the simulator, by the engine's test package proxysim), the wire layer "
-              "(the only product package allowed to import pgproto3), and the work vocabulary (the only thing the cores see). "
-              "A second protocol would be a sibling of the wire layer producing the same vocabulary.",
+        intro="This diagram shows the verdict on the backend interface: there is no generic backend interface. Instead, "
+              "there are three seams. The first is the engine's byte transport, which the shell implements over TCP "
+              "and the engine's test package proxysim implements on the simulator. The second is the wire layer, the "
+              "only product package allowed to import pgproto3. The third is the work vocabulary, the only thing the "
+              "cores see. A second protocol would be a sibling of the wire layer producing the same vocabulary.",
         nodes=["developer", "c-sim", "c-e2e", "c-shell", "c-engine", "c-pgwire", "c-work", "c-adm", "c-pool", "c-coal",
                "c-retry", "pgproto3", "pg"],
         rels=["c3", "s1", "c4", "s2", "s3", "s18", "s4", "s5", "s6", "s8", "s9", "s10", "s17", "s11", "s12", "s13", "s14", "s15", "c10", "s16"],
@@ -1209,8 +1210,8 @@ diagram("container-seams", "container", "Containers: drivers and seams", "03-con
 diagram("deployment", "deployment", "Deployment: three instances, one database", "04-deployment-fleet", parent="container",
         shows="The supported multi-instance deployment: static fleet config, per-instance enforcement, no run-time coordination",
         intro="Each instance enforces its own limits. The config declares the instance count and divides the fleet "
-              "budgets. What multiplies, weakens or survives at N instances is the table in PLAN.md section 8.2; the "
-              "weakened rows are measured in three-instance scenarios.",
+              "budgets. The table in PLAN.md section 8.2 lists what multiplies, weakens, or survives at N instances. "
+              "The weakened rows are measured in three-instance scenarios.",
         nodes=["d-clients", "i-spread", "d-tier", "i-gw1", "i-gw2", "i-gw3", "d-db", "i-pg", "d-ops", "i-tel"],
         rels=["x%d" % i for i in range(1, 10)], env=ENV, direction="LR",
         groups=[("d-clients", ["i-spread"]), ("d-tier", ["i-gw1", "i-gw2", "i-gw3"]), ("d-db", ["i-pg"]), ("d-ops", ["i-tel"])])
@@ -1224,38 +1225,39 @@ def component_diagram(id, title, file, scope, shows, intro, extra_nodes, rels):
 
 component_diagram("component-engine", "Components: engine", "05-component-engine", "c-engine",
                   "internal/proxy: the transport seam and its simulator driver, the two connection tables, the request pipeline and its stage seams, the lease end with its reset, the reply relay, the failure classifier, deadlines, the snapshot",
-                  "The engine is where the seams meet. The transport seam below it has two implementations. The pipeline "
-                  "above calls each core through a small stage interface, so a core can be replaced by a pass-through "
-                  "(which is how each scenario's ablation run is made). Chunk 6 built the walking skeleton: the whole "
-                  "path of a request with a stand-in at every stage whose core is not built, which is why the arrows "
-                  "to admission, the coalescer, the pool and the retry policy are still dashed.",
+                  "The engine is where the seams meet. Below it, the transport seam has two implementations. Above it, "
+                  "the pipeline calls each core through a small stage interface, so a core can be replaced by a "
+                  "pass-through. That is how each scenario's ablation run is made. Chunk 6 built the walking skeleton: "
+                  "the whole path of a request, with a stand-in at every stage whose core is not built yet. As a "
+                  "result, the arrows to admission, the coalescer, the pool, and the retry policy are still dashed.",
                   ["n-shell", "n-sim", "n-pgwire", "n-adm", "n-coal", "n-pool", "n-retry", "n-obs", "n-work"],
                   ["e%d" % i for i in (1, 2, 22, 3, 4, 5, 6, 7, 27, 23, 8, 9, 10, 12, 13, 14, 15, 24, 25, 26, 29, 16, 17, 28, 18, 19, 20, 21)])
 component_diagram("component-wire", "Components: wire layer", "06-component-wire-layer", "c-pgwire",
                   "internal/pgwire: our framer and message coding, both session machines, SCRAM, the two trackers, the wire snapshot, the SQL lexer, the classifier with its courtesy reject list, the safe-shape recogniser, the error contract and reply builders, the test proxies and their scenarios; planned: the pgproto3 codec boundary",
-                  "pgproto3 gives message structs and nothing else. The framer, the session machines, SCRAM, transaction "
-                  "tracking, classification and error mapping are ours. Everything here is a pure state machine or a "
-                  "pure function. Chunk 4 built the sessions. Chunk 5 built the classifier and the contracts: session "
-                  "safety does not depend on reading SQL (the pool will reset every connection after every lease), so "
-                  "the reject list is a courtesy, and what may be shared is decided by a recogniser that does not use "
-                  "the lexer. The machines, the trackers and the reply builders code their messages by hand, so no "
-                  "file in the package imports pgproto3 and the codec boundary has no caller yet. Since chunk 6 the "
-                  "engine drives this code. The two test proxies remain as the wire layer's own scenarios in the "
-                  "simulator, between simulated clients and the fake Postgres.",
+                  "pgproto3 provides message structs and nothing else. The framer, session machines, SCRAM, "
+                  "transaction tracking, classification, and error mapping are ours. Everything here is a pure state "
+                  "machine or a pure function. Chunk 4 built the sessions, and chunk 5 built the classifier and the "
+                  "contracts. Because the pool will reset every connection after every lease, session safety does not "
+                  "depend on reading SQL, so the reject list is a courtesy. A recogniser that does not use the lexer "
+                  "decides what may be shared. The machines, trackers, and reply builders code their messages "
+                  "by hand, so no file in the package imports pgproto3 and the codec boundary has no caller yet. Since "
+                  "chunk 6 the engine drives this code. The two test proxies remain as the wire layer's own scenarios "
+                  "in the simulator, between simulated clients and the fake Postgres.",
                   ["n-engine", "n-work", "n-sim", "pgproto3", "pg"],
                   ["w%d" % i for i in (1, 2, 3, 17, 4, 5, 53, 54, 55, 18, 19, 20, 21, 22, 23, 24, 25, 26, 12, 13, 27, 28, 29, 30,
                                          9, 10, 11, 14, 40, 41, 15, 42, 43, 16, 31, 32, 37, 38, 39, 33, 34, 35, 36,
                                          44, 45, 52, 46, 47, 48, 49, 50, 51)])
 component_diagram("component-admission", "Components: admission", "07-component-admission", "c-adm",
                   "internal/admission: the rate gate, per-tenant queues, both CoDel modes behind one interface, the dispatcher, the adaptive limit",
-                  "Order of decisions: gate, then queue, then dispatch under the limit. The two queue rules are equal, "
-                  "selectable implementations of one interface. Two control loops read two different signals: the queue "
-                  "rule reads queue wait, the adaptive limit reads database round-trip time.",
+                  "Decisions run in order: gate, then queue, then dispatch under the limit. The two queue rules are "
+                  "equal, selectable implementations of one interface. Two control loops read two different signals: "
+                  "the queue rule reads queue wait, and the adaptive limit reads database round-trip time.",
                   ["n-engine", "n-work"], ["a%d" % i for i in range(1, 16)])
 component_diagram("component-pool", "Components: pool", "08-component-pool", "c-pool",
                   "internal/pool: the hard cap, the creation limiter, leases per transaction, the breaker, the dirty-connection table",
                   "A request never waits inside the pool: the dispatcher releases it only when a lease is available. "
-                  "The pool's job is the cap, the creation rate, and never lending a connection that is not idle and clean.",
+                  "The pool enforces the cap, controls the creation rate, and lends a connection only when it is idle "
+                  "and clean.",
                   ["n-engine", "n-work"], ["p%d" % i for i in range(1, 13)])
 component_diagram("component-coalescer", "Components: coalescer", "09-component-coalescer", "c-coal",
                   "internal/coalesce: the join rule, the flight table, waiters, the flight's own deadline, the shared reply",
@@ -1268,29 +1270,28 @@ component_diagram("component-retry", "Components: retry policy", "10-component-r
 component_diagram("component-simulator", "Components: simulator harness", "11-component-simulator", "c-sim",
                   "internal/sim and its sub-packages, internal/testclient and internal/randdist: the loop, the clock, simulated byte streams, the simulated TLS handshake, the fake Postgres, simulated clients, the test client, the scenario world with its baselines and fidelity runner, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol",
                   "The harness owns the world around the engine. The engine's own test package, proxysim, implements "
-                  "the engine's transport seam on the simulated streams, so the engine under test is the engine that "
-                  "ships. Several engines can run on one loop, which is how the "
-                  "three-instance scenarios will be made. The kernel came first (chunk 1) and is proved on a toy echo "
-                  "protocol. Chunk 2 added the world the proxy stands in: the fake Postgres, the simulated clients "
-                  "and scenarios that run the clients straight at the fake. Chunk 4 added SCRAM login and the TLS "
-                  "request, answer and simulated handshake to the fake and the clients. Chunk 6 put the engine "
-                  "between the clients and the fake; the simulator packages themselves did not change, and the "
-                  "direct baselines are the control arms.",
+                  "the transport seam on simulated streams, so the engine under test is the same engine that ships. "
+                  "Several engines can run on one loop, which is how the three-instance scenarios will be made. The "
+                  "kernel came first (chunk 1) and is proved on a toy echo protocol. Chunk 2 added the world the proxy "
+                  "stands in: the fake Postgres, the simulated clients, and scenarios that run the clients straight at "
+                  "the fake. Chunk 4 added SCRAM login, plus the TLS request, answer, and simulated handshake, to both "
+                  "the fake and the clients. Chunk 6 placed the engine between the clients and the fake without "
+                  "changing the simulator packages themselves. The direct baselines serve as the control arms.",
                   ["developer", "n-engine", "n-e2e", "n-pgwire", "pgproto3", "pg"], ["m%d" % i for i in range(1, 52) if i != 31])
 component_diagram("component-observability", "Components: observability", "12-component-observability", "c-obs",
                   "internal/obs: the one raw export (snapshots), the metric registry, the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus",
-                  "The hard rule: one common raw export, then the collector interface, then adapters. Components fill "
-                  "plain structs; the collector assembles them; every output form is an adapter that reads only what the "
-                  "collector publishes. No component knows about CSV, DuckDB, OTel or Prometheus, and adding an adapter "
-                  "touches no component. Two paths leave the process. The testing path: the CSV flush adapter writes "
-                  "files, and tests and DuckDB read them with nothing else running. The production path: the OTLP "
-                  "adapter pushes to an OpenTelemetry Collector, which Prometheus scrapes. DuckDB is an analysis tool "
-                  "over files, never a dependency of the proxy. Chunk 3 built the spine before the proxy's "
-                  "components: the sources are the simulator's kernel, network, fake Postgres and workload, "
-                  "from the wire layer its snapshot (chunk 4, the first product source) and the classifier's "
-                  "and reply builders' counters (chunk 5), and the engine with its shell (chunk 6). In the real "
-                  "process the shell creates the collector and publishes; in the simulator the scenario flush "
-                  "harness does.",
+                  "The hard rule is one common raw export, then the collector interface, then adapters. Components "
+                  "fill plain structs, the collector assembles them, and every output form is an adapter that reads "
+                  "only what the collector publishes. No component knows about CSV, DuckDB, OTel, or Prometheus, and "
+                  "adding an adapter touches no component. Two paths leave the process. On the testing path, the CSV "
+                  "flush adapter writes files that tests and DuckDB read with nothing else running. On the production "
+                  "path, the OTLP adapter pushes to an OpenTelemetry Collector, which Prometheus scrapes. DuckDB is an "
+                  "analysis tool over files, never a dependency of the proxy. Chunk 3 built this spine before the "
+                  "proxy's components, starting with sources for the simulator's kernel, network, fake Postgres, and "
+                  "workload. Later chunks added the wire layer's snapshot (chunk 4, the first product source), the "
+                  "classifier's and reply builders' counters (chunk 5), and the engine with its shell (chunk 6). In "
+                  "the real process, the shell creates the collector and publishes; in the simulator, the scenario "
+                  "flush harness does.",
                   ["n-engine", "n-shell", "n-e2e", "n-sim", "n-pgwire", "csvfiles", "duckdb", "otelcol", "prom"],
                   ["o%d" % i for i in (1, 2, 25, 26, 27, 3, 24, 28, 29, 4, 15, 8, 9, 10, 11, 12, 31, 32, 5, 6, 7, 16, 18, 17, 19,
                                          13, 20, 21, 14, 33, 22, 23, 50, 51, 34, 35, 52, 53, 57, 58, 61, 62, 63, 64, 65, 66, 68, 37, 54, 59, 67, 38, 39, 40, 41, 42, 55, 56, 60, 69, 43, 44, 45, 46, 47, 48)])

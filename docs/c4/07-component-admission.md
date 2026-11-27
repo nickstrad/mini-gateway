@@ -2,7 +2,7 @@
 
 **Built so far: chunks 0–6. Dashed parts are planned.** In this diagram 1 of 12 elements and 0 of 15 relationships are built. Model: diagram `component-admission` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
-Order of decisions: gate, then queue, then dispatch under the limit. The two queue rules are equal, selectable implementations of one interface. Two control loops read two different signals: the queue rule reads queue wait, the adaptive limit reads database round-trip time.
+Decisions run in order: gate, then queue, then dispatch under the limit. The two queue rules are equal, selectable implementations of one interface. Two control loops read two different signals: the queue rule reads queue wait, and the adaptive limit reads database round-trip time.
 
 A solid box or arrow is built; a dashed one is planned. An arrow points to the supplier. An arrow marked "implements" means the source implements the target's interface; every other arrow means "uses".
 

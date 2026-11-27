@@ -2,7 +2,7 @@
 
 **Built so far: chunks 0–6. Dashed parts are planned.** In this diagram 4 of 13 elements and 9 of 14 relationships are built. Model: diagram `container` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
-Containers are Go packages inside one process. The shell does all socket I/O and makes no decisions. The engine is one single-threaded state machine that calls the wire layer and the four pure cores. Observability hangs off the side: the engine publishes snapshots, the admin listener serves them.
+Containers are Go packages inside one process. The shell does all socket I/O and makes no decisions. The engine is one single-threaded state machine that calls the wire layer and the four pure cores. Observability hangs off the side: the engine publishes snapshots, and the admin listener serves them.
 
 A solid box or arrow is built; a dashed one is planned. An arrow points to the supplier.
 

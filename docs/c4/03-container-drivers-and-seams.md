@@ -2,7 +2,7 @@
 
 **Built so far: chunks 0–6. Dashed parts are planned.** In this diagram 5 of 13 elements and 12 of 20 relationships are built. Model: diagram `container-seams` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
-The verdict on the backend interface, drawn. There is no generic backend interface. There are three seams: the engine's byte transport (implemented by the shell with TCP and, on the simulator, by the engine's test package proxysim), the wire layer (the only product package allowed to import pgproto3), and the work vocabulary (the only thing the cores see). A second protocol would be a sibling of the wire layer producing the same vocabulary.
+This diagram shows the verdict on the backend interface: there is no generic backend interface. Instead, there are three seams. The first is the engine's byte transport, which the shell implements over TCP and the engine's test package proxysim implements on the simulator. The second is the wire layer, the only product package allowed to import pgproto3. The third is the work vocabulary, the only thing the cores see. A second protocol would be a sibling of the wire layer producing the same vocabulary.
 
 A solid box or arrow is built; a dashed one is planned. An arrow points to the supplier.
 
