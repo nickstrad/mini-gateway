@@ -333,8 +333,8 @@ func TestAdv_6_RealTSVColumns(t *testing.T) {
 		t.Fatal("no targets reported")
 	}
 	for i, row := range rows {
-		if n := len(strings.Split(row, "\t")); n != 5 {
-			t.Fatalf("row %d has %d TSV columns; want 5: %q", i, n, row)
+		if n := len(strings.Split(row, "\t")); n != 6 {
+			t.Fatalf("row %d has %d TSV columns; want 6: %q", i, n, row)
 		}
 	}
 }

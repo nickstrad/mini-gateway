@@ -6,6 +6,9 @@
 #   FUZZ_SECONDS=20       time per target (the gate's budget; on demand use minutes)
 #   FUZZ_RATE_FLOOR=100   executions per second below which a simulation-level target is
 #                         classed as a seed sweep
+#   FUZZ_MAX_RETRIES=2    maximum number of targets retried once on Go's own deadline
+#                         error (0 turns the retry off; the gate refuses to count a run
+#                         above 2 for landing)
 #   FUZZ_REPORT=<file>    also write the summary table there as TSV (header row first)
 #   FUZZ_GO=<command>     the command run in place of `go` for the fuzzing step only (the
 #                         test seam of scripts/fuzz_test.go; the gate unsets it)
@@ -29,9 +32,26 @@
 # FUZZ_RATE_FLOOR is a `seed-sweep`: it still runs and can still fail, but it does not count
 # as fuzzing. Every other target with a rate is `fuzz`. A seed sweep is not a failure.
 #
-# Output: the go test output of each target, then a table (package, target, executions,
-# executions per second, class) and a NOTE line with the counts. When the run fails, its
-# last line names every failed target: `fuzz: FAILED: <dir> <target>, ...`.
+# Deadline retry (CR-2). Go's fuzz tool occasionally ends a target at -fuzztime with a
+# bare `context deadline exceeded` under `--- FAIL: <target>` and no failing input. A
+# target is retried once when, and only when, ALL five conditions hold: non-zero exit, a
+# `--- FAIL: <target>` block whose only message is `context deadline exceeded`, no
+# "Failing input written to" line, no panic or other failure text, and no change to the
+# package's testdata/fuzz/<target>/ corpus tree (files added, removed, or modified in
+# content, compared NUL-safely through symlinks; fails closed if a snapshot cannot be
+# taken). At most FUZZ_MAX_RETRIES targets are retried in one run; the second run's
+# result and rate stand.
+# Two limits of that check (review 2): a corpus directory whose parent cannot be searched
+# at all, before and after, is read as absent rather than as a failed snapshot (go test,
+# running as the same user, cannot write a failing input there either); and the signature
+# test is written for gawk, the awk on the gate's machine - mawk ends a line at a NUL byte
+# and could accept a forged log that gawk refuses.
+#
+# Output: the go test output of each target, a `fuzz: RETRY: <dir> <target>: go's own
+# deadline, no failing input` line for each retry, then a table (package, target,
+# executions, executions per second, class, retried) and a NOTE line with the counts.
+# When the run fails, its last line names every failed target:
+# `fuzz: FAILED: <dir> <target>, ...`.
 #
 # Exit status: 0 green, 1 a target failed, has no readable rate, or cannot be classed, or
 # no target exists, 2 usage or setup error.
@@ -43,10 +63,12 @@ command -v go >/dev/null 2>&1 || PATH="/usr/local/go/bin:$PATH"
 
 secs=${FUZZ_SECONDS:-20}
 floor=${FUZZ_RATE_FLOOR:-100}
+max_retries=${FUZZ_MAX_RETRIES:-2}
 report=${FUZZ_REPORT:-}
 fuzz_go=${FUZZ_GO:-go}
 [[ "$secs" =~ ^[1-9][0-9]*$ ]] || { echo "fuzz.sh: FUZZ_SECONDS must be a positive whole number" >&2; exit 2; }
 [[ "$floor" =~ ^[1-9][0-9]*$ ]] || { echo "fuzz.sh: FUZZ_RATE_FLOOR must be a positive whole number" >&2; exit 2; }
+[[ "$max_retries" =~ ^(0|[1-9][0-9]{0,8})$ ]] || { echo "fuzz.sh: FUZZ_MAX_RETRIES must be a non-negative whole number" >&2; exit 2; }
 module=$(go list -m 2>/dev/null) || { echo "fuzz.sh: cannot read the module path (go list -m)" >&2; exit 2; }
 work=$(mktemp -d /tmp/fuzz-sh.XXXXXX) || exit 2
 trap 'rm -rf "$work"' EXIT
@@ -89,6 +111,104 @@ sim_level() {
   [ "${level_of[$1]}" = sim ]
 }
 
+# snapshot_corpus <dir> <target> <out>: NUL-delimited sorted snapshot of the target's
+# corpus tree (following symlinks, with SHA-256 content hashes for regular files).
+# Fails closed (returns non-zero) if the tree cannot be safely snapshotted.
+snapshot_corpus() {
+  local d="$1/testdata/fuzz/$2" out="$3" paths="$work/corpus.paths" p hash
+  rm -f "$out" "$paths" "$paths.sorted"
+  if [ ! -e "$d" ] && [ ! -L "$d" ]; then
+    printf 'ABSENT\0' > "$out" || return 1
+    return 0
+  fi
+  [ -d "$d" ] || return 1
+  (cd -- "$d" && find -L . -mindepth 1 -print0) > "$paths" 2>/dev/null || return 1
+  LC_ALL=C sort -z "$paths" > "$paths.sorted" || return 1
+  {
+    printf 'PRESENT\0'
+    while IFS= read -r -d '' p; do
+      if [ -d "$d/$p" ]; then
+        printf 'D\0%s\0' "$p"
+      elif [ -f "$d/$p" ]; then
+        hash=$(sha256sum < "$d/$p" 2>/dev/null) || return 1
+        hash=${hash%% *}
+        [[ "$hash" =~ ^[0-9a-f]{64}$ ]] || return 1
+        printf 'F\0%s\0%s\0' "$p" "$hash"
+      else
+        return 1
+      fi
+    done < "$paths.sorted"
+  } > "$out" || return 1
+}
+
+# is_deadline_signature <log> <target>: 0 iff the log is Go's own deadline error for
+# <target> with no failing input, no panic and no other failure text.
+is_deadline_signature() {
+  awk -v target="$2" '
+    BEGIN {
+      state = 0
+      bad = 0
+      saw_exit = 0
+      saw_pkg_fail = 0
+      fail_prefix = "--- FAIL: " target
+      run_line = "=== RUN   " target
+    }
+    {
+      line = $0
+      if (state == 0) {
+        if (line == "" ||
+            line == "warning: starting with empty corpus" ||
+            line == "warning: the test binary was not built with coverage instrumentation, so fuzzing will run without coverage guidance and may be inefficient" ||
+            line == "waiting for fuzzing process to terminate..." ||
+            line == run_line ||
+            line ~ /^fuzz: elapsed: [0-9hms]+, (gathering baseline coverage|testing seed corpus): [0-9]+\/[0-9]+ completed(, now fuzzing with [0-9]+ workers)?$/ ||
+            line ~ /^fuzz: elapsed: [0-9hms]+, execs: [0-9]+ \([0-9]+\/sec\)(, new interesting: [0-9]+ \(total: [0-9]+\))?$/) {
+          next
+        }
+        if (line == fail_prefix ||
+            (substr(line, 1, length(fail_prefix)) == fail_prefix &&
+             substr(line, length(fail_prefix) + 1) ~ /^ \(([0-9]+h)?([0-9]+m)?[0-9]+(\.[0-9]+)?s\)$/)) {
+          state = 1
+          next
+        }
+        bad = 1
+        exit 1
+      } else if (state == 1) {
+        if (line ~ /^[ \t]+context deadline exceeded$/) {
+          state = 2
+          next
+        }
+        bad = 1
+        exit 1
+      } else if (state == 2) {
+        if (line == "FAIL") {
+          state = 3
+          next
+        }
+        bad = 1
+        exit 1
+      } else {
+        if (line == "") {
+          next
+        }
+        if (!saw_exit && !saw_pkg_fail && line == "exit status 1") {
+          saw_exit = 1
+          next
+        }
+        if (!saw_pkg_fail && line ~ /^FAIL[ \t]+[^ \t]+[ \t]+([0-9]+h)?([0-9]+m)?[0-9]+(\.[0-9]+)?s$/) {
+          saw_pkg_fail = 1
+          next
+        }
+        bad = 1
+        exit 1
+      }
+    }
+    END {
+      if (bad || state != 3) exit 1
+    }
+  ' "$1"
+}
+
 # fail_target <dir> <name>: marks the run failed and lists the target once.
 fail_target() {
   rc=1
@@ -104,18 +224,43 @@ sweeps=0
 fuzzed=0
 unreadable=0
 unclassified=0
+retried_total=0
 i=0
 while read -r dir name; do
   i=$((i + 1))
   log="$work/$i.log"
+  retried=0
+  snap_before_ok=0
+  if snapshot_corpus "$dir" "$name" "$work/corpus.before"; then
+    snap_before_ok=1
+  fi
   echo "fuzz: ./$dir $name"
-  if ! "$fuzz_go" test -run '^$' -fuzz "^${name}\$" -fuzztime "${secs}s" "./$dir" 2>&1 | tee "$log"; then
-    echo "fuzz: $name in ./$dir FAILED" >&2
-    fail_target "$dir" "$name"
+  run_rc=0
+  "$fuzz_go" test -run '^$' -fuzz "^${name}\$" -fuzztime "${secs}s" "./$dir" 2>&1 | tee "$log" || run_rc=$?
+  if [ "$run_rc" != 0 ]; then
+    corpus_unchanged=0
+    if [ "$snap_before_ok" = 1 ] && snapshot_corpus "$dir" "$name" "$work/corpus.after" && cmp -s "$work/corpus.before" "$work/corpus.after"; then
+      corpus_unchanged=1
+    fi
+    if [ "$corpus_unchanged" = 1 ] && [ "$retried_total" -lt "$max_retries" ] && is_deadline_signature "$log" "$name"; then
+      retried=1
+      retried_total=$((retried_total + 1))
+      echo "fuzz: RETRY: $dir $name: go's own deadline, no failing input"
+      log="$work/$i.retry.log"
+      run_rc=0
+      "$fuzz_go" test -run '^$' -fuzz "^${name}\$" -fuzztime "${secs}s" "./$dir" 2>&1 | tee "$log" || run_rc=$?
+      if [ "$run_rc" != 0 ]; then
+        echo "fuzz: $name in ./$dir FAILED" >&2
+        fail_target "$dir" "$name"
+      fi
+    else
+      echo "fuzz: $name in ./$dir FAILED" >&2
+      fail_target "$dir" "$name"
+    fi
   fi
   if ! rate=$(read_rate "$log"); then
     echo "fuzz: $name in ./$dir: no execution rate in the go test output (no 'fuzz: elapsed: ..., execs: N (M/sec)' line)" >&2
-    rows+=("$dir	$name	-	-	unreadable")
+    rows+=("$dir	$name	-	-	unreadable	$retried")
     unreadable=$((unreadable + 1))
     fail_target "$dir" "$name"
     continue
@@ -124,20 +269,20 @@ while read -r dir name; do
   lvl=0; sim_level "$dir" || lvl=$?
   if [ $lvl = 2 ]; then
     echo "fuzz: $name in ./$dir: cannot list the dependencies of its test package" >&2
-    rows+=("$dir	$name	$execs	$per_sec	unclassified")
+    rows+=("$dir	$name	$execs	$per_sec	unclassified	$retried")
     unclassified=$((unclassified + 1))
     fail_target "$dir" "$name"
     continue
   fi
   class=fuzz
   if [ $lvl = 0 ] && [ "$per_sec" -lt "$floor" ]; then class=seed-sweep; sweeps=$((sweeps + 1)); else fuzzed=$((fuzzed + 1)); fi
-  rows+=("$dir	$name	$execs	$per_sec	$class")
+  rows+=("$dir	$name	$execs	$per_sec	$class	$retried")
 done <<<"$targets"
 
-table=$(printf 'package\ttarget\texecs\texecs_per_sec\tclass\n'; printf '%s\n' "${rows[@]}")
+table=$(printf 'package\ttarget\texecs\texecs_per_sec\tclass\tretried\n'; printf '%s\n' "${rows[@]}")
 echo "fuzz: summary"
 column -t -s $'\t' <<<"$table" 2>/dev/null || printf '%s\n' "$table"
-echo "NOTE: $count fuzz targets, ${secs}s each: $fuzzed fuzz, $sweeps seed-sweep (floor ${floor}/s), $unreadable without a rate, $unclassified unclassified"
+echo "NOTE: $count fuzz targets, ${secs}s each: $fuzzed fuzz, $sweeps seed-sweep (floor ${floor}/s), $unreadable without a rate, $unclassified unclassified, $retried_total retried"
 if [ -n "$report" ]; then
   printf '%s\n' "$table" > "$report" || { echo "fuzz.sh: cannot write FUZZ_REPORT $report" >&2; exit 2; }
 fi

@@ -1,0 +1,8 @@
+package pgwire
+
+func AdvCounts(src []byte) [5]int {
+ l := LexerFor(src)
+ for { _, ok := l.Next(); if !ok { break } }
+ _, c := clsRunCounted(src, false, false)
+ return [5]int{l.opRunBytes,l.lookahead,c.keywordChecks,c.tokenVisits,c.literalBytes}
+}

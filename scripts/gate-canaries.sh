@@ -38,7 +38,7 @@ export PATH
 for tool in go jq git tar; do
   command -v "$tool" >/dev/null 2>&1 || { echo "canaries: $tool is not on PATH" >&2; exit 2; }
 done
-unset GATE_ONLY GATE_STAGE GATE_BASE GATE_PREPROSE GATE_SHORT GATE_OUT SWEEP_SEEDS FUZZ_SECONDS FUZZ_RATE_FLOOR FUZZ_REPORT FUZZ_GO
+unset GATE_ONLY GATE_STAGE GATE_BASE GATE_PREPROSE GATE_SHORT GATE_OUT SWEEP_SEEDS FUZZ_SECONDS FUZZ_RATE_FLOOR FUZZ_MAX_RETRIES FUZZ_REPORT FUZZ_GO
 
 module=github.com/nickstrad/mini-gateway
 result_file=agent_work/chunks/c00-foundation/gate/canaries.json
@@ -297,6 +297,14 @@ plant_unreadable_rate() {
   printf '//go:build never\n\npackage canary\n\nimport "testing"\n\nfunc FuzzNever(f *testing.F) {\n\tf.Fuzz(func(t *testing.T, b []byte) {})\n}\n' \
     | put internal/canary/never_test.go && commit plant
 }
+plant_retry_reported() {
+  printf 'package canary\n\nimport "testing"\n\nfunc FuzzCanaryRetry(f *testing.F) {\n\tf.Add([]byte("ok"))\n\tf.Fuzz(func(t *testing.T, b []byte) {})\n}\n' \
+    | put internal/canary/retry_test.go && commit plant
+}
+plant_crasher_not_retried() {
+  printf 'package canary\n\nimport "testing"\n\nfunc FuzzCrasher(f *testing.F) {\n\tf.Add([]byte("ok"))\n\tf.Fuzz(func(t *testing.T, b []byte) {\n\t\tif string(b) != "ok" {\n\t\t\tt.Fatal("PLANTED-FUZZ-CRASHER")\n\t\t}\n\t})\n}\n' \
+    | put internal/canary/crasher_test.go && commit plant
+}
 
 # ---- the canaries
 canary g0-gofmt            red "unformatted Go in a product package" G0 gofmt 'internal/canary/unformatted\.go' plant_gofmt
@@ -340,6 +348,77 @@ canary g4-marker-added     red "a not-built marker that the baseline commit does
 canary g5-built-with-marker red "a stage script that runs while its not-built marker still exists" G5 fuzz 'delete the marker' plant_built_with_marker
 canary g5-unreadable-rate  red "a fuzz target the go tool never runs, so it prints no execution rate" G5 fuzz 'FuzzNever in \./internal/canary: no execution rate' plant_unreadable_rate FUZZ_SECONDS=5
 canary g5-seed-sweep-reported green "control: a rate floor no target reaches; G5 passes and result.json counts the seed sweeps" G5 fuzz '.fuzz_seed_sweeps >= 1 and .fuzz_targets > .fuzz_seed_sweeps' plant_nothing FUZZ_SECONDS=20 FUZZ_RATE_FLOOR=1000000000
+if selected g5-retry-reported; then
+  reset_copy && plant_retry_reported
+  real_go=$(command -v go)
+  mkdir -p "$work/retry-bin"
+  rm -f "$work/retry-once"
+  cat > "$work/retry-bin/go" <<'EOF'
+#!/bin/bash
+is_target=0
+prev=
+for a in "$@"; do
+  if [ "$prev" = -fuzz ] && [ "$a" = '^FuzzCanaryRetry$' ]; then is_target=1; fi
+  prev=$a
+done
+if [ "${1:-}" = test ] && [ "$is_target" = 1 ] && [ ! -e "$RETRY_FLAG" ]; then
+  : > "$RETRY_FLAG"
+  cat <<'OUT'
+fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
+fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 4 workers
+fuzz: elapsed: 1s, execs: 1000 (1000/sec), new interesting: 0 (total: 1)
+--- FAIL: FuzzCanaryRetry (1.01s)
+    context deadline exceeded
+FAIL
+exit status 1
+FAIL	github.com/nickstrad/mini-gateway/internal/canary	1.020s
+OUT
+  exit 1
+fi
+exec "$REAL_GO" "$@"
+EOF
+  chmod +x "$work/retry-bin/go"
+  rc=0
+  run_gate GATE_ONLY=G5 FUZZ_SECONDS=20 PATH="$work/retry-bin:$PATH" REAL_GO="$real_go" RETRY_FLAG="$work/retry-once" || rc=$?
+  log="$copy/agent_work/chunks/canary/gate/G5-fuzz.log"
+  tsv="$copy/agent_work/chunks/canary/gate/G5-fuzz.tsv"
+  status=$(jq -r '.checks[] | select(.gate == "G5" and .check == "fuzz") | .status' "$res" 2>/dev/null || true)
+  note=$(jq -r '.checks[] | select(.gate == "G5" and .check == "fuzz") | .note' "$res" 2>/dev/null || true)
+  res_retries=$(jq -r '.fuzz_retries' "$res" 2>/dev/null || true)
+  tsv_retries=$(tail -n +2 "$tsv" 2>/dev/null | awk -F '\t' '$6 == "1"' | grep -c . || true)
+  canary_retried=$(awk -F '\t' '$1 == "internal/canary" && $2 == "FuzzCanaryRetry" { print $6 }' "$tsv" 2>/dev/null || true)
+  if [ $rc != 0 ] || [ "$status" != pass ]; then
+    verdict g5-retry-reported green "planted first-run deadline signature is retried, reported and counted" G5 fuzz 'pass, RETRY line, retried=1, fuzz_retries matches' MISSED "gate exit $rc, check status '${status:-absent}', want 0 and pass"
+  elif [ ! -e "$work/retry-once" ]; then
+    verdict g5-retry-reported green "planted first-run deadline signature is retried, reported and counted" G5 fuzz 'pass, RETRY line, retried=1, fuzz_retries matches' MISSED "planted first-run deadline did not fire"
+  elif ! grep -qF "fuzz: RETRY: internal/canary FuzzCanaryRetry: go's own deadline, no failing input" "$log"; then
+    verdict g5-retry-reported green "planted first-run deadline signature is retried, reported and counted" G5 fuzz 'pass, RETRY line, retried=1, fuzz_retries matches' MISSED "missing RETRY line in G5-fuzz.log"
+  elif [ "$canary_retried" != 1 ] || [ "$res_retries" != "$tsv_retries" ] || [ "${tsv_retries:-0}" -lt 1 ] || [[ "$note" != *", $tsv_retries retried" ]]; then
+    verdict g5-retry-reported green "planted first-run deadline signature is retried, reported and counted" G5 fuzz 'pass, RETRY line, retried=1, fuzz_retries matches' MISSED "mismatch: row=$canary_retried tsv=$tsv_retries result=$res_retries note='$note'"
+  else
+    verdict g5-retry-reported green "planted first-run deadline signature is retried, reported and counted" G5 fuzz 'pass, RETRY line, retried=1, fuzz_retries matches' CAUGHT "retried=1, fuzz_retries=$res_retries, note='$note'"
+  fi
+fi
+if selected g5-crasher-not-retried; then
+  reset_copy && plant_crasher_not_retried
+  rc=0
+  run_gate GATE_ONLY=G5 FUZZ_SECONDS=5 || rc=$?
+  log="$copy/agent_work/chunks/canary/gate/G5-fuzz.log"
+  tsv="$copy/agent_work/chunks/canary/gate/G5-fuzz.tsv"
+  status=$(jq -r '.checks[] | select(.gate == "G5" and .check == "fuzz") | .status' "$res" 2>/dev/null || true)
+  canary_retried=$(awk -F '\t' '$1 == "internal/canary" && $2 == "FuzzCrasher" { print $6 }' "$tsv" 2>/dev/null || true)
+  if [ $rc != 1 ] || [ "$status" != fail ]; then
+    verdict g5-crasher-not-retried red "a planted failing input is never retried and fails G5" G5 fuzz 'PLANTED-FUZZ-CRASHER, Failing input written to, retried=0' MISSED "gate exit $rc, check status '${status:-absent}', want 1 and fail"
+  elif [ "$(jq -r .overall "$res")" != fail ] || [ "$(jq -r .counts_for_landing "$res")" != false ]; then
+    verdict g5-crasher-not-retried red "a planted failing input is never retried and fails G5" G5 fuzz 'PLANTED-FUZZ-CRASHER, Failing input written to, retried=0' MISSED "result does not say overall=fail, counts_for_landing=false"
+  elif ! grep -q 'PLANTED-FUZZ-CRASHER' "$log" || ! grep -q 'Failing input written to' "$log"; then
+    verdict g5-crasher-not-retried red "a planted failing input is never retried and fails G5" G5 fuzz 'PLANTED-FUZZ-CRASHER, Failing input written to, retried=0' MISSED "log missing crasher or failing-input message"
+  elif grep -qF "fuzz: RETRY: internal/canary FuzzCrasher" "$log" || [ "$canary_retried" != 0 ]; then
+    verdict g5-crasher-not-retried red "a planted failing input is never retried and fails G5" G5 fuzz 'PLANTED-FUZZ-CRASHER, Failing input written to, retried=0' MISSED "crasher was retried (row=$canary_retried)"
+  else
+    verdict g5-crasher-not-retried red "a planted failing input is never retried and fails G5" G5 fuzz 'PLANTED-FUZZ-CRASHER, Failing input written to, retried=0' CAUGHT "red without retry: $(grep -m1 'Failing input written to' "$log" | cut -c1-120)"
+  fi
+fi
 canary g6-built-stage-fails red "a built stage (marker deleted) whose script fails" G6 tier-r 'PLANTED-STAGE-FAILURE' plant_stage_fails
 canary g9-broken-link      red "a broken link in a site page" G9 site 'broken link: no-such-page\.md' plant_broken_link
 canary g9-broken-html-link red "a broken link in a single-quoted raw HTML anchor" G9 site 'broken link: no-such-page\.md' plant_broken_html_link

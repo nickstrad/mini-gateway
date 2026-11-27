@@ -1,0 +1,401 @@
+=== RUN   TestAdv_1_ControlBytesAndExtraBlocks
+=== RUN   TestAdv_1_ControlBytesAndExtraBlocks/"\\r"
+    adv_test.go:150: seed=20261127
+=== RUN   TestAdv_1_ControlBytesAndExtraBlocks/"\\033[0m"
+    adv_test.go:150: seed=20261127
+=== RUN   TestAdv_1_ControlBytesAndExtraBlocks/"\\n---_FAIL:_FuzzSibling_(0.01s)\\n____invariant_violated"
+    adv_test.go:150: seed=20261127
+--- PASS: TestAdv_1_ControlBytesAndExtraBlocks (0.60s)
+    --- PASS: TestAdv_1_ControlBytesAndExtraBlocks/"\\r" (0.22s)
+    --- PASS: TestAdv_1_ControlBytesAndExtraBlocks/"\\033[0m" (0.20s)
+    --- PASS: TestAdv_1_ControlBytesAndExtraBlocks/"\\n---_FAIL:_FuzzSibling_(0.01s)\\n____invariant_violated" (0.17s)
+=== RUN   TestAdv_1_ExistingCorpusRewritten
+    adv_test.go:156: seed=20261127
+    adv_test.go:158: expected failure and 1 invocations; exit=0 calls=2
+        fuzz.sh: 1 fuzz targets, 20s each, rate floor 100/s for simulation-level targets
+        fuzz: ./p FuzzA0
+        fuzz: elapsed: 2s, execs: 800 (0/sec)
+        --- FAIL: FuzzA0 (2.01s)
+            context deadline exceeded
+        FAIL
+        fuzz: RETRY: p FuzzA0: go's own deadline, no failing input
+        fuzz: elapsed: 2s, execs: 246 (0/sec), new interesting: 0 (total: 1)
+        PASS
+        fuzz: summary
+        package  target  execs  execs_per_sec  class  retried
+        p        FuzzA0  246    123            fuzz   1
+        NOTE: 1 fuzz targets, 20s each: 1 fuzz, 0 seed-sweep (floor 100/s), 0 without a rate, 0 unclassified, 1 retried
+--- FAIL: TestAdv_1_ExistingCorpusRewritten (0.24s)
+=== RUN   TestAdv_1_SymlinkedCorpusChild
+    adv_test.go:161: seed=20261127
+    adv_test.go:167: expected failure and 1 invocations; exit=0 calls=2
+        fuzz.sh: 1 fuzz targets, 20s each, rate floor 100/s for simulation-level targets
+        fuzz: ./p FuzzA0
+        fuzz: elapsed: 2s, execs: 800 (0/sec)
+        --- FAIL: FuzzA0 (2.01s)
+            context deadline exceeded
+        FAIL
+        fuzz: RETRY: p FuzzA0: go's own deadline, no failing input
+        fuzz: elapsed: 2s, execs: 246 (0/sec), new interesting: 0 (total: 1)
+        PASS
+        fuzz: summary
+        package  target  execs  execs_per_sec  class  retried
+        p        FuzzA0  246    123            fuzz   1
+        NOTE: 1 fuzz targets, 20s each: 1 fuzz, 0 seed-sweep (floor 100/s), 0 without a rate, 0 unclassified, 1 retried
+--- FAIL: TestAdv_1_SymlinkedCorpusChild (0.22s)
+=== RUN   TestAdv_1_NewCorpusWithHostileFilename
+    adv_test.go:170: seed=20261127
+--- PASS: TestAdv_1_NewCorpusWithHostileFilename (0.12s)
+=== RUN   TestAdv_2_BudgetAcrossSevenTargets
+    adv_test.go:174: seed=20261127
+--- PASS: TestAdv_2_BudgetAcrossSevenTargets (0.43s)
+=== RUN   TestAdv_2_IndependentProcessesResetBudget
+    adv_test.go:191: seed=20261127
+    adv_test.go:191: seed=20261127
+    adv_test.go:191: seed=20261127
+--- PASS: TestAdv_2_IndependentProcessesResetBudget (0.67s)
+=== RUN   TestAdv_2_WidenedStandaloneBudget
+    adv_test.go:199: seed=20261127
+    adv_test.go:206: claim says at most two targets per run; observed 3 retries with FUZZ_MAX_RETRIES=3, exit=1
+--- FAIL: TestAdv_2_WidenedStandaloneBudget (0.32s)
+=== RUN   TestAdv_3_SecondExitWithoutOutput
+    adv_test.go:210: seed=20261127
+--- PASS: TestAdv_3_SecondExitWithoutOutput (0.14s)
+=== RUN   TestAdv_3_SecondSignalAfterGoodProgress
+    adv_test.go:214: seed=20261127
+--- PASS: TestAdv_3_SecondSignalAfterGoodProgress (0.14s)
+=== RUN   TestAdv_3_SecondExitAllStatuses
+=== RUN   TestAdv_3_SecondExitAllStatuses/2
+    adv_test.go:220: seed=20261127
+=== RUN   TestAdv_3_SecondExitAllStatuses/3
+    adv_test.go:220: seed=20261127
+=== RUN   TestAdv_3_SecondExitAllStatuses/64
+    adv_test.go:220: seed=20261127
+=== RUN   TestAdv_3_SecondExitAllStatuses/124
+    adv_test.go:220: seed=20261127
+=== RUN   TestAdv_3_SecondExitAllStatuses/137
+    adv_test.go:220: seed=20261127
+=== RUN   TestAdv_3_SecondExitAllStatuses/255
+    adv_test.go:220: seed=20261127
+--- PASS: TestAdv_3_SecondExitAllStatuses (0.97s)
+    --- PASS: TestAdv_3_SecondExitAllStatuses/2 (0.16s)
+    --- PASS: TestAdv_3_SecondExitAllStatuses/3 (0.20s)
+    --- PASS: TestAdv_3_SecondExitAllStatuses/64 (0.19s)
+    --- PASS: TestAdv_3_SecondExitAllStatuses/124 (0.14s)
+    --- PASS: TestAdv_3_SecondExitAllStatuses/137 (0.14s)
+    --- PASS: TestAdv_3_SecondExitAllStatuses/255 (0.13s)
+=== RUN   TestAdv_4_GateCountsWhenRetryClassificationFails
+    adv_test.go:244: seed=20261127
+--- PASS: TestAdv_4_GateCountsWhenRetryClassificationFails (0.46s)
+=== RUN   TestAdv_4_MixedFailedAndRecoveredTargets
+    adv_test.go:255: seed=20261127
+--- PASS: TestAdv_4_MixedFailedAndRecoveredTargets (0.59s)
+=== RUN   TestAdv_4_SkippedGateDiscardsStaleCounts
+    adv_test.go:263: seed=20261127
+--- PASS: TestAdv_4_SkippedGateDiscardsStaleCounts (0.78s)
+=== RUN   TestAdv_5_RetryCrossesFloorBothDirections
+=== RUN   TestAdv_5_RetryCrossesFloorBothDirections/198
+    adv_test.go:273: seed=20261127
+=== RUN   TestAdv_5_RetryCrossesFloorBothDirections/200
+    adv_test.go:273: seed=20261127
+=== RUN   TestAdv_5_RetryCrossesFloorBothDirections/202
+    adv_test.go:273: seed=20261127
+--- PASS: TestAdv_5_RetryCrossesFloorBothDirections (0.70s)
+    --- PASS: TestAdv_5_RetryCrossesFloorBothDirections/198 (0.21s)
+    --- PASS: TestAdv_5_RetryCrossesFloorBothDirections/200 (0.19s)
+    --- PASS: TestAdv_5_RetryCrossesFloorBothDirections/202 (0.30s)
+=== RUN   TestAdv_5_HourDurationAndZeroSeconds
+    adv_test.go:287: seed=20261127
+    adv_test.go:287: seed=20261127
+    adv_test.go:287: seed=20261127
+--- PASS: TestAdv_5_HourDurationAndZeroSeconds (0.75s)
+=== RUN   TestAdv_5_LastProgressCannotBorrowFirstAttempt
+    adv_test.go:295: seed=20261127
+--- PASS: TestAdv_5_LastProgressCannotBorrowFirstAttempt (0.31s)
+=== RUN   TestAdv_6_MaximumAndOverflowEnvironment
+    adv_test.go:304: seed=20261127
+    adv_test.go:304: seed=20261127
+    adv_test.go:304: seed=20261127
+    adv_test.go:304: seed=20261127
+    adv_test.go:304: seed=20261127
+    adv_test.go:304: seed=20261127
+    adv_test.go:304: seed=20261127
+--- PASS: TestAdv_6_MaximumAndOverflowEnvironment (0.92s)
+=== RUN   TestAdv_6_GateDropsInjectedFuzzCommand
+    adv_test.go:316: seed=20261127
+--- PASS: TestAdv_6_GateDropsInjectedFuzzCommand (0.90s)
+=== RUN   TestAdv_6_LandingPredicateBudgetBoundary
+    adv_test.go:328: seed=20261127
+--- PASS: TestAdv_6_LandingPredicateBudgetBoundary (0.03s)
+=== RUN   TestAdv_1_SeededLogMutationCampaign
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+    adv_test.go:358: seed=20261127
+--- PASS: TestAdv_1_SeededLogMutationCampaign (45.43s)
+=== RUN   TestAdv_1_NewlineDirectoryReplacement
+    adv_test.go:364: seed=20261127
+    adv_test.go:366: expected failure and 1 invocations; exit=0 calls=2
+        fuzz.sh: 1 fuzz targets, 20s each, rate floor 100/s for simulation-level targets
+        fuzz: ./p FuzzA0
+        fuzz: elapsed: 2s, execs: 800 (0/sec)
+        --- FAIL: FuzzA0 (2.01s)
+            context deadline exceeded
+        FAIL
+        fuzz: RETRY: p FuzzA0: go's own deadline, no failing input
+        fuzz: elapsed: 2s, execs: 246 (0/sec), new interesting: 0 (total: 1)
+        PASS
+        fuzz: summary
+        package  target  execs  execs_per_sec  class  retried
+        p        FuzzA0  246    123            fuzz   1
+        NOTE: 1 fuzz targets, 20s each: 1 fuzz, 0 seed-sweep (floor 100/s), 0 without a rate, 0 unclassified, 1 retried
+--- FAIL: TestAdv_1_NewlineDirectoryReplacement (0.16s)
+FAIL
+FAIL	github.com/nickstrad/mini-gateway/agent_work/adversarial/cr02-fuzz-deadline-retry	54.897s
+FAIL

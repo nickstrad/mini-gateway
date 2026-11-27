@@ -79,12 +79,13 @@ Contract for the scripts when they are built (their headers repeat it): the gate
 and `scripts/gen-docs.sh --check`. Exit 0 is green; anything else is red. A first line
 `NOTE: text` in a script's output becomes the note of its row in `result.json`.
 
-## G5: fuzz rates and seed sweeps (CR-1, 2026-11-26)
+## G5: fuzz rates and seed sweeps (CR-1, 2026-11-26; CR-2, 2026-11-27)
 
 - `scripts/fuzz.sh` prints, after all targets, a table: package, target, executions,
-  executions per second, class. The rate is the executions of Go's last
-  `fuzz: elapsed: <d>, execs: <N> (<M>/sec)` line divided by its elapsed seconds (Go's own
-  `M` covers only the last interval and is often 0 on the final line).
+  executions per second, class, retried (`0` or `1`; the first five columns are unchanged).
+  The rate is the executions of Go's last `fuzz: elapsed: <d>, execs: <N> (<M>/sec)` line
+  divided by its elapsed seconds (Go's own `M` covers only the last interval and is often 0
+  on the final line). The rate comes from the run that stands.
 - A target is simulation-level when `go list -deps -test ./<pkg>` lists `internal/sim`
   (the package itself counts). Simulation-level and below `FUZZ_RATE_FLOOR` (default 100
   per second) is class `seed-sweep`: reported, not failed, and not fuzzing in any claim.
@@ -92,13 +93,41 @@ and `scripts/gen-docs.sh --check`. Exit 0 is green; anything else is red. A firs
   target never gets past Go's baseline coverage pass in the time budget (a large cached
   corpus on a slow target), or when the go tool fuzzes nothing (a `//go:build` line that
   excludes the file).
+- **Deadline-only retry (CR-2).** Go's fuzz coordinator sometimes ends a target at
+  `-fuzztime` with `context deadline exceeded` and writes no failing input. `scripts/fuzz.sh`
+  retries a target once when — and only when — all five conditions hold: (1) non-zero exit,
+  (2) a `--- FAIL: <target>` block whose only message is bare `context deadline exceeded`,
+  (3) no `Failing input written to` line, (4) no panic or other failure text anywhere in
+  the output, and (5) no change to the package's `testdata/fuzz/<target>/` corpus tree
+  (files added, removed, or changed in content, compared NUL-safely through symlinks using
+  SHA-256 hashes; snapshot errors such as broken symlinks, symlink loops, non-directory
+  roots, special files, unreadable entries, or tool errors fail closed and block the retry).
+  The second run's result and rate stand, whatever its message. At most `FUZZ_MAX_RETRIES`
+  targets are retried per run (default `2`; `0` disables the retry; accepts `0` or positive
+  integers up to 9 digits and exits 2 otherwise; a standalone run may set it above `2`, but
+  any value above `2` sets `counts_for_landing` to `false`). Each retry prints
+  `fuzz: RETRY: <dir> <target>: go's own deadline, no failing input`, sets `retried` to `1`
+  in the table, and is counted in the `NOTE:` line (`<N> retried`). Any other failure, a
+  second failure on the retried target, or another target hitting the signature once
+  `FUZZ_MAX_RETRIES` targets have already been retried (a third target under the default
+  cap of `2`) fails the run. Limits: (a) if a parent of `testdata/fuzz/<target>/` cannot be
+  searched at all before and after the run, the corpus directory is snapshotted as absent
+  rather than as a snapshot error, so the snapshot does not block the retry (`go test`,
+  running as the same user, cannot write a failing input there either, and the log checks
+  still apply); (b) the signature check is written for `gawk` (`awk` on the gate machine),
+  whereas under `mawk` a NUL byte ends a line early and can let forged logs through that
+  `gawk` rejects.
 - The gate writes the table to `gate/G5-fuzz.tsv` (gitignored) and records
-  `fuzz_targets`, `fuzz_seed_sweeps` and `fuzz_rate_floor` in `result.json` (counts are
-  `null` when G5 did not run). A `FUZZ_RATE_FLOOR` under 100 never counts for landing.
-  `FUZZ_GO` is a test seam of `fuzz.sh` (`scripts/fuzz_test.go`); the gate unsets it.
-- Canaries: `g5-unreadable-rate` (red) and `g5-seed-sweep-reported` (green control). The
-  older `g5-built-with-marker` cannot be caught any more: chunk 1 deleted the `fuzz`
-  marker, so no stage the gate runs has a marker left.
+  `fuzz_targets`, `fuzz_seed_sweeps`, `fuzz_retries`, `fuzz_rate_floor` and
+  `fuzz_max_retries` in `result.json` (counts are `null` when G5 did not run).
+  `fuzz_retries` does not change `counts_for_landing` by itself; a `FUZZ_RATE_FLOOR` under
+  100 or a `FUZZ_MAX_RETRIES` above 2 never counts for landing. `FUZZ_GO` is a test seam of
+  `fuzz.sh` (`scripts/fuzz_test.go`); the gate unsets it.
+- Canaries: `g5-unreadable-rate` (red), `g5-seed-sweep-reported` (green control),
+  `g5-retry-reported` (green: planted first-run deadline signature is retried, reported and
+  counted), and `g5-crasher-not-retried` (red: planted failing input is never retried and
+  fails G5). The older `g5-built-with-marker` cannot be caught any more: chunk 1 deleted
+  the `fuzz` marker, so no stage the gate runs has a marker left.
 
 ## When a result counts for landing
 
@@ -106,7 +135,7 @@ and `scripts/gen-docs.sh --check`. Exit 0 is green; anything else is red. A firs
 `pass`; the tree was clean when the gate started (the chunk's own `gate/result.json` is
 the one path that is ignored, so the result file can be rewritten; `gate/extra.sh` and
 `gate/canaries.json` are inputs and count); HEAD is a full commit id; and none of
-`GATE_SHORT`, `GATE_OUT`, `SWEEP_SEEDS` under 200 or `FUZZ_SECONDS` under 20 was used.
+`GATE_SHORT`, `GATE_OUT`, `SWEEP_SEEDS` under 200, `FUZZ_SECONDS` under 20, `FUZZ_RATE_FLOOR` under 100 or `FUZZ_MAX_RETRIES` above 2 was used.
 
 A run that is refused (exit 2: bad stage, bad `GATE_ONLY`, no baseline, a tool missing)
 removes any `result.json` already in its output folder before it exits, and a run that
@@ -182,6 +211,31 @@ Facts about the lints that are easy to trip over:
   list). The full list is in `README-tools.txt`, section 7.
 - An empty module is green: with no product Go, `gofmt`, `go build`, `go vet` and `go test`
   are recorded as passed with the note "no Go packages in the module yet".
+
+## G3 also runs the counted growth tests (2026-11-27)
+
+G3 runs three checks: `unit` (`go test -count=1 ./...`), `counted`, and `race`. `counted`
+invokes `scripts/counted-growth.sh`, which runs
+`go test -tags clscount -count=1 -run Linearly -v ./internal/pgwire/`. The check fails if
+that run exits non-zero or if any of the five growth tests the script names does not report
+`PASS` (so a renamed test, a skipped tagged test, a dropped build tag, or `"no tests to
+run"` turns red). `COUNTED_GO` is a test seam of `counted-growth.sh`
+(`scripts/counted_growth_test.go`); `scripts/gate.sh` unsets it before running the script.
+`scripts/ci-fast.sh` gets `counted` through the gate's G3, and
+`scripts/counted_growth_test.go` verifies the script's arguments, failure modes, and
+`gate.sh`/`ci-fast.sh` wiring with a stub `go`.
+
+Why a build tag: the lexer and classifier count every loop step and lexer-pass token step
+only when `clscount.On` is true (`internal/pgwire/clscount/on.go`, tag `clscount`). In the
+default build the constant is false and the compiler removes every `if clscount.On { … }`
+block at compile time. The switch sits in its own package, `internal/pgwire/clscount`,
+because detlint's `[buildtag]` rule rejects any `//go:build` line inside a package on
+`det-packages.txt` (test files included) and type-checks both files of a tag pair together.
+`internal/pgwire/clscount` is deliberately omitted from `det-packages.txt`; it imports
+nothing and holds only a constant and integer tallies. Because the tagged tests in
+`internal/pgwire` skip when `clscount.On` is false, a plain `go test ./...` does not check
+per-step lexer work (including string bodies and line comments). Run the full counted suite
+by hand with `scripts/counted-growth.sh`.
 
 ## Chunk extras (G10)
 

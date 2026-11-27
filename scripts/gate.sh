@@ -33,6 +33,8 @@
 #   FUZZ_SECONDS=20        G5 time per fuzz target.
 #   FUZZ_RATE_FLOOR=100    G5 rate floor of a simulation-level target (scripts/fuzz.sh); a
 #                          floor under 100 never counts.
+#   FUZZ_MAX_RETRIES=2     G5 maximum targets retried once on Go's own deadline error
+#                          (scripts/fuzz.sh); 0 turns the retry off; above 2 never counts.
 #
 # The checks, in order:
 #   G0  build     tools build; gofmt; go build; go vet; the nested module tools/detlint
@@ -40,13 +42,15 @@
 #   G1  lints     detlint (tools/lint-rules/det-packages.txt), importlint, boundlint,
 #                 paniccheck
 #   G2  comments  see GATE_STAGE
-#   G3  tests     go test -count=1 ./... ; go test -race for tools/lint-rules/race-packages.txt
+#   G3  tests     go test -count=1 ./... ; scripts/counted-growth.sh (the growth tests under
+#                 -tags clscount) ; go test -race for tools/lint-rules/race-packages.txt
 #   G4  markers   every scripts/.not-built/ marker is legitimate (see below)
 #   G4  sweep     scripts/sweep.sh
 #   G5  fuzz      scripts/fuzz.sh, with its rate table written to gate/G5-fuzz.tsv; red
 #                 when fuzz.sh passes without writing the table. result.json records
-#                 fuzz_targets and fuzz_seed_sweeps from the table (null when G5 did not
-#                 run). A seed sweep is reported, not failed.
+#                 fuzz_targets, fuzz_seed_sweeps and fuzz_retries from the table (null
+#                 when G5 did not run). A seed sweep is reported, not failed; fuzz_retries
+#                 does not change counts_for_landing by itself.
 #   G6  tier-r    scripts/tier-r.sh
 #   G7  csv       scripts/csv-assert.sh over the run directories G4 and G6 wrote
 #   G8  gen-docs  scripts/gen-docs.sh --check
@@ -72,8 +76,9 @@
 # counts_for_landing is true only when ALL of these hold: every check ran (no GATE_ONLY),
 # overall is pass, the tree was clean when the gate started (the chunk's own
 # gate/result.json is the one path that does not count), HEAD is a full commit id, the
-# stage is valid, and none of GATE_SHORT, GATE_OUT, a SWEEP_SEEDS under 200 or a
-# FUZZ_SECONDS under 20 or a FUZZ_RATE_FLOOR under 100 was used. The
+# stage is valid, and none of GATE_SHORT, GATE_OUT, a SWEEP_SEEDS under 200, a
+# FUZZ_SECONDS under 20, a FUZZ_RATE_FLOOR under 100 or a FUZZ_MAX_RETRIES above 2 was
+# used. The
 # file is evidence for an honest operator, not a tamper-proof certificate;
 # agent_work/orch/land.sh binds it to the branch tip.
 #
@@ -120,9 +125,11 @@ want() { [ -z "$only" ] || [[ ",$only," == *",$1,"* ]]; }
 sweep_seeds=${SWEEP_SEEDS:-200}
 fuzz_seconds=${FUZZ_SECONDS:-20}
 fuzz_floor=${FUZZ_RATE_FLOOR:-100}
+fuzz_max_retries=${FUZZ_MAX_RETRIES:-2}
 [[ "$sweep_seeds" =~ ^[1-9][0-9]*$ ]] || die "SWEEP_SEEDS must be a positive whole number"
 [[ "$fuzz_seconds" =~ ^[1-9][0-9]*$ ]] || die "FUZZ_SECONDS must be a positive whole number"
 [[ "$fuzz_floor" =~ ^[1-9][0-9]*$ ]] || die "FUZZ_RATE_FLOOR must be a positive whole number"
+[[ "$fuzz_max_retries" =~ ^(0|[1-9][0-9]{0,8})$ ]] || die "FUZZ_MAX_RETRIES must be a non-negative whole number"
 short=false; short_flag=()
 if [ "${GATE_SHORT:-}" = 1 ]; then short=true; short_flag=(-short); fi
 
@@ -222,7 +229,7 @@ marker_problem() {
 fuzz_report="$out/G5-fuzz.tsv"
 g5_fuzz() {
   local rc=0
-  env -u FUZZ_GO FUZZ_SECONDS="$fuzz_seconds" FUZZ_RATE_FLOOR="$fuzz_floor" FUZZ_REPORT="$fuzz_report" scripts/fuzz.sh || rc=$?
+  env -u FUZZ_GO FUZZ_SECONDS="$fuzz_seconds" FUZZ_RATE_FLOOR="$fuzz_floor" FUZZ_MAX_RETRIES="$fuzz_max_retries" FUZZ_REPORT="$fuzz_report" scripts/fuzz.sh || rc=$?
   if [ $rc = 0 ] && [ ! -s "$fuzz_report" ]; then echo "GATE: fuzz.sh passed but wrote no rate table to $fuzz_report"; rc=1; fi
   return $rc
 }
@@ -358,6 +365,10 @@ g3_unit() {
     go test -count=1 -timeout 30m ./...
   fi
 }
+g3_counted() {
+  no_go && return 0
+  env -u COUNTED_GO scripts/counted-growth.sh
+}
 g3_race() {
   local pkgs p; pkgs=$(list_file tools/lint-rules/race-packages.txt) || return 1
   [ -n "$pkgs" ] || { echo "NOTE: race-packages.txt lists no package yet"; return 0; }
@@ -409,15 +420,17 @@ if want G2; then
 fi
 if want G3; then
   check G3 unit g3_unit
+  check G3 counted g3_counted
   check G3 race g3_race
 fi
 want G4 && check G4 markers g4_markers
 want G4 && stage_check G4 sweep sweep env SWEEP_SEEDS="$sweep_seeds" RUN_DIR="$runs/sweep" scripts/sweep.sh
 want G5 && stage_check G5 fuzz fuzz g5_fuzz
-fuzz_targets=null; fuzz_sweeps=null
+fuzz_targets=null; fuzz_sweeps=null; fuzz_retries=null
 if want G5 && [ -s "$fuzz_report" ]; then
   fuzz_targets=$(tail -n +2 "$fuzz_report" | grep -c . || true)
   fuzz_sweeps=$(tail -n +2 "$fuzz_report" | awk -F '\t' '$5 == "seed-sweep"' | grep -c . || true)
+  fuzz_retries=$(tail -n +2 "$fuzz_report" | awk -F '\t' '$6 == "1"' | grep -c . || true)
 fi
 want G6 && stage_check G6 tier-r tier-r env RUN_DIR="$runs/tier-r" scripts/tier-r.sh
 want G7 && stage_check G7 csv csv-assert scripts/csv-assert.sh "$runs/sweep" "$runs/tier-r"
@@ -432,20 +445,22 @@ partial=false; [ -z "$only" ] || partial=true
 counts=false
 if [ "$overall" = pass ] && [ "$partial" = false ] && [ "$dirty" = false ] && [ "$sha" != unknown ] \
    && [ "$short" = false ] && [ "$custom_out" = false ] && [ "$sweep_seeds" -ge 200 ] && [ "$fuzz_seconds" -ge 20 ] \
-   && [ "$fuzz_floor" -ge 100 ]; then counts=true; fi
+   && [ "$fuzz_floor" -ge 100 ] && [[ "$fuzz_max_retries" =~ ^[012]$ ]]; then counts=true; fi
 jq -n --arg chunk "$chunk" --arg sha "$sha" --arg stage "$stage" --arg started "$started" \
   --arg finished "$(date -u +%FT%TZ)" --argjson seconds "$((SECONDS - t_start))" \
   --arg go "$(go version 2>&1)" --arg duckdb "$(duckdb --version 2>/dev/null | head -n1 || true)" \
   --arg overall "$overall" --argjson partial "$partial" --argjson dirty "$dirty" --argjson counts "$counts" \
   --argjson short "$short" --argjson sweep "$sweep_seeds" --argjson fuzz "$fuzz_seconds" \
-  --argjson fuzz_floor "$fuzz_floor" --argjson fuzz_targets "$fuzz_targets" --argjson fuzz_sweeps "$fuzz_sweeps" \
+  --argjson fuzz_floor "$fuzz_floor" --argjson fuzz_max_retries "$fuzz_max_retries" \
+  --argjson fuzz_targets "$fuzz_targets" --argjson fuzz_sweeps "$fuzz_sweeps" --argjson fuzz_retries "$fuzz_retries" \
   --arg cbase "$base_sha" --arg preprose "$preprose_sha" --arg only "$only" --argjson checks "$checks_json" \
   '{chunk:$chunk, sha:$sha, dirty_tree:$dirty, stage:$stage, partial:$partial, only:$only, overall:$overall,
     counts_for_landing:$counts, go_version:$go,
     duckdb_version:(if $duckdb == "" then "not found" else $duckdb end),
     started:$started, finished:$finished, seconds:$seconds,
     comment_baseline:$cbase, preprose_commit:$preprose, short:$short, sweep_seeds:$sweep, fuzz_seconds:$fuzz,
-    fuzz_rate_floor:$fuzz_floor, fuzz_targets:$fuzz_targets, fuzz_seed_sweeps:$fuzz_sweeps,
+    fuzz_rate_floor:$fuzz_floor, fuzz_max_retries:$fuzz_max_retries,
+    fuzz_targets:$fuzz_targets, fuzz_seed_sweeps:$fuzz_sweeps, fuzz_retries:$fuzz_retries,
     skip_not_built:[$checks[] | select(.status == "skip-not-built") | .gate + " " + .check],
     checks:$checks}' > "$out/result.json" || die "cannot write $out/result.json"
 echo "gate: overall=$overall counts_for_landing=$counts -> $out/result.json"
