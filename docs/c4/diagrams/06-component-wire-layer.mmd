@@ -3,7 +3,7 @@ flowchart TB
   N_WORK["Work vocabulary"]:::built
   N_SIM["Simulator harness"]:::planned
   PGPROTO3[["pgproto3 (from pgx/v5)"]]:::built
-  PG[("Postgres")]:::planned
+  PG[("Postgres")]:::built
   subgraph SCOPE["Wire layer"]
     W_FRAMER["Framer"]:::built
     W_MSGS["Message coding"]:::built
@@ -24,55 +24,58 @@ flowchart TB
     W_WORLD["Wire scenarios"]:::built
     W_CLSWORLD["Classifier scenarios"]:::built
   end
-  N_ENGINE -.->|1| W_CLIENT
-  N_ENGINE -.->|2| W_BACKEND
-  N_ENGINE -.->|3| W_CYCLE
-  N_ENGINE -.->|4| W_FRONT
-  N_ENGINE -.->|5| W_CLASSIFIER
-  N_ENGINE -.->|6| W_ERRORS
-  W_CLIENT -->|7| W_FRAMER
-  W_BACKEND -->|8| W_FRAMER
-  W_CYCLE -->|9| W_FRAMER
-  W_FRONT -->|10| W_FRAMER
-  W_CLIENT -->|11| W_MSGS
-  W_BACKEND -->|12| W_MSGS
-  W_CLIENT -->|13| W_FATAL
-  W_BACKEND -->|14| W_FATAL
-  W_CYCLE -->|15| W_FATAL
-  W_CLIENT -->|16| W_SCRAM
-  W_BACKEND -->|17| W_SCRAM
-  W_CLIENT -->|18| W_SNAPSHOT
-  W_BACKEND -->|19| W_SNAPSHOT
-  W_CYCLE -->|20| W_SNAPSHOT
-  W_FRONT -->|21| W_SNAPSHOT
-  W_ERRORS -->|22| W_MSGS
-  W_CODEC -.->|23| W_FRAMER
-  W_CODEC -.->|24| PGPROTO3
-  W_CLASSIFIER -->|25| W_LEXER
-  W_CLASSIFIER -->|26| W_REJECTS
-  W_CLASSIFIER -->|27| W_SHARE
-  W_CLASSIFIER -->|28| N_WORK
-  W_REJECTS -->|29| N_WORK
-  W_ERRORS -->|30| N_WORK
-  W_CYCLE -.->|31| N_WORK
-  W_HARNESS -->|32| W_CLIENT
-  W_HARNESS -->|33| W_BACKEND
-  W_HARNESS -->|34| W_CYCLE
-  W_HARNESS -->|35| W_FRONT
-  W_HARNESS -->|36| W_SNAPSHOT
-  W_HARNESS -->|37| N_SIM
-  W_WORLD -->|38| W_HARNESS
-  W_WORLD -->|39| N_SIM
-  W_HARNESS -->|40| PG
-  W_CLSWORLD -->|41| W_CLASSIFIER
-  W_CLSWORLD -->|42| W_ERRORS
-  W_CLSWORLD -->|43| W_REJECTS
-  W_CLSWORLD -->|44| W_FRONT
-  W_CLSWORLD -->|45| W_FRAMER
-  W_CLSWORLD -->|46| W_MSGS
-  W_CLSWORLD -->|47| W_SNAPSHOT
-  W_CLSWORLD -->|48| N_SIM
-  W_SHARE -->|49| PG
+  N_ENGINE -->|1| W_CLIENT
+  N_ENGINE -->|2| W_BACKEND
+  N_ENGINE -->|3| W_CYCLE
+  N_ENGINE -->|4| W_FRONT
+  N_ENGINE -->|5| W_CLASSIFIER
+  N_ENGINE -->|6| W_ERRORS
+  N_ENGINE -->|7| W_FRAMER
+  N_ENGINE -->|8| W_SNAPSHOT
+  N_ENGINE -->|9| W_MSGS
+  W_CLIENT -->|10| W_FRAMER
+  W_BACKEND -->|11| W_FRAMER
+  W_CYCLE -->|12| W_FRAMER
+  W_FRONT -->|13| W_FRAMER
+  W_CLIENT -->|14| W_MSGS
+  W_BACKEND -->|15| W_MSGS
+  W_CLIENT -->|16| W_FATAL
+  W_BACKEND -->|17| W_FATAL
+  W_CYCLE -->|18| W_FATAL
+  W_CLIENT -->|19| W_SCRAM
+  W_BACKEND -->|20| W_SCRAM
+  W_CLIENT -->|21| W_SNAPSHOT
+  W_BACKEND -->|22| W_SNAPSHOT
+  W_CYCLE -->|23| W_SNAPSHOT
+  W_FRONT -->|24| W_SNAPSHOT
+  W_ERRORS -->|25| W_MSGS
+  W_CODEC -.->|26| W_FRAMER
+  W_CODEC -.->|27| PGPROTO3
+  W_CLASSIFIER -->|28| W_LEXER
+  W_CLASSIFIER -->|29| W_REJECTS
+  W_CLASSIFIER -->|30| W_SHARE
+  W_CLASSIFIER -->|31| N_WORK
+  W_REJECTS -->|32| N_WORK
+  W_ERRORS -->|33| N_WORK
+  W_CYCLE -.->|34| N_WORK
+  W_HARNESS -->|35| W_CLIENT
+  W_HARNESS -->|36| W_BACKEND
+  W_HARNESS -->|37| W_CYCLE
+  W_HARNESS -->|38| W_FRONT
+  W_HARNESS -->|39| W_SNAPSHOT
+  W_HARNESS -->|40| N_SIM
+  W_WORLD -->|41| W_HARNESS
+  W_WORLD -->|42| N_SIM
+  W_HARNESS -->|43| PG
+  W_CLSWORLD -->|44| W_CLASSIFIER
+  W_CLSWORLD -->|45| W_ERRORS
+  W_CLSWORLD -->|46| W_REJECTS
+  W_CLSWORLD -->|47| W_FRONT
+  W_CLSWORLD -->|48| W_FRAMER
+  W_CLSWORLD -->|49| W_MSGS
+  W_CLSWORLD -->|50| W_SNAPSHOT
+  W_CLSWORLD -->|51| N_SIM
+  W_SHARE -->|52| PG
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned

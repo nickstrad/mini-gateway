@@ -22,7 +22,8 @@ func ErrorRowsMarkdown() string {
 		}
 		b.WriteString("| " + strings.Join(cells, " | ") + " |\n")
 	}
-	b.WriteString("\n\"Reached the database? no\" means no byte of the request was written to a database connection. The proxy's own retry may act only on rows where that column is \"no\".\n")
+	b.WriteString("\n\"Reached the database? no\" means no write of the request was attempted, or its first write was refused with zero bytes accepted (rule G8); once a write was handed to a database connection the request may have reached the database. The proxy's own retry may act only on rows where that column is \"no\".\n")
+	b.WriteString("\nThe choice between `lost-after-read` (08006, safe to retry) and `lost-after-write` (08007) rests on the classifier's safe shape (`SafeRead`, docs/safe-shape.md) and has the same limits: a view, a user-defined operator, a function shadowing an allow-listed name, or a table with a row-level security policy can hide a write behind a statement text that fits the safe shape. For such a statement the proxy may answer 08006 when a write happened; a database with such objects should treat 08006 like 08007.\n")
 	return b.String()
 }
 

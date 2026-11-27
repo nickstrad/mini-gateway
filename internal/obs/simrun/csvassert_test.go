@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 	"github.com/nickstrad/mini-gateway/internal/obs/simrun"
 	"github.com/nickstrad/mini-gateway/internal/sim/world"
+	"github.com/nickstrad/mini-gateway/test/e2e"
 )
 
 const envRequireDuckDB = "MG_REQUIRE_DUCKDB"
@@ -79,6 +81,9 @@ func baselineRuns(t *testing.T) string {
 		if baselineErr = wireRuns(dir); baselineErr == nil {
 			baselineErr = classifierRuns(dir)
 		}
+		if baselineErr == nil {
+			baselineErr = engineRuns(dir)
+		}
 	})
 	if baselineErr != nil {
 		t.Fatal(baselineErr)
@@ -127,12 +132,36 @@ func writeSQL(t *testing.T, body string) string {
 // assertions pass over flushed CSV files under DuckDB 1.5.x.
 func TestCSVAssertBaselineCountsFromFlushedFiles(t *testing.T) {
 	requireDuckDB(t)
-	out, err := csvAssert(t, nil, baselineRuns(t))
+	root := baselineRuns(t)
+	dirs, err := filepath.Glob(filepath.Join(repoRoot(t), "test", "analysis", "*"))
 	if err != nil {
-		t.Fatalf("%v\n%s", err, out)
+		t.Fatal(err)
 	}
-	if want := fmt.Sprintf("%d SQL files run, 0 failures", analysisFiles(t)); !strings.Contains(out, want) || !strings.Contains(out, "v1.5.") {
-		t.Fatalf("unexpected output\n%s", out)
+	ran, tierR := 0, 0
+	for _, d := range dirs {
+		sqls, _ := filepath.Glob(filepath.Join(d, "*.sql"))
+		if len(sqls) == 0 {
+			continue
+		}
+		name := filepath.Base(d)
+		if strings.HasPrefix(name, e2e.TierRPrefix) {
+			if !slices.Contains(e2e.TierRScenarios(), name) {
+				t.Fatalf("%s has SQL files but no tier R test writes that scenario", name)
+			}
+			tierR += len(sqls)
+			continue
+		}
+		out, err := csvAssert(t, nil, append([]string{filepath.Join(root, name)}, sqls...)...)
+		if err != nil {
+			t.Fatalf("%s: %v\n%s", name, err, out)
+		}
+		if want := fmt.Sprintf("%d SQL files run, 0 failures", len(sqls)); !strings.Contains(out, want) || !strings.Contains(out, "v1.5.") {
+			t.Fatalf("%s: unexpected output\n%s", name, out)
+		}
+		ran += len(sqls)
+	}
+	if ran+tierR != analysisFiles(t) || ran == 0 || tierR == 0 {
+		t.Fatalf("%d SQL files run over the simulator runs and %d left to the tier R runs, of %d", ran, tierR, analysisFiles(t))
 	}
 }
 

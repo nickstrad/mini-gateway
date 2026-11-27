@@ -151,7 +151,6 @@ func TestWireCountersMoveAndConserve(t *testing.T) {
 		"AuthFailures": {int(AuthCauseWrongPassword): true, int(AuthCauseUnknownUser): true, int(AuthCauseBadMechanism): true,
 			int(AuthCauseChannelBindingRefused): true, int(AuthCauseChannelBindingMismatch): true, int(AuthCauseNonceMismatch): true, int(AuthCauseMalformed): true},
 		"Violations":     {int(ViolationSecondTLSRequest): true, int(ViolationSecondGSSRequest): true, int(ViolationBadStartupPacket): true, int(ViolationUnknownMessage): true},
-		"TLSFailed":      {int(HandshakeViolation): true},
 		"StartupsFailed": {int(ClassLost): false},
 	}
 	check := func(side string, v reflect.Value, skip map[string]map[int]bool) {

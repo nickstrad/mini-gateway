@@ -1,0 +1,20 @@
+{
+  "listen": "127.0.0.1:6432",
+  "admin_listen": "127.0.0.1:6433",
+  "instance": "gw-1",
+  "database": {"address": "127.0.0.1:5432", "name": "app", "user": "gateway", "password": "gateway-secret", "password_file": ""},
+  "client_tls": {"mode": "require", "cert_file": "server.crt", "key_file": "server.key"},
+  "backend_tls": {"mode": "require", "ca_file": "", "server_name": ""},
+  "tenants": [
+    {"user": "alice", "verifier": "SCRAM-SHA-256$4096:YWxpY2Utc2FsdC0xNmJ5dA==$wFsWRjw4CdurXhNfUCJ5TYgWLpm7VaVe1BnlT3YMkHQ=:kigZ7dHs129bcEpWRXAE1OULr7tdMHWVvgKrM5fmcQU="},
+    {"user": "bob", "verifier": "SCRAM-SHA-256$4096:Ym9iLXNhbHQtMTZieXRlcw==$6LsavMiZUI+B727MKlgjdT/C6El3jPBup8NRgJxLzec=:V9non7svIjxX0rnRmMlvrZyEtUOZzxkPhfzjiMzQZZ8="}
+  ],
+  "pool": {"connections": 4},
+  "queue": {"capacity": 256},
+  "limits": {"max_clients": 1024, "max_startup": 128, "reply_buffer": 262144},
+  "timeouts": {"client_startup": "5s", "client_mid_message": "5s", "client_idle": "10m", "queue_wait": "5s",
+               "database_connect": "2s", "statement": "30s", "reset": "1s", "client_write": "5s", "redial_delay": "100ms"},
+  "lease": {"reset": "always"},
+  "obs": {"publish_interval": "1s", "detail": true, "csv": {"dir": "", "max_bytes": 0}},
+  "fleet": {"instances": 1, "backend_connections": 4, "connect_rate_per_s": 10, "backend_max_connections": 100}
+}

@@ -2,7 +2,8 @@
 # header for what it does.
 #
 #   make test             the CI set (scripts/ci-fast.sh)
-#   make chaos            the named chaos scenarios      (not built yet: chunk 6)
+#   make chaos            the named chaos scenarios, tier S then tier R (scripts/chaos.sh;
+#                         CHAOS_SEEDS=N, VERBOSE=1 for the raw output)
 #   make bench            the benchmarks                 (not built yet: chunk 14)
 #   make gate CHUNK=c01-sim-kernel    the local landing gate for one chunk
 #   make ci               scripts/ci-fast.sh, exactly what CI runs
@@ -24,8 +25,7 @@ test:
 	scripts/ci-fast.sh
 
 chaos:
-	@if [ -e $(NOT_BUILT)/make-chaos ]; then echo "make chaos: not built yet" >&2; exit 1; fi
-	@echo "make chaos: the marker $(NOT_BUILT)/make-chaos is gone but no recipe was written" >&2; exit 1
+	@scripts/chaos.sh
 
 bench:
 	@scripts/bench.sh

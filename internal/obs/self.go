@@ -92,8 +92,8 @@ func (c *Collector) selfView() InstanceSnapshot {
 	e := Emitter{reg: &c.reg, component: ComponentObs, detail: c.cfg.Detail}
 	c.emitSelfAt(&e, c.seq)
 	e.finish()
-	out := c.last
-	out.Points = make([]Point, 0, len(c.last.Points)+len(e.points))
+	out := c.last.Clone()
+	out.Points = out.Points[:0]
 	for _, p := range c.last.Points {
 		if p.Component != ComponentObs {
 			out.Points = append(out.Points, p)

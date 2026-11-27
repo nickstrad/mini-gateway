@@ -3,6 +3,7 @@ package csvflush_test
 import (
 	"encoding/csv"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,4 +105,21 @@ func records(t *testing.T, path string) [][]string {
 		t.Fatal(err)
 	}
 	return r
+}
+
+// TestZeroFlushCloseCountsAFailedOpen proves a zero-flush Close whose file open fails increments FlushErrors.
+func TestZeroFlushCloseCountsAFailedOpen(t *testing.T) {
+	cfg := config(t.TempDir())
+	cfg.Strict = false
+	csvflush.SetCreate(&cfg, func(string) (io.WriteCloser, error) { return nil, errors.New("disk gone") })
+	w := newWriter(t, cfg)
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if st := w.FlushStats(); st.FlushErrors != 1 {
+		t.Fatalf("a close whose open failed must count one flush error: %+v", st)
+	}
+	if err := w.Err(); err == nil || !strings.Contains(err.Error(), "disk gone") {
+		t.Fatalf("the open error must be kept: %v", err)
+	}
 }

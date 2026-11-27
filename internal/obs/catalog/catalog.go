@@ -10,6 +10,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 	"github.com/nickstrad/mini-gateway/internal/obs/clssrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/csvflush"
+	"github.com/nickstrad/mini-gateway/internal/obs/enginesrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/simsrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/wiresrc"
 )
@@ -29,6 +30,9 @@ func Registry() (*obs.Registry, error) {
 		return nil, err
 	}
 	if err := reg.Declare(obs.ComponentClassifier, clssrc.Metrics()...); err != nil {
+		return nil, err
+	}
+	if err := reg.Declare(obs.ComponentEngine, enginesrc.AllMetrics()...); err != nil {
 		return nil, err
 	}
 	for _, d := range simsrc.All() {

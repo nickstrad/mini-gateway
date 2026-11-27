@@ -37,7 +37,7 @@ func testTenants(t testing.TB) *TenantTable {
 	t.Helper()
 	var ts []Tenant
 	for _, u := range []string{"alice", "bob"} {
-		v, err := NewVerifier(testPassword+"-"+u, []byte("salt-of-"+u+"-0123"), testIters)
+		v, err := NewVerifier(testPassword+"-"+u, []byte(("salt-of-" + u + "-0123456789")[:16]), testIters)
 		if err != nil {
 			t.Fatal(err)
 		}

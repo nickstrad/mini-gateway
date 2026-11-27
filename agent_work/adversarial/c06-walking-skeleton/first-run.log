@@ -1,0 +1,12 @@
+--- FAIL: TestAdv_3_ResetWithTrailingReply (0.00s)
+    engine_test.go:61: seed=6062026
+    engine_test.go:63: database lent with unread reset residue; wrote "Q\x00\x00\x00\x0eSELECT 82\x00Q\x00\x00\x00\x10DISCARD ALL\x00"
+--- FAIL: TestAdv_3_ResetDeadlineTie (0.00s)
+    engine_test.go:61: seed=6062026
+    engine_test.go:64: reset at expired deadline dispatched queued query
+--- FAIL: TestAdv_13_ExplicitZeroCapacity (0.00s)
+    scenarios_test.go:37: seed=6062026
+    scenarios_test.go:37: accepted invalid queue.capacity
+FAIL
+FAIL	github.com/nickstrad/mini-gateway/agent_work/adversarial/c06-walking-skeleton	1.252s
+FAIL

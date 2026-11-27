@@ -1,16 +1,16 @@
 flowchart TB
-  APP(["Client application"]):::planned
-  OPERATOR(["Operator"]):::planned
+  APP(["Client application"]):::built
+  OPERATOR(["Operator"]):::built
   DEVELOPER(["Developer or reader"]):::built
   GW["mini-gateway"]:::planned
-  PG[("Postgres")]:::planned
+  PG[("Postgres")]:::built
   TELEMETRY[["Metrics and log readers"]]:::planned
   PGPROTO3[["pgproto3 (from pgx/v5)"]]:::built
-  APP -.->|1| GW
-  OPERATOR -.->|2| GW
+  APP -->|1| GW
+  OPERATOR -->|2| GW
   DEVELOPER -.->|3| GW
-  GW -.->|4| PG
-  TELEMETRY -.->|5| GW
+  GW -->|4| PG
+  TELEMETRY -->|5| GW
   GW -.->|6| TELEMETRY
   GW -.->|7| PGPROTO3
   subgraph KEY["Key"]

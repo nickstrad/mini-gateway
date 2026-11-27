@@ -1,5 +1,5 @@
 flowchart TB
-  N_SHELL["Shell and binary"]:::planned
+  N_SHELL["Shell and binary"]:::built
   N_SIM["Simulator harness"]:::planned
   N_PGWIRE["Wire layer"]:::planned
   N_ADM["Admission"]:::planned
@@ -9,36 +9,47 @@ flowchart TB
   N_OBS["Observability"]:::planned
   N_WORK["Work vocabulary"]:::built
   subgraph SCOPE["Engine"]
-    E_TRANSPORT["Transport seam"]:::planned
-    E_SESSIONS["Client session table"]:::planned
-    E_BACKENDS["Database connection table"]:::planned
-    E_PIPELINE["Request pipeline"]:::planned
+    E_TRANSPORT["Transport seam"]:::built
+    E_SESSIONS["Client session table"]:::built
+    E_BACKENDS["Database connection table"]:::built
+    E_PIPELINE["Request pipeline"]:::built
+    E_SEAMS["Stage seams and stand-ins"]:::built
+    E_RESET["Lease end and reset"]:::built
     E_RELAY["Reply relay"]:::planned
-    E_FAIL["Failure classifier"]:::planned
-    E_CLOCK["Deadline table"]:::planned
+    E_FAIL["Failure classifier"]:::built
+    E_CLOCK["Deadline table"]:::built
     E_DRAIN["Drain controller"]:::planned
-    E_PUBLISH["Snapshot publisher"]:::planned
+    E_PUBLISH["Snapshot publisher"]:::built
+    E_PROXYSIM["Simulator driver"]:::built
   end
-  N_SHELL -.->|1 implements| E_TRANSPORT
-  N_SIM -.->|2 implements| E_TRANSPORT
-  E_TRANSPORT -.->|3| E_SESSIONS
-  E_TRANSPORT -.->|4| E_BACKENDS
-  E_SESSIONS -.->|5| N_PGWIRE
-  E_BACKENDS -.->|6| N_PGWIRE
-  E_SESSIONS -.->|7| E_PIPELINE
-  E_PIPELINE -.->|8| N_ADM
-  E_PIPELINE -.->|9| N_COAL
-  E_PIPELINE -.->|10| N_POOL
-  E_PIPELINE -.->|11| N_RETRY
-  E_PIPELINE -.->|12| E_BACKENDS
-  E_BACKENDS -.->|13| E_RELAY
-  E_RELAY -.->|14| E_SESSIONS
-  E_PIPELINE -.->|15| E_FAIL
-  E_FAIL -.->|16| N_PGWIRE
-  E_CLOCK -.->|17| E_PIPELINE
-  E_DRAIN -.->|18| E_PIPELINE
-  E_PUBLISH -.->|19| N_OBS
-  E_PIPELINE -.->|20| N_WORK
+  N_SHELL -->|1 implements| E_TRANSPORT
+  E_PROXYSIM -->|2 implements| E_TRANSPORT
+  E_PROXYSIM -->|3| N_SIM
+  E_TRANSPORT -->|4| E_SESSIONS
+  E_TRANSPORT -->|5| E_BACKENDS
+  E_SESSIONS -->|6| N_PGWIRE
+  E_BACKENDS -->|7| N_PGWIRE
+  E_SESSIONS -->|8| E_PIPELINE
+  E_PIPELINE -->|9| N_PGWIRE
+  E_PIPELINE -->|10| E_SEAMS
+  E_PIPELINE -.->|11| N_ADM
+  E_PIPELINE -.->|12| N_COAL
+  E_PIPELINE -.->|13| N_POOL
+  E_PIPELINE -.->|14| N_RETRY
+  E_PIPELINE -->|15| E_BACKENDS
+  E_BACKENDS -->|16| E_RELAY
+  E_RELAY -->|17| E_SESSIONS
+  E_RELAY -.->|18| E_RESET
+  E_RESET -->|19| E_BACKENDS
+  E_RESET -->|20| E_SEAMS
+  E_RESET -->|21| N_PGWIRE
+  E_PIPELINE -->|22| E_FAIL
+  E_FAIL -->|23| N_PGWIRE
+  E_FAIL -->|24| E_SEAMS
+  E_CLOCK -->|25| E_PIPELINE
+  E_DRAIN -->|26| E_PIPELINE
+  E_PUBLISH -->|27| N_OBS
+  E_PIPELINE -->|28| N_WORK
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned

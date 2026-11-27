@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "id": "mini-gateway",
  "title": "mini-gateway — target architecture",
- "revision": "target-approved-2026-11-24-rulings+built-through-chunk-5",
+ "revision": "target-approved-2026-11-24-rulings+built-through-chunk-6",
  "defaultDiagramId": "context",
  "model": {
   "elements": [
@@ -11,7 +11,7 @@
     "kind": "person",
     "name": "Client application",
     "description": "Any program that speaks the Postgres wire protocol. Its startup user name selects its tenant.",
-    "status": "planned",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -23,8 +23,8 @@
     "id": "operator",
     "kind": "person",
     "name": "Operator",
-    "description": "Runs proxy instances, writes the static fleet config, reads health and stats, drains an instance with SIGTERM.",
-    "status": "planned",
+    "description": "Runs proxy instances, writes the config file with its static fleet block, reads health and stats, stops an instance with SIGTERM (a plain stop so far; a graceful drain from chunk 13).",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -52,7 +52,9 @@
     "description": "A proxy that speaks the Postgres wire protocol (simple-query subset) in front of one Postgres: a hard-capped connection pool lent per transaction, per-tenant admission with two CoDel modes, read coalescing, an off-by-default retry policy, snapshot observability. Terminates client TLS; logs clients in with SCRAM-SHA-256. Runs as N independent instances.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 6: a working proxy, the walking skeleton — cmd/mini-gateway terminates client TLS, logs clients in with SCRAM-SHA-256, lends one of a fixed set of database connections per transaction, resets it after every lease, queues waiting requests in one bounded first-come queue, and serves health, stats and metrics from snapshots. Not built: the pool with its breaker, per-tenant admission with the two CoDel modes, read coalescing, the retry policy, the OTLP push, and the fleet division and drain of N instances."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -64,7 +66,7 @@
     "kind": "softwareSystem",
     "name": "Postgres",
     "description": "One ordinary Postgres server. Sees at most the fleet's connection budget, all logged in as one role.",
-    "status": "planned",
+    "status": "existing",
     "tags": [
      "external"
     ],
@@ -174,8 +176,8 @@
     "id": "c-shell",
     "kind": "container",
     "name": "Shell and binary",
-    "description": "cmd/mini-gateway and internal/shell. Listeners, one reader and one writer goroutine per connection, bounded mailboxes, a deadline on every socket operation, TLS on both legs with crypto/tls (it answers a client's TLS request, upgrades the socket and buffers nothing across the upgrade), the admin listener on its own port, signal handling. Makes no decisions: it posts events to the engine and performs the actions the engine returns.",
-    "status": "planned",
+    "description": "cmd/mini-gateway and internal/shell. The binary (-config, -check, -verifier) and the goroutine shell: the client listener, one reader and one writer goroutine per connection, one bounded mailbox into the engine's goroutine, a bounded write queue per connection, a deadline on every socket operation, TLS on both legs with crypto/tls (it reads exactly the 8 bytes of a client's first packet, upgrades the socket when the engine says so and buffers nothing across the upgrade), the admin listener on its own port, the collector with its JSON, Prometheus and CSV adapters, and signal handling: SIGTERM or SIGINT stops the process (a plain stop so far; the graceful drain is chunk 13). Makes no decisions: it posts events to the engine and performs the actions the engine returns.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -191,7 +193,7 @@
     "kind": "container",
     "name": "Shell and binary",
     "description": "Neighbour in a component view: stands for the container `c-shell`.",
-    "status": "planned",
+    "status": "existing",
     "tags": [
      "external",
      "neighbour"
@@ -209,10 +211,12 @@
     "id": "c-engine",
     "kind": "container",
     "name": "Engine",
-    "description": "internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code.",
+    "description": "internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code; its test package proxysim is the simulator's driver.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). The stages that belong to cores not built yet run their stand-ins: a breaker that is always closed, a rate gate that always allows, no coalescing, one bounded first-come queue, a fixed set of connections, retry off."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -231,7 +235,9 @@
      "external",
      "neighbour"
     ],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). The stages that belong to cores not built yet run their stand-ins: a breaker that is always closed, a rate gate that always allows, no coalescing, one bounded first-come queue, a fixed set of connections, retry off."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -248,7 +254,7 @@
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunks 4 and 5 (internal/pgwire): every component drawn here except the codec boundary. Chunk 4: the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the two trackers, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest and wireworld. Chunk 5: the SQL lexer, the reject list, the statement classifier, the safe-shape recogniser, the error table with its reply builders, and the test package clsworld. Not built: the codec boundary (no file in the package imports pgproto3; the reply builders code their messages by hand). No engine exists yet, so only the test proxies drive this code, and nothing produces outcomes."
+     "Built in chunks 4 and 5 (internal/pgwire): every component drawn here except the codec boundary. Chunk 4: the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the two trackers, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest and wireworld. Chunk 5: the SQL lexer, the reject list, the statement classifier, the safe-shape recogniser, the error table with its reply builders, and the test package clsworld. Chunk 6: the engine drives this code, and the client session machine takes every FATAL from the error table (three startup rows added). Not built: the codec boundary (no file in the package imports pgproto3; the reply builders code their messages by hand). Nothing produces outcomes yet."
     ],
     "docIds": [],
     "sourceIds": [
@@ -269,7 +275,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunks 4 and 5 (internal/pgwire): every component drawn here except the codec boundary. Chunk 4: the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the two trackers, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest and wireworld. Chunk 5: the SQL lexer, the reject list, the statement classifier, the safe-shape recogniser, the error table with its reply builders, and the test package clsworld. Not built: the codec boundary (no file in the package imports pgproto3; the reply builders code their messages by hand). No engine exists yet, so only the test proxies drive this code, and nothing produces outcomes."
+     "Built in chunks 4 and 5 (internal/pgwire): every component drawn here except the codec boundary. Chunk 4: the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the two trackers, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest and wireworld. Chunk 5: the SQL lexer, the reject list, the statement classifier, the safe-shape recogniser, the error table with its reply builders, and the test package clsworld. Chunk 6: the engine drives this code, and the client session machine takes every FATAL from the error table (three startup rows added). Not built: the codec boundary (no file in the package imports pgproto3; the reply builders code their messages by hand). Nothing produces outcomes yet."
     ],
     "docIds": [],
     "sourceIds": [
@@ -462,7 +468,7 @@
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunks 1, 3, 4 and 5: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP."
+     "Built in chunks 1, 3, 4, 5 and 6: everything except the OTLP push adapter (chunk 15) and the health rules for shedding, an open breaker, the limit's floor and draining (chunk 7 on). Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness."
     ],
     "docIds": [],
     "sourceIds": [
@@ -483,7 +489,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunks 1, 3, 4 and 5: everything except the OTLP push adapter (chunk 15) and the health rules that read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP."
+     "Built in chunks 1, 3, 4, 5 and 6: everything except the OTLP push adapter (chunk 15) and the health rules for shedding, an open breaker, the limit's floor and draining (chunk 7 on). Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness."
     ],
     "docIds": [],
     "sourceIds": [
@@ -497,10 +503,12 @@
     "id": "c-config",
     "kind": "container",
     "name": "Configuration",
-    "description": "internal/config. The config file, the static fleet block (instance count N; fleet budgets divided by N), and load-time validation that fails closed.",
+    "description": "internal/config. The config file (JSON), the client_tls and backend_tls blocks, the static fleet block (instance count N; fleet budgets divided by N), load-time validation that fails closed and names the key, and the config fingerprint.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 6 (internal/config): the JSON config file with its defaults, validation that fails closed and names the key (the timeout nesting too), the client_tls and backend_tls blocks, the config fingerprint, and the fleet block parsed and checked (pool.connections must fit fleet.backend_connections / fleet.instances, which must divide evenly and fit the database's limit with a reserve). Not built: nothing takes its budget from the division yet (chunk 7 on; the fleet configuration is chunk 13)."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -519,7 +527,9 @@
      "external",
      "neighbour"
     ],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 6 (internal/config): the JSON config file with its defaults, validation that fails closed and names the key (the timeout nesting too), the client_tls and backend_tls blocks, the config fingerprint, and the fleet block parsed and checked (pool.connections must fit fleet.backend_connections / fleet.instances, which must divide evenly and fit the database's limit with a reserve). Not built: nothing takes its budget from the division yet (chunk 7 on; the fleet configuration is chunk 13)."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -538,7 +548,7 @@
      "test"
     ],
     "plannedNotes": [
-     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: no engine exists yet, so the harness drives the fake Postgres, the toy protocol and the wire layer's two test proxies (startup-only, and the classifier scenarios' gateway); nothing implements the engine's transport seam, and no synthetic workload drives the cores."
+     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Since chunk 6 the engine runs on it, through the engine's own test package internal/proxy/proxysim. Not built: no synthetic workload drives the cores (no core exists yet)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -559,7 +569,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: no engine exists yet, so the harness drives the fake Postgres, the toy protocol and the wire layer's two test proxies (startup-only, and the classifier scenarios' gateway); nothing implements the engine's transport seam, and no synthetic workload drives the cores."
+     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Since chunk 6 the engine runs on it, through the engine's own test package internal/proxy/proxysim. Not built: no synthetic workload drives the cores (no core exists yet)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -573,12 +583,14 @@
     "id": "c-e2e",
     "kind": "container",
     "name": "End-to-end suite and load generator",
-    "description": "test/e2e and cmd/loadgen. Each scenario is written once and runs on the simulator (tier S) and on the real binary against a real Postgres (tier R). The load generator is open-loop.",
+    "description": "test/e2e and cmd/loadgen. Each scenario is written once and runs on the simulator (tier S) and on the real binary against a real Postgres (tier R), with the CSV flush on and SQL assertions over the files. Holds the engine's operation fuzz target and the canaries. The load generator is open-loop.",
     "status": "planned",
     "tags": [
      "test"
     ],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Not built: cmd/loadgen, the open-loop load generator (chunk 6a), and make bench."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -597,7 +609,9 @@
      "external",
      "neighbour"
     ],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Not built: cmd/loadgen, the open-loop load generator (chunk 6a), and make bench."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -610,8 +624,8 @@
     "id": "e-transport",
     "kind": "component",
     "name": "Transport seam",
-    "description": "Dialer and byte-stream connection events and actions: open, bytes in, bytes out, closed. Knows no protocol. Two implementations: TCP in the shell, simulated streams in the harness.",
-    "status": "planned",
+    "description": "The engine's contract with its driver, as plain events and actions (no Go interface). Events in: accepted, bytes arrived, bytes written, write refused, closed, dial failed, TLS result, timer, publish. Actions out: write, close, start TLS, pause and resume reading, open a database connection, wake at a time, publish. Knows no protocol; its read rule (exactly 8 bytes of a new client, one unprocessed read per connection) keeps bytes from crossing a TLS upgrade. Two implementations: TCP in the shell, simulated streams in proxysim.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -619,14 +633,14 @@
      "plan"
     ],
     "parentId": "c-engine",
-    "technology": "Go interface"
+    "technology": "Go types: events and actions"
    },
    {
     "id": "e-sessions",
     "kind": "component",
     "name": "Client session table",
-    "description": "One entry per client connection: its wire state machine, tenant, transaction state, the single request it may have inside the proxy, and its bounded reply buffer.",
-    "status": "planned",
+    "description": "One entry per client connection: its wire state machines, tenant, phase (startup, idle, queued, active, holding a connection), transaction status, the single request it may have inside the proxy, a bounded input buffer and the count of reply bytes not yet written. Caps the clients connected and the clients in startup.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -640,8 +654,8 @@
     "id": "e-backends",
     "kind": "component",
     "name": "Database connection table",
-    "description": "One entry per database connection: its wire state machine, the query-cycle tracker, and who holds it.",
-    "status": "planned",
+    "description": "One entry per database connection: its wire state machine, the query-cycle tracker, its phase (dialing, startup, idle, lent, resetting) and who holds it. So far it also keeps the fixed set full itself: opens the configured number at start, one dial at a time, and dials again after a loss, after a short delay when the connect failed (the pool decides this from chunk 7).",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -655,8 +669,38 @@
     "id": "e-pipeline",
     "kind": "component",
     "name": "Request pipeline",
-    "description": "The fixed order every request takes, each stage a small interface: classify, reject list, draining, breaker, rate gate, coalesce, queue, lease, forward, release. Statements inside an open transaction skip from classify straight to forward on the connection the client already holds.",
-    "status": "planned",
+    "description": "The fixed order every request takes: classify, reject list, draining, breaker, rate gate, coalesce, queue, lease, forward, release. Each stage is counted as passed or refused, and each refusal is answered with its error-contract row. A queued request has a wait deadline. Statements inside an open transaction skip from the reject list straight to forward on the connection the client already holds.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go"
+   },
+   {
+    "id": "e-seams",
+    "kind": "component",
+    "name": "Stage seams and stand-ins",
+    "description": "The small interfaces the pipeline calls: classifier, breaker, rate gate, coalescer, queue, pool, release policy, retry policy. Also the implementations used until each core lands: a breaker that is always closed, a rate gate that always allows, no coalescing, one bounded first-come queue, a fixed set of connections, reset after every lease, retry off. The engine's config can replace any of them.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go interfaces"
+   },
+   {
+    "id": "e-reset",
+    "kind": "component",
+    "name": "Lease end and reset",
+    "description": "A lease ends when a reply ends with status idle; while the status is in-transaction or failed the client keeps its connection. At release the policy answers reset, lend as is, or close (close when the status is not idle or bytes are left unread). The reset is DISCARD ALL sent as the proxy's own Query: the connection is lent again only after exactly that tag and status idle, with nothing after them, inside the reset deadline. Anything else closes it, counted by reason. Nothing of the reset's reply reaches a client.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -670,10 +714,12 @@
     "id": "e-relay",
     "kind": "component",
     "name": "Reply relay",
-    "description": "Streams database messages to the client (or to every waiter of a shared read) through bounded buffers, with back pressure in both directions. Never sends a short reply that looks complete.",
+    "description": "Streams database messages to the client (or to every waiter of a shared read) as they arrive, through a bounded buffer per client, with back pressure in both directions: reading the database connection is paused while the client is behind, reading the client while its request is in progress. ErrorResponse and ReadyForQuery are held whole, so a FATAL from the database becomes an error-contract reply. Never sends a short reply that looks complete.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 6 (internal/proxy: relay, relayEvents and relayed in lease.go; writeClient and the pauses in client.go): all of it for the one client of a reply. Not built: the fan-out to every waiter of a shared read (chunk 11)."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -685,8 +731,8 @@
     "id": "e-fail",
     "kind": "component",
     "name": "Failure classifier",
-    "description": "For every failure records whether any byte reached the database, and picks the error-contract row.",
-    "status": "planned",
+    "description": "For every failure records whether the request may have reached the database (no only when the driver reports that its first write was refused with zero bytes accepted) and picks the error-contract row: 08006 for a safe read or when nothing reached, 08007 otherwise, FATAL 08006 when a transaction lost its connection, and a close with no message once part of the reply was sent. Hands the fact to the retry seam.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -700,8 +746,8 @@
     "id": "e-clock",
     "kind": "component",
     "name": "Deadline table",
-    "description": "Every wait in the timeout budget, as deadlines on the injected clock; returns the next wake-up time as an action.",
-    "status": "planned",
+    "description": "Every wait the engine has, as deadlines on the clock passed in with each event: one heap, and the next wake-up time returned as an action. Timers due at or before an event's time fire before the event is processed, so whatever arrives at the instant of its deadline is late.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -718,7 +764,9 @@
     "description": "Sequences shutdown: stop admitting, finish transactions in progress within a bound, close idle connections, exit.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 6 (internal/proxy: the EvDraining input, gates in lease.go, Shutdown in engine.go): while the draining input is on, new work from a client outside a transaction is refused with 53M05 and that client is closed after the reply (unit-tested; nothing in the binary sets it yet); and a plain stop that closes every client and connection. Not built: the sequence — finish transactions in progress within a bound, close idle connections, exit (chunk 13)."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -730,9 +778,26 @@
     "id": "e-publish",
     "kind": "component",
     "name": "Snapshot publisher",
-    "description": "Collects every component's Snapshot() between events and hands the copy to the collector.",
-    "status": "planned",
+    "description": "Snapshot(): the engine's counters as one plain struct — clients, requests by stage and outcome, replies by row, leases, resets, relay, connections, three histograms — with its conservation check, beside the wire, classifier and reply snapshots the engine holds. On a publish event the engine returns a publish action; its driver then has the collector read the snapshots, between events.",
+    "status": "existing",
     "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go"
+   },
+   {
+    "id": "e-proxysim",
+    "kind": "component",
+    "name": "Simulator driver",
+    "description": "internal/proxy/proxysim. The engine on the simulator: accepts and dials on simulated streams, keeps the same read rule as the shell, plays the simulated TLS handshake on both legs, reports writes and refused writes, and registers the engine's invariants, quiesce check and state with the simulator. Its World builds the simulator, the network, the fake Postgres and the engine for a scenario.",
+    "status": "existing",
+    "tags": [
+     "test"
+    ],
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -865,7 +930,7 @@
     "id": "w-fatal",
     "kind": "component",
     "name": "Startup FATAL replies",
-    "description": "The replies the session machines make themselves during startup: an ErrorResponse with severity, SQLSTATE and message, the old-format error for a protocol 2 client, and NegotiateProtocolVersion. Also parses the severity and SQLSTATE of an ErrorResponse from the database. The error table lists the startup rows too, but the session machines still build their replies here.",
+    "description": "The replies the session machines make themselves during startup: an ErrorResponse with severity, SQLSTATE and message, the old-format error for a protocol 2 client, and NegotiateProtocolVersion. Also parses the severity and SQLSTATE of an ErrorResponse from the database. The client session machine names a row of the error table for every FATAL it writes and takes the code from that row; the encoders stay here.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -955,7 +1020,7 @@
     "id": "w-errors",
     "kind": "component",
     "name": "Error contract and reply builders",
-    "description": "One table of 20 rows: each refusal and failure, its reply form, its SQLSTATE, whether anything reached the database, whether a write may have applied, and what happens to the client connection. The reply builder appends the ErrorResponse and the correct end marker for a row and counts replies by row. The discard-until-Sync rule refuses extended-protocol messages. docs/error-contract.md is generated from the table. Later chunks start to send their rows; so far only the two unsupported rows are sent, by the test gateway.",
+    "description": "One table of 23 rows: each refusal and failure, its reply form, its SQLSTATE, whether anything reached the database, whether a write may have applied, and what happens to the client connection. The reply builder appends the ErrorResponse and the correct end marker for a row and counts replies by row. The discard-until-Sync rule refuses extended-protocol messages. docs/error-contract.md is generated from the table. The engine sends the rows of the walking skeleton and the client session machine the startup rows; the rows of cores not built yet (breaker, rate gate and others) are not sent so far.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -1865,11 +1930,11 @@
     "id": "o-health",
     "kind": "component",
     "name": "Health",
-    "description": "Three states, the worst over a table of named rules, with a reason per rule and a JSON body. The collector rule: degraded before the first publish, and while the latest publish had metric errors or an adapter's export failed. Other rules: degraded while shedding, while the breaker is open, at the limit's floor, or draining; failed only when this instance cannot work. A database outage is degraded.",
+    "description": "Three states, the worst over a table of named rules, with a reason per rule and a JSON body. The collector rule: degraded before the first publish, and while the latest publish had metric errors or an adapter's export failed. Other rules: degraded while shedding, while the breaker is open, at the limit's floor, or draining; failed only when this instance cannot work (its client listener is down). A database outage is degraded.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunk 3 (internal/obs: health.go): the three states, the rule table (overall state is the worst rule), the collector rule and the JSON body. Not built: the rules for shedding, an open breaker, the limit's floor, draining and a database outage, and any rule that gives failed (chunk 6 on)."
+     "Built in chunks 3 and 6. Chunk 3 (internal/obs: health.go): the three states, the rule table (overall state is the worst rule), the collector rule and the JSON body. Chunk 6: the rule database (internal/obs/enginesrc: degraded while no database connection is usable and the last connect failed) and the rule listener (internal/shell: failed while the client listener is down). Not built: the rules for shedding, an open breaker, the limit's floor and draining (chunk 7 on)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -2001,6 +2066,21 @@
     "technology": "Go"
    },
    {
+    "id": "o-enginesrc",
+    "kind": "component",
+    "name": "Engine source mapping",
+    "description": "internal/obs/enginesrc. The metric declarations of component engine and the mapping to points from two snapshots: the engine's, and the shell's (mailbox depth and peak, goroutines, readers and writers, deadlines; names shell_...). Labels are outcome, reason and mode; no tenant label so far. Registers the engine's wire and classifier sources beside its own. Holds the health rule database: degraded while no database connection is usable and the last connect failed.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
     "id": "o-catalog",
     "kind": "component",
     "name": "Metric catalog and schema document",
@@ -2019,7 +2099,7 @@
     "id": "o-simrun",
     "kind": "component",
     "name": "Scenario flush harness",
-    "description": "internal/obs/simrun. Runs a simulator world scenario, a wire scenario or a classifier scenario, with a collector that publishes on the virtual clock and with the CSV, JSON, Prometheus and log adapters attached, then checks every output against the final snapshot. Its tests run the five direct baselines, every wire scenario and both classifier scenarios twice per seed and compare the files byte for byte.",
+    "description": "internal/obs/simrun. Runs a simulator world scenario, a wire scenario, a classifier scenario, or any run handed its simulator and sources (the end-to-end suite's tier S scenarios), with a collector that publishes on the virtual clock and with the CSV, JSON, Prometheus and log adapters attached, then checks every output against the final snapshot. Its tests run the five direct baselines, every wire scenario and both classifier scenarios twice per seed and compare the files byte for byte.",
     "status": "existing",
     "tags": [
      "test"
@@ -2036,7 +2116,7 @@
     "id": "o-assert",
     "kind": "component",
     "name": "SQL assertions and their runner",
-    "description": "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The assertion files check the direct baselines' counts and, for each wire scenario, that startup failures by reason, TLS requests by answer and handshake failures equal what was injected and sent, and for the classifier scenarios that rejects equal the statements sent and the fake Postgres started only what was forwarded (nothing in the reject-only scenario).",
+    "description": "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The assertion files check the direct baselines' counts and, for each wire scenario, that startup failures by reason, TLS requests by answer and handshake failures equal what was injected and sent, and for the classifier scenarios that rejects equal the statements sent and the fake Postgres started only what was forwarded (nothing in the reject-only scenario). For the end-to-end scenarios of both tiers: conservation per instance, the resets against the leases ended and, where the scenario has a fault, error-contract replies by row = faults injected; in tier S also proxy completed = workload completed and replies by row = what the clients saw.",
     "status": "existing",
     "tags": [
      "test"
@@ -2209,7 +2289,7 @@
     "sourceId": "app",
     "targetId": "gw",
     "label": "Connects, logs in, sends statements and transactions",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2221,8 +2301,8 @@
     "id": "r-op-gw",
     "sourceId": "operator",
     "targetId": "gw",
-    "label": "Configures the fleet; reads health and stats; drains",
-    "status": "planned",
+    "label": "Configures the instance and the fleet block; reads health and stats; stops an instance (a plain stop so far; a graceful drain from chunk 13)",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2235,7 +2315,7 @@
     "sourceId": "gw",
     "targetId": "pg",
     "label": "Lends pooled connections per transaction; at most the configured budget",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2248,7 +2328,7 @@
     "sourceId": "telemetry",
     "targetId": "gw",
     "label": "Scrapes metrics and stats from every instance and merges them",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2300,7 +2380,7 @@
     "sourceId": "app",
     "targetId": "c-shell",
     "label": "Connects, logs in, sends statements",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2312,8 +2392,8 @@
     "id": "c2",
     "sourceId": "operator",
     "targetId": "c-shell",
-    "label": "Reads health, stats and metrics; sends SIGTERM to drain",
-    "status": "planned",
+    "label": "Reads health, stats and metrics; sends SIGTERM to stop (a plain stop so far; a graceful drain from chunk 13)",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2325,21 +2405,21 @@
     "id": "c3",
     "sourceId": "c-shell",
     "targetId": "c-engine",
-    "label": "Posts events (bytes arrived, connection opened or closed, clock) and performs the returned actions",
-    "status": "planned",
+    "label": "Posts events (bytes arrived, bytes written, connection opened or closed, TLS result, clock) and performs the returned actions",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
-    "technology": "Go, bounded mailboxes"
+    "technology": "Go, one bounded mailbox"
    },
    {
     "id": "c4",
     "sourceId": "c-engine",
     "targetId": "c-pgwire",
-    "label": "Turns bytes into work units and outcomes; builds replies the proxy makes itself",
-    "status": "planned",
+    "label": "Runs the session machines and trackers over the bytes; turns each Query into a work unit; builds the replies the proxy makes itself",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2404,7 +2484,7 @@
     "sourceId": "c-shell",
     "targetId": "pg",
     "label": "Opens the pooled connections and moves their bytes",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2416,8 +2496,8 @@
     "id": "c11",
     "sourceId": "c-engine",
     "targetId": "c-obs",
-    "label": "Publishes one instance snapshot per interval",
-    "status": "planned",
+    "label": "Keeps its counters as one plain snapshot (histograms, gauges, a conservation check); answers each publish event with a publish action",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2429,8 +2509,8 @@
     "id": "c12",
     "sourceId": "c-shell",
     "targetId": "c-obs",
-    "label": "Admin listener serves exporters and health from the last published snapshot",
-    "status": "planned",
+    "label": "Creates the collector and publishes once per interval; the admin listener serves exporters and health from the last published snapshot",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2443,7 +2523,7 @@
     "sourceId": "telemetry",
     "targetId": "c-shell",
     "label": "Scrapes Prometheus text and JSON stats",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2469,7 +2549,7 @@
     "sourceId": "c-shell",
     "targetId": "c-config",
     "label": "Loads and validates the config and the fleet block at start",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2479,16 +2559,16 @@
    },
    {
     "id": "s1",
-    "sourceId": "c-sim",
-    "targetId": "c-engine",
-    "label": "Drives the same engine on its event loop, over simulated byte streams",
-    "status": "planned",
+    "sourceId": "c-engine",
+    "targetId": "c-sim",
+    "label": "The engine's test package proxysim runs the same engine on the simulator's event loop, over simulated byte streams",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
-    "technology": "Go, transport seam"
+    "technology": "Go, transport seam, test code"
    },
    {
     "id": "s2",
@@ -2586,7 +2666,7 @@
     "sourceId": "c-e2e",
     "targetId": "c-sim",
     "label": "Tier S: runs each scenario on the simulator",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2598,8 +2678,8 @@
     "id": "s11",
     "sourceId": "c-e2e",
     "targetId": "c-shell",
-    "label": "Tier R: runs the real binary and drives it with test clients and open-loop load",
-    "status": "planned",
+    "label": "Tier R: runs the real binary and drives it with test clients (open-loop load from chunk 6a)",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2612,7 +2692,7 @@
     "sourceId": "c-e2e",
     "targetId": "pg",
     "label": "Tier R: starts a real Postgres 17 container and checks its state",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2673,11 +2753,37 @@
     "technology": "Go types, test code"
    },
    {
+    "id": "s17",
+    "sourceId": "c-e2e",
+    "targetId": "c-engine",
+    "label": "Tier S: puts the engine between simulated clients and the fake Postgres with proxysim; the operation fuzz target and the canaries set the engine's test-only switches",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
+   },
+   {
+    "id": "s18",
+    "sourceId": "c-engine",
+    "targetId": "c-work",
+    "label": "Stage seams are written against these types; work units pass between stages",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
     "id": "e1",
     "sourceId": "n-shell",
     "targetId": "e-transport",
-    "label": "Implements it with TCP sockets; posts events through bounded mailboxes",
-    "status": "planned",
+    "label": "Implements it with TCP sockets; posts events through one bounded mailbox",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2687,10 +2793,10 @@
    },
    {
     "id": "e2",
-    "sourceId": "n-sim",
+    "sourceId": "e-proxysim",
     "targetId": "e-transport",
-    "label": "Implements it with simulated byte streams on the event loop",
-    "status": "planned",
+    "label": "Implements it with simulated byte streams on the simulator's event loop",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2699,11 +2805,24 @@
     "technology": "Go, interface implementation"
    },
    {
+    "id": "e22",
+    "sourceId": "e-proxysim",
+    "targetId": "n-sim",
+    "label": "Runs on the simulator's loop, byte streams and simulated TLS handshake; starts the fake Postgres",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
     "id": "e3",
     "sourceId": "e-transport",
     "targetId": "e-sessions",
     "label": "Client bytes and connection events",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2716,7 +2835,7 @@
     "sourceId": "e-transport",
     "targetId": "e-backends",
     "label": "Database bytes and connection events",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2728,8 +2847,8 @@
     "id": "e5",
     "sourceId": "e-sessions",
     "targetId": "n-pgwire",
-    "label": "Client session machine; statement classifier",
-    "status": "planned",
+    "label": "Client session machine; client query-phase tracker; the discard-until-Sync rule",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2742,7 +2861,7 @@
     "sourceId": "e-backends",
     "targetId": "n-pgwire",
     "label": "Database session machine; query-cycle tracker",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2755,7 +2874,33 @@
     "sourceId": "e-sessions",
     "targetId": "e-pipeline",
     "label": "One work unit at a time per client",
-    "status": "planned",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e27",
+    "sourceId": "e-pipeline",
+    "targetId": "n-pgwire",
+    "label": "Statement classifier: Query text in, work unit out",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e23",
+    "sourceId": "e-pipeline",
+    "targetId": "e-seams",
+    "label": "Calls each stage through its interface",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2820,7 +2965,7 @@
     "sourceId": "e-pipeline",
     "targetId": "e-backends",
     "label": "Forwards the statement on the lent connection",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2833,7 +2978,7 @@
     "sourceId": "e-backends",
     "targetId": "e-relay",
     "label": "Reply messages and the end-of-reply status byte",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2846,7 +2991,59 @@
     "sourceId": "e-relay",
     "targetId": "e-sessions",
     "label": "Reply bytes for each recipient",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e24",
+    "sourceId": "e-relay",
+    "targetId": "e-reset",
+    "label": "The reply ended, with its status byte",
     "status": "planned",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e25",
+    "sourceId": "e-reset",
+    "targetId": "e-backends",
+    "label": "Writes the reset on the connection; makes it idle or closes it",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e26",
+    "sourceId": "e-reset",
+    "targetId": "e-seams",
+    "label": "Asks the release policy; returns the connection to the pool seam",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e29",
+    "sourceId": "e-reset",
+    "targetId": "n-pgwire",
+    "label": "Encodes the reset's Query; frames its reply",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2859,7 +3056,7 @@
     "sourceId": "e-pipeline",
     "targetId": "e-fail",
     "label": "Every refusal and failure",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2872,7 +3069,20 @@
     "sourceId": "e-fail",
     "targetId": "n-pgwire",
     "label": "Builds the error reply for its contract row",
-    "status": "planned",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e28",
+    "sourceId": "e-fail",
+    "targetId": "e-seams",
+    "label": "Hands each failure, with its reached fact, to the retry policy",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2885,7 +3095,7 @@
     "sourceId": "e-clock",
     "targetId": "e-pipeline",
     "label": "A deadline was reached",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2898,7 +3108,7 @@
     "sourceId": "e-drain",
     "targetId": "e-pipeline",
     "label": "Sets the draining input",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2910,8 +3120,8 @@
     "id": "e20",
     "sourceId": "e-publish",
     "targetId": "n-obs",
-    "label": "Hands over the instance snapshot",
-    "status": "planned",
+    "label": "Uses the histogram, the gauge and the conservation check; the engine source mapping reads its snapshot",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2924,7 +3134,7 @@
     "sourceId": "e-pipeline",
     "targetId": "n-work",
     "label": "Passes work units and outcomes between stages",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2937,7 +3147,7 @@
     "sourceId": "n-engine",
     "targetId": "w-client",
     "label": "Client bytes and events in; actions out, until the client is ready",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2950,7 +3160,7 @@
     "sourceId": "n-engine",
     "targetId": "w-backend",
     "label": "Database bytes and events in; actions out, until the connection is ready",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2963,7 +3173,7 @@
     "sourceId": "n-engine",
     "targetId": "w-cycle",
     "label": "Reply bytes in; status and message boundaries out",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2976,7 +3186,7 @@
     "sourceId": "n-engine",
     "targetId": "w-classifier",
     "label": "Statement text in; work unit out",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2989,7 +3199,7 @@
     "sourceId": "n-engine",
     "targetId": "w-errors",
     "label": "Contract row in; reply bytes out",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3002,7 +3212,46 @@
     "sourceId": "n-engine",
     "targetId": "w-front",
     "label": "Client bytes after login in; queries and terminate out",
-    "status": "planned",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w53",
+    "sourceId": "n-engine",
+    "targetId": "w-framer",
+    "label": "Frames the reply of the reset it sends after every lease",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w54",
+    "sourceId": "n-engine",
+    "targetId": "w-snapshot",
+    "label": "Keeps one set of wire counters for all its sessions and trackers",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "w55",
+    "sourceId": "n-engine",
+    "targetId": "w-msgs",
+    "label": "Encodes each Query it forwards, and the reset",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4221,16 +4470,16 @@
    },
    {
     "id": "m6",
-    "sourceId": "s-net",
-    "targetId": "n-engine",
-    "label": "Implements the engine's transport seam: bytes in, bytes out, opened, closed",
-    "status": "planned",
+    "sourceId": "n-engine",
+    "targetId": "s-net",
+    "label": "The engine's simulator driver (proxysim) implements the transport seam on these streams: listens, dials, reads, writes, closes",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
-    "technology": "Go, interface implementation"
+    "technology": "Go, test code"
    },
    {
     "id": "m7",
@@ -4574,27 +4823,27 @@
     "id": "m17",
     "sourceId": "n-engine",
     "targetId": "s-trace",
-    "label": "Appends each decision",
-    "status": "planned",
+    "label": "The engine's simulator driver appends a record for each connection it closes and writes the engine's counters for the state digest",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
-    "technology": "Go"
+    "technology": "Go, test code"
    },
    {
     "id": "m18",
-    "sourceId": "s-inv",
-    "targetId": "n-engine",
-    "label": "Reads snapshots at every event and at the end",
-    "status": "planned",
+    "sourceId": "n-engine",
+    "targetId": "s-inv",
+    "label": "The engine's simulator driver registers the engine's invariants (snapshot conservation, one client per lent connection) and its quiesce check",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
-    "technology": "Go"
+    "technology": "Go, test code"
    },
    {
     "id": "m19",
@@ -4727,17 +4976,95 @@
     "technology": "Go"
    },
    {
-    "id": "o1",
+    "id": "m46",
     "sourceId": "n-engine",
-    "targetId": "o-collector",
-    "label": "Registers each component as a source and publishes once per interval",
-    "status": "planned",
+    "targetId": "s-simtls",
+    "label": "The engine's simulator driver plays the handshake on both legs: server for clients, client for the database",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
-    "technology": "Go, plain structs"
+    "technology": "Go, test code"
+   },
+   {
+    "id": "m47",
+    "sourceId": "n-engine",
+    "targetId": "s-fakepg",
+    "label": "The simulator driver's World starts the fake as the engine's database",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code"
+   },
+   {
+    "id": "m48",
+    "sourceId": "n-e2e",
+    "targetId": "s-world",
+    "label": "Implements the driver interface with the proxy between the clients and the fake, and runs a direct baseline through it",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
+   },
+   {
+    "id": "m49",
+    "sourceId": "n-e2e",
+    "targetId": "s-fakepg",
+    "label": "Tier S checks read the fake's statement and write logs: transaction integrity, session state, what ran after a fault",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
+   },
+   {
+    "id": "m50",
+    "sourceId": "n-e2e",
+    "targetId": "s-faults",
+    "label": "Scenario fault schedules; the operation fuzz target decodes its input into a timed operation list in the schedule's form",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
+   },
+   {
+    "id": "m51",
+    "sourceId": "n-e2e",
+    "targetId": "s-testclient",
+    "label": "The scripted clients of both tiers frame, decode and track their session with it",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
+   },
+   {
+    "id": "o1",
+    "sourceId": "n-shell",
+    "targetId": "o-collector",
+    "label": "Creates it in the real process, attaches the JSON, Prometheus and (when obs.csv.dir is set) CSV adapters, and publishes when the engine returns a publish action: once per interval and at the stop",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
    },
    {
     "id": "o2",
@@ -4783,7 +5110,7 @@
     "sourceId": "n-shell",
     "targetId": "o-prom",
     "label": "Admin listener serves /metrics",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4796,7 +5123,7 @@
     "sourceId": "n-shell",
     "targetId": "o-json",
     "label": "Admin listener serves /stats",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4808,8 +5135,8 @@
     "id": "o7",
     "sourceId": "n-shell",
     "targetId": "o-health",
-    "label": "Admin listener serves /health",
-    "status": "planned",
+    "label": "Admin listener serves /healthz; adds the rule listener (failed while the client listener is down)",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4951,8 +5278,8 @@
     "id": "o18",
     "sourceId": "n-e2e",
     "targetId": "o-csv",
-    "label": "Turns the flush on for every run; checks the final flush equals the snapshot",
-    "status": "planned",
+    "label": "Turns the flush on for every run in both tiers; checks the final flush equals the snapshot (tier R: reads the binary's files back and runs the round-trip check on them)",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4964,14 +5291,14 @@
     "id": "o19",
     "sourceId": "n-e2e",
     "targetId": "o-assert",
-    "label": "Runs the SQL assertions after a run",
-    "status": "planned",
+    "label": "Runs the SQL assertions over the run directories of every scenario, both tiers",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
-    "technology": "scripts/csv-assert.sh"
+    "technology": "scripts/chaos.sh, scripts/csv-assert.sh"
    },
    {
     "id": "o20",
@@ -5442,6 +5769,123 @@
     "technology": "Go"
    },
    {
+    "id": "o61",
+    "sourceId": "o-enginesrc",
+    "targetId": "n-engine",
+    "label": "Reads the engine snapshot and the wire, classifier and reply snapshots the engine holds",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o62",
+    "sourceId": "o-enginesrc",
+    "targetId": "n-shell",
+    "label": "Reads the shell's counters through a function the shell hands over",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o63",
+    "sourceId": "o-enginesrc",
+    "targetId": "o-collector",
+    "label": "Registers the engine source (shell metrics included) and the engine's wire and classifier sources",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o64",
+    "sourceId": "o-enginesrc",
+    "targetId": "o-wiresrc",
+    "label": "Takes the wire source for the engine's wire snapshot",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o65",
+    "sourceId": "o-enginesrc",
+    "targetId": "o-clssrc",
+    "label": "Takes the classifier source for the engine's classifier and reply snapshots",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o66",
+    "sourceId": "o-enginesrc",
+    "targetId": "o-health",
+    "label": "Supplies the rule database",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o67",
+    "sourceId": "o-catalog",
+    "targetId": "o-enginesrc",
+    "label": "Lists every metric it declares",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o68",
+    "sourceId": "n-shell",
+    "targetId": "o-csv",
+    "label": "The real process flushes through the bounded queue when obs.csv.dir is set",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o69",
+    "sourceId": "n-e2e",
+    "targetId": "o-simrun",
+    "label": "Tier S runs every scenario under it, with the engine's and the simulator's sources",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
+   },
+   {
     "id": "o50",
     "sourceId": "n-sim",
     "targetId": "o-conserve",
@@ -5732,7 +6176,7 @@
    "id": "container",
    "kind": "container",
    "title": "Containers: the request path",
-   "status": "planned",
+   "status": "mixed",
    "nodes": [
     {
      "elementId": "app"
@@ -5991,6 +6435,9 @@
      "relationshipId": "s3"
     },
     {
+     "relationshipId": "s18"
+    },
+    {
      "relationshipId": "s4"
     },
     {
@@ -6007,6 +6454,9 @@
     },
     {
      "relationshipId": "s10"
+    },
+    {
+     "relationshipId": "s17"
     },
     {
      "relationshipId": "s11"
@@ -6265,6 +6715,12 @@
      "elementId": "e-pipeline"
     },
     {
+     "elementId": "e-seams"
+    },
+    {
+     "elementId": "e-reset"
+    },
+    {
      "elementId": "e-relay"
     },
     {
@@ -6278,6 +6734,9 @@
     },
     {
      "elementId": "e-publish"
+    },
+    {
+     "elementId": "e-proxysim"
     },
     {
      "elementId": "n-shell"
@@ -6315,6 +6774,9 @@
      "relationshipId": "e2"
     },
     {
+     "relationshipId": "e22"
+    },
+    {
      "relationshipId": "e3"
     },
     {
@@ -6328,6 +6790,12 @@
     },
     {
      "relationshipId": "e7"
+    },
+    {
+     "relationshipId": "e27"
+    },
+    {
+     "relationshipId": "e23"
     },
     {
      "relationshipId": "e8"
@@ -6351,10 +6819,25 @@
      "relationshipId": "e15"
     },
     {
+     "relationshipId": "e24"
+    },
+    {
+     "relationshipId": "e25"
+    },
+    {
+     "relationshipId": "e26"
+    },
+    {
+     "relationshipId": "e29"
+    },
+    {
      "relationshipId": "e16"
     },
     {
      "relationshipId": "e17"
+    },
+    {
+     "relationshipId": "e28"
     },
     {
      "relationshipId": "e18"
@@ -6533,6 +7016,15 @@
     },
     {
      "relationshipId": "w5"
+    },
+    {
+     "relationshipId": "w53"
+    },
+    {
+     "relationshipId": "w54"
+    },
+    {
+     "relationshipId": "w55"
     },
     {
      "relationshipId": "w18"
@@ -7360,6 +7852,9 @@
      "elementId": "n-engine"
     },
     {
+     "elementId": "n-e2e"
+    },
+    {
      "elementId": "n-pgwire"
     },
     {
@@ -7501,6 +7996,24 @@
     },
     {
      "relationshipId": "m45"
+    },
+    {
+     "relationshipId": "m46"
+    },
+    {
+     "relationshipId": "m47"
+    },
+    {
+     "relationshipId": "m48"
+    },
+    {
+     "relationshipId": "m49"
+    },
+    {
+     "relationshipId": "m50"
+    },
+    {
+     "relationshipId": "m51"
     }
    ],
    "legend": {
@@ -7645,6 +8158,9 @@
     },
     {
      "elementId": "o-clssrc"
+    },
+    {
+     "elementId": "o-enginesrc"
     },
     {
      "elementId": "o-catalog"
@@ -7805,6 +8321,27 @@
      "relationshipId": "o58"
     },
     {
+     "relationshipId": "o61"
+    },
+    {
+     "relationshipId": "o62"
+    },
+    {
+     "relationshipId": "o63"
+    },
+    {
+     "relationshipId": "o64"
+    },
+    {
+     "relationshipId": "o65"
+    },
+    {
+     "relationshipId": "o66"
+    },
+    {
+     "relationshipId": "o68"
+    },
+    {
      "relationshipId": "o37"
     },
     {
@@ -7812,6 +8349,9 @@
     },
     {
      "relationshipId": "o59"
+    },
+    {
+     "relationshipId": "o67"
     },
     {
      "relationshipId": "o38"
@@ -7836,6 +8376,9 @@
     },
     {
      "relationshipId": "o60"
+    },
+    {
+     "relationshipId": "o69"
     },
     {
      "relationshipId": "o43"
@@ -7933,7 +8476,7 @@
    "id": "plan",
    "title": "mini-gateway PLAN.md (approved 2026-11-24)",
    "url": "https://github.com/nickstrad/mini-gateway/blob/main/PLAN.md",
-   "notes": "Target architecture. Built so far: chunks 0–5. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
+   "notes": "Target architecture. Built so far: chunks 0–6. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
   }
  ]
 }

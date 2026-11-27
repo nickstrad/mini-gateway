@@ -31,7 +31,7 @@ from pathlib import Path
 # REL_BUILT relationship id -> chunk number, or None. Leave it empty unless the rule is
 #           wrong for one arrow. The rule: a relationship is built when both its ends are.
 #           A chunk number forces "built", None forces "planned".
-LANDED = 5
+LANDED = 6
 
 BUILT = {
     # chunk 1 — simulator kernel (diagram 11)
@@ -72,9 +72,9 @@ BUILT = {
     "o-csv": 3,       # internal/obs/csvflush (schema.go, writer.go, reader.go)
     "o-log": 3,       # internal/obs/logline
     "o-simsrc": 3,    # internal/obs/simsrc (chunk 4 added the fake's authentication counters and the clients' startup counters)
-    "o-catalog": 3,   # internal/obs/catalog; scripts/gen-docs.sh, scripts/gen-docs.d/c03-csv-schema.sh; docs/csv-schema.md (chunk 5 added the classifier source)
-    "o-simrun": 5,    # internal/obs/simrun (chunk 3); chunk 4 added wire.go (the wire scenarios), chunk 5 classifier.go (the classifier scenarios)
-    "o-assert": 5,    # scripts/csv-assert.sh, test/analysis (views.sql, guard.sql, 65 assertion files: 5 of chunk 3, 57 of chunk 4, 3 of chunk 5); make csv-assert
+    "o-catalog": 3,   # internal/obs/catalog; scripts/gen-docs.sh, scripts/gen-docs.d/c03-csv-schema.sh; docs/csv-schema.md (chunk 5 added the classifier source, chunk 6 the engine and shell metrics)
+    "o-simrun": 6,    # internal/obs/simrun (chunk 3); chunk 4 added wire.go (the wire scenarios), chunk 5 classifier.go (the classifier scenarios), chunk 6 custom.go (a run handed its sources)
+    "o-assert": 6,    # scripts/csv-assert.sh, test/analysis (views.sql, guard.sql, 195 assertion files: 5 of chunk 3, 57 of chunk 4, 3 of chunk 5, 130 of chunk 6); make csv-assert; scripts/chaos.sh
     "o-wiresrc": 4,   # internal/obs/wiresrc
     "o-clssrc": 5,    # internal/obs/clssrc
     "csvfiles": 3,    # written by internal/obs/csvflush; described in docs/csv-schema.md
@@ -99,48 +99,92 @@ BUILT = {
     "w-share": 5,     # internal/pgwire: share.go, share_doc.go; docs/safe-shape.md; tier R test in share_tierr_test.go
     "w-errors": 5,    # internal/pgwire: errors.go, errors_doc.go, reply.go; docs/error-contract.md
     "w-clsworld": 5,  # internal/pgwire/pgwiretest/clsworld; run by internal/pgwire/classify_e2e_test.go and internal/obs/simrun/classifier_test.go
+    # chunk 6 — walking skeleton (diagrams 1, 2, 3, 5 and 12)
+    "app": 6,         # a client connects, logs in and runs statements through cmd/mini-gateway (test/e2e tier R: psql, pgbench-style runs)
+    "operator": 6,    # the config file (internal/config), /healthz, /stats and /metrics (internal/shell/admin.go), SIGTERM (cmd/mini-gateway/main.go)
+    "pg": 6,          # the proxy now stands in front of it: tier R of test/e2e runs the binary against Postgres 17
+    "c-shell": 6,     # cmd/mini-gateway (main.go); internal/shell (shell.go, engine.go, conn.go, io.go, admin.go, stats.go)
+    "e-transport": 6, # internal/proxy: api.go (events, actions, the read constants)
+    "e-sessions": 6,  # internal/proxy: client.go
+    "e-backends": 6,  # internal/proxy: dbconn.go
+    "e-pipeline": 6,  # internal/proxy: startRequest, gates, enqueue, dispatch, lend, forward in lease.go
+    "e-seams": 6,     # internal/proxy: seams.go
+    "e-reset": 6,     # internal/proxy: replyDone, release, startReset, resetJudge, judgeReset in lease.go
+    "e-fail": 6,      # internal/proxy: leaseFailed, statementLost, reachedFor, lostRow in lease.go; reply in client.go
+    "e-clock": 6,     # internal/proxy: timers.go; fireTimers in engine.go
+    "e-publish": 6,   # internal/proxy: snapshot.go; Snapshot and the EvPublish case in engine.go
+    "e-proxysim": 6,  # internal/proxy/proxysim (proxysim.go, world.go)
+    "o-enginesrc": 6, # internal/obs/enginesrc
 }
 
 PARTIAL = {
+    "gw": "Built in chunk 6: a working proxy, the walking skeleton — cmd/mini-gateway terminates client TLS, logs "
+          "clients in with SCRAM-SHA-256, lends one of a fixed set of database connections per transaction, resets it "
+          "after every lease, queues waiting requests in one bounded first-come queue, and serves health, stats and "
+          "metrics from snapshots. Not built: the pool with its breaker, per-tenant admission with the two CoDel "
+          "modes, read coalescing, the retry policy, the OTLP push, and the fleet division and drain of N instances.",
+    "c-engine": "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two "
+                "parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). "
+                "The stages that belong to cores not built yet run their stand-ins: a breaker that is always closed, "
+                "a rate gate that always allows, no coalescing, one bounded first-come queue, a fixed set of "
+                "connections, retry off.",
+    "e-relay": "Built in chunk 6 (internal/proxy: relay, relayEvents and relayed in lease.go; writeClient and the "
+               "pauses in client.go): all of it for the one client of a reply. Not built: the fan-out to every waiter "
+               "of a shared read (chunk 11).",
+    "e-drain": "Built in chunk 6 (internal/proxy: the EvDraining input, gates in lease.go, Shutdown in engine.go): "
+               "while the draining input is on, new work from a client outside a transaction is refused with 53M05 "
+               "and that client is closed after the reply (unit-tested; nothing in the binary sets it yet); and a plain stop that "
+               "closes every client and connection. Not built: the sequence — finish transactions in progress within "
+               "a bound, close idle connections, exit (chunk 13).",
+    "c-config": "Built in chunk 6 (internal/config): the JSON config file with its defaults, validation that fails "
+                "closed and names the key (the timeout nesting too), the client_tls and backend_tls blocks, the "
+                "config fingerprint, and the fleet block parsed and checked (pool.connections must fit "
+                "fleet.backend_connections / fleet.instances, which must divide evenly and fit the database's limit "
+                "with a reserve). Not built: nothing takes its budget from the division yet (chunk 7 on; the fleet "
+                "configuration is chunk 13).",
+    "c-e2e": "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in "
+             "tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz "
+             "target FuzzEngineOps, and make chaos (scripts/chaos.sh). Not built: cmd/loadgen, the open-loop load "
+             "generator (chunk 6a), and make bench.",
     "c-sim": "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy "
              "protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS "
              "handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no "
-             "proxy) and the fidelity runner, and scripts/tier-r.sh. Not built: no engine exists yet, so the harness "
-             "drives the fake Postgres, the toy protocol and the wire layer's two test proxies (startup-only, and the "
-             "classifier scenarios' gateway); nothing "
-             "implements the engine's transport seam, and no synthetic workload drives the cores.",
+             "proxy) and the fidelity runner, and scripts/tier-r.sh. Since chunk 6 the engine runs on it, through the "
+             "engine's own test package internal/proxy/proxysim. Not built: no synthetic workload drives the cores "
+             "(no core exists yet).",
     "c-pgwire": "Built in chunks 4 and 5 (internal/pgwire): every component drawn here except the codec boundary. Chunk 4: "
                 "the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the "
                 "two trackers, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest and "
                 "wireworld. Chunk 5: the SQL lexer, the reject list, the statement classifier, the safe-shape "
-                "recogniser, the error table with its reply builders, and the test package clsworld. Not built: the "
+                "recogniser, the error table with its reply builders, and the test package clsworld. Chunk 6: the "
+                "engine drives this code, and the client session machine takes every FATAL from the error table "
+                "(three startup rows added). Not built: the "
                 "codec boundary (no file in the package imports pgproto3; the reply builders code their messages by "
-                "hand). No engine exists yet, so only the test proxies drive this code, and nothing produces outcomes.",
-    "c-obs": "Built in chunks 1, 3, 4 and 5: everything except the OTLP push adapter (chunk 15) and the health rules that "
-             "read other components (chunk 6 on). No engine or shell exists yet, so only the simulator's scenario "
-             "harness (internal/obs/simrun) creates a collector, and nothing serves the outputs over HTTP.",
-    "o-health": "Built in chunk 3 (internal/obs: health.go): the three states, the rule table (overall state is the "
-                "worst rule), the collector rule and the JSON body. Not built: the rules for shedding, an open "
-                "breaker, the limit's floor, draining and a database outage, and any rule that gives failed "
-                "(chunk 6 on).",
+                "hand). Nothing produces outcomes yet.",
+    "c-obs": "Built in chunks 1, 3, 4, 5 and 6: everything except the OTLP push adapter (chunk 15) and the health "
+             "rules for shedding, an open breaker, the limit's floor and draining (chunk 7 on). Since chunk 6 the "
+             "shell creates a collector in the real process, with the engine, wire and classifier sources, and "
+             "serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line "
+             "adapter is attached only by the scenario flush harness.",
+    "o-health": "Built in chunks 3 and 6. Chunk 3 (internal/obs: health.go): the three states, the rule table "
+                "(overall state is the worst rule), the collector rule and the JSON body. Chunk 6: the rule database "
+                "(internal/obs/enginesrc: degraded while no database connection is usable and the last connect "
+                "failed) and the rule listener (internal/shell: failed while the client listener is down). Not "
+                "built: the rules for shedding, an open breaker, the limit's floor and draining (chunk 7 on).",
 }
 
 REL_BUILT = {
-    # Arrows that are wholly true of the code although one end is only partly built (PARTIAL)
-    # or is Postgres, which stays planned: nothing sits in front of it yet.
+    # Arrows that are wholly true of the code although one end is only partly built (PARTIAL).
     "m16": 4,   # fakepg/auth.go and backend.go import internal/pgwire (ScramServer, Verifier, AppendNegotiateProtocolVersion)
     "m43": 4,   # workload/startup.go imports internal/pgwire (ScramClient)
-    "m36": 2,   # world/tierr_test.go, run by scripts/tier-r.sh
     # Container arrows of the partly built simulator harness that are wholly true of the code:
     "s9": 2,    # the pgproto3 requirement entered go.mod in chunk 2
     "s13": 1,   # cmd/mgsim and go test run scenarios from a seed since chunk 1
     "s16": 2,   # scripts/tier-r.sh
-    # Diagram 6 arrows from the wire layer's test packages to the partly built simulator harness and to Postgres:
+    # Diagram 6 arrows from the wire layer's test packages to the partly built simulator harness:
     "w33": 4,   # pgwiretest/proxy.go and fidelity_sim.go import sim, simnet, simtls, fakepg
     "w35": 4,   # wireworld/wireworld.go imports sim, simnet, fakepg, workload
-    "w36": 4,   # pgwiretest/fidelity_test.go: TestTierRStartupFidelity, run by scripts/tier-r.sh
     "w50": 5,   # clsworld/clsworld.go imports sim, simnet, fakepg, workload and testclient
-    "w51": 5,   # share_tierr_test.go: TestTierRSafeShapeDifferential, run by scripts/tier-r.sh
     # The query-cycle tracker (chunk 4) does not import internal/work: nothing produces outcomes yet.
     "w16": None,
     # Diagram 12 arrows that are wholly true of the code although one end is only partly built:
@@ -153,6 +197,62 @@ REL_BUILT = {
     "o52": 4,   # wiresrc/wiresrc.go maps pgwire.WireSnapshot
     "o55": 4,   # simrun/wire.go builds and runs a wireworld.World; simrun/classifier.go a clsworld.World (chunk 5)
     "o57": 5,   # clssrc/clssrc.go maps pgwire.ClassifierSnapshot, ReplySnapshot and SyncDiscardSnapshot
+    # Chunk 6. Context arrows of the partly built system that are wholly true of the binary:
+    "r-app-gw": 6,  # test/e2e tier R: psql and scripted clients through cmd/mini-gateway, client TLS on
+    "r-op-gw": 6,   # internal/config (the file, the fleet block), internal/shell/admin.go, signalContext in cmd/mini-gateway/main.go
+    "r-gw-pg": 6,   # the fixed set of pool.connections, lent per transaction (internal/proxy/lease.go)
+    "r-tel-gw": 6,  # /metrics and /stats on the admin port (internal/shell/admin.go)
+    # Chunk 6. Container arrows with the partly built engine, wire layer, observability, config or suite at one end:
+    "c3": 6,    # shell/engine.go: the mailbox, core.Step, execute
+    "c4": 6,    # proxy/client.go, dbconn.go and lease.go import internal/pgwire
+    "c11": 6,   # proxy/snapshot.go uses obs.Gauge, obs.Histogram and obs.Conserve; the EvPublish case in engine.go
+    "c12": 6,   # shell/admin.go: wireObs, publish, the three handlers
+    "c13": 6,   # shell/admin.go: /metrics and /stats
+    "c15": 6,   # cmd/mini-gateway/main.go: config.Load, then File.Proxy and the TLS configs
+    "s1": 6,    # proxysim/proxysim.go imports sim, simnet and simtls; world.go adds fakepg
+    "s10": 6,   # test/e2e/simtier.go (RunSim), driver.go (ProxyDriver)
+    "s11": 6,   # test/e2e/realtier.go and realenv.go start the binary; realclient.go drives it
+    "s12": 6,   # test/e2e/realenv.go starts the container; tierr_test.go checks pg_stat_ssl and the dirty-check query
+    "s17": 6,   # test/e2e/simtier.go and opfuzz.go build a proxysim.World; the canaries set proxy.Plant bits
+    "s18": 6,   # proxy/seams.go, lease.go and client.go import internal/work
+    # Chunk 6. Diagram 5 arrows that are wholly true although the relay, the drain controller or a neighbour is partly built:
+    "e5": 6,    # client.go: pgwire.ClientSession, FrontendTracker, SyncDiscard
+    "e6": 6,    # dbconn.go: pgwire.BackendSession, CycleTracker
+    "e14": 6,   # lease.go: dbData hands reply bytes to relay
+    "e15": 6,   # lease.go: relayed calls writeClient
+    "e17": 6,   # client.go: reply builds the row's bytes with pgwire.ReplyBuilder
+    "e19": 6,   # engine.go: EvDraining sets the input that gates reads
+    "e20": 6,   # snapshot.go: obs.Gauge, obs.HistogramSnapshot, obs.Conserve
+    "e22": 6,   # proxysim.go imports sim, simnet, simtls; world.go fakepg
+    "e27": 6,   # lease.go: startRequest calls the Classifier seam, a *pgwire.Classifier
+    "e29": 6,   # lease.go: pgwire.AppendQuery and the pgwire.Framer inside resetJudge
+    # Chunk 6. Diagram 6 arrows from the partly built engine to built wire components:
+    "w1": 6,    # proxy/client.go: startupData drives pgwire.ClientSession
+    "w2": 6,    # proxy/dbconn.go: backendActs drives pgwire.BackendSession
+    "w3": 6,    # proxy/lease.go: relay feeds pgwire.CycleTracker
+    "w4": 6,    # proxy/lease.go: startRequest
+    "w5": 6,    # proxy/client.go: reply; the SyncDiscard rule in front
+    "w17": 6,   # proxy/client.go: front feeds pgwire.FrontendTracker
+    "w53": 6,   # proxy/lease.go: resetJudge holds a pgwire.Framer
+    "w54": 6,   # proxy/engine.go: one pgwire.WireStats handed to both session configs
+    "w55": 6,   # proxy/lease.go: pgwire.AppendQuery
+    # Chunk 6. Diagram 11 arrows from the partly built engine (its test package proxysim) and suite to built simulator components:
+    "m6": 6,    # proxysim.go: accept, dial, readChunk, flush on simnet ends
+    "m17": 6,   # proxysim.go: Trace(kindClose, ...) in shut; writeState
+    "m18": 6,   # proxysim.go: RegisterInvariant, RegisterQuiesce, RegisterState in New
+    "m46": 6,   # proxysim.go: clientHandshake, dbHandshake
+    "m47": 6,   # proxysim/world.go: BuildWorld calls fakepg.New
+    "m48": 6,   # test/e2e/driver.go: ProxyDriver embeds world.SimDriver
+    "m49": 6,   # test/e2e/simtier.go turns on the fake's statement and write logs; checks.go reads them
+    "m50": 6,   # test/e2e/opfuzz.go: DecodeOps returns []sim.Fault
+    "m51": 6,   # test/e2e/simclient.go and realclient.go import internal/testclient
+    # Chunk 6. Diagram 12 arrows with the partly built engine, suite or health element at one end:
+    "o7": 6,    # shell/admin.go: serveHealth, Health (the listener rule)
+    "o18": 6,   # test/e2e/simtier.go (simrun.Custom); tierr_test.go (csvflush.Read, RoundTrip)
+    "o19": 6,   # scripts/chaos.sh runs csv-assert.sh over every scenario of both tiers
+    "o61": 6,   # enginesrc.go: Map(proxy.Snapshot), Sources(*proxy.Engine)
+    "o66": 6,   # enginesrc.go: HealthRules
+    "o69": 6,   # test/e2e/simtier.go: simrun.Custom
 }
 # =========================================================================== end of AS BUILT
 
@@ -217,7 +317,8 @@ def comp(parent, id, name, desc, tech="Go", tags=()):
 person("app", "Client application",
        "Any program that speaks the Postgres wire protocol. Its startup user name selects its tenant.")
 person("operator", "Operator",
-       "Runs proxy instances, writes the static fleet config, reads health and stats, drains an instance with SIGTERM.")
+       "Runs proxy instances, writes the config file with its static fleet block, reads health and stats, stops an "
+       "instance with SIGTERM (a plain stop so far; a graceful drain from chunk 13).")
 person("developer", "Developer or reader",
        "Runs simulator scenarios from a seed, replays a failure from its printed REPLAY line, runs make test / chaos / bench.")
 system("gw", "mini-gateway",
@@ -254,16 +355,19 @@ system("pgproto3", "pgproto3 (from pgx/v5)",
 
 # --------------------------------------------------------------------------- containers
 container("c-shell", "Shell and binary",
-          "cmd/mini-gateway and internal/shell. Listeners, one reader and one writer goroutine per connection, bounded "
-          "mailboxes, a deadline on every socket operation, TLS on both legs with crypto/tls (it answers a client's "
-          "TLS request, upgrades the socket and buffers nothing across the upgrade), the admin listener on its own "
-          "port, signal handling. "
+          "cmd/mini-gateway and internal/shell. The binary (-config, -check, -verifier) and the goroutine shell: the "
+          "client listener, one reader and one writer goroutine per connection, one bounded mailbox into the engine's "
+          "goroutine, a bounded write queue per connection, a deadline on every socket operation, TLS on both legs "
+          "with crypto/tls (it reads exactly the 8 bytes of a client's first packet, upgrades the socket when the "
+          "engine says so and buffers nothing across the upgrade), the admin listener on its own port, the collector "
+          "with its JSON, Prometheus and CSV adapters, and signal handling: SIGTERM or SIGINT stops the process (a "
+          "plain stop so far; the graceful drain is chunk 13). "
           "Makes no decisions: it posts events to the engine and performs the actions the engine returns.",
           tech="Go, goroutines, TCP, crypto/tls")
 container("c-engine", "Engine",
           "internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the "
           "client and database connection tables and the request pipeline with its stage seams. The simulator and the "
-          "shell drive this same code.", tech="Go, pure state machine")
+          "shell drive this same code; its test package proxysim is the simulator's driver.", tech="Go, pure state machine")
 container("c-pgwire", "Wire layer",
           "internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle "
           "tracker, the SQL lexer, the statement classifier with its courtesy reject list, the safe-shape recogniser that "
@@ -294,8 +398,9 @@ container("c-obs", "Observability",
           "text, JSON, CSV flush, log line, OTLP push), fleet merge, health, and the SQL assertions over flushed files.",
           tech="Go, standard library")
 container("c-config", "Configuration",
-          "internal/config. The config file, the static fleet block (instance count N; fleet budgets divided by N), "
-          "and load-time validation that fails closed.", tech="Go")
+          "internal/config. The config file (JSON), the client_tls and backend_tls blocks, the static fleet block "
+          "(instance count N; fleet budgets divided by N), load-time validation that fails closed and names the key, "
+          "and the config fingerprint.", tech="Go")
 container("c-sim", "Simulator harness",
           "internal/sim and its sub-packages simnet, simtls, fakepg, workload, world, simtest and simtoy; internal/testclient; "
           "internal/randdist; cmd/mgsim; scripts/tier-r.sh. A deterministic single-threaded world: virtual clock, "
@@ -304,11 +409,12 @@ container("c-sim", "Simulator harness",
           tech="Go test harness", tags=("test",))
 container("c-e2e", "End-to-end suite and load generator",
           "test/e2e and cmd/loadgen. Each scenario is written once and runs on the simulator (tier S) and on the real "
-          "binary against a real Postgres (tier R). The load generator is open-loop.", tech="Go test code", tags=("test",))
+          "binary against a real Postgres (tier R), with the CSV flush on and SQL assertions over the files. Holds the "
+          "engine's operation fuzz target and the canaries. The load generator is open-loop.", tech="Go test code", tags=("test",))
 
 # --------------------------------------------------------------------------- context relationships
 rel("r-app-gw", "app", "gw", "Connects, logs in, sends statements and transactions", "Postgres wire protocol v3, simple query; TCP, TLS when the client asks for it")
-rel("r-op-gw", "operator", "gw", "Configures the fleet; reads health and stats; drains", "Config file, HTTP admin port, SIGTERM")
+rel("r-op-gw", "operator", "gw", "Configures the instance and the fleet block; reads health and stats; stops an instance (a plain stop so far; a graceful drain from chunk 13)", "Config file, HTTP admin port, SIGTERM")
 rel("r-gw-pg", "gw", "pg", "Lends pooled connections per transaction; at most the configured budget", "Postgres wire protocol v3; TCP, TLS by config")
 rel("r-tel-gw", "telemetry", "gw", "Scrapes metrics and stats from every instance and merges them", "HTTP: Prometheus text, JSON")
 rel("r-gw-tel", "gw", "telemetry", "Pushes metrics to a Collector that feeds Prometheus; flushes CSV files; writes log lines", "OTLP/HTTP JSON, files")
@@ -317,22 +423,22 @@ rel("r-gw-lib", "gw", "pgproto3", "Encodes and decodes wire messages", "Go impor
 
 # --------------------------------------------------------------------------- container view A (request path)
 rel("c1", "app", "c-shell", "Connects, logs in, sends statements", "Postgres wire protocol; TCP, TLS when the client asks for it")
-rel("c2", "operator", "c-shell", "Reads health, stats and metrics; sends SIGTERM to drain", "HTTP admin port, signal")
-rel("c3", "c-shell", "c-engine", "Posts events (bytes arrived, connection opened or closed, clock) and performs the returned actions", "Go, bounded mailboxes")
-rel("c4", "c-engine", "c-pgwire", "Turns bytes into work units and outcomes; builds replies the proxy makes itself", "Go, in-process")
+rel("c2", "operator", "c-shell", "Reads health, stats and metrics; sends SIGTERM to stop (a plain stop so far; a graceful drain from chunk 13)", "HTTP admin port, signal")
+rel("c3", "c-shell", "c-engine", "Posts events (bytes arrived, bytes written, connection opened or closed, TLS result, clock) and performs the returned actions", "Go, one bounded mailbox")
+rel("c4", "c-engine", "c-pgwire", "Runs the session machines and trackers over the bytes; turns each Query into a work unit; builds the replies the proxy makes itself", "Go, in-process")
 rel("c5", "c-engine", "c-adm", "Gate, enqueue, pick the next request, report completions", "Go, in-process")
 rel("c6", "c-engine", "c-coal", "Join or start a shared read; fan the reply out", "Go, in-process")
 rel("c7", "c-engine", "c-pool", "Lend and release connections; open and close decisions; breaker state", "Go, in-process")
 rel("c9", "c-engine", "c-retry", "Ask whether a failure may be retried", "Go, in-process")
 rel("c10", "c-shell", "pg", "Opens the pooled connections and moves their bytes", "Postgres wire protocol; TCP, TLS by config")
-rel("c11", "c-engine", "c-obs", "Publishes one instance snapshot per interval", "Go, plain structs")
-rel("c12", "c-shell", "c-obs", "Admin listener serves exporters and health from the last published snapshot", "Go, in-process")
+rel("c11", "c-engine", "c-obs", "Keeps its counters as one plain snapshot (histograms, gauges, a conservation check); answers each publish event with a publish action", "Go, plain structs")
+rel("c12", "c-shell", "c-obs", "Creates the collector and publishes once per interval; the admin listener serves exporters and health from the last published snapshot", "Go, in-process")
 rel("c13", "telemetry", "c-shell", "Scrapes Prometheus text and JSON stats", "HTTP admin port")
 rel("c14", "c-obs", "telemetry", "Pushes OTLP metrics to a Collector that feeds Prometheus (last build chunk); flushes CSV files; writes log lines", "OTLP/HTTP JSON, files")
 rel("c15", "c-shell", "c-config", "Loads and validates the config and the fleet block at start", "Go, in-process")
 
 # --------------------------------------------------------------------------- container view B (drivers and seams)
-rel("s1", "c-sim", "c-engine", "Drives the same engine on its event loop, over simulated byte streams", "Go, transport seam")
+rel("s1", "c-engine", "c-sim", "The engine's test package proxysim runs the same engine on the simulator's event loop, over simulated byte streams", "Go, transport seam, test code")
 rel("s2", "c-pgwire", "pgproto3", "The codec boundary: message structs encoded and decoded here and nowhere else in product code", "Go import")
 rel("s3", "c-pgwire", "c-work", "Produces work units and outcomes", "Go types")
 rel("s4", "c-adm", "c-work", "Written against these types only", "Go types")
@@ -341,45 +447,86 @@ rel("s6", "c-coal", "c-work", "Written against these types only", "Go types")
 rel("s8", "c-retry", "c-work", "Written against these types only", "Go types")
 rel("s9", "c-sim", "pgproto3", "The fake Postgres and the test client encode and decode real wire messages, in one file each", "Go import, test code")
 rel("s10", "c-e2e", "c-sim", "Tier S: runs each scenario on the simulator", "Go test")
-rel("s11", "c-e2e", "c-shell", "Tier R: runs the real binary and drives it with test clients and open-loop load", "Process, Postgres wire protocol")
+rel("s11", "c-e2e", "c-shell", "Tier R: runs the real binary and drives it with test clients (open-loop load from chunk 6a)", "Process, Postgres wire protocol")
 rel("s12", "c-e2e", "pg", "Tier R: starts a real Postgres 17 container and checks its state", "Docker, Postgres wire protocol")
 rel("s13", "developer", "c-sim", "Runs a scenario from a seed; replays a failure", "cmd/mgsim, go test")
 rel("s14", "developer", "c-e2e", "make test, make chaos, make bench", "make")
 rel("s16", "c-sim", "pg", "Tier R of the simulated world: the fidelity script and three direct baselines run against a real Postgres 17, to show the fake is faithful", "scripts/tier-r.sh, Docker, TCP")
 rel("s15", "c-sim", "c-work", "Synthetic workloads drive the cores directly, with no Postgres code", "Go types, test code")
+rel("s17", "c-e2e", "c-engine", "Tier S: puts the engine between simulated clients and the fake Postgres with proxysim; the operation fuzz target and the canaries set the engine's test-only switches", "Go test")
+rel("s18", "c-engine", "c-work", "Stage seams are written against these types; work units pass between stages", "Go types")
 
 # --------------------------------------------------------------------------- engine components
 P = "c-engine"
 comp(P, "e-transport", "Transport seam",
-     "Dialer and byte-stream connection events and actions: open, bytes in, bytes out, closed. Knows no protocol. "
-     "Two implementations: TCP in the shell, simulated streams in the harness.", tech="Go interface")
+     "The engine's contract with its driver, as plain events and actions (no Go interface). Events in: accepted, "
+     "bytes arrived, bytes written, write refused, closed, dial failed, TLS result, timer, publish. Actions out: "
+     "write, close, start TLS, pause and resume reading, open a database connection, wake at a time, publish. "
+     "Knows no protocol; its read rule (exactly 8 bytes of a new client, one unprocessed read per connection) keeps "
+     "bytes from crossing a TLS upgrade. Two implementations: TCP in the shell, simulated streams in proxysim.",
+     tech="Go types: events and actions")
 comp(P, "e-sessions", "Client session table",
-     "One entry per client connection: its wire state machine, tenant, transaction state, the single request it may "
-     "have inside the proxy, and its bounded reply buffer.")
+     "One entry per client connection: its wire state machines, tenant, phase (startup, idle, queued, active, "
+     "holding a connection), transaction status, the single request it may have inside the proxy, a bounded input "
+     "buffer and the count of reply bytes not yet written. Caps the clients connected and the clients in startup.")
 comp(P, "e-backends", "Database connection table",
-     "One entry per database connection: its wire state machine, the query-cycle tracker, and who holds it.")
+     "One entry per database connection: its wire state machine, the query-cycle tracker, its phase (dialing, "
+     "startup, idle, lent, resetting) and who holds it. So far it also keeps the fixed set full itself: opens the "
+     "configured number at start, one dial at a time, and dials again after a loss, after a short delay when the "
+     "connect failed (the pool decides this from chunk 7).")
 comp(P, "e-pipeline", "Request pipeline",
-     "The fixed order every request takes, each stage a small interface: classify, reject list, draining, breaker, "
-     "rate gate, coalesce, queue, lease, forward, release. Statements inside an open transaction skip from classify "
-     "straight to forward on the connection the client already holds.")
+     "The fixed order every request takes: classify, reject list, draining, breaker, rate gate, coalesce, queue, "
+     "lease, forward, release. Each stage is counted as passed or refused, and each refusal is answered with its "
+     "error-contract row. A queued request has a wait deadline. Statements inside an open transaction skip from "
+     "the reject list straight to forward on the connection the client already holds.")
+comp(P, "e-seams", "Stage seams and stand-ins",
+     "The small interfaces the pipeline calls: classifier, breaker, rate gate, coalescer, queue, pool, release "
+     "policy, retry policy. Also the implementations used until each core lands: a breaker that is always closed, a "
+     "rate gate that always allows, no coalescing, one bounded first-come queue, a fixed set of connections, reset "
+     "after every lease, retry off. The engine's config can replace any of them.", tech="Go interfaces")
+comp(P, "e-reset", "Lease end and reset",
+     "A lease ends when a reply ends with status idle; while the status is in-transaction or failed the client "
+     "keeps its connection. At release the policy answers reset, lend as is, or close (close when the status is not "
+     "idle or bytes are left unread). The reset is DISCARD ALL sent as the proxy's own Query: the connection is "
+     "lent again only after exactly that tag and status idle, with nothing after them, inside the reset deadline. "
+     "Anything else closes it, counted by reason. Nothing of the reset's reply reaches a client.")
 comp(P, "e-relay", "Reply relay",
-     "Streams database messages to the client (or to every waiter of a shared read) through bounded buffers, with "
-     "back pressure in both directions. Never sends a short reply that looks complete.")
+     "Streams database messages to the client (or to every waiter of a shared read) as they arrive, through a "
+     "bounded buffer per client, with back pressure in both directions: reading the database connection is paused "
+     "while the client is behind, reading the client while its request is in progress. ErrorResponse and "
+     "ReadyForQuery are held whole, so a FATAL from the database becomes an error-contract reply. "
+     "Never sends a short reply that looks complete.")
 comp(P, "e-fail", "Failure classifier",
-     "For every failure records whether any byte reached the database, and picks the error-contract row.")
+     "For every failure records whether the request may have reached the database (no only when the driver reports "
+     "that its first write was refused with zero bytes accepted) and picks the error-contract row: 08006 for a safe "
+     "read or when nothing reached, 08007 otherwise, FATAL 08006 when a transaction lost its connection, and a "
+     "close with no message once part of the reply was sent. Hands the fact to the retry seam.")
 comp(P, "e-clock", "Deadline table",
-     "Every wait in the timeout budget, as deadlines on the injected clock; returns the next wake-up time as an action.")
+     "Every wait the engine has, as deadlines on the clock passed in with each event: one heap, and the next "
+     "wake-up time returned as an action. Timers due at or before an event's time fire before the event is "
+     "processed, so whatever arrives at the instant of its deadline is late.")
 comp(P, "e-drain", "Drain controller",
      "Sequences shutdown: stop admitting, finish transactions in progress within a bound, close idle connections, exit.")
 comp(P, "e-publish", "Snapshot publisher",
-     "Collects every component's Snapshot() between events and hands the copy to the collector.")
-rel("e1", "n-shell", "e-transport", "Implements it with TCP sockets; posts events through bounded mailboxes", "Go", "implementation")
-rel("e2", "n-sim", "e-transport", "Implements it with simulated byte streams on the event loop", "Go", "implementation")
+     "Snapshot(): the engine's counters as one plain struct — clients, requests by stage and outcome, replies by "
+     "row, leases, resets, relay, connections, three histograms — with its conservation check, beside the wire, "
+     "classifier and reply snapshots the engine holds. On a publish event the engine returns a publish action; its "
+     "driver then has the collector read the snapshots, between events.")
+comp(P, "e-proxysim", "Simulator driver",
+     "internal/proxy/proxysim. The engine on the simulator: accepts and dials on simulated streams, keeps the same "
+     "read rule as the shell, plays the simulated TLS handshake on both legs, reports writes and refused writes, "
+     "and registers the engine's invariants, quiesce check and state with the simulator. Its World builds the "
+     "simulator, the network, the fake Postgres and the engine for a scenario.", tags=("test",))
+rel("e1", "n-shell", "e-transport", "Implements it with TCP sockets; posts events through one bounded mailbox", "Go", "implementation")
+rel("e2", "e-proxysim", "e-transport", "Implements it with simulated byte streams on the simulator's event loop", "Go", "implementation")
+rel("e22", "e-proxysim", "n-sim", "Runs on the simulator's loop, byte streams and simulated TLS handshake; starts the fake Postgres", "Go, test code")
 rel("e3", "e-transport", "e-sessions", "Client bytes and connection events", "Go")
 rel("e4", "e-transport", "e-backends", "Database bytes and connection events", "Go")
-rel("e5", "e-sessions", "n-pgwire", "Client session machine; statement classifier", "Go")
+rel("e5", "e-sessions", "n-pgwire", "Client session machine; client query-phase tracker; the discard-until-Sync rule", "Go")
 rel("e6", "e-backends", "n-pgwire", "Database session machine; query-cycle tracker", "Go")
 rel("e7", "e-sessions", "e-pipeline", "One work unit at a time per client", "Go")
+rel("e27", "e-pipeline", "n-pgwire", "Statement classifier: Query text in, work unit out", "Go")
+rel("e23", "e-pipeline", "e-seams", "Calls each stage through its interface", "Go")
 rel("e8", "e-pipeline", "n-adm", "Gate, queue, dispatch, limit", "Go")
 rel("e9", "e-pipeline", "n-coal", "Join or lead a shared read", "Go")
 rel("e10", "e-pipeline", "n-pool", "Lend, release, breaker state, dirty connections", "Go")
@@ -387,11 +534,16 @@ rel("e12", "e-pipeline", "n-retry", "May this failure be retried", "Go")
 rel("e13", "e-pipeline", "e-backends", "Forwards the statement on the lent connection", "Go")
 rel("e14", "e-backends", "e-relay", "Reply messages and the end-of-reply status byte", "Go")
 rel("e15", "e-relay", "e-sessions", "Reply bytes for each recipient", "Go")
+rel("e24", "e-relay", "e-reset", "The reply ended, with its status byte", "Go")
+rel("e25", "e-reset", "e-backends", "Writes the reset on the connection; makes it idle or closes it", "Go")
+rel("e26", "e-reset", "e-seams", "Asks the release policy; returns the connection to the pool seam", "Go")
+rel("e29", "e-reset", "n-pgwire", "Encodes the reset's Query; frames its reply", "Go")
 rel("e16", "e-pipeline", "e-fail", "Every refusal and failure", "Go")
 rel("e17", "e-fail", "n-pgwire", "Builds the error reply for its contract row", "Go")
+rel("e28", "e-fail", "e-seams", "Hands each failure, with its reached fact, to the retry policy", "Go")
 rel("e18", "e-clock", "e-pipeline", "A deadline was reached", "Go")
 rel("e19", "e-drain", "e-pipeline", "Sets the draining input", "Go")
-rel("e20", "e-publish", "n-obs", "Hands over the instance snapshot", "Go, plain structs")
+rel("e20", "e-publish", "n-obs", "Uses the histogram, the gauge and the conservation check; the engine source mapping reads its snapshot", "Go, plain structs")
 rel("e21", "e-pipeline", "n-work", "Passes work units and outcomes between stages", "Go types")
 
 # --------------------------------------------------------------------------- wire layer components
@@ -438,8 +590,8 @@ comp(P, "w-scram", "SCRAM-SHA-256 functions",
 comp(P, "w-fatal", "Startup FATAL replies",
      "The replies the session machines make themselves during startup: an ErrorResponse with severity, SQLSTATE and "
      "message, the old-format error for a protocol 2 client, and NegotiateProtocolVersion. Also parses the severity "
-     "and SQLSTATE of an ErrorResponse from the database. The error table lists the startup rows too, but the "
-     "session machines still build their replies here.")
+     "and SQLSTATE of an ErrorResponse from the database. The client session machine names a row of the error "
+     "table for every FATAL it writes and takes the code from that row; the encoders stay here.")
 comp(P, "w-snapshot", "Wire snapshot",
      "The wire layer's counters as one plain struct, per side: startups begun, completed, in progress and failed by "
      "reason; pre-startup requests by kind and answer; TLS handshakes by version and failure; plaintext refused; "
@@ -467,11 +619,12 @@ comp(P, "w-share", "Safe-shape recogniser",
      "nothing. docs/safe-shape.md is generated from its tables. Stated limit: it cannot see a view, operator or "
      "row-level security policy that hides a side effect.")
 comp(P, "w-errors", "Error contract and reply builders",
-     "One table of 20 rows: each refusal and failure, its reply form, its SQLSTATE, whether anything reached the "
+     "One table of 23 rows: each refusal and failure, its reply form, its SQLSTATE, whether anything reached the "
      "database, whether a write may have applied, and what happens to the client connection. The reply builder "
      "appends the ErrorResponse and the correct end marker for a row and counts replies by row. The "
      "discard-until-Sync rule refuses extended-protocol messages. docs/error-contract.md is generated from the "
-     "table. Later chunks start to send their rows; so far only the two unsupported rows are sent, by the test gateway.")
+     "table. The engine sends the rows of the walking skeleton and the client session machine the startup rows; "
+     "the rows of cores not built yet (breaker, rate gate and others) are not sent so far.")
 comp(P, "w-harness", "Startup-only test proxy and startup fidelity runner",
      "internal/pgwire/pgwiretest. A proxy for tests on simulated streams: the two session machines back to back, "
      "one database connection per client, no pool; after login it relays queries and replies through both trackers. "
@@ -497,6 +650,9 @@ rel("w3", "n-engine", "w-cycle", "Reply bytes in; status and message boundaries 
 rel("w4", "n-engine", "w-classifier", "Statement text in; work unit out", "Go")
 rel("w5", "n-engine", "w-errors", "Contract row in; reply bytes out", "Go")
 rel("w17", "n-engine", "w-front", "Client bytes after login in; queries and terminate out", "Go")
+rel("w53", "n-engine", "w-framer", "Frames the reply of the reset it sends after every lease", "Go")
+rel("w54", "n-engine", "w-snapshot", "Keeps one set of wire counters for all its sessions and trackers", "Go")
+rel("w55", "n-engine", "w-msgs", "Encodes each Query it forwards, and the reset", "Go")
 rel("w9", "w-errors", "w-msgs", "Encodes ErrorResponse and ReadyForQuery by hand", "Go")
 rel("w10", "w-codec", "w-framer", "Framed message bodies (no caller yet)", "Go")
 rel("w11", "w-codec", "pgproto3", "Message structs: Encode, Decode", "Go import")
@@ -759,7 +915,7 @@ rel("m2", "s-cli", "s-toy", "Looks up a toy scenario by name and runs it", "Go")
 rel("m3", "s-simtest", "s-loop", "Runs a scenario twice from one seed", "Go")
 rel("m4", "s-loop", "s-clock", "Advances time to the next event", "Go")
 rel("m5", "s-net", "s-loop", "Schedules every delivery and notification as its own event", "Go")
-rel("m6", "s-net", "n-engine", "Implements the engine's transport seam: bytes in, bytes out, opened, closed", "Go", "implementation")
+rel("m6", "n-engine", "s-net", "The engine's simulator driver (proxysim) implements the transport seam on these streams: listens, dials, reads, writes, closes", "Go, test code")
 rel("m7", "s-workload", "s-net", "Opens client connections; sends and reads", "Go")
 rel("m8", "s-fakepg", "s-net", "Accepts database connections; replies", "Go")
 rel("m9", "s-faults", "s-net", "Applies the network faults at their instants", "Go")
@@ -786,8 +942,8 @@ rel("m39", "s-workload", "s-trace", "Appends arrivals, sends, completions and re
 rel("m40", "s-fakepg", "s-inv", "Registers its conservation laws, the connection limit and its quiesce check", "Go")
 rel("m41", "s-workload", "s-inv", "Registers request conservation per tenant and its quiesce check", "Go")
 rel("m42", "s-world", "s-faults", "Scenario fault schedules; random schedules decoded from fuzz input", "Go")
-rel("m17", "n-engine", "s-trace", "Appends each decision", "Go")
-rel("m18", "s-inv", "n-engine", "Reads snapshots at every event and at the end", "Go")
+rel("m17", "n-engine", "s-trace", "The engine's simulator driver appends a record for each connection it closes and writes the engine's counters for the state digest", "Go, test code")
+rel("m18", "n-engine", "s-inv", "The engine's simulator driver registers the engine's invariants (snapshot conservation, one client per lent connection) and its quiesce check", "Go, test code")
 rel("m19", "s-simtest", "s-trace", "Compares the digests of the two runs; prints the trace tail on failure", "Go")
 rel("m20", "s-toy", "s-net", "Echo over simulated streams, for the meta-tests", "Go")
 rel("m21", "s-net", "s-streams", "Latency and fragment sizes, one stream per connection and direction", "Go")
@@ -798,6 +954,12 @@ rel("m25", "s-toy", "s-faults", "Scenario fault schedules; schedules decoded fro
 rel("m26", "s-toy", "s-simtest", "Its scenario tests sweep seeds and run every seed twice", "Go test")
 rel("m27", "developer", "s-simtest", "Runs seed sweeps and fuzz targets", "scripts/sweep.sh, scripts/fuzz.sh, go test")
 rel("m28", "s-cli", "s-trace", "Prints the digests and, on request, every trace record", "Go")
+rel("m46", "n-engine", "s-simtls", "The engine's simulator driver plays the handshake on both legs: server for clients, client for the database", "Go, test code")
+rel("m47", "n-engine", "s-fakepg", "The simulator driver's World starts the fake as the engine's database", "Go, test code")
+rel("m48", "n-e2e", "s-world", "Implements the driver interface with the proxy between the clients and the fake, and runs a direct baseline through it", "Go test")
+rel("m49", "n-e2e", "s-fakepg", "Tier S checks read the fake's statement and write logs: transaction integrity, session state, what ran after a fault", "Go test")
+rel("m50", "n-e2e", "s-faults", "Scenario fault schedules; the operation fuzz target decodes its input into a timed operation list in the schedule's form", "Go test")
+rel("m51", "n-e2e", "s-testclient", "The scripted clients of both tiers frame, decode and track their session with it", "Go test")
 
 # --------------------------------------------------------------------------- observability components
 P = "c-obs"
@@ -844,7 +1006,7 @@ comp(P, "o-health", "Health",
      "Three states, the worst over a table of named rules, with a reason per rule and a JSON body. The collector "
      "rule: degraded before the first publish, and while the latest publish had metric errors or an adapter's export "
      "failed. Other rules: degraded while shedding, while the breaker is open, at the limit's floor, or draining; "
-     "failed only when this instance cannot work. A database outage is degraded.")
+     "failed only when this instance cannot work (its client listener is down). A database outage is degraded.")
 comp(P, "o-prom", "Prometheus text exporter",
      "internal/obs/promtext. Names mg_<component>_<metric>, low-cardinality labels and a bounded tenant label: "
      "configured tenants, or the first active ones, up to a cap; quiet tenants lose their slot; the rest are summed "
@@ -879,12 +1041,19 @@ comp(P, "o-clssrc", "Classifier source mapping",
      "wire-layer snapshots: the classifier's (statements, by class, rejects by reason, opaque, safe-read, "
      "shareable, hinted, share keys), the reply builder's (replies by error-table row, failures) and the "
      "discard-until-Sync counters. All counters; every known label value is emitted, zero included; no tenant label.")
+comp(P, "o-enginesrc", "Engine source mapping",
+     "internal/obs/enginesrc. The metric declarations of component engine and the mapping to points from two "
+     "snapshots: the engine's, and the shell's (mailbox depth and peak, goroutines, readers and writers, deadlines; "
+     "names shell_...). Labels are outcome, reason and mode; no tenant label so far. Registers the engine's wire "
+     "and classifier sources beside its own. Holds the health rule database: degraded while no database connection "
+     "is usable and the last connect failed.")
 comp(P, "o-catalog", "Metric catalog and schema document",
      "internal/obs/catalog. The registry of every source the product registers, and the generator of "
      "docs/csv-schema.md (columns of the three files and every metric). Its test fails when the committed document "
      "differs from the code; scripts/gen-docs.sh regenerates or checks it.")
 comp(P, "o-simrun", "Scenario flush harness",
-     "internal/obs/simrun. Runs a simulator world scenario, a wire scenario or a classifier scenario, with a "
+     "internal/obs/simrun. Runs a simulator world scenario, a wire scenario, a classifier scenario, or any run "
+     "handed its simulator and sources (the end-to-end suite's tier S scenarios), with a "
      "collector that publishes on the virtual clock and "
      "with the CSV, JSON, Prometheus and log adapters attached, then checks every output against the final "
      "snapshot. Its tests run the five direct baselines, every wire scenario and both classifier scenarios twice "
@@ -897,14 +1066,17 @@ comp(P, "o-assert", "SQL assertions and their runner",
      "the direct baselines' counts and, for each wire scenario, that startup failures by reason, TLS requests by "
      "answer and handshake failures equal what was injected and sent, and for the classifier scenarios that "
      "rejects equal the statements sent and the fake Postgres started only what was forwarded (nothing in the "
-     "reject-only scenario).", tech="Bash, SQL", tags=("test",))
-rel("o1", "n-engine", "o-collector", "Registers each component as a source and publishes once per interval", "Go, plain structs")
+     "reject-only scenario). For the end-to-end scenarios of both tiers: conservation per instance, the resets "
+     "against the leases ended and, where the scenario has a fault, error-contract replies by row = faults "
+     "injected; in tier S also proxy completed = workload completed and replies by row = what the clients saw.",
+     tech="Bash, SQL", tags=("test",))
+rel("o1", "n-shell", "o-collector", "Creates it in the real process, attaches the JSON, Prometheus and (when obs.csv.dir is set) CSV adapters, and publishes when the engine returns a publish action: once per interval and at the stop", "Go")
 rel("o2", "o-collector", "o-contract", "Calls every source's Snapshot and mapping at each publish", "Go")
 rel("o3", "o-contract", "o-hist", "Histograms inside snapshots", "Go")
 rel("o4", "o-collector", "o-health", "Evaluates the rule table on its last snapshot", "Go")
 rel("o5", "n-shell", "o-prom", "Admin listener serves /metrics", "HTTP")
 rel("o6", "n-shell", "o-json", "Admin listener serves /stats", "HTTP")
-rel("o7", "n-shell", "o-health", "Admin listener serves /health", "HTTP")
+rel("o7", "n-shell", "o-health", "Admin listener serves /healthz; adds the rule listener (failed while the client listener is down)", "HTTP")
 rel("o8", "o-prom", "o-adapter", "Implements the adapter interface", "Go", "implementation")
 rel("o9", "o-json", "o-adapter", "Implements the adapter interface", "Go", "implementation")
 rel("o10", "o-csv", "o-adapter", "Implements the adapter interface", "Go", "implementation")
@@ -915,8 +1087,8 @@ rel("o14", "o-merge", "o-instance", "Merges the snapshots of several instances i
 rel("o15", "o-adapter", "o-collector", "Is attached to it and receives each published snapshot; all an adapter can read", "Go")
 rel("o16", "o-csv", "csvfiles", "Flushes rows at each publish and at the end of a run", "Files, schema version 1")
 rel("o17", "duckdb", "csvfiles", "Reads the files directly", "read_csv, SQL")
-rel("o18", "n-e2e", "o-csv", "Turns the flush on for every run; checks the final flush equals the snapshot", "Go test")
-rel("o19", "n-e2e", "o-assert", "Runs the SQL assertions after a run", "scripts/csv-assert.sh")
+rel("o18", "n-e2e", "o-csv", "Turns the flush on for every run in both tiers; checks the final flush equals the snapshot (tier R: reads the binary's files back and runs the round-trip check on them)", "Go test")
+rel("o19", "n-e2e", "o-assert", "Runs the SQL assertions over the run directories of every scenario, both tiers", "scripts/chaos.sh, scripts/csv-assert.sh")
 rel("o20", "prom", "otelcol", "Scrapes the Collector's Prometheus endpoint", "HTTP")
 rel("o21", "prom", "n-shell", "Can scrape /metrics directly instead (no Collector)", "HTTP admin port")
 rel("o22", "n-sim", "o-obstest", "Scenario tests check that snapshots are plain and that every counter moves", "Go test")
@@ -953,6 +1125,15 @@ rel("o57", "o-clssrc", "n-pgwire", "Reads the classifier, reply-builder and disc
 rel("o58", "o-clssrc", "o-collector", "Gives it one source for component classifier, with its metric declarations", "Go")
 rel("o59", "o-catalog", "o-clssrc", "Lists every metric it declares", "Go")
 rel("o60", "o-simrun", "o-clssrc", "Takes the classifier source of the scenario's test gateway", "Go")
+rel("o61", "o-enginesrc", "n-engine", "Reads the engine snapshot and the wire, classifier and reply snapshots the engine holds", "Go")
+rel("o62", "o-enginesrc", "n-shell", "Reads the shell's counters through a function the shell hands over", "Go")
+rel("o63", "o-enginesrc", "o-collector", "Registers the engine source (shell metrics included) and the engine's wire and classifier sources", "Go")
+rel("o64", "o-enginesrc", "o-wiresrc", "Takes the wire source for the engine's wire snapshot", "Go")
+rel("o65", "o-enginesrc", "o-clssrc", "Takes the classifier source for the engine's classifier and reply snapshots", "Go")
+rel("o66", "o-enginesrc", "o-health", "Supplies the rule database", "Go")
+rel("o67", "o-catalog", "o-enginesrc", "Lists every metric it declares", "Go")
+rel("o68", "n-shell", "o-csv", "The real process flushes through the bounded queue when obs.csv.dir is set", "Go")
+rel("o69", "n-e2e", "o-simrun", "Tier S runs every scenario under it, with the engine's and the simulator's sources", "Go test")
 rel("o50", "n-sim", "o-conserve", "The fake Postgres and the workload keep gauges with peaks and check conservation", "Go")
 rel("o51", "n-sim", "o-hist", "The workload records latencies in it; the world checks read its snapshots", "Go")
 
@@ -1016,12 +1197,12 @@ diagram("container", "container", "Containers: the request path", "02-container-
 diagram("container-seams", "container", "Containers: drivers and seams", "03-container-drivers-and-seams", scope="gw", parent="context",
         shows="Who drives the engine (the shell or the simulator), where the Postgres codec boundary is, and the work vocabulary the cores are written against",
         intro="The verdict on the backend interface, drawn. There is no generic backend interface. There are three seams: "
-              "the engine's byte transport (implemented by the shell with TCP and by the simulator), the wire layer "
+              "the engine's byte transport (implemented by the shell with TCP and, on the simulator, by the engine's test package proxysim), the wire layer "
               "(the only product package allowed to import pgproto3), and the work vocabulary (the only thing the cores see). "
               "A second protocol would be a sibling of the wire layer producing the same vocabulary.",
         nodes=["developer", "c-sim", "c-e2e", "c-shell", "c-engine", "c-pgwire", "c-work", "c-adm", "c-pool", "c-coal",
                "c-retry", "pgproto3", "pg"],
-        rels=["c3", "s1", "c4", "s2", "s3", "s4", "s5", "s6", "s8", "s9", "s10", "s11", "s12", "s13", "s14", "s15", "c10", "s16"],
+        rels=["c3", "s1", "c4", "s2", "s3", "s18", "s4", "s5", "s6", "s8", "s9", "s10", "s17", "s11", "s12", "s13", "s14", "s15", "c10", "s16"],
         boundary="mini-gateway repository",
         detail={"c-sim": "component-simulator", "c-engine": "component-engine", "c-pgwire": "component-wire"})
 
@@ -1042,12 +1223,14 @@ def component_diagram(id, title, file, scope, shows, intro, extra_nodes, rels):
 
 
 component_diagram("component-engine", "Components: engine", "05-component-engine", "c-engine",
-                  "internal/proxy: the transport seam, the two connection tables, the request pipeline and its stage seams, the reply relay",
+                  "internal/proxy: the transport seam and its simulator driver, the two connection tables, the request pipeline and its stage seams, the lease end with its reset, the reply relay, the failure classifier, deadlines, the snapshot",
                   "The engine is where the seams meet. The transport seam below it has two implementations. The pipeline "
                   "above calls each core through a small stage interface, so a core can be replaced by a pass-through "
-                  "(which is how each scenario's ablation run is made).",
+                  "(which is how each scenario's ablation run is made). Chunk 6 built the walking skeleton: the whole "
+                  "path of a request with a stand-in at every stage whose core is not built, which is why the arrows "
+                  "to admission, the coalescer, the pool and the retry policy are still dashed.",
                   ["n-shell", "n-sim", "n-pgwire", "n-adm", "n-coal", "n-pool", "n-retry", "n-obs", "n-work"],
-                  ["e%d" % i for i in range(1, 22) if i != 11])
+                  ["e%d" % i for i in (1, 2, 22, 3, 4, 5, 6, 7, 27, 23, 8, 9, 10, 12, 13, 14, 15, 24, 25, 26, 29, 16, 17, 28, 18, 19, 20, 21)])
 component_diagram("component-wire", "Components: wire layer", "06-component-wire-layer", "c-pgwire",
                   "internal/pgwire: our framer and message coding, both session machines, SCRAM, the two trackers, the wire snapshot, the SQL lexer, the classifier with its courtesy reject list, the safe-shape recogniser, the error contract and reply builders, the test proxies and their scenarios; planned: the pgproto3 codec boundary",
                   "pgproto3 gives message structs and nothing else. The framer, the session machines, SCRAM, transaction "
@@ -1056,11 +1239,11 @@ component_diagram("component-wire", "Components: wire layer", "06-component-wire
                   "safety does not depend on reading SQL (the pool will reset every connection after every lease), so "
                   "the reject list is a courtesy, and what may be shared is decided by a recogniser that does not use "
                   "the lexer. The machines, the trackers and the reply builders code their messages by hand, so no "
-                  "file in the package imports pgproto3 and the codec boundary has no caller yet. No engine exists "
-                  "yet, so two test proxies drive this code in the simulator, between simulated clients and the fake "
-                  "Postgres.",
+                  "file in the package imports pgproto3 and the codec boundary has no caller yet. Since chunk 6 the "
+                  "engine drives this code. The two test proxies remain as the wire layer's own scenarios in the "
+                  "simulator, between simulated clients and the fake Postgres.",
                   ["n-engine", "n-work", "n-sim", "pgproto3", "pg"],
-                  ["w%d" % i for i in (1, 2, 3, 17, 4, 5, 18, 19, 20, 21, 22, 23, 24, 25, 26, 12, 13, 27, 28, 29, 30,
+                  ["w%d" % i for i in (1, 2, 3, 17, 4, 5, 53, 54, 55, 18, 19, 20, 21, 22, 23, 24, 25, 26, 12, 13, 27, 28, 29, 30,
                                          9, 10, 11, 14, 40, 41, 15, 42, 43, 16, 31, 32, 37, 38, 39, 33, 34, 35, 36,
                                          44, 45, 52, 46, 47, 48, 49, 50, 51)])
 component_diagram("component-admission", "Components: admission", "07-component-admission", "c-adm",
@@ -1084,14 +1267,16 @@ component_diagram("component-retry", "Components: retry policy", "10-component-r
                   ["n-engine", "n-work"], ["t%d" % i for i in range(1, 8)])
 component_diagram("component-simulator", "Components: simulator harness", "11-component-simulator", "c-sim",
                   "internal/sim and its sub-packages, internal/testclient and internal/randdist: the loop, the clock, simulated byte streams, the simulated TLS handshake, the fake Postgres, simulated clients, the test client, the scenario world with its baselines and fidelity runner, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol",
-                  "The harness owns the world around the engine. It implements the engine's transport seam, so the engine "
-                  "under test is the engine that ships. Several engines can run on one loop, which is how the "
-                  "three-instance scenarios are made. The kernel came first (chunk 1) and is proved on a toy echo "
-                  "protocol. Chunk 2 added the world the proxy will stand in: the fake Postgres, the simulated clients "
+                  "The harness owns the world around the engine. The engine's own test package, proxysim, implements "
+                  "the engine's transport seam on the simulated streams, so the engine under test is the engine that "
+                  "ships. Several engines can run on one loop, which is how the "
+                  "three-instance scenarios will be made. The kernel came first (chunk 1) and is proved on a toy echo "
+                  "protocol. Chunk 2 added the world the proxy stands in: the fake Postgres, the simulated clients "
                   "and scenarios that run the clients straight at the fake. Chunk 4 added SCRAM login and the TLS "
-                  "request, answer and simulated handshake to the fake and the clients. No engine exists yet, so "
-                  "those direct baselines are the control arms for later chunks.",
-                  ["developer", "n-engine", "n-pgwire", "pgproto3", "pg"], ["m%d" % i for i in range(1, 46) if i != 31])
+                  "request, answer and simulated handshake to the fake and the clients. Chunk 6 put the engine "
+                  "between the clients and the fake; the simulator packages themselves did not change, and the "
+                  "direct baselines are the control arms.",
+                  ["developer", "n-engine", "n-e2e", "n-pgwire", "pgproto3", "pg"], ["m%d" % i for i in range(1, 52) if i != 31])
 component_diagram("component-observability", "Components: observability", "12-component-observability", "c-obs",
                   "internal/obs: the one raw export (snapshots), the metric registry, the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus",
                   "The hard rule: one common raw export, then the collector interface, then adapters. Components fill "
@@ -1101,13 +1286,14 @@ component_diagram("component-observability", "Components: observability", "12-co
                   "files, and tests and DuckDB read them with nothing else running. The production path: the OTLP "
                   "adapter pushes to an OpenTelemetry Collector, which Prometheus scrapes. DuckDB is an analysis tool "
                   "over files, never a dependency of the proxy. Chunk 3 built the spine before the proxy's "
-                  "components: so far the sources are the simulator's kernel, network, fake Postgres and workload "
-                  "and, from the wire layer, its snapshot (chunk 4, the first product source) and the classifier's "
-                  "and reply builders' counters (chunk 5), "
-                  "and the scenario flush harness is what publishes.",
+                  "components: the sources are the simulator's kernel, network, fake Postgres and workload, "
+                  "from the wire layer its snapshot (chunk 4, the first product source) and the classifier's "
+                  "and reply builders' counters (chunk 5), and the engine with its shell (chunk 6). In the real "
+                  "process the shell creates the collector and publishes; in the simulator the scenario flush "
+                  "harness does.",
                   ["n-engine", "n-shell", "n-e2e", "n-sim", "n-pgwire", "csvfiles", "duckdb", "otelcol", "prom"],
                   ["o%d" % i for i in (1, 2, 25, 26, 27, 3, 24, 28, 29, 4, 15, 8, 9, 10, 11, 12, 31, 32, 5, 6, 7, 16, 18, 17, 19,
-                                         13, 20, 21, 14, 33, 22, 23, 50, 51, 34, 35, 52, 53, 57, 58, 37, 54, 59, 38, 39, 40, 41, 42, 55, 56, 60, 43, 44, 45, 46, 47, 48)])
+                                         13, 20, 21, 14, 33, 22, 23, 50, 51, 34, 35, 52, 53, 57, 58, 61, 62, 63, 64, 65, 66, 68, 37, 54, 59, 67, 38, 39, 40, 41, 42, 55, 56, 60, 69, 43, 44, 45, 46, 47, 48)])
 
 
 # --------------------------------------------------------------------------- output

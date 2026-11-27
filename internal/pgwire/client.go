@@ -218,9 +218,9 @@ func (s *ClientSession) write(acts []Action, data []byte, messages int64) []Acti
 	return append(acts, Action{Kind: ActWrite, Data: data})
 }
 
-func (s *ClientSession) fatal(acts []Action, code, message string, r Reason) []Action {
-	acts = s.write(acts, AppendFatal(nil, code, message), 1)
-	return s.close(acts, Action{Reason: r, Code: code})
+func (s *ClientSession) fatal(acts []Action, id ErrRowID, message string, r Reason) []Action {
+	acts = s.write(acts, AppendRowFatal(nil, id, message), 1)
+	return s.close(acts, Action{Reason: r, Code: id.Row().Code})
 }
 
 func (s *ClientSession) close(acts []Action, a Action) []Action {
@@ -241,7 +241,7 @@ func (s *ClientSession) close(acts []Action, a Action) []Action {
 func (s *ClientSession) violation(acts []Action, v Violation, reply bool) []Action {
 	s.st.Violations[v]++
 	if reply {
-		acts = s.write(acts, AppendFatal(nil, CodeProtocolViolation, "protocol violation: "+v.String()), 1)
+		acts = s.write(acts, AppendRowFatal(nil, ErrRowProtocolViolation, "protocol violation: "+v.String()), 1)
 	}
 	return s.close(acts, Action{Reason: ReasonViolation, Violation: v})
 }
@@ -277,7 +277,7 @@ func (s *ClientSession) Deadline(acts []Action) []Action {
 	case csTLSWait:
 		s.st.TLSFailed[HandshakeDeadline]++
 	case csAuthFirst, csAuthFinal:
-		acts = s.write(acts, AppendFatal(nil, CodeProtocolViolation, "canceling authentication due to timeout"), 1)
+		acts = s.write(acts, AppendRowFatal(nil, ErrRowProtocolViolation, "canceling authentication due to timeout"), 1)
 	}
 	if !s.inStartup() {
 		return acts
@@ -339,10 +339,10 @@ func parseSASLInitial(body []byte) (string, []byte, bool) {
 
 func (s *ClientSession) authFailed(acts []Action, cause AuthCause) []Action {
 	s.st.AuthFailures[cause]++
-	code, message := CodeProtocolViolation, "malformed SCRAM message"
+	row, message := ErrRowProtocolViolation, "malformed SCRAM message"
 	switch cause {
 	case AuthCauseWrongPassword, AuthCauseUnknownUser:
-		code, message = CodeInvalidPassword, `password authentication failed for user "`+s.user+`"`
+		row, message = ErrRowAuthFailed, `password authentication failed for user "`+s.user+`"`
 	case AuthCauseBadMechanism:
 		message = "client selected an invalid SASL authentication mechanism"
 	case AuthCauseChannelBindingRefused:
@@ -352,17 +352,17 @@ func (s *ClientSession) authFailed(acts []Action, cause AuthCause) []Action {
 	case AuthCauseNonceMismatch:
 		message = "SCRAM nonce does not match"
 	}
-	acts = s.write(acts, AppendFatal(nil, code, message), 1)
-	return s.close(acts, Action{Reason: ReasonAuthFailed, Cause: cause, Code: code})
+	acts = s.write(acts, AppendRowFatal(nil, row, message), 1)
+	return s.close(acts, Action{Reason: ReasonAuthFailed, Cause: cause, Code: row.Row().Code})
 }
 
 func (s *ClientSession) authenticated(acts []Action, out []byte, messages int64) []Action {
 	out = AppendAuthentication(out, AuthOK, nil)
 	messages++
 	if s.database != s.cfg.Database {
-		out = AppendFatal(out, CodeUnknownDatabase, `database "`+s.database+`" does not exist`)
+		out = AppendRowFatal(out, ErrRowUnknownDatabase, `database "`+s.database+`" does not exist`)
 		acts = s.write(acts, out, messages+1)
-		return s.close(acts, Action{Reason: ReasonUnknownDatabase, Code: CodeUnknownDatabase})
+		return s.close(acts, Action{Reason: ReasonUnknownDatabase, Code: ErrRowUnknownDatabase.Row().Code})
 	}
 	params := s.cfg.ServerParams
 	if params == nil {

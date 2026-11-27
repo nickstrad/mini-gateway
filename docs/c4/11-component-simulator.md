@@ -1,18 +1,19 @@
 # C4 Level 3: Components: simulator harness
 
-**Built so far: chunks 0–5. Dashed parts are planned.** In this diagram 18 of 21 elements and 41 of 44 relationships are built. Model: diagram `component-simulator` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–6. Dashed parts are planned.** In this diagram 19 of 22 elements and 50 of 50 relationships are built. Model: diagram `component-simulator` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
-The harness owns the world around the engine. It implements the engine's transport seam, so the engine under test is the engine that ships. Several engines can run on one loop, which is how the three-instance scenarios are made. The kernel came first (chunk 1) and is proved on a toy echo protocol. Chunk 2 added the world the proxy will stand in: the fake Postgres, the simulated clients and scenarios that run the clients straight at the fake. Chunk 4 added SCRAM login and the TLS request, answer and simulated handshake to the fake and the clients. No engine exists yet, so those direct baselines are the control arms for later chunks.
+The harness owns the world around the engine. The engine's own test package, proxysim, implements the engine's transport seam on the simulated streams, so the engine under test is the engine that ships. Several engines can run on one loop, which is how the three-instance scenarios will be made. The kernel came first (chunk 1) and is proved on a toy echo protocol. Chunk 2 added the world the proxy stands in: the fake Postgres, the simulated clients and scenarios that run the clients straight at the fake. Chunk 4 added SCRAM login and the TLS request, answer and simulated handshake to the fake and the clients. Chunk 6 put the engine between the clients and the fake; the simulator packages themselves did not change, and the direct baselines are the control arms.
 
-A solid box or arrow is built; a dashed one is planned. An arrow points to the supplier. An arrow marked "implements" means the source implements the target's interface; every other arrow means "uses".
+A solid box or arrow is built; a dashed one is planned. An arrow points to the supplier.
 
 ```mermaid
 flowchart TB
   DEVELOPER(["Developer or reader"]):::built
   N_ENGINE["Engine"]:::planned
+  N_E2E["End-to-end suite and load generator"]:::planned
   N_PGWIRE["Wire layer"]:::planned
   PGPROTO3[["pgproto3 (from pgx/v5)"]]:::built
-  PG[("Postgres")]:::planned
+  PG[("Postgres")]:::built
   subgraph SCOPE["Simulator harness"]
     S_LOOP["Event loop"]:::built
     S_CLOCK["Virtual clock and timers"]:::built
@@ -36,7 +37,7 @@ flowchart TB
   S_SIMTEST -->|3| S_LOOP
   S_LOOP -->|4| S_CLOCK
   S_NET -->|5| S_LOOP
-  S_NET -.->|6 implements| N_ENGINE
+  N_ENGINE -->|6| S_NET
   S_WORKLOAD -->|7| S_NET
   S_FAKEPG -->|8| S_NET
   S_FAULTS -->|9| S_NET
@@ -47,8 +48,8 @@ flowchart TB
   S_FAKEPG -->|14| PGPROTO3
   S_TESTCLIENT -->|15| PGPROTO3
   S_FAKEPG -->|16| N_PGWIRE
-  N_ENGINE -.->|17| S_TRACE
-  S_INV -.->|18| N_ENGINE
+  N_ENGINE -->|17| S_TRACE
+  N_ENGINE -->|18| S_INV
   S_SIMTEST -->|19| S_TRACE
   S_TOY -->|20| S_NET
   S_NET -->|21| S_STREAMS
@@ -75,6 +76,12 @@ flowchart TB
   S_WORKLOAD -->|42| N_PGWIRE
   S_FAKEPG -->|43| S_SIMTLS
   S_WORKLOAD -->|44| S_SIMTLS
+  N_ENGINE -->|45| S_SIMTLS
+  N_ENGINE -->|46| S_FAKEPG
+  N_E2E -->|47| S_WORLD
+  N_E2E -->|48| S_FAKEPG
+  N_E2E -->|49| S_FAULTS
+  N_E2E -->|50| S_TESTCLIENT
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned
@@ -105,10 +112,11 @@ flowchart TB
 | cmd/mgsim | component | built (chunk 1) | Lists the named scenarios (toy and world); runs one from a seed outside go test, prints its digests (and the trace on request; for a world scenario also its result table) and exits 1 with the REPLAY line when it fails. |
 | Toy echo protocol | component | built (chunk 1) | internal/sim/simtoy. A line-echo client and server with a planted-bug switch, and eleven named scenarios that cover every network fault. Used only to test the harness itself. |
 | Developer or reader | person | built (chunk 1) | Runs simulator scenarios from a seed, replays a failure from its printed REPLAY line, runs make test / chaos / bench. |
-| Engine | neighbouring container | planned | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code. |
-| Wire layer | neighbouring container | planned | internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the SQL lexer, the statement classifier with its courtesy reject list, the safe-shape recogniser that decides sharing, the error contract, the wire snapshot. The only product package allowed to import pgproto3. Its test packages pgwiretest, wireworld and clsworld run this code in the simulator. **So far:** Built in chunks 4 and 5 (internal/pgwire): every component drawn here except the codec boundary. Chunk 4: the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the two trackers, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest and wireworld. Chunk 5: the SQL lexer, the reject list, the statement classifier, the safe-shape recogniser, the error table with its reply builders, and the test package clsworld. Not built: the codec boundary (no file in the package imports pgproto3; the reply builders code their messages by hand). No engine exists yet, so only the test proxies drive this code, and nothing produces outcomes. |
+| Engine | neighbouring container | planned | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code; its test package proxysim is the simulator's driver. **So far:** Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). The stages that belong to cores not built yet run their stand-ins: a breaker that is always closed, a rate gate that always allows, no coalescing, one bounded first-come queue, a fixed set of connections, retry off. |
+| End-to-end suite and load generator | neighbouring container | planned | test/e2e and cmd/loadgen. Each scenario is written once and runs on the simulator (tier S) and on the real binary against a real Postgres (tier R), with the CSV flush on and SQL assertions over the files. Holds the engine's operation fuzz target and the canaries. The load generator is open-loop. **So far:** Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Not built: cmd/loadgen, the open-loop load generator (chunk 6a), and make bench. |
+| Wire layer | neighbouring container | planned | internal/pgwire. Everything that knows Postgres: framing, both session state machines, the query-cycle tracker, the SQL lexer, the statement classifier with its courtesy reject list, the safe-shape recogniser that decides sharing, the error contract, the wire snapshot. The only product package allowed to import pgproto3. Its test packages pgwiretest, wireworld and clsworld run this code in the simulator. **So far:** Built in chunks 4 and 5 (internal/pgwire): every component drawn here except the codec boundary. Chunk 4: the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the two trackers, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest and wireworld. Chunk 5: the SQL lexer, the reject list, the statement classifier, the safe-shape recogniser, the error table with its reply builders, and the test package clsworld. Chunk 6: the engine drives this code, and the client session machine takes every FATAL from the error table (three startup rows added). Not built: the codec boundary (no file in the package imports pgproto3; the reply builders code their messages by hand). Nothing produces outcomes yet. |
 | pgproto3 (from pgx/v5) | softwareSystem, external | built (chunk 2) | Go package github.com/jackc/pgx/v5/pgproto3: Postgres wire message structs with Encode and Decode. The one external dependency, used for message encoding only. |
-| Postgres | softwareSystem, external | planned | One ordinary Postgres server. Sees at most the fleet's connection budget, all logged in as one role. |
+| Postgres | softwareSystem, external | built (chunk 6) | One ordinary Postgres server. Sees at most the fleet's connection budget, all logged in as one role. |
 
 ## Relationships
 
@@ -119,7 +127,7 @@ flowchart TB
 | 3 | Seeds, replay, sweep | Event loop | built | Runs a scenario twice from one seed | Go |
 | 4 | Event loop | Virtual clock and timers | built | Advances time to the next event | Go |
 | 5 | Simulated byte streams | Event loop | built | Schedules every delivery and notification as its own event | Go |
-| 6 | Simulated byte streams | Engine | planned | Implements the engine's transport seam: bytes in, bytes out, opened, closed | Go, interface implementation |
+| 6 | Engine | Simulated byte streams | built | The engine's simulator driver (proxysim) implements the transport seam on these streams: listens, dials, reads, writes, closes | Go, test code |
 | 7 | Clients and tenants | Simulated byte streams | built | Opens client connections; sends and reads | Go |
 | 8 | Fake Postgres | Simulated byte streams | built | Accepts database connections; replies | Go |
 | 9 | Fault schedule and shrinker | Simulated byte streams | built | Applies the network faults at their instants | Go |
@@ -130,8 +138,8 @@ flowchart TB
 | 14 | Fake Postgres | pgproto3 (from pgx/v5) | built | Wire messages | Go import |
 | 15 | Test client | pgproto3 (from pgx/v5) | built | Wire messages | Go import |
 | 16 | Fake Postgres | Wire layer | built | Reuses the SCRAM functions (server side) and the NegotiateProtocolVersion encoder | Go |
-| 17 | Engine | Decision trace and digests | planned | Appends each decision | Go |
-| 18 | Invariants and quiesce check | Engine | planned | Reads snapshots at every event and at the end | Go |
+| 17 | Engine | Decision trace and digests | built | The engine's simulator driver appends a record for each connection it closes and writes the engine's counters for the state digest | Go, test code |
+| 18 | Engine | Invariants and quiesce check | built | The engine's simulator driver registers the engine's invariants (snapshot conservation, one client per lent connection) and its quiesce check | Go, test code |
 | 19 | Seeds, replay, sweep | Decision trace and digests | built | Compares the digests of the two runs; prints the trace tail on failure | Go |
 | 20 | Toy echo protocol | Simulated byte streams | built | Echo over simulated streams, for the meta-tests | Go |
 | 21 | Simulated byte streams | Named random streams | built | Latency and fragment sizes, one stream per connection and direction | Go |
@@ -158,3 +166,9 @@ flowchart TB
 | 42 | Clients and tenants | Wire layer | built | Reuses the SCRAM functions (client side) | Go |
 | 43 | Fake Postgres | Simulated TLS handshake | built | Reads the client hello; replies with the configured outcome | Go |
 | 44 | Clients and tenants | Simulated TLS handshake | built | Sends the client hello, or a bad one; reads the reply | Go |
+| 45 | Engine | Simulated TLS handshake | built | The engine's simulator driver plays the handshake on both legs: server for clients, client for the database | Go, test code |
+| 46 | Engine | Fake Postgres | built | The simulator driver's World starts the fake as the engine's database | Go, test code |
+| 47 | End-to-end suite and load generator | Scenario world | built | Implements the driver interface with the proxy between the clients and the fake, and runs a direct baseline through it | Go test |
+| 48 | End-to-end suite and load generator | Fake Postgres | built | Tier S checks read the fake's statement and write logs: transaction integrity, session state, what ran after a fault | Go test |
+| 49 | End-to-end suite and load generator | Fault schedule and shrinker | built | Scenario fault schedules; the operation fuzz target decodes its input into a timed operation list in the schedule's form | Go test |
+| 50 | End-to-end suite and load generator | Test client | built | The scripted clients of both tiers frame, decode and track their session with it | Go test |

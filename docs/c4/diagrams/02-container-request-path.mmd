@@ -1,10 +1,10 @@
 flowchart TB
-  APP(["Client application"]):::planned
-  OPERATOR(["Operator"]):::planned
-  PG[("Postgres")]:::planned
+  APP(["Client application"]):::built
+  OPERATOR(["Operator"]):::built
+  PG[("Postgres")]:::built
   TELEMETRY[["Metrics and log readers"]]:::planned
   subgraph SCOPE["mini-gateway process"]
-    C_SHELL["Shell and binary<br/>cmd/mini-gateway"]:::planned
+    C_SHELL["Shell and binary<br/>cmd/mini-gateway"]:::built
     C_ENGINE["Engine<br/>internal/proxy"]:::planned
     C_PGWIRE["Wire layer<br/>internal/pgwire"]:::planned
     C_ADM["Admission<br/>internal/admission"]:::planned
@@ -14,20 +14,20 @@ flowchart TB
     C_OBS["Observability<br/>internal/obs"]:::planned
     C_CONFIG["Configuration<br/>internal/config"]:::planned
   end
-  APP -.->|1| C_SHELL
-  OPERATOR -.->|2| C_SHELL
-  C_SHELL -.->|3| C_ENGINE
-  C_ENGINE -.->|4| C_PGWIRE
+  APP -->|1| C_SHELL
+  OPERATOR -->|2| C_SHELL
+  C_SHELL -->|3| C_ENGINE
+  C_ENGINE -->|4| C_PGWIRE
   C_ENGINE -.->|5| C_ADM
   C_ENGINE -.->|6| C_COAL
   C_ENGINE -.->|7| C_POOL
   C_ENGINE -.->|8| C_RETRY
-  C_SHELL -.->|9| PG
-  C_ENGINE -.->|10| C_OBS
-  C_SHELL -.->|11| C_OBS
-  TELEMETRY -.->|12| C_SHELL
+  C_SHELL -->|9| PG
+  C_ENGINE -->|10| C_OBS
+  C_SHELL -->|11| C_OBS
+  TELEMETRY -->|12| C_SHELL
   C_OBS -.->|13| TELEMETRY
-  C_SHELL -.->|14| C_CONFIG
+  C_SHELL -->|14| C_CONFIG
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned

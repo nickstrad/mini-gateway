@@ -1,9 +1,11 @@
 package simrun_test
 
 import (
+	"errors"
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -13,6 +15,18 @@ import (
 const module = "github.com/nickstrad/mini-gateway/"
 
 var adapters = []string{"internal/obs/csvflush", "internal/obs/jsonstats", "internal/obs/logline", "internal/obs/promtext"}
+
+var rawExportSide = []string{
+	"internal/sim", "internal/testclient", "internal/randdist",
+	"internal/obs/simsrc", "internal/obs/wiresrc", "internal/obs/clssrc", "internal/obs/enginesrc", "internal/obs/obstest",
+	"internal/pool", "internal/admission", "internal/coalesce", "internal/retry", "internal/work", "internal/pgwire", "internal/proxy",
+}
+
+var adapterForbidden = []string{
+	"internal/sim", "internal/testclient",
+	"internal/obs/simsrc", "internal/obs/wiresrc", "internal/obs/clssrc", "internal/obs/enginesrc",
+	"internal/pool", "internal/admission", "internal/coalesce", "internal/retry", "internal/work", "internal/pgwire", "internal/proxy",
+}
 
 func importsUnder(t *testing.T, dir string) map[string][]string {
 	t.Helper()
@@ -51,7 +65,10 @@ func hasPrefixAny(s string, prefixes []string) bool {
 func TestOneRawExportImportRule(t *testing.T) {
 	root := repoRoot(t)
 	forbidden := append(append([]string{}, adapters...), "internal/obs/simrun", "internal/obs/catalog")
-	for _, dir := range []string{"internal/sim", "internal/testclient", "internal/randdist", "internal/obs/simsrc", "internal/obs/wiresrc", "internal/obs/clssrc"} {
+	for _, dir := range rawExportSide {
+		if _, err := os.Stat(filepath.Join(root, dir)); errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
 		for file, imps := range importsUnder(t, filepath.Join(root, dir)) {
 			for _, imp := range imps {
 				if hasPrefixAny(imp, forbidden) {
@@ -76,7 +93,7 @@ func TestOneRawExportImportRule(t *testing.T) {
 				continue
 			}
 			for _, imp := range imps {
-				if hasPrefixAny(imp, []string{"internal/sim", "internal/obs/simsrc", "internal/testclient"}) {
+				if hasPrefixAny(imp, adapterForbidden) {
 					t.Errorf("adapter file %s reads a component directly: %s", file, imp)
 				}
 			}

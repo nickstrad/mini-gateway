@@ -365,9 +365,9 @@ func TestAdv_6_GateSeedSweepCounts(t *testing.T) {
 	if e != nil {
 		t.Fatalf("%v %s", e, out)
 	}
-	// The inventory has 14 simulator-dependent targets and one plain target.
-	if strings.TrimSpace(string(out)) != "14" {
-		t.Fatalf("14 sim targets at 1 exec/s: gate records %q seed sweeps; output:\n%s", out, b)
+	// The inventory has 15 simulator-dependent targets and one plain target.
+	if strings.TrimSpace(string(out)) != "15" {
+		t.Fatalf("15 sim targets at 1 exec/s: gate records %q seed sweeps; output:\n%s", out, b)
 	}
 }
 func TestAdv_6_UnreadableAfterProgress(t *testing.T) {
@@ -422,7 +422,7 @@ func TestAdv_7_WireAndFakeSeedDataflow(t *testing.T) {
 func TestAdv_7_InventoryAndHiddenHashImports(t *testing.T) {
 	start(t)
 	count := 0
-	for _, dir := range []string{"internal/sim", "internal/sim/world", "internal/sim/simtoy", "internal/sim/fakepg", "internal/pgwire"} {
+	for _, dir := range []string{"internal/sim", "internal/sim/world", "internal/sim/simtoy", "internal/sim/fakepg", "internal/pgwire", "test/e2e"} {
 		deps := must(t, "go", "list", "-deps", "-test", "./"+dir)
 		if !bytes.Contains(deps, []byte("github.com/nickstrad/mini-gateway/internal/sim")) {
 			t.Fatalf("%s classification lost", dir)
@@ -470,8 +470,8 @@ func TestAdv_7_InventoryAndHiddenHashImports(t *testing.T) {
 			}
 		}
 	}
-	if count != 14 {
-		t.Fatalf("unreviewed fuzz inventory: got %d want 14", count)
+	if count != 15 {
+		t.Fatalf("unreviewed fuzz inventory: got %d want 15", count)
 	}
 }
 func TestAdv_2_LongSeedCampaign(t *testing.T) {

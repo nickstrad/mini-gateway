@@ -13,7 +13,12 @@
 # The main one has max_connections=600 and pg_stat_statements loaded; the burst one has
 # max_connections=100. A third, mg-tier-r-<pid>-scram, uses scram-sha-256 authentication
 # (password $scram_pw for postgres) with ssl=on (the image's snakeoil certificate), for the
-# chunk 4 wire tests. All are removed on exit, also on failure or interrupt. Then it
+# chunk 4 wire tests. Chunk 6's tests (test/e2e) start a fourth, <prefix>-c06, themselves:
+# Postgres 17 with ssl=on and scram-sha-256, its server certificate issued by a test CA that
+# the tests generate with the standard library, and pg_stat_statements; they also build the
+# mini-gateway binary and run it with client TLS on and obs.csv.dir under RUN_DIR (one run per
+# scenario under RUN_DIR/<scenario>/, read by csv-assert.sh with test/analysis/tierr-*/).
+# All are removed on exit, also on failure or interrupt. Then it
 # runs the tier R tests (go test -run '^TestTierR' with MG_TIER_R=1) and prints a summary.
 # The tests themselves skip unless MG_TIER_R=1, so `go test ./...` never needs Docker.
 #
@@ -36,7 +41,8 @@ prefix="mg-tier-r-$$"
 names=()
 cleanup() {
   local n
-  for n in ${names[@]+"${names[@]}"}; do docker rm -f "$n" >/dev/null 2>&1 || true; done
+  for n in ${names[@]+"${names[@]}"}; do docker rm -f -v "$n" >/dev/null 2>&1 || true; done
+  for n in $(docker ps -aq --filter "name=^${prefix}-" 2>/dev/null); do docker rm -f -v "$n" >/dev/null 2>&1 || true; done
 }
 trap cleanup EXIT
 trap 'exit 2' INT TERM
@@ -88,7 +94,7 @@ version=$(docker exec "$prefix-main" psql -h 127.0.0.1 -U postgres -tAc 'SHOW se
 echo "NOTE: Postgres $version in $prefix-main (127.0.0.1:$main_port), $prefix-burst (127.0.0.1:$burst_port) and $prefix-scram (127.0.0.1:$scram_port)"
 
 rc=0
-MG_TIER_R=1 MG_PG_ADDR="127.0.0.1:$main_port" MG_PG_BURST_ADDR="127.0.0.1:$burst_port" \
+MG_TIER_R=1 MG_TIER_R_PREFIX="$prefix" RUN_DIR="$dir" MG_PG_ADDR="127.0.0.1:$main_port" MG_PG_BURST_ADDR="127.0.0.1:$burst_port" \
   MG_PG_SCRAM_ADDR="127.0.0.1:$scram_port" MG_PG_SCRAM_PASSWORD="$scram_pw" \
   go test -p 1 -count=1 -timeout 30m -v -run '^TestTierR' ./... >"$log" 2>&1 || rc=$?
 

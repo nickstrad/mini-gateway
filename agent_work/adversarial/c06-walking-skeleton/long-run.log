@@ -1,0 +1,153 @@
+=== RUN   TestAdv_1_ByteSplitsThroughRow
+    engine_test.go:134: seed=6062026
+--- PASS: TestAdv_1_ByteSplitsThroughRow (0.00s)
+=== RUN   TestAdv_1_SeededIrregularSplits
+    engine_test.go:134: seed=6062026
+--- PASS: TestAdv_1_SeededIrregularSplits (0.00s)
+=== RUN   TestAdv_1_HeaderBoundarySplits
+    engine_test.go:134: seed=6062026
+--- PASS: TestAdv_1_HeaderBoundarySplits (0.00s)
+=== RUN   TestAdv_2_FailedTransactionKeepsOwner
+    engine_test.go:164: seed=6062026
+--- PASS: TestAdv_2_FailedTransactionKeepsOwner (0.00s)
+=== RUN   TestAdv_2_QueuedContenderCannotSteal
+    engine_test.go:164: seed=6062026
+--- PASS: TestAdv_2_QueuedContenderCannotSteal (0.00s)
+=== RUN   TestAdv_2_OwnerVanishClosesLease
+    engine_test.go:164: seed=6062026
+--- PASS: TestAdv_2_OwnerVanishClosesLease (0.00s)
+=== RUN   TestAdv_3_DuplicateResetTag
+    engine_test.go:193: seed=6062026
+--- PASS: TestAdv_3_DuplicateResetTag (0.00s)
+=== RUN   TestAdv_3_ResetWithTrailingReply
+    engine_test.go:193: seed=6062026
+    engine_test.go:218: database lent with unread reset residue; wrote "Q\x00\x00\x00\x0eSELECT 82\x00Q\x00\x00\x00\x10DISCARD ALL\x00"
+--- FAIL: TestAdv_3_ResetWithTrailingReply (0.00s)
+=== RUN   TestAdv_3_ResetDeadlineTie
+    engine_test.go:193: seed=6062026
+    engine_test.go:226: reset at expired deadline dispatched queued query
+--- FAIL: TestAdv_3_ResetDeadlineTie (0.00s)
+=== RUN   TestAdv_4_PartialCommandThenLoss
+    engine_test.go:234: seed=6062026
+--- PASS: TestAdv_4_PartialCommandThenLoss (0.00s)
+=== RUN   TestAdv_4_QueueShedHasSingleEnd
+    engine_test.go:245: seed=6062026
+--- PASS: TestAdv_4_QueueShedHasSingleEnd (0.00s)
+=== RUN   TestAdv_4_RejectInsideFailedTransaction
+    engine_test.go:259: seed=6062026
+--- PASS: TestAdv_4_RejectInsideFailedTransaction (0.00s)
+=== RUN   TestAdv_5_FirstByteAccepted
+    engine_test.go:272: seed=6062026
+--- PASS: TestAdv_5_FirstByteAccepted (0.00s)
+=== RUN   TestAdv_5_ResponseBeforeWriteAck
+    engine_test.go:272: seed=6062026
+--- PASS: TestAdv_5_ResponseBeforeWriteAck (0.00s)
+=== RUN   TestAdv_5_ZeroAcceptedBytes
+    engine_test.go:272: seed=6062026
+--- PASS: TestAdv_5_ZeroAcceptedBytes (0.00s)
+=== RUN   TestAdv_6_QueueStorm
+    engine_test.go:299: seed=6062026
+--- PASS: TestAdv_6_QueueStorm (0.01s)
+=== RUN   TestAdv_6_StartupCapBurst
+    engine_test.go:314: seed=6062026
+--- PASS: TestAdv_6_StartupCapBurst (0.00s)
+=== RUN   TestAdv_6_RowLargerThanRelay
+    engine_test.go:324: seed=6062026
+--- PASS: TestAdv_6_RowLargerThanRelay (0.00s)
+=== RUN   TestAdv_7_PartialStartupDeadline
+    engine_test.go:343: seed=6062026
+--- PASS: TestAdv_7_PartialStartupDeadline (0.00s)
+=== RUN   TestAdv_7_PartialQueryDeadline
+    engine_test.go:343: seed=6062026
+--- PASS: TestAdv_7_PartialQueryDeadline (0.00s)
+=== RUN   TestAdv_7_IdleTransactionDeadline
+    engine_test.go:343: seed=6062026
+--- PASS: TestAdv_7_IdleTransactionDeadline (0.00s)
+=== RUN   TestAdv_9_RequireAfterGSSRefusal
+    engine_test.go:377: seed=6062026
+--- PASS: TestAdv_9_RequireAfterGSSRefusal (0.00s)
+=== RUN   TestAdv_9_SSLWithTrailingStartup
+    engine_test.go:387: seed=6062026
+--- PASS: TestAdv_9_SSLWithTrailingStartup (0.00s)
+=== RUN   TestAdv_9_VerifyFullRefusedTLS
+    engine_test.go:396: seed=6062026
+--- PASS: TestAdv_9_VerifyFullRefusedTLS (0.00s)
+=== RUN   TestAdv_10_CommentedMixedCaseListen
+    engine_test.go:405: seed=6062026
+--- PASS: TestAdv_10_CommentedMixedCaseListen (0.00s)
+=== RUN   TestAdv_10_PrepareWithWhitespace
+    engine_test.go:405: seed=6062026
+--- PASS: TestAdv_10_PrepareWithWhitespace (0.00s)
+=== RUN   TestAdv_10_CopyAfterLineComment
+    engine_test.go:405: seed=6062026
+--- PASS: TestAdv_10_CopyAfterLineComment (0.00s)
+=== RUN   TestAdv_11_RoundTripWithQueuedTransactions
+    scenarios_test.go:42: seed=6062026
+--- PASS: TestAdv_11_RoundTripWithQueuedTransactions (0.12s)
+=== RUN   TestAdv_11_ByteIdenticalIndependentFlushes
+    scenarios_test.go:48: seed=6062026
+    scenarios_test.go:49: seed=6062026
+--- PASS: TestAdv_11_ByteIdenticalIndependentFlushes (0.15s)
+=== RUN   TestAdv_11_ConservationFromReloadedFiles
+    scenarios_test.go:77: seed=6062026
+--- PASS: TestAdv_11_ConservationFromReloadedFiles (0.08s)
+=== RUN   TestAdv_12_ConcurrentSchedulesReplay
+    scenarios_test.go:100: seed=0
+    scenarios_test.go:101: seed=0
+    scenarios_test.go:100: seed=-1
+    scenarios_test.go:101: seed=-1
+    scenarios_test.go:100: seed=4611686018427387904
+    scenarios_test.go:101: seed=4611686018427387904
+    scenarios_test.go:100: seed=6062026
+    scenarios_test.go:101: seed=6062026
+--- PASS: TestAdv_12_ConcurrentSchedulesReplay (0.13s)
+=== RUN   TestAdv_12_FragmentedReplay
+    scenarios_test.go:110: seed=6062026
+    scenarios_test.go:111: seed=6062026
+--- PASS: TestAdv_12_FragmentedReplay (0.27s)
+=== RUN   TestAdv_12_FreshProcessReplay
+--- PASS: TestAdv_12_FreshProcessReplay (0.10s)
+=== RUN   TestAdv_13_NegativeFleetBudget
+    scenarios_test.go:178: seed=6062026
+--- PASS: TestAdv_13_NegativeFleetBudget (0.00s)
+=== RUN   TestAdv_13_ExplicitZeroCapacity
+    scenarios_test.go:181: seed=6062026
+    scenarios_test.go:181: accepted invalid queue.capacity
+--- FAIL: TestAdv_13_ExplicitZeroCapacity (0.00s)
+=== RUN   TestAdv_13_NestedTimeoutEquality
+    scenarios_test.go:184: seed=6062026
+--- PASS: TestAdv_13_NestedTimeoutEquality (0.00s)
+=== RUN   TestAdv_14_AllByteValuesAndLengths
+    scenarios_test.go:188: seed=6062026
+--- PASS: TestAdv_14_AllByteValuesAndLengths (0.00s)
+=== RUN   TestAdv_14_OneByteCannotReseedWorld
+    scenarios_test.go:204: seed=6062026
+--- PASS: TestAdv_14_OneByteCannotReseedWorld (0.00s)
+=== RUN   TestAdv_14_SeededPlantCampaign
+    scenarios_test.go:223: seed=6062026
+    scenarios_test.go:236: plant caught at sample=0 input=124b2b66babddb83ce605e677041ba8ee83318785dcc7a3588d61ed989055b70eab98fa9d66276e19ccb51c7bcd38b96a5b6fc1057a5d3d8c4bc04ccfd017f2752ca14cacee90ea5f0b5dd466ddee7a65fb7658c18ea86a8761c5d49dba26bf4a7152ee2530efc78b78670b8e58f0d7f7d6936b05b1814a21941667e7d2ca5e37cb19018f2f72af35904cfd40f776a2bb01316477063c30ca6e81523bfd9e08e267ddad6bc704f54b910809071f35e626076bff5e741570f8020d8ac24b6d510
+--- PASS: TestAdv_14_SeededPlantCampaign (0.81s)
+=== RUN   TestAdv_14_LongUnplantedCampaign
+    scenarios_test.go:246: seed=6062026
+--- PASS: TestAdv_14_LongUnplantedCampaign (291.37s)
+=== RUN   TestAdv_8_AdminWhileMailboxBackedUp
+    shell_real_test.go:55: seed=6062026
+--- PASS: TestAdv_8_AdminWhileMailboxBackedUp (0.01s)
+=== RUN   TestAdv_8_ConcurrentCloseDuringDial
+    shell_real_test.go:91: seed=6062026
+--- PASS: TestAdv_8_ConcurrentCloseDuringDial (0.00s)
+=== RUN   TestAdv_8_HalfStartupDisconnectStorm
+    shell_real_test.go:110: seed=6062026
+--- PASS: TestAdv_8_HalfStartupDisconnectStorm (0.02s)
+=== RUN   TestAdv_3b_AbortedLeaseSettings
+    shell_real_test.go:163: seed=6062026
+--- PASS: TestAdv_3b_AbortedLeaseSettings (6.00s)
+=== RUN   TestAdv_3b_DynamicTempPreparedListener
+    shell_real_test.go:163: seed=6062026
+--- PASS: TestAdv_3b_DynamicTempPreparedListener (0.15s)
+=== RUN   TestAdv_3b_ReentrantAdvisoryLocks
+    shell_real_test.go:163: seed=6062026
+--- PASS: TestAdv_3b_ReentrantAdvisoryLocks (0.14s)
+FAIL
+FAIL	github.com/nickstrad/mini-gateway/agent_work/adversarial/c06-walking-skeleton	302.273s
+FAIL

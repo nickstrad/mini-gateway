@@ -1,4 +1,4 @@
--- requires: wire.client_prestartup_requests wire.database_tls_answers workload.startup_tls_requests fakepg.tls_answered
+-- requires: wire.client_prestartup_requests wire.database_tls_answers workload.startup_tls_requests fakepg.tls_answered wire.database_tls_requests workload.startup_tls_answered
 -- claim: wire-startup-tls: TLS requests by kind and answer equal the requests sent. Client side: the requests the proxy
 -- answered S or N equal the TLS requests the workload sent (at least 1), each answer equals the answers the
 -- workload received, and no GSS or cancel request was counted (none is sent). Database side: the proxy's TLS

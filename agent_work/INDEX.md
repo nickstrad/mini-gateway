@@ -152,3 +152,17 @@ Record: `chunks/cr01-shrink-fuzz-rules/` (change request, brief, notes, two revi
 | `../scripts/fuzz.sh` (changed) | Now prints and, with `FUZZ_REPORT`, writes a rate table; classes each target `fuzz` or `seed-sweep` by `FUZZ_RATE_FLOOR` (100/s); fails closed without a readable rate. Test: `go test ./scripts/` | Opus | 12 targets; the rate is read from the last progress line only (attack fixed) |
 | `../docs/knowledge/shrunk-scenarios.md` | How to turn a failing fault schedule into a committed scenario file | Opus | Used by `internal/sim/simtoy`'s planted bug |
 | `adversarial/cr01-shrink-fuzz-rules/` | Astra's 24 attacks on the seven claims; `ADV_LONG=1 ./long-fuzz.sh` for the long fuzz campaign. Report assembled by the orchestrator (Astra's run was cut twice) | Astra; report by Fable | 22 held / 2 broken, then 23 pass / 1 settled; found the 13-second `FuzzWorldSchedule` input |
+
+## Phase 2, chunk 6 — walking skeleton (Opus, 2026-11-26)
+
+Record: `chunks/c06-walking-skeleton/` (brief, notes, gate extra).
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../scripts/chaos.sh` | `make chaos`: the named e2e scenarios, tier S (`TestScenarioE2E`, `CHAOS_SEEDS` seeds) then tier R (`TestTierR*` in `test/e2e`) when Docker is present, each with the SQL files of `test/analysis/<scenario>/`; one line per scenario, `VERBOSE=1` for the raw output | Opus | 21 tier S scenarios green at 3 seeds; tier R 14 tests green in about 30 s |
+| `../scripts/fuzz-plant.sh` | Plants the queue-slot ordering bug (`MG_FUZZ_PLANT=queued-vanish`) and requires `FuzzEngineOps` to fail with the queue invariant within `FUZZ_SECONDS` (default 20); removes the crasher it writes. Run by the chunk's gate extra | Opus | Found in 1–4 s in 5 of 5 runs (3 clients over 1 connection, empty fuzz cache); the minimised input is `test/e2e/testdata/shrunk/queued-vanish.faults` (4 operations) |
+| `../scripts/gen-docs.d/c06-contracts.sh` | Generates `docs/timeout-budget.md` and `docs/capacity-table.md` from `internal/proxy/contracts.go` and `internal/shell/contracts.go`; `--check` diffs | Opus | Part of `scripts/gen-docs.sh` (gate G8) |
+| `../scripts/tier-r.sh` (changed) | Passes `MG_TIER_R_PREFIX` and `RUN_DIR` to the tests and also removes every container named `<prefix>-*` (chunk 6 starts `<prefix>-c06` itself) | Opus | Full tier R (chunks 2, 4, 5, 6) green |
+| `../docs/knowledge/walking-skeleton.md` | Facts for the builders of chunks 6a–13: the engine API and read protocol, seams, plants, shell, e2e harness | Opus | — |
+| `chunks/c06-walking-skeleton/gate/extra.sh` | G10: canaries and ablations, the shrunk fuzz scenario, `scripts/fuzz-plant.sh`, the simrun baseline SQL with DuckDB required | Opus | — |
+| `adversarial/c06-walking-skeleton/` | Astra's 46 attacks on the 15 claims. Run: `go test -count=1 ./agent_work/adversarial/c06-walking-skeleton/...`; long and real-server: `ADV_LONG=1` | Astra | 43 held / 3 broken, then 44 pass / 2 settled (`chunks/c06-walking-skeleton/ADVERSARIAL.md`) |

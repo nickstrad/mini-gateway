@@ -10,4 +10,4 @@ Each chapter states the problem, explains the design and the alternatives turned
 
 The simulator comes first. Before any proxy code exists, the first two chapters build a deterministic simulator. It is a single-threaded test harness with a virtual clock, seeded random streams, simulated byte-stream connections, a fake Postgres, and simulated clients. Every later part of the proxy is proved in that repeatable world before it is tested against a real Postgres server.
 
-Chapters 1 through 5—the simulator kernel, the simulated world, the observability spine, wire sessions, and the statement classifier and contracts—are live below. The remaining planned chapters are listed after them and will become links as each chunk lands.
+Chapters 1 through 6—the simulator kernel, the simulated world, the observability spine, wire sessions, the statement classifier and contracts, and the walking skeleton—are live below. The remaining planned chapters are listed after them and will become links as each chunk lands.

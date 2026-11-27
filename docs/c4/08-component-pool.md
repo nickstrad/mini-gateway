@@ -1,6 +1,6 @@
 # C4 Level 3: Components: pool
 
-**Built so far: chunks 0–5. Dashed parts are planned.** In this diagram 1 of 10 elements and 0 of 12 relationships are built. Model: diagram `component-pool` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–6. Dashed parts are planned.** In this diagram 1 of 10 elements and 0 of 12 relationships are built. Model: diagram `component-pool` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 A request never waits inside the pool: the dispatcher releases it only when a lease is available. The pool's job is the cap, the creation rate, and never lending a connection that is not idle and clean.
 
@@ -53,7 +53,7 @@ flowchart TB
 | Idle and lifetime reaper | component | planned | Closes idle and old connections, with jitter so they do not all expire together; checks a long-idle connection before reuse. |
 | Cancel map | component | planned | Maps proxy-issued key data to the connection a client currently holds, so a client's cancel request reaches its own statement and no one else's. Caps concurrent cancels. |
 | Pool snapshot | component | planned | Snapshot(): open, idle, lent, connecting, creation rate, closes by reason, exhaustion events, breaker state and transitions, dirty-table outcomes, lease-time histogram. |
-| Engine | neighbouring container | planned | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code. |
+| Engine | neighbouring container | planned | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code; its test package proxysim is the simulator's driver. **So far:** Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). The stages that belong to cores not built yet run their stand-ins: a breaker that is always closed, a rate gate that always allows, no coalescing, one bounded first-come queue, a fixed set of connections, retry off. |
 | Work vocabulary | neighbouring container | built (chunk 5) | internal/work. Small plain types the cores are written against: tenant, unit of work with its class, reject reason and sharing flags, share key and its scope, outcome, refusal. Carries no Postgres type and imports only the standard library. This is the extension seam for a second protocol. |
 
 ## Relationships
