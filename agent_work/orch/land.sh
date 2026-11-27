@@ -52,10 +52,10 @@ if [ "${LAND_NO_REVIEW:-}" != 1 ]; then
   rev=$({ grep -E 'ARBITRATION-[0-9]+\.md$' <<<"$notes" || true; } | sort -V | tail -1)
   [ -n "$rev" ] || rev=$({ grep -E 'REVIEW-[0-9]+\.md$' <<<"$notes" || true; } | sort -V | tail -1)
   [ -n "$rev" ] || { echo "land: no review file" >&2; exit 1; }
-  verdict=$(show "$rev" | head -1 | tr -d '\r')
+  verdict=$(show "$rev" | sed -n 1p | tr -d "\r")
   case "$verdict" in
     "VERDICT: PASS") ;;
-    "VERDICT: NITS") show "$rev" | grep -q '^NITS CLOSED' || { echo "land: $rev is NITS without a NITS CLOSED line" >&2; exit 1; } ;;
+    "VERDICT: NITS") show "$rev" | grep '^NITS CLOSED' >/dev/null || { echo "land: $rev is NITS without a NITS CLOSED line" >&2; exit 1; } ;;
     *) echo "land: $rev says '$verdict'" >&2; exit 1 ;;
   esac
   show "$dir/ADVERSARIAL.md" >/dev/null || { echo "land: no ADVERSARIAL.md" >&2; exit 1; }

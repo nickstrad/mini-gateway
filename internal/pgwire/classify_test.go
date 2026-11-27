@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
@@ -509,72 +508,110 @@ func FuzzClassify(f *testing.F) {
 	})
 }
 
-const clsTimeGrowthLimit = 96
+// Linear-growth checks compare a 4 KiB input against a 64 KiB input (16x) and
+// allow up to 17x work so fixed prefixes and repeat-count rounding fit while
+// quadratic regressions (~256x) fail cleanly.
+const (
+	clsWorkSmallInput  = 1 << 12
+	clsWorkLargeInput  = 1 << 16
+	clsWorkGrowthLimit = 17
+)
 
-func clsFastest(q []byte) time.Duration {
-	best := time.Duration(1<<63 - 1)
-	for k := 0; k < 3; k++ {
-		start := time.Now()
-		ClassifyQuery(q, false)
-		ShareFits(q)
-		LexAll(q)
-		if d := time.Since(start); d < best {
-			best = d
-		}
-	}
-	return best
+type clsWork struct {
+	opRunBytes int
+	lookahead  int
+	clsCounts
 }
 
-// TestLexOperatorRunsGrowLinearly proves that repeated operator-run shapes
-// lex and classify in linear time (16x input <= 96x time).
+func clsMeasureWork(q []byte) clsWork {
+	l := LexerFor(q)
+	for {
+		if _, ok := l.Next(); !ok {
+			break
+		}
+	}
+	_, counts := clsRunCounted(q, false, false)
+	return clsWork{opRunBytes: l.opRunBytes, lookahead: l.lookahead, clsCounts: counts}
+}
+
+var (
+	clsOperatorRunShapes = []string{"+", "-", "-+", "+-", "*+", "=-", "<+-", "+ ", "1+"}
+	clsSpanKeywordShapes = []string{"pg_settings ", "standard_conforming_strings ", "client_encoding ", `"pg_settings" `, "pg_settings, ", "SELECT pg_settings "}
+	clsWholeCallShapes   = []string{"(", "a ", ";", "'x'", "set_config(1,2,", `U&"a" `, "SELECT abs(t.a) FROM t; ", "'a'\n", "-- c\n", "$a$x$a$ ", "$a "}
+)
+
+// TestLexOperatorRunsGrowLinearly proves that operator-run lexing does linear
+// work (16x input <= 17x work) across nine shapes (eight operator runs plus "-"
+// as a line comment) and moves opRunBytes whenever operator tokens appear.
 func TestLexOperatorRunsGrowLinearly(t *testing.T) {
-	clsCheckLinearShapes(t, []string{"+", "-", "+-", "*+", "=-", "<+-", "+ ", "1+"})
+	clsCheckLinearShapes(t, "SELECT ", clsKindIs(TokenOperator), func(w clsWork) int { return w.opRunBytes }, clsOperatorRunShapes)
 }
 
 // TestClassifierSpanKeywordChecksGrowLinearly proves that repeated setting
-// identifiers (pg_settings, client_encoding, standard_conforming_strings)
-// classify in linear time without quadratic span rescans.
+// names classify in linear work without rescanning earlier spans and move
+// keywordChecks across all six shapes.
 func TestClassifierSpanKeywordChecksGrowLinearly(t *testing.T) {
-	clsCheckLinearShapes(t, []string{"pg_settings ", "standard_conforming_strings ", "client_encoding ", `"pg_settings" `, "pg_settings, ", "SELECT pg_settings "})
+	clsCheckLinearShapes(t, "SELECT ", clsKindIs(TokenWord), func(w clsWork) int { return w.keywordChecks }, clsSpanKeywordShapes)
 }
 
-func clsCheckLinearShapes(t *testing.T, units []string) {
+func clsCheckLinearShapes(t *testing.T, prefix string, measuredKind func(TokenKind) bool, measured func(clsWork) int, units []string) {
 	t.Helper()
-	if testing.Short() {
-		t.Skip("timing test")
-	}
 	for _, unit := range units {
-		small := []byte("SELECT " + strings.Repeat(unit, (1<<12)/len(unit)))
-		large := []byte("SELECT " + strings.Repeat(unit, (1<<16)/len(unit)))
-		a, b := clsFastest(small), clsFastest(large)
-		if a < time.Microsecond {
-			a = time.Microsecond
+		smallUnits := []byte(strings.Repeat(unit, clsWorkSmallInput/len(unit)))
+		small := clsMeasureWork(append([]byte(prefix), smallUnits...))
+		large := clsMeasureWork([]byte(prefix + strings.Repeat(unit, clsWorkLargeInput/len(unit))))
+		t.Logf("%q: 4 KiB %+v, 64 KiB %+v", unit, small, large)
+		if measured(small) == 0 && clsHasKind(smallUnits, measuredKind) {
+			t.Errorf("%q: the input has tokens of the measured kind but the measured path did no work (%+v)", unit, small)
 		}
-		ratio := int64(b / a)
-		t.Logf("%q: 4 KiB %v, 64 KiB %v, ratio %d", unit, a, b, ratio)
-		if ratio > clsTimeGrowthLimit {
-			t.Errorf("%q: 16 times the input took %d times as long (%v against %v); want at most %d", unit, ratio, b, a, clsTimeGrowthLimit)
-		}
+		clsCheckGrowth(t, unit, "operator-run bytes", small.opRunBytes, large.opRunBytes)
+		clsCheckGrowth(t, unit, "lookahead bytes", small.lookahead, large.lookahead)
+		clsCheckGrowth(t, unit, "keyword checks", small.keywordChecks, large.keywordChecks)
+		clsCheckGrowth(t, unit, "token visits", small.tokenVisits, large.tokenVisits)
+		clsCheckGrowth(t, unit, "literal bytes", small.literalBytes, large.literalBytes)
 	}
 }
 
-// TestClassifierTimeGrowsLinearly proves that nine adversarial token shapes
-// scale linearly from 64 KiB to 1 MiB (16x input <= 96x time).
-func TestClassifierTimeGrowsLinearly(t *testing.T) {
-	if testing.Short() {
-		t.Skip("timing test")
-	}
-	for _, unit := range []string{"(", "a ", ";", "'x'", "set_config(1,2,", `U&"a" `, "SELECT abs(t.a) FROM t; ", "'a'\n", "-- c\n"} {
-		small := []byte(strings.Repeat(unit, (1<<16)/len(unit)))
-		large := []byte(strings.Repeat(unit, (1<<20)/len(unit)))
-		a, b := clsFastest(small), clsFastest(large)
-		if a < time.Microsecond {
-			a = time.Microsecond
+func clsKindIs(kind TokenKind) func(TokenKind) bool {
+	return func(k TokenKind) bool { return k == kind }
+}
+
+func clsHasKind(q []byte, wanted func(TokenKind) bool) bool {
+	toks, _ := LexAll(q)
+	for _, tok := range toks {
+		if wanted(tok.Kind) {
+			return true
 		}
-		ratio := int64(b / a)
-		t.Logf("%q: 64 KiB %v, 1 MiB %v, ratio %d", unit, a, b, ratio)
-		if ratio > clsTimeGrowthLimit {
-			t.Errorf("%q: 16 times the input took %d times as long (%v against %v); want at most %d", unit, ratio, b, a, clsTimeGrowthLimit)
+	}
+	return false
+}
+
+func clsCheckGrowth(t *testing.T, unit, what string, small, large int) {
+	t.Helper()
+	if large > clsWorkGrowthLimit*small {
+		t.Errorf("%q: 16 times the input took %d %s against %d; want at most %d times as many", unit, large, what, small, clsWorkGrowthLimit)
+	}
+}
+
+// TestClassifierWorkGrowsLinearly proves that the default build's five
+// always-on work counters grow linearly across eleven whole-call shapes without
+// reading the wall clock. String bodies and line comments are covered under
+// -tags clscount by TestCountedWorkGrowsLinearly.
+func TestClassifierWorkGrowsLinearly(t *testing.T) {
+	clsCheckLinearShapes(t, "", TokenKind.Significant, func(w clsWork) int { return w.tokenVisits }, clsWholeCallShapes)
+}
+
+// TestClassifierCountsTheSetConfigLiteralItScans proves that setConfigLocal
+// counts literalBytes on a continued string literal before clsContinued rejects
+// it.
+func TestClassifierCountsTheSetConfigLiteralItScans(t *testing.T) {
+	for _, local := range []string{"false", "0"} {
+		plain := []byte("SELECT set_config('abcdef', 'x', " + local + ")")
+		continued := []byte("SELECT set_config('ab'\n'c', 'x', " + local + ")")
+		_, plainCounts := clsRunCounted(plain, false, false)
+		_, continuedCounts := clsRunCounted(continued, false, false)
+		if continuedCounts.literalBytes < plainCounts.literalBytes {
+			t.Errorf("%q: %d literal bytes counted, %d for the plain literal of the same length in %q", continued, continuedCounts.literalBytes, plainCounts.literalBytes, plain)
 		}
 	}
 }

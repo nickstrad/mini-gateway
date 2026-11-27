@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 
+	"github.com/nickstrad/mini-gateway/internal/pgwire/clscount"
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
@@ -110,9 +111,37 @@ type clsMsg struct {
 	bad     bool
 	plant   bool
 	scratch [clsNameMax]byte
+
+	counts clsCounts
+}
+
+// clsCounts holds per-call work counters returned by clsRunCounted for
+// deterministic linear-growth tests.
+type clsCounts struct {
+	lex           clsLexCounts
+	keywordChecks int
+	tokenVisits   int
+	literalBytes  int
+}
+
+// clsLexCounts groups the four tagged lexer tallies under one field so
+// clsCounts stays at four top-level fields and remains SSA-able in registers.
+type clsLexCounts struct {
+	reads  clscount.Tally
+	steps  clscount.Tally
+	opRuns clscount.Tally
+	ahead  clscount.Tally
 }
 
 func clsRun(text []byte, inTx, plant bool) work.Unit {
+	u, _ := clsRunCounted(text, inTx, plant)
+	return u
+}
+
+// clsRunCounted runs classification and returns per-call work counts alongside
+// the resulting Unit. clsRun stays a thin inlined wrapper so exported
+// signatures and shared state are unchanged.
+func clsRunCounted(text []byte, inTx, plant bool) (work.Unit, clsCounts) {
 	m := clsMsg{src: text, plant: plant}
 	m.lex()
 	m.matchParens()
@@ -131,11 +160,11 @@ func clsRun(text []byte, inTx, plant bool) work.Unit {
 		if r := m.rejectReason(s); r != work.RejectNone {
 			u.Class = work.ClassReject
 			u.Reason = r
-			return u
+			return u, m.counts
 		}
 	}
 	u.Shareable = u.SafeRead && !inTx
-	return u
+	return u, m.counts
 }
 
 type clsSpan struct{ lo, hi int }
@@ -145,10 +174,16 @@ const clsNameMax = 63
 
 // lex counts significant tokens before allocating m.toks so a large input
 // avoids slice-doubling overhead and stays under ClassifMemoryFactor.
+// TestClassifierLexLoopsCountTheirSteps requires every loop here to start with
+// a clscount.On step bump, and countPass folds both lexer passes into m.counts
+// under -tags clscount.
 func (m *clsMsg) lex() {
 	n := 0
 	l := LexerFor(m.src)
 	for {
+		if clscount.On {
+			m.counts.lex.steps.Bump()
+		}
 		t, ok := l.Next()
 		if !ok {
 			break
@@ -157,11 +192,20 @@ func (m *clsMsg) lex() {
 			n++
 		}
 	}
+	if clscount.On {
+		m.countPass(&l)
+	}
 	m.toks = make([]Token, 0, n)
 	l = LexerFor(m.src)
 	for {
+		if clscount.On {
+			m.counts.lex.steps.Bump()
+		}
 		t, ok := l.Next()
 		if !ok {
+			if clscount.On {
+				m.countPass(&l)
+			}
 			return
 		}
 		if t.Kind == TokenBad {
@@ -173,7 +217,14 @@ func (m *clsMsg) lex() {
 	}
 }
 
+func (m *clsMsg) countPass(l *Lexer) {
+	m.counts.lex.reads.Add(l.reads.Value())
+	m.counts.lex.opRuns.Add(l.opRunBytes)
+	m.counts.lex.ahead.Add(l.lookahead)
+}
+
 func (m *clsMsg) isPunct(i int, c byte) bool {
+	m.counts.tokenVisits++
 	return i >= 0 && i < len(m.toks) && m.toks[i].Kind == TokenPunct && m.src[m.toks[i].Start] == c
 }
 
@@ -236,9 +287,13 @@ func (m *clsMsg) split() []clsSpan {
 	return out
 }
 
-func (m *clsMsg) word(i int) bool { return i >= 0 && i < len(m.toks) && m.toks[i].Kind == TokenWord }
+func (m *clsMsg) word(i int) bool {
+	m.counts.tokenVisits++
+	return i >= 0 && i < len(m.toks) && m.toks[i].Kind == TokenWord
+}
 
 func (m *clsMsg) is(i int, kw string) bool {
+	m.counts.keywordChecks++
 	if !m.word(i) {
 		return false
 	}
@@ -274,6 +329,7 @@ func clsFold(c byte) byte {
 }
 
 func (m *clsMsg) isName(i int) bool {
+	m.counts.tokenVisits++
 	if i < 0 || i >= len(m.toks) {
 		return false
 	}
@@ -283,6 +339,7 @@ func (m *clsMsg) isName(i int) bool {
 
 func (m *clsMsg) name(i, hi int) ([]byte, int, bool) {
 	t := m.toks[i]
+	m.counts.literalBytes += t.End - t.Start
 	switch t.Kind {
 	case TokenWord:
 		k := min(t.End-t.Start, clsNameMax)
@@ -511,6 +568,7 @@ func (m *clsMsg) setConfigPathMayNameTemp(open int) bool {
 }
 
 func (m *clsMsg) isString(i int) bool {
+	m.counts.tokenVisits++
 	if i < 0 || i >= len(m.toks) {
 		return false
 	}
@@ -524,6 +582,7 @@ func (m *clsMsg) stringMayContain(i int, words ...string) bool {
 	}
 	t := m.toks[i]
 	raw := m.src[t.Start:t.End]
+	m.counts.literalBytes += len(raw)
 	if t.Kind == TokenString && clsContinued(raw) {
 		return true
 	}
@@ -603,7 +662,14 @@ func (m *clsMsg) setConfigLocal(open int) bool {
 	if p.match < 0 || p.comma2 < 0 || int(p.comma1) != open+2 {
 		return false
 	}
+	// Count the setting literal through isString and literalBytes before
+	// clsContinued runs, because clsContinued scans the bytes even when it
+	// rejects a continued string.
+	if !m.isString(open + 1) {
+		return false
+	}
 	lit := m.toks[open+1]
+	m.counts.literalBytes += lit.End - lit.Start
 	if lit.Kind != TokenString || m.src[lit.Start] != '\'' || clsContinued(m.src[lit.Start:lit.End]) {
 		return false
 	}
