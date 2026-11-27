@@ -69,7 +69,8 @@ report:
 # The run targets (deploy/dev/, PLAN.md chunk 6a and section 19.3 item 3): a gateway, a
 # Postgres 17 and a Prometheus scraping the gateway, a constant load, and the way down.
 #   make run-up                                   build, start the stack, wait for the scrape, print URLs
-#   make load RATE=100 DURATION=30s PROFILE=simple|errors SEED=<n>   open-loop load (cmd/loadgen)
+#   make load RATE=100 DURATION=30s PROFILE=simple|errors SEED=<n>   open-loop load (cmd/loadgen;
+#                                                 also CONNS=8, LOAD_ARGS=<more loadgen flags>)
 #   make run-down                                 stop the gateway, remove containers, network, volumes
 # Settings (ports, state directory): deploy/dev/env.sh.
 .PHONY: run-up load run-down
@@ -77,7 +78,7 @@ run-up:
 	@deploy/dev/up.sh
 
 load:
-	@RATE="$(RATE)" DURATION="$(DURATION)" PROFILE="$(PROFILE)" SEED="$(SEED)" deploy/dev/load.sh
+	@RATE="$(RATE)" DURATION="$(DURATION)" PROFILE="$(PROFILE)" SEED="$(SEED)" CONNS="$(CONNS)" LOAD_ARGS="$(LOAD_ARGS)" deploy/dev/load.sh
 
 run-down:
 	@deploy/dev/down.sh
