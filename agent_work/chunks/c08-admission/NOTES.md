@@ -94,14 +94,14 @@ the fake also charges it to every `DISCARD ALL` and halves the capacity.
 
 | # | Claim | Tests |
 | --- | --- | --- |
-| 1 | Bounded: depth ≤ capacity per tenant, tenant queues ≤ cap, memory fixed, quiet queue removed | `internal/admission`: `TestCoreAgreesWithTheReferenceModelForEveryRule` (after every op `Queues.Check`: ring ≤ tenant capacity, total ≤ capacity, tenants ≤ cap), `TestTenantCapShedsTheArrivalOnlyWhenNoQueueIsEmpty`, `TestQuietTenantQueueIsRemovedAndItsRingReused` (200 tenants through a cap of 4, rings ≤ cap); `test/e2e`: `checkHeadToHead` (depth peak ≤ capacity), `runAdm` steady state (no tenant queue after quiesce); engine `Invariants()` |
+| 1 | Bounded: depth ≤ capacity per tenant, tenant queues ≤ cap, memory fixed, quiet queue removed | `internal/admission`: `TestPendingShedStorageStaysFixedUnderAPartialDrain`, `TestPendingShedStorageHoldsTheWorstUndrainedBacklog`, `TestFoldedOtherRowIsBoundedByTheTotalNotOneTenant`, `TestCoreAgreesWithTheReferenceModelForEveryRule` (after every op `Queues.Check`: ring ≤ tenant capacity, total ≤ capacity, tenants ≤ cap), `TestTenantCapShedsTheArrivalOnlyWhenNoQueueIsEmpty`, `TestQuietTenantQueueIsRemovedAndItsRingReused` (200 tenants through a cap of 4, rings ≤ cap); `test/e2e`: `checkHeadToHead` (depth peak ≤ capacity), `runAdm` steady state (no tenant queue after quiesce); engine `Invariants()` |
 | 2 | Anti-bufferbloat, timeout rule: served wait < interval, depth equal at T and 4T, FIFO control grows | core: `claims()` in every property run (no served wait ≥ interval); `TestLIFOWithoutTheHeadSweepBuriesStaleRequests`; e2e `TestScenarioAdmissionAntiBloat/timeout` + `/fifo` (FIFO control backlog at 4T ≥ 3× T); SQL `admission-anti-bloat/admission-depth.sql`, `admission-wait.sql`; tier R `TestTierRAdmissionOverloadWithPgSleep/timeout` |
-| 3 | Anti-bufferbloat, control law: depth bounded by the hard capacity, its bound = capacity × lease | e2e `TestScenarioAdmissionAntiBloat/control-law` (peak equal at T and 4T, served wait < capacity × lease + interval); SQL `admission-depth.sql`; table: at 1.2× p50 2.5 ms (near target), at 10× the wait is bounded by the ring, not by the law |
-| 4 | Shedding never idles the backend: served ≥ 95% of capacity at 10× | e2e `TestScenarioAdmissionHeadToHead` (`checkHeadToHead`: served ≥ 95% of the never-idle FIFO arm at 2× and 10×; the FIFO arm itself ≥ 95% of 2 s / 5.5 ms); tier R (≥ 70% of the run that sheds only on overflow, a real-hardware threshold) |
+| 3 | Anti-bufferbloat, control law: depth bounded by the hard capacity, its bound = capacity × lease | e2e `checkModerateConvergence` in `TestScenarioAdmissionHeadToHead/load=120` (median served wait ≤ target, p99 below the FIFO median) and SQL `admission-h2h-l120/admission-wait.sql`; `checkRuleSheds` (sheds by the rule, not only overflow); `TestScenarioAdmissionAntiBloat/control-law` (peak equal at T and 4T, served wait < capacity × lease + interval); SQL `admission-depth.sql`; table: at 1.2× p50 2.5 ms (near target), at 10× the wait is bounded by the ring, not by the law |
+| 4 | Shedding never idles the backend: served ≥ 95% of capacity at 10× (narrowed: spread arrivals, see "Narrowed claims") | e2e `TestScenarioAdmissionHeadToHead` (`checkHeadToHead`: served ≥ 95% of the never-idle FIFO arm at 2× and 10×; the FIFO arm itself ≥ 95% of 2 s / 5.5 ms); tier R (≥ 70% of the run that sheds only on overflow, a real-hardware threshold) |
 | 5 | The first burst after idle gets the interval, both rules | core `TestFirstBurstAfterIdleGetsTheIntervalNotTheShortTarget`; e2e `TestScenarioAdmissionFirstBurst/{timeout,control-law}` (swept); canaries below |
-| 6 | Expired items never linger; none served late or buried, LIFO and FIFO alike | core `claims()` after every op (no queued item at or past its allowed wait), the reference model's all-items expiry check, `TestDeadlineAtEqualityHasExpired`, `TestLIFOWithoutTheHeadSweepBuriesStaleRequests`; engine `TestAdmissionShedByTheRuleIsAnsweredAtOnceWithItsRowAndEndMarker`, `TestAdmissionArmsItsNextDeadline` |
+| 6 | Expired items never linger; none served late or buried, LIFO and FIFO alike | core `claims()` after every op (no queued item at or past its allowed wait), the reference model's all-items expiry check, `TestDeadlineAtEqualityHasExpired`, `TestTimeoutDeadlineAtEqualityWhileStanding`, `TestControlLawAtEqualityOfTargetAndFirstAbove`, `TestUnpopRestoresTheRuleStateAndTheDeadline`, `TestLIFOWithoutTheHeadSweepBuriesStaleRequests`; engine `TestAdmissionShedByTheRuleIsAnsweredAtOnceWithItsRowAndEndMarker`, `TestAdmissionArmsItsNextDeadline` |
 | 7 | Overflow sheds the head, not the arrival | core `TestOverflowShedsTheHeadNotTheArrival`; engine `TestAdmissionOverflowShedsTheQueuedHeadNotTheArrival` |
-| 8 | Every shed answered at once with 53M01 and an end marker, counted by reason; conservation on every path | engine `TestAdmissionShedByTheRuleIsAnsweredAtOnceWithItsRowAndEndMarker`, `TestAdmissionConservesOnEveryExitPath` (served, removed, deadline); core `Snapshot.Check` (pushes = served + Σshed + removed + queued) in every property op; `admsrc` `TestCountersMoveAndConserveThroughTheMapping`; SQL `admission-conservation.sql` (all scenarios, incl. engine shed = admission shed) and `admission-h2h-l1000/admission-sheds.sql` (53M01 replies = sheds); tier R shed row ≥ client-seen 53M01 |
+| 8 | Every shed answered at once with 53M01 and an end marker, counted by reason; conservation on every path | engine `Invariants()` (core shed total = engine `Shed` after every event), `TestAdmissionShutdownAtTheDeadlineShedsTheExpiredAndRemovesTheRest`, `TestAdmissionShutdownInTheQuietWindowCancelsTheTimer`, `TestAdmissionShedByTheRuleIsAnsweredAtOnceWithItsRowAndEndMarker`, `TestAdmissionConservesOnEveryExitPath` (served, removed, deadline); core `Snapshot.Check` (pushes = served + Σshed + removed + queued) in every property op; `admsrc` `TestCountersMoveAndConserveThroughTheMapping`; SQL `admission-conservation.sql` (all scenarios, incl. engine shed = admission shed) and `admission-h2h-l1000/admission-sheds.sql` (53M01 replies = sheds); tier R shed row ≥ client-seen 53M01 |
 | 9 | LIFO hysteresis: switches only at the thresholds, no flapping at the threshold | core `TestLIFOHysteresisDoesNotFlapAtTheThreshold` (1 on, 0 off over 40 cycles at the threshold), `TestLIFOSwitchesOffOnlyAfterTheHold`; reference model agreement on every LIFO state |
 | 10 | Integer control law matches the reference for every count up to the maximum | core `TestIntervalOverSqrtMatchesTheReferenceForEveryCountUpToTheMaximum` (every count 1..65,536 for five intervals, against `math/big`), `TestControlLawCountAndNextDropAcrossLeavingAndReentering`; detlint (no floating point) |
 | 11 | Recovery: rule leaves overload within interval + hold + interval, wait back to uncongested | e2e `checkRecovery` in `TestScenarioAdmissionAntiBloat/{timeout,control-law}`: 1.2 s after the overload all tenant queues normal and LIFO off; the 0.3× load after it is never shed and its latency ≤ 4 leases |
@@ -191,11 +191,19 @@ no admission timer (`Engine.Quiesce`).
 2. LIFO switch-on is observed at operations and deadlines; when standing begins between
    them, the switch is recorded at the next operation (the pop decision is always current).
 3. The load gauge shares folly's blindness under LIFO (it reads served waits).
-4. A real tenant named `other` shares the fold-over counters once 4,096 tenants have been seen.
-5. `Unpop` leaves the served-wait sample in the histogram.
+4. A real tenant named `other` shares the fold-over counters once 4,096 tenants have been seen
+   (one `other` row, never two: `TestARealTenantNamedOtherSharesTheFoldRow`). The `other` row's
+   depth sums several live queues, so `Snapshot.Check` bounds it by `queue.capacity`, not by the
+   tenant capacity; every live ring is still checked against the tenant capacity in `Queues.Check`.
+5. `Unpop` leaves the served-wait sample in the histogram and the load gauge sample; it restores
+   the ring position, the enqueue time, the empty time and the rule state.
 6. The overload scenarios are exact on seed 1 only; the sweep runs them with one seed.
 7. Tier R's idle-capacity check is a 70% threshold against a run without the rule on the same
    host; measured 73–74/s against 84/s while two other builds ran.
+8. The pending-shed buffer holds `2 x queue.capacity + 2` entries, allocated once: arrivals are
+   refused (reason `undrained`) once `queue.capacity + 1` sheds are untaken, and a sweep can add at
+   most `queue.capacity` more (`TestPendingShedStorageHoldsTheWorstUndrainedBacklog`).
+9. Claim 4 holds for spread arrivals only (see "Narrowed claims").
 
 ## Deviations
 
@@ -208,6 +216,53 @@ no admission timer (`Engine.Quiesce`).
   connection reaches the proxy, D5), shown as backlog at 4T ≥ 3× backlog at T.
 - `make chaos` does not list the admission scenarios; they run in `go test`, the sweep and
   the gate extra.
+
+## Narrowed claims
+
+- **Claim 4 (no starvation of capacity).** As built and measured, the claim is: *at 10× offered
+  load with arrivals spread at a constant rate, so that the gap between successive arrivals at the
+  proxy is shorter than the rule's short target, served ≥ 95% of capacity.* The benchmark meets
+  that condition: 100 clients, `workload.ArrivalConstant` with `Spread: true`, one request per
+  client every 55 ms, so an arrival reaches the proxy about every 0.55 ms against a 5 ms target
+  and a 5.5 ms lease; the queue is never empty when the connection frees. The claim does NOT hold
+  for clustered arrivals whose idle gaps exceed the allowed wait (the interval when the queue is
+  not standing, the target while it is): the rule sheds whatever the backend cannot serve within
+  the allowed wait, and the backend then idles until the next burst. Per burst, served ≤ allowed
+  wait / service time + 1. `TestAdv_4_BurstyTenfoldLoad` (bursts of 1,000 every 100 slots, allowed
+  wait 10 slots) serves 100 of 1,000 slots; that is the rule working as specified (it bounds the
+  wait), not a defect, so the code is unchanged.
+
+## Repair round
+
+Repair builder: Opus (`claude-opus-5-5`), 2026-11-27. Every regression test below was run
+against the pre-repair tree (`54528cc`, a scratch copy) and failed there, except where noted.
+
+**Shutdown rule (finding 2).** `Engine.Shutdown(now)` follows "time passes before the event":
+it first sweeps the admission core at `now` and answers every shed due at or before `now` with
+its `53M01` row (counted `shed` by reason `rule` in the core and `Shed` in the engine); then every
+client is closed and every request still queued is removed as client-gone (core `removed`,
+engine `Failed` without a reply, exactly as a disconnect); then the core's empty tenant queues
+are closed (`Queues.Close`, counted as `tenants_removed`) and the admission timer is cancelled,
+so `Quiesce` passes. Because the sweep at `now` runs first, `RemoveAt` in `dequeueGone` cannot
+shed its own target at the same instant (`Step` already fires timers before the event); a
+divergence on any other path is now caught by `Engine.Invariants`, which requires the core's
+shed total to equal the engine's `Shed`.
+
+| Item | Outcome |
+| --- | --- |
+| Review 1 finding 1 (MAJOR, fold row breaks `Check`, duplicate `other`) | fixed in `aafe85f`: `statsFor` reuses a real `other` row as the fold row and registers a new one in the stats list; `Snapshot.Check` bounds the `other` row by `queue.capacity`. Tests `TestFoldedOtherRowIsBoundedByTheTotalNotOneTenant`, `TestARealTenantNamedOtherSharesTheFoldRow` (`internal/admission`), `TestARealTenantNamedOtherPublishesOnceAfterTheFold` (`internal/obs/admsrc`, through `obs.Collector.Publish`) |
+| Review 1 finding 2 (MAJOR, shutdown timer and conservation) | fixed in `04256ae` (rule above). Tests `TestAdmissionShutdownInTheQuietWindowCancelsTheTimer` (both rules), `TestAdmissionShutdownAtTheDeadlineShedsTheExpiredAndRemovesTheRest` (`internal/proxy/admission_shutdown_test.go`): no future wake, `Invariants` and `Quiesce` pass, engine shed = core shed |
+| Review 1 finding 3 (MAJOR, control law unasserted in e2e) | fixed in `cde3a7a`: `checkRuleSheds` requires sheds by reason `rule` for both product rules in `checkAntiBloat` and `checkHeadToHead` at every load; `checkModerateConvergence` requires the 1.2× control-law median served wait ≤ the 5 ms target and its p99 below the FIFO control's median; `admission-h2h-l120/admission-wait.sql` adds the median and rule-shed conditions. Mutation M5 (control law disabled) now fails `TestScenarioAdmissionHeadToHead/load=120`, `TestScenarioAdmissionAntiBloat/control-law` and the SQL file (checked) |
+| Review 1 finding 4 (MINOR, zero-length first window) | load gauge fixed in `aafe85f` (first window ends one interval after the tenant queue is created; reference model too), test `TestTheLoadGaugeFirstWindowIsOneInterval`. `FollyRule` disputed and unchanged: it is the comparison arm reproducing folly's detector, and folly's `Codel` starts with `codelIntervalTimeNs_ = now` and `codelResetDelay_ = true`, so folly's own first window is zero-length too; changing it would make the arm stop being folly |
+| Review 1 finding 5 (MINOR, `-short` runs 15 overload scenarios) | fixed in `a7a5de7`: `AdmissionBaseline(dir, overload)`; under `-short` the simrun baseline runs only the two first-burst scenarios and `TestCSVAssertBaselineCountsFromFlushedFiles` skips the overload scenario directories (`e2e.AdmissionOverloadScenarios`); the full suite still runs all (`c62feec` counts the skipped SQL files). No failing-before test (a timing finding). Measured: `go test -short -count=1 ./internal/obs/simrun` passes in 463 s wall / 4 min 30 s user CPU at load average 15 (three builds and another branch's landing gate on the host); with the change the package runs no overload scenario under `-short`, and its remaining cost is the pre-existing chunk 3–6 baseline (about 2 min on a quiet host per chunk 4's notes). A quiet-host `ci-fast.sh` time could not be taken on this shared machine |
+| Review 1 finding 6 (MINOR, capacity-1 overflow and unpop reset the rule) | fixed in `aafe85f`: `Push` takes `wasEmpty` before any overflow shed and never empties the arriving tenant; `shedOldest` skips `emptied` when the oldest is the arriving tenant; `Pop` saves the rule state and empty time when it empties a tenant and `Unpop` restores them. Tests `TestAOneSlotQueueUnderFloodReachesItsOverloadState`, `TestOverflowOfTheArrivingTenantByTheTotalCapKeepsItsRuleState`, `TestUnpopRestoresTheRuleStateAndTheDeadline`; the reference model mirrors all three |
+| Review 1 finding 7 (MINOR, weak equality test, dead setup) | fixed in `aafe85f`: `TestTimeoutDeadlineAtEqualityWhileStanding` (age exactly the target while standing; fails under mutation M1, checked), `TestControlLawAtEqualityOfTargetAndFirstAbove`; the dead setup in `TestCanaryFirstBurstBugShedsTheFirstBurst` removed. These strengthen tests, so they pass on the old code by design |
+| `TestAdv_1_ChurnBeyondCounterCap` (BROKEN) | fixed in `aafe85f` (same cause as finding 1); passes |
+| `TestAdv_8_FoldedStatsConservation` (BROKEN) | fixed in `aafe85f` (same cause as finding 1); passes |
+| `TestAdv_1_PartialShedDrainMemory` (BROKEN) | fixed in `aafe85f`: the pending buffer is allocated once at `2 x capacity + 2` and compacted in place when the consumed prefix blocks an append, so it never reallocates. Tests `TestPendingShedStorageStaysFixedUnderAPartialDrain`, `TestPendingShedStorageHoldsTheWorstUndrainedBacklog`; passes |
+| `TestAdv_6_UnpopPreservesDeadline` (BROKEN) | fixed in `aafe85f` (with finding 6); passes |
+| `TestAdv_13_QuotedOutputDirectory` (BROKEN) | fixed in `f28b26c`: `sql_string` doubles apostrophes in every path the script puts into SQL. Test `TestHeadToHeadScriptAcceptsAQuoteInTheRunDirectory` (`test/e2e`, needs DuckDB, skipped under `-short`); passes |
+| `TestAdv_4_BurstyTenfoldLoad` (BROKEN) | narrowed, code unchanged (see "Narrowed claims"); stays red by decision |
 
 ## Commands
 

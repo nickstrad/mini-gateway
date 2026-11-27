@@ -40,7 +40,10 @@ the engine's queue stage or the admission scenarios. Full record:
   chunk 6's `FIFO`, so every chunk 6 tier S scenario still runs on `FIFO`. The binary always
   sets a rule (default `timeout`).
 - The seam grew additively: `proxy.ShedQueue` (`RemoveAt`, `Expire`, `Sweep`, `Next`,
-  `TakeShed`, `Unpop`). The engine drains sheds and re-arms one timer (`tAdmission`) after
+  `TakeShed`, `Unpop`, `Close`). `Engine.Shutdown` sweeps the core at its instant first
+  (answering due sheds), then removes the rest as client-gone, then `Close`s the empty
+  tenant queues and cancels `tAdmission`; `Invariants()` holds the core's shed total equal to
+  the engine's `Shed`. `Unpop` restores the rule state a pop that emptied the queue reset. The engine drains sheds and re-arms one timer (`tAdmission`) after
   every queue operation (`Engine.queueTouched`); a shed is answered `53M01` with its
   `ReadyForQuery`, at once. With a `ShedQueue` the engine never lends past the queue (no
   fast path), so the rule sees every request.
