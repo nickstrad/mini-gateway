@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/loadgen"
+	"github.com/nickstrad/mini-gateway/internal/loadgen/live"
 	"github.com/nickstrad/mini-gateway/internal/loadgen/loadgentest"
 )
 
@@ -142,5 +143,14 @@ func TestTheSameSeedGivesTheSamePlanAcrossProcesses(t *testing.T) {
 		if strings.Join(seen[0][u], "\n") != strings.Join(seen[1][u], "\n") || len(seen[0][u]) == 0 {
 			t.Fatalf("tenant %s: the two processes sent different statements", u)
 		}
+	}
+}
+
+func TestLateSendsAloneExitThreeWithTheShortfallLine(t *testing.T) {
+	s := loadgen.Snapshot{Planned: 10, TargetRate: 10, Intended: 10, Sent: 10, Late: 4, Completed: [4]int64{10, 0, 0, 0}}
+	var out, errb bytes.Buffer
+	code := summarize(&out, &errb, loadgen.Plan{Seed: 1, Profile: loadgen.ProfileSimple}, live.Result{Snapshot: s}, nil)
+	if code != exitShortfall || !strings.Contains(out.String(), "SHORTFALL: achieved 6.0/s of target 10/s: 4 late, 0 could not send") {
+		t.Fatalf("exit %d\n%s\n%s", code, out.String(), errb.String())
 	}
 }

@@ -402,3 +402,58 @@ func TestStatusAndSummaryLines(t *testing.T) {
 		t.Fatalf("summary:\n%s", sum)
 	}
 }
+
+func lateSendsQuickReplies(t *testing.T, lag int64) (loadgen.Plan, loadgen.Snapshot) {
+	t.Helper()
+	p := plan(10, 1000)
+	p.Tenants = 1
+	tr := tracker(t, p, loadgen.TrackerConfig{Conns: 1, MaxOutstanding: 16, LateAfterNs: 5 * ms})
+	for _, d := range tr.Tick(p.DurationNs, nil) {
+		sentAt := d.Op.At + lag
+		if !tr.Sent(d.Conn, sentAt) || !tr.Completed(d.Conn, sentAt+ms, loadgen.Result{Outcome: loadgen.OutcomeOK}) {
+			t.Fatal("send or completion refused")
+		}
+	}
+	tr.Finish()
+	s := tr.Snapshot()
+	if err := s.Check(); err != nil {
+		t.Fatal(err)
+	}
+	return p, s
+}
+
+func TestLatencyIsMeasuredFromTheIntendedSendTimeNotTheActualSend(t *testing.T) {
+	_, s := lateSendsQuickReplies(t, 400*ms)
+	fromIntended := loadgen.SnapshotLatencies(s.Latency)
+	fromSend := loadgen.SnapshotLatencies(s.LatencyFromSend)
+	if s.Latency.Count != 10 || s.LatencyFromSend.Count != 10 {
+		t.Fatalf("latency counts %d and %d, want 10", s.Latency.Count, s.LatencyFromSend.Count)
+	}
+	if fromIntended.P50 < 400*ms || fromIntended.Max < 401*ms {
+		t.Fatalf("latency from intended send ignores the 400ms send lag: %+v", fromIntended)
+	}
+	if fromSend.Max > 2*ms {
+		t.Fatalf("latency from actual send includes the send lag: %+v", fromSend)
+	}
+}
+
+func TestLateSendsAloneAreAShortfall(t *testing.T) {
+	p, s := lateSendsQuickReplies(t, 6*ms)
+	if s.CouldNotSend != 0 || s.Late != p.Count() {
+		t.Fatalf("want every send late and none dropped: %+v", s)
+	}
+	if !s.Shortfall() {
+		t.Fatal("late sends with nothing dropped are not a shortfall")
+	}
+	if loadgen.AchievedTenths(s) >= s.TargetRate*10 {
+		t.Fatalf("achieved %d tenths of target %d/s", loadgen.AchievedTenths(s), s.TargetRate)
+	}
+	lines := strings.Join(loadgen.Summary(s, loadgen.Latencies{}, loadgen.Latencies{}), "\n")
+	if !strings.Contains(lines, "SHORTFALL: achieved 0.0/s of target 10/s: 10 late, 0 could not send") {
+		t.Fatalf("summary:\n%s", lines)
+	}
+	_, onTime := lateSendsQuickReplies(t, 5*ms)
+	if onTime.Shortfall() || onTime.Late != 0 {
+		t.Fatalf("sends exactly at the threshold are on time: %+v", onTime)
+	}
+}
