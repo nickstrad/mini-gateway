@@ -11,7 +11,7 @@ command -v go >/dev/null 2>&1 || PATH="/usr/local/go/bin:$PATH"
 fail=0
 run() { echo "extra: $*"; "$@" || fail=1; }
 run go test -count=1 ./internal/pool
-run go test -count=1 -timeout 40m -run 'TestCanaryPool|TestAblationColdStart|TestAblationRestart|TestAblationLifetimes|TestAblationNightTrickle|TestNightTrickleEachRemedy|TestPathFault' ./test/e2e
-run go test -count=1 -run 'TestCore' ./internal/proxy
+run go test -count=1 -timeout 40m -run 'TestCanaryPool|TestCanaryJoin|TestAblationColdStart|TestAblationRestart|TestAblationLifetimes|TestAblationNightTrickle|TestNightTrickleEachRemedy|TestPathFault' ./test/e2e
+run go test -count=1 -run 'TestCore|TestJoin' ./internal/proxy
 run scripts/fuzz-plant.sh
 exit $fail
