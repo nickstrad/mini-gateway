@@ -543,9 +543,8 @@ func clsMeasureWork(q []byte) clsWork {
 			break
 		}
 	}
-	m := clsMsg{src: q}
-	m.unit(false)
-	return clsWork{opRunBytes: l.opRunBytes, keywordChecks: m.keywordChecks}
+	_, keywordChecks := clsRunCounted(q, false, false)
+	return clsWork{opRunBytes: l.opRunBytes, keywordChecks: keywordChecks}
 }
 
 func TestLexOperatorRunsGrowLinearly(t *testing.T) {

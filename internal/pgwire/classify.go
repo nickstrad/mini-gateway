@@ -115,11 +115,12 @@ type clsMsg struct {
 }
 
 func clsRun(text []byte, inTx, plant bool) work.Unit {
-	m := clsMsg{src: text, plant: plant}
-	return m.unit(inTx)
+	u, _ := clsRunCounted(text, inTx, plant)
+	return u
 }
 
-func (m *clsMsg) unit(inTx bool) work.Unit {
+func clsRunCounted(text []byte, inTx, plant bool) (work.Unit, int) {
+	m := clsMsg{src: text, plant: plant}
 	m.lex()
 	m.matchParens()
 	u := work.Unit{Class: work.ClassStartLease}
@@ -128,20 +129,20 @@ func (m *clsMsg) unit(inTx bool) work.Unit {
 	}
 	// SafeRead and Hinted are computed directly from raw bytes so a lexer
 	// defect can never widen sharing or downgrade 08007 to 08006.
-	u.Hinted = bytes.HasPrefix(m.src, []byte(ShareHint))
+	u.Hinted = bytes.HasPrefix(text, []byte(ShareHint))
 	u.Opaque = m.bad
-	u.SafeRead = ShareFits(m.src)
+	u.SafeRead = ShareFits(text)
 	stmts := m.split()
 	u.Statements = len(stmts)
 	for _, s := range stmts {
 		if r := m.rejectReason(s); r != work.RejectNone {
 			u.Class = work.ClassReject
 			u.Reason = r
-			return u
+			return u, m.keywordChecks
 		}
 	}
 	u.Shareable = u.SafeRead && !inTx
-	return u
+	return u, m.keywordChecks
 }
 
 type clsSpan struct{ lo, hi int }
