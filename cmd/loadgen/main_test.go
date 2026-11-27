@@ -29,6 +29,8 @@ func runCmd(t *testing.T, args ...string) (int, string, string) {
 	return code, out.String(), errb.String()
 }
 
+// TestTheSeedIsPrintedFirstAndAServedRunExitsZero proves the banner prints
+// the seed first and a run that meets its target exits 0 without SHORTFALL.
 func TestTheSeedIsPrintedFirstAndAServedRunExitsZero(t *testing.T) {
 	f := loadgentest.Start(t, loadgentest.Options{})
 	code, out, errs := runCmd(t, "-addr", f.Addr(), "-rate", "50", "-duration", "2500ms", "-conns", "2", "-tenants", "2",
@@ -48,6 +50,8 @@ func TestTheSeedIsPrintedFirstAndAServedRunExitsZero(t *testing.T) {
 	}
 }
 
+// TestARandomSeedIsPrintedSoTheRunCanBeRepeated proves an omitted -seed prints
+// a seed that reproduces the exact same plan when passed back to -seed.
 func TestARandomSeedIsPrintedSoTheRunCanBeRepeated(t *testing.T) {
 	_, out, _ := runCmd(t, "-plan", "3")
 	m := regexp.MustCompile(`plan: seed (-?\d+) `).FindStringSubmatch(out)
@@ -60,6 +64,8 @@ func TestARandomSeedIsPrintedSoTheRunCanBeRepeated(t *testing.T) {
 	}
 }
 
+// TestAThrottledServerPrintsShortfallAndExitsThree proves a slow target yields
+// exit 3 with a SHORTFALL line naming non-zero late or could-not-send counts.
 func TestAThrottledServerPrintsShortfallAndExitsThree(t *testing.T) {
 	f := loadgentest.Start(t, loadgentest.Options{Delay: 50 * time.Millisecond})
 	code, out, _ := runCmd(t, "-addr", f.Addr(), "-rate", "400", "-duration", "1s", "-conns", "1", "-tenants", "1",
@@ -78,6 +84,7 @@ func TestAThrottledServerPrintsShortfallAndExitsThree(t *testing.T) {
 	}
 }
 
+// TestUsageErrors proves invalid flags exit 2 and -h exits 0.
 func TestUsageErrors(t *testing.T) {
 	for _, args := range [][]string{{"-rate", "0"}, {"-profile", "x"}, {"-conns", "1", "-tenants", "2"}, {"extra"},
 		{"-tls", "bogus"}, {"-drain", "-1s"}, {"-user-prefix", ""}} {
@@ -90,6 +97,8 @@ func TestUsageErrors(t *testing.T) {
 	}
 }
 
+// TestNoServerIsARuntimeFailureWithConservedNumbers proves an unreachable
+// target exits 1 while still printing a conserved summary.
 func TestNoServerIsARuntimeFailureWithConservedNumbers(t *testing.T) {
 	code, out, errs := runCmd(t, "-addr", "127.0.0.1:1", "-rate", "10", "-duration", "1s", "-conns", "1", "-tenants", "1", "-seed", "1")
 	if code != exitRuntime || !strings.Contains(errs, "no connection") || !strings.Contains(out, "loadgen summary") {
@@ -97,6 +106,8 @@ func TestNoServerIsARuntimeFailureWithConservedNumbers(t *testing.T) {
 	}
 }
 
+// TestTheSameSeedGivesTheSamePlanAcrossProcesses proves two compiled binary
+// processes print byte-identical plans and send identical per-tenant SQL.
 func TestTheSameSeedGivesTheSamePlanAcrossProcesses(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the binary")
@@ -147,6 +158,8 @@ func TestTheSameSeedGivesTheSamePlanAcrossProcesses(t *testing.T) {
 	}
 }
 
+// TestLateSendsAloneExitThreeWithTheShortfallLine proves late sends with zero
+// drops still emit SHORTFALL and return exit status 3.
 func TestLateSendsAloneExitThreeWithTheShortfallLine(t *testing.T) {
 	s := loadgen.Snapshot{Planned: 10, TargetRate: 10, Intended: 10, Sent: 10, Late: 4, Completed: [4]int64{10, 0, 0, 0}}
 	var out, errb bytes.Buffer
@@ -156,6 +169,8 @@ func TestLateSendsAloneExitThreeWithTheShortfallLine(t *testing.T) {
 	}
 }
 
+// TestACSVFlushErrorIsReportedAndFailsTheRun proves any CSV flush error prints
+// to stderr and forces exit status 1.
 func TestACSVFlushErrorIsReportedAndFailsTheRun(t *testing.T) {
 	s := loadgen.Snapshot{Planned: 10, TargetRate: 10, Intended: 10, Sent: 10, Completed: [4]int64{10, 0, 0, 0}}
 	for _, res := range []live.Result{{Snapshot: s, FlushErrs: 2}, {Snapshot: s, FlushErr: errors.New("disk full")}} {
@@ -167,6 +182,8 @@ func TestACSVFlushErrorIsReportedAndFailsTheRun(t *testing.T) {
 	}
 }
 
+// TestAPlanWithNoOperationAndAnOverLongPasswordAreUsageErrors proves zero-op
+// plans and >1024-byte stdin passwords exit 2 without echoing the secret.
 func TestAPlanWithNoOperationAndAnOverLongPasswordAreUsageErrors(t *testing.T) {
 	if code, _, errs := runCmd(t, "-rate", "1", "-duration", "500ms"); code != exitUsage || !strings.Contains(errs, "-duration") {
 		t.Fatalf("exit %d: %s", code, errs)

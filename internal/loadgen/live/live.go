@@ -1,3 +1,9 @@
+// Package live drives loadgen.Tracker over real TCP/TLS connections to a
+// running gateway or Postgres server.
+//
+// One coordinator goroutine owns the Tracker and obs.Collector; each open
+// connection gets a dedicated writer goroutine and reader goroutine that report
+// send, reply, and disconnect events back through a single bounded event channel.
 package live
 
 import (
@@ -20,6 +26,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/testclient"
 )
 
+// Default timeouts and periodic status interval for Run.
 const (
 	DefaultDrain       = 5 * time.Second
 	DefaultStatusEvery = time.Second
@@ -29,6 +36,7 @@ const (
 	instanceName       = "loadgen"
 )
 
+// Options configures a live load run against a real TCP/TLS target.
 type Options struct {
 	Addr        string
 	Database    string
@@ -45,6 +53,7 @@ type Options struct {
 	Status      io.Writer
 }
 
+// Result holds the final snapshot, optional CSV run directory, and flush status from Run.
 type Result struct {
 	Snapshot  loadgen.Snapshot
 	RunDir    string
@@ -88,6 +97,7 @@ type runner struct {
 	csv    *csvflush.Writer
 }
 
+// ErrSetup is returned when zero connections succeed in connecting and logging in.
 var ErrSetup = errors.New("loadgen: setup failed")
 
 func (o *Options) defaults() {
@@ -105,6 +115,9 @@ func (o *Options) defaults() {
 	}
 }
 
+// Run dials all connections up front, executes o.Plan open-loop until finished
+// or ctx is cancelled, drains in-flight replies up to o.Drain, and flushes the
+// final snapshot if o.CSVDir is set.
 func Run(ctx context.Context, o Options) (Result, error) {
 	o.defaults()
 	tr, err := loadgen.NewTracker(o.Plan, o.Tracker)
@@ -217,6 +230,7 @@ func (r *runner) dial(ctx context.Context, i int) (*conn, error) {
 		_ = nc.Close()
 		return nil, err
 	}
+	// Clear the setup deadline so long-lived open-loop connections are bounded by run duration and drain.
 	_ = nc.SetDeadline(time.Time{})
 	return &conn{idx: i, nc: nc, sess: sess, jobs: make(chan string, r.tr.Config().MaxOutstanding)}, nil
 }
@@ -250,6 +264,7 @@ func (r *runner) write(c *conn) {
 	for {
 		select {
 		case sql := <-c.jobs:
+			// Post evSent before writing to the socket so a fast reply can never arrive at the tracker ahead of its send.
 			r.post(event{kind: evSent, conn: c.idx, at: r.now()})
 			if err := c.sess.Write(testclient.EncodeQuery(nil, sql)); err != nil {
 				r.post(event{kind: evDown, conn: c.idx})
@@ -372,6 +387,8 @@ func (r *runner) drainEvents() {
 	}
 }
 
+// finish finalizes accounting before closing quit and sockets so every worker
+// goroutine unblocks and the final CSV snapshot reflects the terminal state.
 func (r *runner) finish() Result {
 	r.drainEvents()
 	r.tr.Finish()

@@ -8,6 +8,8 @@ import (
 	"os"
 )
 
+// ClientTLS builds a *tls.Config for client TLS modes "off", "require", and
+// "verify-full" (requiring at least TLS 1.2). It returns (nil, nil) for "off".
 func ClientTLS(mode, caFile, serverName, addr string) (*tls.Config, error) {
 	switch mode {
 	case "off", "":

@@ -1,3 +1,7 @@
+// Package loadgentest provides a minimal TCP Postgres responder for tests of
+// the load generator and mgctl. It speaks trust startup and answers the
+// loadgen simple and errors profile statements, with optional reply delay,
+// stall window, and read-blocking knobs.
 package loadgentest
 
 import (
@@ -11,6 +15,7 @@ import (
 	"time"
 )
 
+// Options configures fault injection on a Fake server.
 type Options struct {
 	Delay      time.Duration
 	StallFrom  time.Duration
@@ -18,6 +23,8 @@ type Options struct {
 	NoRead     bool
 }
 
+// Fake is a loopback TCP server speaking enough of the Postgres simple query
+// protocol to test loadgen and mgctl without Docker.
 type Fake struct {
 	t     testing.TB
 	ln    net.Listener
@@ -30,6 +37,8 @@ type Fake struct {
 	done  chan struct{}
 }
 
+// Start listens on 127.0.0.1:0, serves connections until t finishes, and
+// registers cleanup to close the listener and every accepted socket.
 func Start(t testing.TB, o Options) *Fake {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -43,6 +52,7 @@ func Start(t testing.TB, o Options) *Fake {
 	return f
 }
 
+// Addr returns the host:port address the fake server is listening on.
 func (f *Fake) Addr() string { return f.ln.Addr().String() }
 
 func (f *Fake) close() {
@@ -61,6 +71,7 @@ func (f *Fake) close() {
 	f.wg.Wait()
 }
 
+// Statements returns a copy of every SQL string received from startup user, in arrival order.
 func (f *Fake) Statements(user string) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -199,6 +210,7 @@ func startup(r *bufio.Reader, c net.Conn) (string, bool) {
 		if _, err := io.ReadFull(r, body); err != nil {
 			return "", false
 		}
+		// 80877103 is PostgreSQL's SSLRequest code; refuse TLS so trust clients proceed in plaintext.
 		if binary.BigEndian.Uint32(body) == 80877103 {
 			if _, err := c.Write([]byte{'N'}); err != nil {
 				return "", false

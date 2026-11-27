@@ -63,6 +63,8 @@ func runServer(t *testing.T, tr *loadgen.Tracker, step, end int64, serviceAt fun
 	return tr.Snapshot()
 }
 
+// TestAchievedEqualsIntendedAtARateTheServerCanServe proves achieved rate
+// equals target with zero shortfall when the server keeps up.
 func TestAchievedEqualsIntendedAtARateTheServerCanServe(t *testing.T) {
 	p := plan(200, 2000)
 	tr := tracker(t, p, loadgen.TrackerConfig{Conns: 4, MaxOutstanding: 8})
@@ -83,6 +85,8 @@ func TestAchievedEqualsIntendedAtARateTheServerCanServe(t *testing.T) {
 	}
 }
 
+// TestAThrottledServerGivesShortfallAndExactCouldNotSend proves back pressure
+// produces SHORTFALL and exact conserved could-not-send counts.
 func TestAThrottledServerGivesShortfallAndExactCouldNotSend(t *testing.T) {
 	p := plan(1000, 1000)
 	tr := tracker(t, p, loadgen.TrackerConfig{Conns: 2, MaxOutstanding: 4})
@@ -108,6 +112,8 @@ func TestAThrottledServerGivesShortfallAndExactCouldNotSend(t *testing.T) {
 	}
 }
 
+// TestLateIsCountedExactlyAgainstTheThreshold proves sends at exactly
+// LateAfterNs are on time while sends 1 ns past it increment Late.
 func TestLateIsCountedExactlyAgainstTheThreshold(t *testing.T) {
 	p := plan(10, 1000)
 	tr := tracker(t, p, loadgen.TrackerConfig{Conns: 2, MaxOutstanding: 16, LateAfterNs: 5 * ms})
@@ -144,6 +150,8 @@ func TestLateIsCountedExactlyAgainstTheThreshold(t *testing.T) {
 	}
 }
 
+// TestAStalledServerShowsInLatencyFromIntendedSendNotInTheRate proves a 1 s
+// stall shows in latency without reducing the intended or sent schedule.
 func TestAStalledServerShowsInLatencyFromIntendedSendNotInTheRate(t *testing.T) {
 	stall := func(at int64) int64 {
 		if at >= 500*ms && at < 1500*ms {
@@ -167,6 +175,8 @@ func TestAStalledServerShowsInLatencyFromIntendedSendNotInTheRate(t *testing.T) 
 	}
 }
 
+// TestPlantedClosedLoopHidesTheStallSoTheOpenLoopCheckCanFail proves the
+// closed-loop plant collapses p99 during a stall so the open-loop assertion can fail.
 func TestPlantedClosedLoopHidesTheStallSoTheOpenLoopCheckCanFail(t *testing.T) {
 	p := plan(100, 3000)
 	p.Tenants = 1
@@ -191,6 +201,8 @@ func TestPlantedClosedLoopHidesTheStallSoTheOpenLoopCheckCanFail(t *testing.T) {
 	}
 }
 
+// TestConnectionLossCountsLostAndCouldNotSendAndConserves proves ConnDown
+// marks in-flight ops lost, queued ops could-not-send, and preserves Check.
 func TestConnectionLossCountsLostAndCouldNotSendAndConserves(t *testing.T) {
 	p := plan(1000, 100)
 	tr := tracker(t, p, loadgen.TrackerConfig{Conns: 2, MaxOutstanding: 8})
@@ -218,6 +230,8 @@ func TestConnectionLossCountsLostAndCouldNotSendAndConserves(t *testing.T) {
 	}
 }
 
+// TestConservationHoldsOnEveryExitPathUnderRandomEvents proves Check holds
+// after every event and after Finish across 200 seeded random sequences.
 func TestConservationHoldsOnEveryExitPathUnderRandomEvents(t *testing.T) {
 	for seed := uint64(1); seed <= 200; seed++ {
 		r := rand.New(rand.NewPCG(seed, 9))
@@ -258,6 +272,8 @@ func TestConservationHoldsOnEveryExitPathUnderRandomEvents(t *testing.T) {
 	}
 }
 
+// TestErrorsAreCountedUnderTheirSQLStateClass proves error codes map to sorted
+// two-character SQLSTATE classes and short codes fall back to "other".
 func TestErrorsAreCountedUnderTheirSQLStateClass(t *testing.T) {
 	p := plan(1000, 10)
 	tr := tracker(t, p, loadgen.TrackerConfig{Conns: 2, MaxOutstanding: 16})
@@ -290,6 +306,8 @@ func TestErrorsAreCountedUnderTheirSQLStateClass(t *testing.T) {
 	}
 }
 
+// TestErrorClassesAreBounded proves ErrorsByClass never exceeds MaxClasses
+// while conserving the total error count through ClassOther.
 func TestErrorClassesAreBounded(t *testing.T) {
 	p := plan(1000, 1000)
 	tr := tracker(t, p, loadgen.TrackerConfig{Conns: 2, MaxOutstanding: 1024})
@@ -312,6 +330,8 @@ func TestErrorClassesAreBounded(t *testing.T) {
 	}
 }
 
+// TestTrackerConfigIsValidated proves NewTracker rejects invalid bounds and
+// fills defaults for zero MaxOutstanding and LateAfterNs.
 func TestTrackerConfigIsValidated(t *testing.T) {
 	p := plan(10, 1000)
 	for _, c := range []loadgen.TrackerConfig{{Conns: 1}, {Conns: loadgen.MaxConns + 1}, {Conns: 2, MaxOutstanding: -1},
@@ -326,6 +346,8 @@ func TestTrackerConfigIsValidated(t *testing.T) {
 	}
 }
 
+// TestSnapshotCountersMoveAndTheMappingExportsEveryMetric proves every loadgen
+// metric moves, conserves through obs.Collector, and publishes from a zero snapshot.
 func TestSnapshotCountersMoveAndTheMappingExportsEveryMetric(t *testing.T) {
 	p := plan(100, 1000)
 	tr := tracker(t, p, loadgen.TrackerConfig{Conns: 2, MaxOutstanding: 2, LateAfterNs: 1})
@@ -375,6 +397,8 @@ func TestSnapshotCountersMoveAndTheMappingExportsEveryMetric(t *testing.T) {
 	}
 }
 
+// TestSnapshotCheckCatchesBrokenConservation proves Snapshot.Check rejects
+// unbalanced intended and sent equations with ErrConservation.
 func TestSnapshotCheckCatchesBrokenConservation(t *testing.T) {
 	s := loadgen.Snapshot{Planned: 10, Intended: 3, Sent: 2, CouldNotSend: 0}
 	if err := s.Check(); !errors.Is(err, loadgen.ErrConservation) {
@@ -386,6 +410,8 @@ func TestSnapshotCheckCatchesBrokenConservation(t *testing.T) {
 	}
 }
 
+// TestStatusAndSummaryLines proves StatusLine and Summary render counts,
+// SQLSTATE classes, achieved rate, quantiles, and SHORTFALL text.
 func TestStatusAndSummaryLines(t *testing.T) {
 	s := loadgen.Snapshot{Planned: 100, TargetRate: 50, Intended: 100, Sent: 90, CouldNotSend: 10, Late: 5,
 		ErrorsByClass: []loadgen.ClassCount{{"23", 4}}}
@@ -422,6 +448,8 @@ func lateSendsQuickReplies(t *testing.T, lag int64) (loadgen.Plan, loadgen.Snaps
 	return p, s
 }
 
+// TestLatencyIsMeasuredFromTheIntendedSendTimeNotTheActualSend proves send lag
+// appears in Snapshot.Latency while Snapshot.LatencyFromSend measures only reply time.
 func TestLatencyIsMeasuredFromTheIntendedSendTimeNotTheActualSend(t *testing.T) {
 	_, s := lateSendsQuickReplies(t, 400*ms)
 	fromIntended := loadgen.SnapshotLatencies(s.Latency)
@@ -437,6 +465,8 @@ func TestLatencyIsMeasuredFromTheIntendedSendTimeNotTheActualSend(t *testing.T) 
 	}
 }
 
+// TestLateSendsAloneAreAShortfall proves late sends with zero drops trigger
+// Shortfall, lower achieved rate, and print SHORTFALL, while boundary sends do not.
 func TestLateSendsAloneAreAShortfall(t *testing.T) {
 	p, s := lateSendsQuickReplies(t, 6*ms)
 	if s.CouldNotSend != 0 || s.Late != p.Count() {

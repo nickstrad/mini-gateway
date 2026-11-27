@@ -10,6 +10,8 @@ import (
 	"testing"
 )
 
+// TestChaosAProcessFailureAfterPassingScenariosFails proves chaos.sh exits
+// non-zero and prints the tail when go test crashes after scenarios pass.
 func TestChaosAProcessFailureAfterPassingScenariosFails(t *testing.T) {
 	log := e2eBlock(false) + "panic: late background failure\nFAIL\t" + mod + "/test/e2e\t4.700s\n"
 	r := runScript(t, "chaos.sh", log, 1)
@@ -21,6 +23,8 @@ func TestChaosAProcessFailureAfterPassingScenariosFails(t *testing.T) {
 	}
 }
 
+// TestChaosAFailedParentWithPassingSeedsFailsTheScenario proves a failed
+// parent scenario test marks that scenario FAIL even when all seed subtests pass.
 func TestChaosAFailedParentWithPassingSeedsFailsTheScenario(t *testing.T) {
 	log := strings.Replace(e2eBlock(false), "    --- PASS: TestScenarioE2E/e2e-results (", "    --- FAIL: TestScenarioE2E/e2e-results (", 1)
 	r := runScript(t, "chaos.sh", log, 1)
@@ -62,6 +66,8 @@ func runDown(t *testing.T, dockerBody string) (string, int) {
 	return buf.String(), 0
 }
 
+// TestRunDownFailsWhenDockerCannotListTheStack proves deploy/dev/down.sh fails
+// closed whenever Docker cannot list containers, networks, or volumes.
 func TestRunDownFailsWhenDockerCannotListTheStack(t *testing.T) {
 	out, code := runDown(t, "echo 'daemon unreachable' >&2\nexit 1\n")
 	if code != 1 || strings.Contains(out, "the dev stack is down") {

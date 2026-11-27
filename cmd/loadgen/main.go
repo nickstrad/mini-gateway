@@ -1,3 +1,7 @@
+// Command loadgen puts a constant, open-loop load on a running mini-gateway.
+// Every request has an intended send time determined solely by rate, duration,
+// and seed; replies never slow the schedule, and any inability to keep up is
+// reported as a SHORTFALL rather than hidden by throttling.
 package main
 
 import (
@@ -109,6 +113,7 @@ func parseFlags(args []string, stderr io.Writer) (*flags, int) {
 		fmt.Fprintf(stderr, "loadgen: unexpected arguments %q\n", fs.Args())
 		return nil, exitUsage
 	}
+	// Distinguish an explicit -seed 0 from an omitted -seed so seed 0 stays repeatable.
 	fs.Visit(func(fl *flag.Flag) {
 		if fl.Name == "seed" {
 			f.seedSet = true
@@ -117,6 +122,7 @@ func parseFlags(args []string, stderr io.Writer) (*flags, int) {
 	return f, -1
 }
 
+// randomSeed returns a non-negative 63-bit seed so -seed flags never need a leading minus.
 func randomSeed() int64 {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
@@ -203,6 +209,7 @@ func summarize(stdout, stderr io.Writer, plan loadgen.Plan, res live.Result, err
 		fmt.Fprintf(stderr, "loadgen: %v\n", err)
 		return exitRuntime
 	}
+	// Report CSV flush failures to stderr even under -quiet so a broken flush never exits 0.
 	if res.FlushErr != nil || res.FlushErrs > 0 {
 		fmt.Fprintf(stderr, "loadgen: CSV flush failed (%d flush errors): %v\n", res.FlushErrs, res.FlushErr)
 		return exitRuntime

@@ -162,6 +162,8 @@ func scenarioLines(out string) []string {
 	return got
 }
 
+// TestSweepConciseOneLinePerScenario proves sweep.sh defaults to one line per
+// scenario plus the gate note and summary without raw go test lines.
 func TestSweepConciseOneLinePerScenario(t *testing.T) {
 	r := runScript(t, "sweep.sh", sweepLog(false), 0, "SWEEP_SEEDS=3")
 	if r.code != 0 {
@@ -188,6 +190,8 @@ func TestSweepConciseOneLinePerScenario(t *testing.T) {
 	}
 }
 
+// TestSweepVerbosePrintsRawOutput proves VERBOSE=1 streams raw go test output
+// alongside the gate note and scenario summary lines.
 func TestSweepVerbosePrintsRawOutput(t *testing.T) {
 	log := sweepLog(false)
 	r := runScript(t, "sweep.sh", log, 0, "SWEEP_SEEDS=3", "VERBOSE=1")
@@ -202,6 +206,8 @@ func TestSweepVerbosePrintsRawOutput(t *testing.T) {
 	}
 }
 
+// TestSweepConciseNeverHidesAFailure proves concise sweep output still prints
+// the failing seed's FAIL, error, and REPLAY lines and exits 1.
 func TestSweepConciseNeverHidesAFailure(t *testing.T) {
 	r := runScript(t, "sweep.sh", sweepLog(true), 1, "SWEEP_SEEDS=3")
 	if r.code != 1 {
@@ -240,6 +246,7 @@ func TestSweepConciseNeverHidesAFailure(t *testing.T) {
 	}
 }
 
+// TestSweepNoScenarioMatchedFails proves sweep.sh exits 1 when no scenario matches.
 func TestSweepNoScenarioMatchedFails(t *testing.T) {
 	r := runScript(t, "sweep.sh", "PASS\n"+pkgLine("ok  ", "internal/config", "0.045s [no tests to run]"), 0, "SWEEP_SEEDS=3")
 	if r.code != 1 || !strings.Contains(r.out, "no scenario test matched") || len(scenarioLines(r.out)) != 0 {
@@ -249,6 +256,8 @@ func TestSweepNoScenarioMatchedFails(t *testing.T) {
 
 var chaosLine = regexp.MustCompile(`(?m)^S  (\S+) +seeds (\d+) +(pass|FAIL|FAIL\(sql\)) +\S+$`)
 
+// TestChaosConciseAndVerbose proves chaos.sh prints one line per scenario by
+// default and includes raw go test output when VERBOSE=1.
 func TestChaosConciseAndVerbose(t *testing.T) {
 	log := e2eBlock(false)
 	r := runScript(t, "chaos.sh", log, 0)
@@ -268,6 +277,8 @@ func TestChaosConciseAndVerbose(t *testing.T) {
 	}
 }
 
+// TestChaosFailedScenarioShowsItsReplay proves concise chaos output prints the
+// failing seed's error and REPLAY command under its FAIL scenario line.
 func TestChaosFailedScenarioShowsItsReplay(t *testing.T) {
 	r := runScript(t, "chaos.sh", e2eBlock(true), 1)
 	if r.code != 1 {
@@ -336,6 +347,8 @@ func extractRun(t *testing.T, tarball, prefix, dest string) {
 	}
 }
 
+// TestChaosFailedSQLShowsTheViolatingRows proves a SQL assertion failure marks
+// the scenario FAIL(sql) and prints the violating rows from csv-assert.sh.
 func TestChaosFailedSQLShowsTheViolatingRows(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs csv-assert.sh with DuckDB; run without -short")

@@ -1,3 +1,5 @@
+// Property and regression tests for deterministic JSON stats encoding and
+// undeclared-metric rejection during snapshot merges.
 package jsonstats_test
 
 import (

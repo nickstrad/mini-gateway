@@ -18,6 +18,8 @@ for href in sys.argv[3:]:
         print(href, e)
 `
 
+// TestSiteLinksMustNameFilesGitTracks proves build_site.py rejects relative
+// links to untracked or gitignored files and broken targets.
 func TestSiteLinksMustNameFilesGitTracks(t *testing.T) {
 	scripts, repo := filepath.Join("..", ".github", "scripts"), t.TempDir()
 	setup := "cd " + repo + " && mkdir -p docs/gate docs/staged && touch markdown.py docs/tracked.md docs/gate/run.log docs/staged/a.md" +

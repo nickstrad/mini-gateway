@@ -1,3 +1,5 @@
+// Property and regression tests for observability dependency boundaries,
+// snapshot detachment, merge overflow handling, and allocation budgets.
 package obs_test
 
 import (

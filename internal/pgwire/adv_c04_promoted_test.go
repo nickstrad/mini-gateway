@@ -1,3 +1,5 @@
+// Property, regression, and Postgres 17 fidelity tests for wire framing,
+// TLS negotiation, SCRAM-SHA-256 authentication, and session cycle tracking.
 package pgwire_test
 
 import (

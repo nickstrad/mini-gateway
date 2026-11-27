@@ -35,6 +35,8 @@ func run(t *testing.T, o live.Options) live.Result {
 	return res
 }
 
+// TestAchievedEqualsIntendedAgainstAFakeThatKeepsUp proves achieved equals
+// target with zero late or unsent requests when the target keeps up.
 func TestAchievedEqualsIntendedAgainstAFakeThatKeepsUp(t *testing.T) {
 	f := loadgentest.Start(t, loadgentest.Options{})
 	p := plan(11, 200, 2*time.Second, 2, loadgen.ProfileSimple)
@@ -50,6 +52,8 @@ func TestAchievedEqualsIntendedAgainstAFakeThatKeepsUp(t *testing.T) {
 	}
 }
 
+// TestTheSameSeedSendsTheSameStatementsPerTenant proves two live runs with the
+// same seed send identical per-tenant SQL sequences matching the plan.
 func TestTheSameSeedSendsTheSameStatementsPerTenant(t *testing.T) {
 	p := plan(99, 300, time.Second, 3, loadgen.ProfileErrors)
 	var got [2]map[string][]string
@@ -76,6 +80,8 @@ func TestTheSameSeedSendsTheSameStatementsPerTenant(t *testing.T) {
 	}
 }
 
+// TestAThrottledFakeGivesShortfallAndCouldNotSend proves a slow target fills
+// MaxOutstanding and produces SHORTFALL with conserved could-not-send counts.
 func TestAThrottledFakeGivesShortfallAndCouldNotSend(t *testing.T) {
 	f := loadgentest.Start(t, loadgentest.Options{Delay: 50 * time.Millisecond})
 	p := plan(5, 500, time.Second, 2, loadgen.ProfileSimple)
@@ -88,6 +94,8 @@ func TestAThrottledFakeGivesShortfallAndCouldNotSend(t *testing.T) {
 	}
 }
 
+// TestAFakeThatStopsReadingMakesSendsLateOrUnsent proves a peer that stops
+// reading causes SHORTFALL and zero ok completions while conserving counts.
 func TestAFakeThatStopsReadingMakesSendsLateOrUnsent(t *testing.T) {
 	f := loadgentest.Start(t, loadgentest.Options{NoRead: true})
 	p := plan(6, 2000, time.Second, 1, loadgen.ProfileSimple)
@@ -102,6 +110,8 @@ func TestAFakeThatStopsReadingMakesSendsLateOrUnsent(t *testing.T) {
 	}
 }
 
+// TestAStalledFakeShowsInLatencyFromIntendedSend proves a 600 ms server stall
+// shows in intended-time latency without slowing the open-loop schedule.
 func TestAStalledFakeShowsInLatencyFromIntendedSend(t *testing.T) {
 	f := loadgentest.Start(t, loadgentest.Options{StallFrom: 300 * time.Millisecond, StallUntil: 900 * time.Millisecond})
 	p := plan(7, 100, 1500*time.Millisecond, 2, loadgen.ProfileSimple)
@@ -115,6 +125,8 @@ func TestAStalledFakeShowsInLatencyFromIntendedSend(t *testing.T) {
 	}
 }
 
+// TestErrorsProfileShowsEveryOutcomeUnderItsSQLStateClass proves the errors
+// profile yields every promised outcome and exact per-class counts (23, 42, 22, 0A).
 func TestErrorsProfileShowsEveryOutcomeUnderItsSQLStateClass(t *testing.T) {
 	f := loadgentest.Start(t, loadgentest.Options{})
 	p := plan(8, 400, time.Second, 2, loadgen.ProfileErrors)
@@ -156,6 +168,8 @@ func TestErrorsProfileShowsEveryOutcomeUnderItsSQLStateClass(t *testing.T) {
 	}
 }
 
+// TestConservationHoldsWhenTheRunIsInterrupted proves cancelling ctx mid-run
+// stops new intends, drains queued work to could-not-send, and keeps Check green.
 func TestConservationHoldsWhenTheRunIsInterrupted(t *testing.T) {
 	f := loadgentest.Start(t, loadgentest.Options{Delay: 5 * time.Millisecond})
 	p := plan(9, 300, 10*time.Second, 2, loadgen.ProfileSimple)
@@ -174,6 +188,8 @@ func TestConservationHoldsWhenTheRunIsInterrupted(t *testing.T) {
 	}
 }
 
+// TestTheLoadToolFlushesItsOwnSnapshotToCSV proves the CSV run directory's
+// final flush matches the final in-memory loadgen.Snapshot value for value.
 func TestTheLoadToolFlushesItsOwnSnapshotToCSV(t *testing.T) {
 	f := loadgentest.Start(t, loadgentest.Options{})
 	dir := t.TempDir()
@@ -212,6 +228,8 @@ func TestTheLoadToolFlushesItsOwnSnapshotToCSV(t *testing.T) {
 	}
 }
 
+// TestNoLoginIsASetupError proves zero open connections return a setup error
+// and record ConnectFailures.
 func TestNoLoginIsASetupError(t *testing.T) {
 	p := plan(1, 10, time.Second, 1, loadgen.ProfileSimple)
 	o := live.Options{Addr: "127.0.0.1:1", Plan: p, Tracker: loadgen.TrackerConfig{Conns: 1}, DialTimeout: time.Second}

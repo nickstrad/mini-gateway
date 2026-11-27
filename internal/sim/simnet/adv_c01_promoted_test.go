@@ -1,3 +1,5 @@
+// Property and regression tests for simulated TCP connections: window
+// back pressure, saturation arithmetic, half-open stalls, fault clearing, and quiescence.
 package simnet_test
 
 import (

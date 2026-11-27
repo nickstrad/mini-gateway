@@ -1,3 +1,5 @@
+// Property and regression tests for fakepg, simulated clients, fault schedules,
+// direct baselines, and live Postgres 17 wire-fidelity comparisons.
 package world_test
 
 import (

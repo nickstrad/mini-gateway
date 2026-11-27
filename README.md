@@ -13,13 +13,14 @@ Under overload, it enforces per-tenant admission control. That control has five 
 - Chunk 4: wire sessions — framer, TLS/SCRAM state machines, cycle trackers, and component `wire` export.
 - Chunk 5: work vocabulary, error contract, courtesy reject list, safe-shape recogniser, and component `classifier` export.
 - Chunk 6: walking skeleton — sans-I/O `proxy.Engine` with transaction-lease lifecycle and unconditional `DISCARD ALL` reset, goroutine shell with TLS on both legs and isolated admin HTTP listener, fail-closed JSON config, `cmd/mini-gateway` binary, component `engine` export, generated timeout-budget and capacity tables, `FuzzEngineOps`, `make chaos`, and tier S + tier R e2e suites.
+- Chunk 6a: operator tools — open-loop load generator (`cmd/loadgen`), read-only operator client (`cmd/mgctl`), one-command local stack (`deploy/dev/` with `make run-up`, `make load`, `make run-down`), DuckDB story report (`scripts/report.sh`, `make report`), concise `sweep.sh` and `make chaos` output, and shipped regression suites for Chunks 1–4.
 
-[Chapter 1](book/chapters/01-simulator-kernel.md), [Chapter 2](book/chapters/02-simulated-world.md), [Chapter 3](book/chapters/03-observability-spine.md), [Chapter 4](book/chapters/04-wire-sessions.md), [Chapter 5](book/chapters/05-classifier.md), and [Chapter 6](book/chapters/06-walking-skeleton.md) of the book are live. The dynamic pool and circuit breaker (Chunk 7), admission queues (Chunks 8–9), adaptive limit (Chunk 10), coalescer (Chunk 11), retries (Chunk 12), and fleet drain (Chunk 13) remain pass-through stage seams.
+[Chapter 1](book/chapters/01-simulator-kernel.md), [Chapter 2](book/chapters/02-simulated-world.md), [Chapter 3](book/chapters/03-observability-spine.md), [Chapter 4](book/chapters/04-wire-sessions.md), [Chapter 5](book/chapters/05-classifier.md), [Chapter 6](book/chapters/06-walking-skeleton.md), and [Chapter 6a](book/chapters/06a-operator-tools.md) of the book are live. The dynamic pool and circuit breaker (Chunk 7), admission queues (Chunks 8–9), adaptive limit (Chunk 10), coalescer (Chunk 11), retries (Chunk 12), and fleet drain (Chunk 13) remain pass-through stage seams.
 
 ## Where to read
 
 - Project site: https://nickstrad.github.io/mini-gateway/
-- Book: [book/index.md](book/index.md) ([Chapter 1](book/chapters/01-simulator-kernel.md), [Chapter 2](book/chapters/02-simulated-world.md), [Chapter 3](book/chapters/03-observability-spine.md), [Chapter 4](book/chapters/04-wire-sessions.md), [Chapter 5](book/chapters/05-classifier.md), and [Chapter 6: The first working proxy, and lending connections by the transaction](book/chapters/06-walking-skeleton.md) are live; later chapters publish as chunks land)
+- Book: [book/index.md](book/index.md) ([Chapter 1](book/chapters/01-simulator-kernel.md), [Chapter 2](book/chapters/02-simulated-world.md), [Chapter 3](book/chapters/03-observability-spine.md), [Chapter 4](book/chapters/04-wire-sessions.md), [Chapter 5](book/chapters/05-classifier.md), [Chapter 6](book/chapters/06-walking-skeleton.md), and [Chapter 6a: Watching it run: a load tool, a small client, and reports that say what a run proved](book/chapters/06a-operator-tools.md) are live; later chapters publish as chunks land)
 - Plan: [PLAN.md](PLAN.md)
 - Generated contracts and registry: [docs/error-contract.md](docs/error-contract.md) · [docs/reject-list.md](docs/reject-list.md) · [docs/safe-shape.md](docs/safe-shape.md) · [docs/timeout-budget.md](docs/timeout-budget.md) · [docs/capacity-table.md](docs/capacity-table.md) · [docs/csv-schema.md](docs/csv-schema.md)
 - Extension seams: [docs/extension-seams.md](docs/extension-seams.md)
@@ -39,6 +40,16 @@ Needs Go 1.26. Three other tools are needed for specific tasks: Python 3 to buil
   `/tmp/mini-gateway -config <file> -check`
 - Run the proxy until `SIGTERM` or `SIGINT` (the admin listener serves `/healthz`, `/stats`, and `/metrics` on `admin_listen`):
   `/tmp/mini-gateway -config <file>`
+
+## Running the local stack and operator tools
+
+Watch the gateway under constant open-loop load with Postgres 17 and Prometheus (all ports bound on `127.0.0.1`; settings in [deploy/dev/env.sh](deploy/dev/env.sh)):
+
+- `make run-up` — builds `mini-gateway`, `mgctl`, and `loadgen`, starts Postgres 17 and Prometheus in Docker, starts the gateway on the host, waits until Prometheus reports the `/metrics` target as up, and prints the Prometheus UI, targets, and graph URLs.
+- `make load RATE=100 DURATION=30s PROFILE=simple|errors SEED=<n>` — runs open-loop load via [cmd/loadgen](cmd/loadgen/main.go) against the dev gateway and flushes its snapshot to CSV under `/tmp/mg-dev/load/`. Exits `3` with a `SHORTFALL` line whenever achieved rate falls below target. Use `go run ./cmd/loadgen -plan 10 -seed 7 -profile errors` to inspect a plan offline.
+- `make run-down` — stops the gateway and removes the stack's containers, network, and volumes while keeping flushed CSV runs under `/tmp/mg-dev/` for reporting.
+- `make report RUNS=<dir...>` (or `make report SEEDS=3` to run tier S e2e scenarios and report over them) — runs [scripts/report.sh](scripts/report.sh) with DuckDB `1.5.x` to print claims, inputs, coverage tables, full assertion and oracle failures, and a one-line verdict.
+- `go run ./cmd/mgctl -admin 127.0.0.1:56433 <subcommand>` — read-only CLI for a running gateway (`health`, `stats -watch`, `metrics`, `tenants [-config <file>]`, `config show [-config <file>]`), plus offline `config check <file>`, `verifier -password <pw|->`, and single-statement `query -user <u> -password <pw|-> "<sql>"` (with error-contract decoding). Set `MGCTL_TRANSCRIPT=<file>` to log commands and redacted output.
 
 ## Running tests and tools
 

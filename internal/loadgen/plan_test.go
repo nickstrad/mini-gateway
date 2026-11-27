@@ -13,6 +13,8 @@ func plan(rate, durationMs int64) loadgen.Plan {
 	return loadgen.Plan{Seed: 42, Rate: rate, DurationNs: durationMs * 1_000_000, Tenants: 2, Keys: 100, Profile: loadgen.ProfileErrors}
 }
 
+// TestCountAndIntendedTimesAreExactAtTheConstantRate proves Count and At match
+// exact constant-rate spacing without exceeding DurationNs.
 func TestCountAndIntendedTimesAreExactAtTheConstantRate(t *testing.T) {
 	cases := []struct {
 		rate, ms, want int64
@@ -34,6 +36,8 @@ func TestCountAndIntendedTimesAreExactAtTheConstantRate(t *testing.T) {
 	}
 }
 
+// TestIntendedTimesDoNotOverflowAtTheLimits proves Count, At, and Due stay
+// overflow-free at MaxRate over MaxDurationNs.
 func TestIntendedTimesDoNotOverflowAtTheLimits(t *testing.T) {
 	p := loadgen.Plan{Seed: 1, Rate: loadgen.MaxRate, DurationNs: loadgen.MaxDurationNs, Tenants: 1, Keys: 1}
 	if err := p.Validate(); err != nil {
@@ -52,6 +56,8 @@ func TestIntendedTimesDoNotOverflowAtTheLimits(t *testing.T) {
 	}
 }
 
+// TestAnOpIsDueAtExactlyItsIntendedTime proves Due(At(i)) includes operation i
+// while Due(At(i)-1) excludes it.
 func TestAnOpIsDueAtExactlyItsIntendedTime(t *testing.T) {
 	p := plan(3, 2000)
 	for i := int64(0); i < p.Count(); i++ {
@@ -70,6 +76,8 @@ func TestAnOpIsDueAtExactlyItsIntendedTime(t *testing.T) {
 	}
 }
 
+// TestTheSameSeedGivesTheSameOperationsKeysAndPayloads proves Op and Digest
+// are repeatable functions of seed and index and change when the seed changes.
 func TestTheSameSeedGivesTheSameOperationsKeysAndPayloads(t *testing.T) {
 	a, b := plan(500, 4000), plan(500, 4000)
 	for i := int64(0); i < a.Count(); i++ {
@@ -90,6 +98,8 @@ func TestTheSameSeedGivesTheSameOperationsKeysAndPayloads(t *testing.T) {
 	}
 }
 
+// TestOpsDoNotDependOnTheRateOrDuration proves changing Rate or DurationNs
+// shifts only Op.At and leaves tenant, kind, key, payload, and SQL identical.
 func TestOpsDoNotDependOnTheRateOrDuration(t *testing.T) {
 	a, b := plan(100, 1000), plan(1000, 20_000)
 	for i := int64(0); i < a.Count(); i++ {
@@ -101,6 +111,8 @@ func TestOpsDoNotDependOnTheRateOrDuration(t *testing.T) {
 	}
 }
 
+// TestEveryProfileKindIsDrawnAndUsesItsStatement proves both profiles draw all
+// declared operation kinds, tenants, bounded hex payloads, and expected SQL forms.
 func TestEveryProfileKindIsDrawnAndUsesItsStatement(t *testing.T) {
 	for _, prof := range []loadgen.Profile{loadgen.ProfileSimple, loadgen.ProfileErrors} {
 		p := plan(1000, 5000)
@@ -137,6 +149,8 @@ func TestEveryProfileKindIsDrawnAndUsesItsStatement(t *testing.T) {
 	}
 }
 
+// TestValidateRefusesOutOfRangePlans proves Validate rejects every field bound
+// violation and ParseProfile rejects unknown profile names.
 func TestValidateRefusesOutOfRangePlans(t *testing.T) {
 	good := plan(10, 1000)
 	bad := []func(*loadgen.Plan){
@@ -160,6 +174,8 @@ func TestValidateRefusesOutOfRangePlans(t *testing.T) {
 	}
 }
 
+// TestAPlanWithNoOperationIsRefusedNamingTheFlags proves zero-operation plans
+// fail validation naming -rate and -duration while one-operation plans pass.
 func TestAPlanWithNoOperationIsRefusedNamingTheFlags(t *testing.T) {
 	for _, p := range []loadgen.Plan{plan(1, 500), {Seed: 1, Rate: 37, DurationNs: 1, Tenants: 1, Keys: 1}} {
 		err := p.Validate()
@@ -175,6 +191,8 @@ func TestAPlanWithNoOperationIsRefusedNamingTheFlags(t *testing.T) {
 	}
 }
 
+// TestTheLargestDurationFormatsWithoutOverflow proves FormatNs and StatusLine
+// format up to math.MaxInt64 nanoseconds without integer overflow.
 func TestTheLargestDurationFormatsWithoutOverflow(t *testing.T) {
 	cases := map[int64]string{math.MaxInt64: "9223372036.8s", loadgen.MaxDurationNs: "86400.0s", 1_500_000: "1.5ms", 999: "999ns"}
 	for ns, want := range cases {
