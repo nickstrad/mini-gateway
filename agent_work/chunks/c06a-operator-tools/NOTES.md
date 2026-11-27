@@ -640,6 +640,49 @@ ADV_LONG=1 go test -count=1 -run 'TestAdv_4_LongSeedCampaign|TestAdv_9_RandomFau
 
 By hand, outside tier-r.sh, `TestTierRAdvC01_*` and `TestTierRAdvC03_*` need only `MG_TIER_R=1` (and DuckDB 1.5.x for c03). `TestTierRAdvC02_1_*` and `TestTierRAdvC04_11_*` also need `MG_PG_ADDR` pointing at a postgres:17 with trust auth and SSL off (tier-r.sh's main container). Without it they fail fatally ("requires MG_PG_ADDR" / "MG_PG_ADDR required").
 
+## Images on vm-1
+
+No pull was needed: `prom/prometheus:v3.9.1` was already on vm-1, and the Postgres reference
+`postgres:17.11@sha256:2d2b8998…` resolves by digest to the local `postgres:17` image (17.11),
+the one tier R uses. `make run-up` passes `--quiet-pull`; on a machine without the images the
+first `run-up` pulls them.
+
+## CI time and host load
+
+- `scripts/ci-fast.sh` on vm-1 at load 14–18 (three builds and their gates running): 1,072 s
+  (G3 unit 974 s). Most of it is pre-existing: `internal/obs/simrun` alone took 744 s under
+  `-short` (its DuckDB tests, 515 s in `TestCSVAssertBaselineCountsFromFlushedFiles`, run when
+  `duckdb` is installed; GitHub's runner has no DuckDB and skips them). The last CI runs on
+  GitHub took 1 min to 1 min 40 s.
+- This chunk's additions under `-short`, measured in that run: `internal/loadgen` 6.5 s,
+  `internal/loadgen/live` 10.9 s (real sockets and real time), `cmd/loadgen` 3.6 s,
+  `internal/mgctl` 2.3 s, `cmd/mgctl` 0.3 s, the mgctl tier S model about 3 s (2 seeds under
+  `-short`), the script tests about 1.6 s, the promoted attacks about 2 s. The DuckDB report
+  tests, the binary-building tests and the slow promoted attacks skip under `-short`.
+- A full `go test -count=1 ./...` at load 14 failed twice in chunk 5's timing tests
+  (`internal/pgwire` `TestLexOperatorRunsGrowLinearly`, `TestClassifierTimeGrowsLinearly`: a
+  growth ratio over their bound); they pass when run alone. Host load, not this chunk.
+
+## Gate runs
+
+1. Full gate at `e6aefbf`: every stage green except G6, where `TestTierRRunTargetsUpLoadDown`
+   failed: one send of the 200 was 31 ms late on the loaded host, which is a SHORTFALL, so
+   `make load` exited 3. Fixed in `c193882` (`make load` forwards `LOAD_ARGS` and `CONNS`; the
+   smoke test runs with `-late-after 2s`, because what it proves is Prometheus's count, not the
+   host's timer latency). In that run: G3 498 s, G4 742 s (200 seeds, concise output), G5 405 s
+   (16 targets, 14 fuzz, 2 seed sweeps — none added here), G6 37 of 38 passed, G7 1,823 s
+   (4,270 run directories, 195 SQL files, 0 failures), G8, G9, G10 167 s green.
+2. Full gate at `c193882` (clean tree): every stage green except G3 unit, where chunk 5's
+   timing test `internal/pgwire` `TestClassifierSpanKeywordChecksGrowLinearly` measured a
+   growth ratio of 108 against its bound of 96 (`"pg_settings, "`: 4 KiB in 110 µs, 64 KiB in
+   12 ms) at host load 20+. G4 586 s, G5 361 s, G6 green (the smoke test included), G7 1,310 s
+   (195 SQL files, 0 failures), G8–G10 green. This chunk changes nothing in `internal/pgwire`
+   but adds test files (no `t.Parallel`).
+3. `GATE_ONLY=G3` at the same commit `c193882`, load 12–14: G3 unit and race green (398 s).
+   So every stage has passed on `c193882`; no single full run did, because of that load-
+   sensitive pre-existing timing test. The orchestrator's landing gate will run it again.
+   `gate/result.json` was deleted (untracked), as the rules ask.
+
 ## Commands
 
 ```
