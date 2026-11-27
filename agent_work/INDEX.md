@@ -166,3 +166,17 @@ Record: `chunks/c06-walking-skeleton/` (brief, notes, gate extra).
 | `../docs/knowledge/walking-skeleton.md` | Facts for the builders of chunks 6a–13: the engine API and read protocol, seams, plants, shell, e2e harness | Opus | — |
 | `chunks/c06-walking-skeleton/gate/extra.sh` | G10: canaries and ablations, the shrunk fuzz scenario, `scripts/fuzz-plant.sh`, the simrun baseline SQL with DuckDB required | Opus | — |
 | `adversarial/c06-walking-skeleton/` | Astra's 46 attacks on the 15 claims. Run: `go test -count=1 ./agent_work/adversarial/c06-walking-skeleton/...`; long and real-server: `ADV_LONG=1` | Astra | 43 held / 3 broken, then 44 pass / 2 settled (`chunks/c06-walking-skeleton/ADVERSARIAL.md`) |
+
+## Phase 2, chunk 6a — operator tools (Opus, 2026-11-27)
+
+Record: `chunks/c06a-operator-tools/` (brief, notes with the promotion ledger, gate extra).
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../cmd/loadgen` | The open-loop load tool: `go run ./cmd/loadgen -addr 127.0.0.1:6432 -password <pw> -rate 200 -duration 30s -profile errors -seed 1 [-csv-dir d]`; `-plan N` prints the operations without a network | Opus | 2026-11-27 on the dev stack: 200/s errors profile, 1,000 intended, `0A:72 22:65 23:85 42:76`, SHORTFALL (230 late, 38 could not send: the proxy's back pressure under host load 6–20); Prometheus completed = the tool's ok + db-error (890) |
+| `../cmd/mgctl` | Read-only operator client: `mgctl -admin <host:port> health \| stats [-watch] \| metrics \| tenants \| config show`, `mgctl config check <file>`, `mgctl verifier -password -`, `mgctl -addr <host:port> query -user U -password - "<sql>"`; `MGCTL_TRANSCRIPT=<file>` | Opus | Model tests green in tier S (4 seeds, replayed) and tier R (real binary, mgctl-made verifier) |
+| `../deploy/dev/` (`make run-up`, `make load`, `make run-down`) | The dev stack: Postgres 17.11 + Prometheus v3.9.1 (127.0.0.1 only, `mg-` names, tmpfs), the gateway on the host, the wait for the scrape, URLs; settings in `deploy/dev/env.sh` | Opus | `TestTierRRunTargetsUpLoadDown` green: up in about 60 s on a loaded host, nothing left after run-down |
+| `../scripts/report.sh` (`make report RUNS=… \| SEEDS=N`) | The story report over flushed CSV runs; SQL in `../test/analysis/report/sections/` | Opus (helper agent) | Golden, planted-failure, empty, truncated and 3-vs-300-seed tests green with DuckDB 1.5.x |
+| `../scripts/sweep.sh`, `../scripts/chaos.sh` (changed) | Concise by default (one line per scenario, failures with their REPLAY lines), `VERBOSE=1` raw; `SWEEP_GO`, `CHAOS_GO` test seams | Opus (helper agent) | `scripts/c06a_report_scripts_test.go` green |
+| `../docs/knowledge/operator-tools.md` | Facts for later builders: the load tool's core and runner, mgctl's surface, the dev stack, the report's SQL placement | Opus | — |
+| `chunks/c06a-operator-tools/gate/extra.sh` | G10: the load tool and mgctl packages in full (binary differential, cross-process repeatability, canary), the mgctl tier S model, the report and script tests with DuckDB required | Opus | — |
