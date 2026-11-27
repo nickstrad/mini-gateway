@@ -2,12 +2,15 @@ package e2e
 
 import (
 	"bytes"
+	"os"
 	"testing"
 
 	"github.com/nickstrad/mini-gateway/internal/coalesce"
 
 	"github.com/nickstrad/mini-gateway/internal/sim/simtest"
 )
+
+const coalFullSweepEnv = "MG_C11_FULL_SWEEP"
 
 func coalReplay(name string, seed int64) string {
 	return replayLine(name, seed) + " (TestScenarioCoalesce)"
@@ -66,8 +69,12 @@ func TestScenarioCoalesce(t *testing.T) {
 				t.Skip("1,000-client scenario: runs without -short (sweep, gate)")
 			}
 			seeds := simtest.Seeds(t)
-			if sc.Heavy && len(seeds) > heavySeeds {
+			full := os.Getenv(coalFullSweepEnv) == "1"
+			if sc.Heavy && len(seeds) > heavySeeds && !full {
 				seeds = seeds[:heavySeeds]
+			}
+			if len(seeds) > poolSweepSeeds && !full {
+				seeds = seeds[:poolSweepSeeds]
 			}
 			if testing.Short() && len(seeds) > 1 {
 				seeds = seeds[:1]
@@ -77,4 +84,32 @@ func TestScenarioCoalesce(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCoalesceHotKeyNumbers(t *testing.T) {
+	if testing.Short() {
+		t.Skip("1,000 clients per arm: runs without -short")
+	}
+	report := func(name string, r *SimRun) {
+		el := firstStepTimes(r)
+		t.Logf("HEADLINE tier S hot key %s: %d clients, %d database reads, p50 %v, p99 %v, max %v", name, len(el),
+			len(readsOf(r, hotRead())), Percentile(el, 500), Percentile(el, 990), Percentile(el, 1000))
+	}
+	for _, j := range []coalesce.JoinMode{coalesce.JoinStrict, coalesce.JoinRelaxed} {
+		r, err := RunSim(HotKeySpec(j), 1, SimOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		report(j.String(), r)
+	}
+	off, err := RunSim(coalesceOff(HotKeySpec(coalesce.JoinStrict)), 1, SimOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	report("off", off)
+	direct, err := RunSim(HotKeySpec(coalesce.JoinStrict), 1, SimOptions{Direct: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	report("direct", direct)
 }
