@@ -73,3 +73,15 @@ func TestBinaryConfigCannotSelectAComparisonArm(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigNeverSetsAnAdmissionPlant(t *testing.T) {
+	for _, rule := range []string{"timeout", "control-law"} {
+		f, err := parseWith(t, "queue.rule", rule)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p := f.ProxyCaps().Admission.Plant; p != 0 {
+			t.Fatalf("config set admission plant %d", p)
+		}
+	}
+}

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/admission"
 	"github.com/nickstrad/mini-gateway/internal/sim/simtest"
@@ -76,6 +75,9 @@ func checkHeadToHead(r *AdmRun, fifoServed int64) error {
 }
 
 func TestScenarioAdmissionHeadToHead(t *testing.T) {
+	if testing.Short() {
+		t.Skip("overload scenarios run in the full suite and the sweep")
+	}
 	for _, load := range HeadToHeadLoads() {
 		t.Run(fmt.Sprintf("load=%d", load), func(t *testing.T) {
 			t.Parallel()
@@ -149,6 +151,9 @@ func checkRecovery(r *AdmRun) error {
 }
 
 func TestScenarioAdmissionAntiBloat(t *testing.T) {
+	if testing.Short() {
+		t.Skip("overload scenarios run in the full suite and the sweep")
+	}
 	for _, arm := range AntiBloatArms() {
 		t.Run(arm.Name, func(t *testing.T) {
 			t.Parallel()
@@ -163,6 +168,9 @@ func TestScenarioAdmissionAntiBloat(t *testing.T) {
 }
 
 func TestCanaryAdmissionWithoutTheHeadSweepServesLate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("overload scenarios run in the full suite and the sweep")
+	}
 	spec := HeadToHeadSpec(ArmTimeout, 1000)
 	spec.Scenario = "admission-canary-head-sweep"
 	spec.TenantCap = AdmTotalCap
@@ -204,5 +212,3 @@ func TestCanaryAdmissionFirstBurstBugShedsTheBurst(t *testing.T) {
 		t.Fatalf("with lastEmpty updated only at dequeue the first burst was not shed: %+v %v", r.World.Proxy.Engine.AdmissionSnapshot(), r.Clients)
 	}
 }
-
-var _ = time.Second
