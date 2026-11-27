@@ -1,5 +1,5 @@
 -- requires: loadgen.completed
--- claim: load tool label contract: completed is exported for exactly the four outcomes ok, db-error, refused and lost, and every errors_by_class reason is a two-character SQLSTATE class.
+-- claim: load tool label contract: completed is exported for exactly the four outcomes ok, db-error, refused and lost, and every errors_by_class reason is a two-character SQLSTATE class or 'other' (the bounded overflow label).
 -- applies-to: loadgen
 -- applies-to-scenarios: load-*
 -- A built-in check of scripts/report.sh. Returns the violating rows.
@@ -13,6 +13,6 @@ UNION ALL
 SELECT DISTINCT run_id || ' ' || instance || ': completed has an unknown outcome ''' || outcome || ''''
 FROM final WHERE component = 'loadgen' AND metric = 'completed' AND outcome NOT IN ('ok', 'db-error', 'refused', 'lost')
 UNION ALL
-SELECT DISTINCT run_id || ' ' || instance || ': errors_by_class reason ''' || reason || ''' is not a two-character SQLSTATE class'
-FROM final WHERE component = 'loadgen' AND metric = 'errors_by_class' AND NOT regexp_full_match(reason, '[0-9A-Z]{2}')
+SELECT DISTINCT run_id || ' ' || instance || ': errors_by_class reason ''' || reason || ''' is not a two-character SQLSTATE class or other'
+FROM final WHERE component = 'loadgen' AND metric = 'errors_by_class' AND reason <> 'other' AND NOT regexp_full_match(reason, '[0-9A-Z]{2}')
 ORDER BY 1;
