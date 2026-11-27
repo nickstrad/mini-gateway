@@ -686,3 +686,21 @@ Also run before the gate: `go test -count=1 ./...` (no `-short`), red only for t
 c07 adversarial attacks (`internal/obs/simrun` 430 s, `test/e2e` 300 s);
 `DST_SEEDS=5 go test -run '^TestScenarioPool$' ./test/e2e` green; `go test -short
 ./internal/obs/simrun` 256 s. `result.json` is not committed.
+
+## Correction after review 4 (orchestrator, 2026-11-27)
+
+The section "Why `pool-admission-restart` now holds on every seed" above gives the right
+conclusion with wrong numbers (review 4, finding 1). The scenario inherits `corePool()`,
+whose `BreakerFailures` is **3**, not 5. What holds, as the review measured it:
+
+- At the restart (t = 2.000 s) every client is in its 50 ms think time between two steps,
+  so no connection is lent: all four are idle and close politely (`peer_closed_idle`),
+  which adds no breaker failure.
+- All three failures therefore come from refused dials. At the scenario's 1,000 dials/s
+  (1 ms spacing) three failed dials take two intervals plus one round trip, at most
+  2.84 ms, against the queue rule's 100 ms interval. (At the old 20 dials/s they took about
+  100.8 ms, which raced the interval and lost on about one seed in five.)
+- So the breaker opens while the requests are still standing in the queue on every seed:
+  `shed{breaker}` was 3 to 5 and `shed{rule}` 0 on each of seeds 1 to 200, 42, 99 and 1001.
+
+The "5 > 4" step of the earlier text does not apply.
