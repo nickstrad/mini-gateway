@@ -556,6 +556,7 @@ func (e *Engine) clientCancel(key pgwire.BackendKey) {
 		e.snap.Failed++
 		e.reached(work.No)
 		e.snap.CancelsQueued++
+		e.retryEnded(t.req, RetryEndFailed)
 		t.req = nil
 		t.phase = cpIdle
 		e.reply(t, pgwire.ErrRowCancelledQueued)
@@ -612,6 +613,7 @@ func (e *Engine) refuseWaiting(c *client) {
 	e.snap.Queued.Add(-1)
 	e.snap.Shed++
 	e.snap.BreakerFlushed++
+	e.retryEnded(c.req, RetryEndShed)
 	c.req = nil
 	c.phase = cpIdle
 	e.reply(c, pgwire.ErrRowBreakerOpen)

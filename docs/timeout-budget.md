@@ -32,6 +32,7 @@ One rule holds for every deadline: time passes before the event. When an event a
 | Control law: sojourn above target before dropping starts; then the next drop after interval/sqrt(count) | admission, tenant queue (head sweep at the drop time) | `queue.target, queue.interval` | 100ms | ERROR 53M01 (shed, reason rule) for the oldest request at each drop; no per-request bound (timeouts.queue_wait and the capacity bound it) |
 | Adaptive LIFO hold: newest-first service ends only after the rule reported no overload for this long | admission, tenant queue | `queue.lifo_hold` | 1s | Service returns to oldest first |
 | Quiet tenant queue removal (16 intervals empty) | admission | `16 x queue.interval` | 1.6s | The tenant queue and its rule state are removed |
+| A request's deadline for a retry by the proxy (from the request's arrival) | engine, retry at the loss of a statement | `timeouts.statement` | 30s | No retry at or after it; a retry's queue wait and statement deadline end at it (ERROR 53M01, or 08006/08007) |
 
 ## Nesting checked at config load
 

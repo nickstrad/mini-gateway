@@ -112,8 +112,8 @@ func New(cfg Config) (*Engine, error) {
 	if e.seams.Release == nil {
 		e.seams.Release = ResetAlwaysPolicy{}
 	}
-	if e.seams.Retry == nil {
-		e.seams.Retry = RetryOff{}
+	if err := e.initRetry(); err != nil {
+		return nil, err
 	}
 	e.stmtHist = obs.NewDurationHistogram()
 	e.queueHist = obs.NewDurationHistogram()
@@ -413,6 +413,9 @@ func (e *Engine) Invariants() error {
 		return e.wire.Snapshot().Check()
 	}
 	if err := e.admissionCheck(); err != nil {
+		return err
+	}
+	if err := e.retryCheck(); err != nil {
 		return err
 	}
 	if e.core != nil {

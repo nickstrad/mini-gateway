@@ -199,7 +199,12 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `engine` | `resets_failed` | counter | reason | count | sum | Resets that failed, by reason; the connection was closed. |
 | `engine` | `resets_not_at_release` | counter | — | count | sum | Resets sent by the pool core other than at a clean release (tenant switch, after a clean-up). |
 | `engine` | `resets_started` | counter | — | count | sum | DISCARD ALL resets sent after a lease. |
-| `engine` | `retry_asked` | counter | — | count | sum | Failures the retry seam asked to retry (policy off: always 0). |
+| `engine` | `retried_requests` | counter | — | count | sum | Requests run again by the proxy at least once. |
+| `engine` | `retries_pending` | gauge | — | count | sum | Requests run again whose outcome is not known yet. |
+| `engine` | `retries_pending_peak` | gauge | — | count | max | Most requests run again with no outcome yet at once. |
+| `engine` | `retry_asked` | counter | — | count | sum | Failures the retry policy granted a retry (policy off: always 0). |
+| `engine` | `retry_ends` | counter | outcome | count | sum | Requests run again, by how they ended (outcome: completed, failed, shed, gone). |
+| `engine` | `retry_offered` | counter | — | count | sum | Failed statements offered to the retry policy. |
 | `engine` | `shell_accept_errors` | counter | — | count | sum | Errors returned by the client listener's Accept. |
 | `engine` | `shell_accept_refused` | counter | — | count | sum | Accepted sockets closed at once because the shell was full or closing. |
 | `engine` | `shell_accepted` | counter | — | count | sum | Client sockets accepted by the listener. |
@@ -366,6 +371,19 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `pool` | `suspect` | gauge | — | count | sum | Connections that must pass a check before their next lend. |
 | `pool` | `suspect_peak` | gauge | — | count | max | Most suspect connections at once. |
 | `pool` | `tenant_switches` | counter | — | count | sum | Resets started at checkout because the connection was last held by another tenant (on-switch). |
+| `retry` | `attempts` | counter | — | count | sum | First attempts forwarded to the database; each deposits a tenth of a token. |
+| `retry` | `budget_cap` | gauge | — | count | sum | The retry budget's cap, in tenths of a token (retry.bucket_cap). |
+| `retry` | `budget_floor` | gauge | — | count | sum | The retry budget's starting level, in tenths of a token (retry.floor divided by fleet.instances). |
+| `retry` | `budget_level` | gauge | — | count | sum | Retry budget held now, in tenths of a token. |
+| `retry` | `budget_level_peak` | gauge | — | count | max | Most retry budget held at once, in tenths of a token. |
+| `retry` | `deposits` | counter | — | count | sum | Tenths of a token deposited, the starting floor included. |
+| `retry` | `exhaustions` | counter | — | count | sum | Retries refused because the budget held less than one token. |
+| `retry` | `expired` | counter | — | count | sum | Tenths of a token lost because the budget was at its cap. |
+| `retry` | `offered` | counter | — | count | sum | Failed statements offered to the retry policy; each ends retried or refused for one reason. |
+| `retry` | `policy` | gauge | — | count | sum | Retry policy in force: 0 off, 1 pre-forward-once, 2 a test-only policy. |
+| `retry` | `refused` | counter | reason | count | sum | Failures not retried, by reason (off, once, in-transaction, reached, breaker, draining, deadline, budget). |
+| `retry` | `retries` | counter | — | count | sum | Retries granted; each withdraws one token. |
+| `retry` | `withdrawals` | counter | — | count | sum | Tenths of a token withdrawn by retries. |
 | `sim` | `background_timers` | gauge | — | count | sum | Waiting events marked as background work. |
 | `sim` | `cancelled` | counter | — | count | sum | Scheduled events cancelled before firing. |
 | `sim` | `faults_applied` | counter | — | count | sum | Faults applied by the kernel's fault schedule. |
