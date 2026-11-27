@@ -468,6 +468,7 @@ func TestAdv_11_RecoveryTimeout(t *testing.T)        { start(t); recoverQueue(t,
 // Mean arrival rate is exactly ten times service, but arrivals are clustered.
 // This tests the unqualified capacity claim, not the spread-arrival benchmark.
 func TestAdv_4_BurstyTenfoldLoad(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 4 narrowed: at least 95% of capacity is served at tenfold load for arrivals spread at a constant rate (closer together than the target); it does not hold for bursts separated by gaps longer than the allowed wait. See agent_work/chunks/c08-admission/ADVERSARIAL.md.")
 	start(t)
 	c := cfg(a.RuleTimeout)
 	c.Capacity = 128
