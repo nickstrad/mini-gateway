@@ -127,9 +127,14 @@ func RestartSpec(breaker bool) Spec {
 	})
 }
 
+const admissionRestartDialRate = 1000
+
 func AdmissionRestartSpec() Spec {
 	sp := RestartSpec(true)
 	sp.Name = "pool-admission-restart"
+	pc := *sp.Pool
+	pc.RatePerSec = admissionRestartDialRate
+	sp.Pool = &pc
 	sp.Admission = admission.Config{Rule: admission.RuleTimeout, LIFO: admission.LIFOAdaptive}
 	return sp
 }
