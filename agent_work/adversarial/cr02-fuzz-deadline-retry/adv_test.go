@@ -196,6 +196,7 @@ func TestAdv_2_IndependentProcessesResetBudget(t *testing.T) {
 	}
 }
 func TestAdv_2_WidenedStandaloneBudget(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 2 narrowed: a standalone run may set FUZZ_MAX_RETRIES above 2 and then never counts for landing; the two-target ceiling is a property of a run that counts. See agent_work/chunks/cr02-fuzz-deadline-retry/ADVERSARIAL.md.")
 	f := fresh(t, 4, retryOK)
 	r := f.run(false, "FUZZ_MAX_RETRIES=3")
 	total := 0
