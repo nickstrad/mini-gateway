@@ -1,0 +1,40 @@
+# The dev stack for watching mini-gateway under load (PLAN.md chunk 6a): Postgres 17 and
+# Prometheus. The gateway itself runs on the host (deploy/dev/up.sh starts it), and
+# Prometheus scrapes its admin /metrics endpoint. Started and stopped by `make run-up` and
+# `make run-down`; do not run `docker compose` on this file by hand without the variables
+# up.sh exports.
+#
+# Every port is bound to 127.0.0.1 only. Prometheus uses the host network so that it can
+# reach the gateway's admin listener on 127.0.0.1; its own listen address is set to
+# 127.0.0.1 by flag. No named volume: both data directories are tmpfs, so `down -v` leaves
+# nothing behind. Images are pinned by version (and Postgres by digest as well).
+name: ${MG_DEV_PROJECT:-mg-dev}
+services:
+  postgres:
+    image: postgres:17.11@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+    container_name: ${MG_DEV_PROJECT:-mg-dev}-postgres
+    environment:
+      POSTGRES_PASSWORD: ${MG_DEV_PG_SUPERPASS:-mg-dev-super}
+      POSTGRES_DB: app
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    command: ["postgres", "-c", "max_connections=100", "-c", "shared_buffers=32MB"]
+    ports:
+      - "127.0.0.1:${MG_DEV_PG_PORT:-55432}:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    tmpfs:
+      - /var/lib/postgresql/data
+  prometheus:
+    image: prom/prometheus:v3.9.1
+    container_name: ${MG_DEV_PROJECT:-mg-dev}-prometheus
+    network_mode: host
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.listen-address=127.0.0.1:${MG_DEV_PROM_PORT:-59090}
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=2h
+    volumes:
+      - ${MG_DEV_DIR:-/tmp/mg-dev}/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    tmpfs:
+      - /prometheus:uid=65534,gid=65534

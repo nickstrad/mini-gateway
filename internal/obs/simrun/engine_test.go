@@ -105,5 +105,7 @@ func engineRuns(dir string) error {
 		}
 		baselineFinals = append(baselineFinals, r.final)
 	}
-	return nil
+	adm, err := e2e.AdmissionBaseline(dir, !testing.Short())
+	baselineFinals = append(baselineFinals, adm...)
+	return err
 }

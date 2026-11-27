@@ -27,6 +27,11 @@ One rule holds for every deadline: time passes before the event. When an event a
 | Breaker open before the half-open trial | pool core, breaker | `breaker.open_for` | 1s | Half-open: the next refused request starts one trial (a dial, or a check when the pool is at its cap) |
 | TCP keepalive on database sockets: idle before the first probe | shell, database dialer | `backend.tcp_keepalive.idle` | 30s | Probes every backend.tcp_keepalive.interval (10s), backend.tcp_keepalive.count (3) unanswered probes report the socket dead; validation: at most backend.path_idle_limit / 2 |
 | Shortest idle timeout of anything between proxy and database (the operator's statement) | config validation | `backend.path_idle_limit` | 4m0s | Not a timer: pool.idle_timeout must be below it and backend.tcp_keepalive.idle at most half of it |
+| Queue wait under the timeout rule, no standing queue (the tenant queue was empty within the last interval) | admission, tenant queue (head sweep at the deadline) | `queue.interval` | 100ms | ERROR 53M01 (shed, reason rule), answered at once; a request waiting exactly the allowed time has expired |
+| Queue wait under the timeout rule while a standing queue exists | admission, tenant queue (head sweep at the deadline) | `queue.target` | 5ms | ERROR 53M01 (shed, reason rule), answered at once |
+| Control law: sojourn above target before dropping starts; then the next drop after interval/sqrt(count) | admission, tenant queue (head sweep at the drop time) | `queue.target, queue.interval` | 100ms | ERROR 53M01 (shed, reason rule) for the oldest request at each drop; no per-request bound (timeouts.queue_wait and the capacity bound it) |
+| Adaptive LIFO hold: newest-first service ends only after the rule reported no overload for this long | admission, tenant queue | `queue.lifo_hold` | 1s | Service returns to oldest first |
+| Quiet tenant queue removal (16 intervals empty) | admission | `16 x queue.interval` | 1.6s | The tenant queue and its rule state are removed |
 
 ## Nesting checked at config load
 

@@ -177,3 +177,26 @@ Record: `chunks/c07-pool/` (brief in `/root/briefs/zgateway-p2-c07-pool.md`, not
 | `chunks/c07-pool/gate/extra.sh` | G10: the pool core's property tests at full size, the pool canaries and ablations (cap, creation rate, check deadline, suspect, on-switch tag, breaker, jitter, the night trickle all-off and each remedy alone), the fault driver's self-test, the engine core-path tests, `scripts/fuzz-plant.sh` | Opus | — |
 | `../test/e2e/c07_faultnet.go` | The G1 fault driver: a relay between the proxy and the fake (blackhole, peer_forgot, idle_drop with modelled keepalive, slots held, polite close, the `setseed` rewrite). Self-test: `go test ./test/e2e -run TestPathFault` | Opus | Blackhole on one connection leaves the other unchanged; clearing idle_drop restores a never-faulted run |
 | `../docs/knowledge/pool-core.md` | Facts for the builders of chunks 8–13: the pool core's API and rules, the engine's core path, the cancel transport action, the tests to copy | Opus | — |
+## Phase 2, chunk 6a — operator tools (Opus, 2026-11-27)
+
+Record: `chunks/c06a-operator-tools/` (brief, notes with the promotion ledger, gate extra).
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../cmd/loadgen` | The open-loop load tool: `go run ./cmd/loadgen -addr 127.0.0.1:6432 -password <pw> -rate 200 -duration 30s -profile errors -seed 1 [-csv-dir d]`; `-plan N` prints the operations without a network | Opus | 2026-11-27 on the dev stack: 200/s errors profile, 1,000 intended, `0A:72 22:65 23:85 42:76`, SHORTFALL (230 late, 38 could not send: the proxy's back pressure under host load 6–20); Prometheus completed = the tool's ok + db-error (890) |
+| `../cmd/mgctl` | Read-only operator client: `mgctl -admin <host:port> health \| stats [-watch] \| metrics \| tenants \| config show`, `mgctl config check <file>`, `mgctl verifier -password -`, `mgctl -addr <host:port> query -user U -password - "<sql>"`; `MGCTL_TRANSCRIPT=<file>` | Opus | Model tests green in tier S (4 seeds, replayed) and tier R (real binary, mgctl-made verifier) |
+| `../deploy/dev/` (`make run-up`, `make load`, `make run-down`) | The dev stack: Postgres 17.11 + Prometheus v3.9.1 (127.0.0.1 only, `mg-` names, tmpfs), the gateway on the host, the wait for the scrape, URLs; settings in `deploy/dev/env.sh` | Opus | `TestTierRRunTargetsUpLoadDown` green: up in about 60 s on a loaded host, nothing left after run-down |
+| `../scripts/report.sh` (`make report RUNS=… \| SEEDS=N`) | The story report over flushed CSV runs; SQL in `../test/analysis/report/sections/` | Opus (helper agent) | Golden, planted-failure, empty, truncated and 3-vs-300-seed tests green with DuckDB 1.5.x |
+| `../scripts/sweep.sh`, `../scripts/chaos.sh` (changed) | Concise by default (one line per scenario, failures with their REPLAY lines), `VERBOSE=1` raw; `SWEEP_GO`, `CHAOS_GO` test seams | Opus (helper agent) | `scripts/c06a_report_scripts_test.go` green |
+| `../docs/knowledge/operator-tools.md` | Facts for later builders: the load tool's core and runner, mgctl's surface, the dev stack, the report's SQL placement | Opus | — |
+| `chunks/c06a-operator-tools/gate/extra.sh` | G10: the load tool and mgctl packages in full (binary differential, cross-process repeatability, canary), the mgctl tier S model, the report and script tests with DuckDB required | Opus | — |
+## Phase 2, chunk 8 — admission queues (Opus, 2026-11-27)
+
+Record: `chunks/c08-admission/` (brief, notes, gate extra).
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../scripts/admission-head-to-head.sh` | Prints the admission head-to-head table (one DuckDB query, `test/analysis/admission-head-to-head/head-to-head.query`) over a root of flushed runs; `--run [root]` runs the scenarios first; `--check` reruns them and diffs with the committed `head-to-head.md` | Opus | Table reproduced from seed 1 (both rules, both arms, 1.2×/2×/10×) |
+| `../scripts/fuzz-plant.sh` (changed) | Also plants `admission.PlantRemoveSwapsTail` (`MG_FUZZ_PLANT=admission-remove-order`) and requires `FuzzAdmissionOps` to find it within `FUZZ_SECONDS` | Opus | Found after 7 s of 20 s (empty cache) |
+| `chunks/c08-admission/gate/extra.sh` | G10: `fuzz-plant.sh` and `admission-head-to-head.sh --check` | Opus | — |
+| `../docs/knowledge/admission-queues.md` | Facts for chunks 9, 10, 13, 14: the core API, the seam, plants, the dispatcher hook, scenario cost | Opus | — |

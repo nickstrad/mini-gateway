@@ -70,7 +70,9 @@ func (e *Engine) gates(c *client) bool {
 func (e *Engine) enqueue(c *client) {
 	req := c.req
 	attempted := false
-	if e.seams.Queue.Len() == 0 && e.seams.Pool.Idle() > 0 {
+	// Skip the direct-lend fast path for ShedQueue so the rule and load gauge
+	// observe zero-wait requests as well as queued ones.
+	if e.shedQ == nil && e.seams.Queue.Len() == 0 && e.seams.Pool.Idle() > 0 {
 		attempted = true
 		if id, ok := e.seams.Pool.Checkout(e.now, c.tenant); ok {
 			e.snap.StagePassed[StageQueue]++
@@ -82,12 +84,14 @@ func (e *Engine) enqueue(c *client) {
 	if !e.seams.Queue.Push(e.now, c.tenant, req.id) {
 		e.snap.StageRefuse[StageQueue]++
 		e.shed(c)
+		e.queueTouched()
 		return
 	}
 	c.phase = cpQueued
 	e.waiting[req.id] = c
 	e.snap.Queued.Add(1)
 	e.t.arm(&c.queueT, e.after(e.cfg.Timeouts.QueueWait), tQueueWait, c, nil)
+	e.queueTouched()
 	if !attempted {
 		e.dispatch()
 	}
@@ -104,11 +108,16 @@ func (e *Engine) queueExpired(c *client) {
 	if c.phase != cpQueued || c.req == nil {
 		return
 	}
-	e.seams.Queue.Remove(c.req.id)
+	if e.shedQ != nil {
+		e.shedQ.Expire(e.now, c.req.id)
+	} else {
+		e.seams.Queue.Remove(c.req.id)
+	}
 	delete(e.waiting, c.req.id)
 	e.snap.Queued.Add(-1)
 	e.snap.StageRefuse[StageQueue]++
 	e.shed(c)
+	e.queueTouched()
 	e.pump(c)
 }
 
@@ -116,6 +125,7 @@ func (e *Engine) dispatch() {
 	for e.seams.Queue.Len() > 0 && e.seams.Pool.Idle() > 0 {
 		id, ok := e.seams.Queue.Pop(e.now)
 		if !ok {
+			e.queueTouched()
 			return
 		}
 		c := e.waiting[id]
@@ -125,16 +135,21 @@ func (e *Engine) dispatch() {
 		}
 		dbID, ok := e.seams.Pool.Checkout(e.now, c.tenant)
 		if !ok {
-			e.seams.Queue.Push(e.now, c.tenant, id)
+			if e.shedQ == nil || !e.shedQ.Unpop() {
+				e.seams.Queue.Push(e.now, c.tenant, id)
+			}
 			e.waiting[id] = c
+			e.queueTouched()
 			return
 		}
 		e.t.cancel(&c.queueT)
 		e.snap.Queued.Add(-1)
 		e.snap.StagePassed[StageQueue]++
 		e.queueHist.Record(int64(e.now - c.req.enq))
+		e.queueTouched()
 		e.lend(c, e.dbs[dbID])
 	}
+	e.queueTouched()
 }
 
 func (e *Engine) lend(c *client, d *dbConn) {

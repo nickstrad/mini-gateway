@@ -11,7 +11,11 @@
 #     the lost flag as soon as it is lost, also while it settles the run, so ordinary inputs
 #     reach it; no committed seed fails on its own. The shrunk operations are
 #     resetClearsSuspectOps, replayed by TestShrunkResetClearsSuspectOrderingBugReplays.
-# Both switches are reachable from tests only.
+#   FuzzAdmissionOps (chunk 8): with MG_FUZZ_PLANT=admission-remove-order a removal from the
+#     middle of a tenant queue swaps the tail into the hole (admission.PlantRemoveSwapsTail), so
+#     the queue order no longer matches the reference model. The seed corpus does not trigger
+#     it; the fuzzer must.
+# Every switch is reachable from tests only.
 #
 # Usage: scripts/fuzz-plant.sh
 # Each run starts from the committed seed corpus with an empty fuzz cache, so earlier runs
@@ -41,8 +45,8 @@ plant() {
   for f in $(ls "$corpus" 2>/dev/null | sort); do
     grep -qxF "$f" <<<"$before" || rm -f "$corpus/$f"
   done
-  [ -d "$corpus" ] && [ -z "$(ls -A "$corpus")" ] && rmdir "$corpus" "$(dirname "$corpus")" 2>/dev/null
-  if [ "$rc" = 0 ] || ! grep -q "$pattern" "$log"; then
+  [ -d "$corpus" ] && [ -z "$(ls -A "$corpus")" ] && rmdir "$corpus" "$(dirname "$corpus")" "$(dirname "$(dirname "$corpus")")" 2>/dev/null
+  if [ "$rc" = 0 ] || ! grep -qE "$pattern" "$log"; then
     tail -n 20 "$log"
     rm -f "$log"
     echo "fuzz-plant: $target did not find the planted $what bug in ${secs}s" >&2
@@ -56,6 +60,7 @@ plant() {
 fail=0
 plant FuzzEngineOps test/e2e queued-vanish 'queue holds' queue-slot || fail=1
 plant FuzzPoolOps internal/pool reset-clears-suspect 'lent suspect' reset-clears-suspect || fail=1
+plant FuzzAdmissionOps internal/admission admission-remove-order 'position [0-9]+: core|reference' remove-order || fail=1
 [ "$fail" = 0 ] || exit 1
 note=$(printf '%s; ' "${notes[@]}")
 echo "NOTE: ${note%; } (budget ${secs}s each)"

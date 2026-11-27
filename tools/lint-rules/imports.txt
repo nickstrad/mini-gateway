@@ -39,3 +39,5 @@ deny internal/obs/csvflush/... internal/obs/jsonstats/... internal/obs/logline/.
 # no adapter, harness or catalog, and no adapter imports it.
 deny internal/obs/poolsrc : internal/obs/csvflush/... internal/obs/jsonstats/... internal/obs/logline/... internal/obs/promtext/... internal/obs/simrun/... internal/obs/catalog/... internal/pgwire/... github.com/jackc/pgx/v5/pgproto3
 deny internal/obs/csvflush/... internal/obs/jsonstats/... internal/obs/logline/... internal/obs/promtext/... : internal/obs/poolsrc/...
+# Chunk 6a: the load tool's core reads no adapter (its runner, internal/loadgen/live, attaches the CSV flush).
+deny internal/loadgen : internal/obs/... !internal/obs

@@ -16,6 +16,7 @@ const (
 	tRedial
 	tPool
 	tClientIdleTx
+	tAdmission
 )
 
 type timer struct {

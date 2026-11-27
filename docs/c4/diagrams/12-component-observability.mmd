@@ -2,8 +2,10 @@ flowchart TB
   N_ENGINE["Engine"]:::planned
   N_SHELL["Shell and binary"]:::built
   N_E2E["End-to-end suite and load generator"]:::planned
+  N_MGCTL["Operator client (mgctl)"]:::built
   N_SIM["Simulator harness"]:::planned
   N_PGWIRE["Wire layer"]:::planned
+  N_ADM["Admission"]:::planned
   CSVFILES[["Flushed CSV files"]]:::built
   DUCKDB[["DuckDB (analysis tool)"]]:::built
   OTELCOL[["OpenTelemetry Collector"]]:::planned
@@ -29,9 +31,12 @@ flowchart TB
     O_WIRESRC["Wire source mapping"]:::built
     O_CLSSRC["Classifier source mapping"]:::built
     O_ENGINESRC["Engine source mapping"]:::built
+    O_ADMSRC["Admission source mapping"]:::built
+    O_H2H["Admission head-to-head table"]:::built
     O_CATALOG["Metric catalog and schema document"]:::built
     O_SIMRUN["Scenario flush harness"]:::built
     O_ASSERT["SQL assertions and their runner"]:::built
+    O_REPORT["Story report"]:::built
   end
   N_SHELL -->|1| O_COLLECTOR
   O_COLLECTOR -->|2| O_CONTRACT
@@ -60,7 +65,7 @@ flowchart TB
   N_E2E -->|25| O_ASSERT
   O_OTLP -.->|26| OTELCOL
   PROM -.->|27| OTELCOL
-  PROM -.->|28| N_SHELL
+  PROM -->|28| N_SHELL
   O_MERGE -->|29| O_INSTANCE
   O_MERGE -->|30| O_REGISTRY
   N_SIM -->|31| O_OBSTEST
@@ -99,6 +104,19 @@ flowchart TB
   O_SIMRUN -->|64| O_ASSERT
   O_ASSERT -->|65| DUCKDB
   O_ASSERT -->|66| CSVFILES
+  N_E2E -->|67| O_COLLECTOR
+  O_CATALOG -->|68| N_E2E
+  N_MGCTL -->|69| O_JSON
+  O_REPORT -->|70| O_ASSERT
+  O_REPORT -->|71| DUCKDB
+  O_REPORT -->|72| CSVFILES
+  O_ADMSRC -->|73| N_ADM
+  O_ENGINESRC -->|74| O_ADMSRC
+  O_CATALOG -->|75| O_ADMSRC
+  O_ADMSRC -->|76| O_HEALTH
+  O_H2H -->|77| DUCKDB
+  O_H2H -->|78| CSVFILES
+  O_H2H -->|79| N_E2E
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned

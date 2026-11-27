@@ -84,6 +84,9 @@ func baselineRuns(t *testing.T) string {
 		if baselineErr == nil {
 			baselineErr = engineRuns(dir)
 		}
+		if baselineErr == nil {
+			baselineErr = loadgenRuns()
+		}
 	})
 	if baselineErr != nil {
 		t.Fatal(baselineErr)
@@ -149,6 +152,10 @@ func TestCSVAssertBaselineCountsFromFlushedFiles(t *testing.T) {
 			continue
 		}
 		name := filepath.Base(d)
+		if testing.Short() && slices.Contains(e2e.AdmissionOverloadScenarios(), name) {
+			skipped += len(sqls)
+			continue
+		}
 		if strings.HasPrefix(name, e2e.TierRPrefix) {
 			if !slices.Contains(e2e.TierRScenarios(), name) {
 				t.Fatalf("%s has SQL files but no tier R test writes that scenario", name)

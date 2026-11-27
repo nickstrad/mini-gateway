@@ -68,6 +68,48 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 
 | Component | Metric | Kind | Labels | Unit | Merge | Help |
 | --- | --- | --- | --- | --- | --- | --- |
+| `admission` | `capacity` | gauge | — | count | sum | Total capacity across the tenant queues (queue.capacity). |
+| `admission` | `lifo_adaptive` | gauge | — | count | sum | 1 when adaptive LIFO is on (queue.lifo adaptive), 0 when off. |
+| `admission` | `lifo_switches` | counter | mode | count | sum | Adaptive LIFO switches (mode: on, off). |
+| `admission` | `lifo_tenants` | gauge | — | count | sum | Tenant queues serving newest first now. |
+| `admission` | `load` | gauge | — | count | sum | Highest 0-100 load gauge over the tenant queues: 100 x min queue delay of the interval / (2 x target). |
+| `admission` | `max_tenants` | gauge | — | count | sum | Cap on tenant queues (queue.max_tenants). |
+| `admission` | `oldest_age` | gauge | — | ns | sum | Age of the oldest queued request at the last queue operation. |
+| `admission` | `pending_sheds` | gauge | — | count | sum | Sheds decided and not yet answered by the engine (0 between events). |
+| `admission` | `per_tenant_capacity` | gauge | — | count | sum | Capacity of one tenant queue (queue.tenant_capacity). |
+| `admission` | `pushes` | counter | — | count | sum | Requests offered to the queues. |
+| `admission` | `queue_wait` | histogram | — | ns | by bucket | Time a served request waited in its tenant queue. |
+| `admission` | `queue_wait_clamped_high` | counter | — | count | sum | Values recorded into queue_wait above its range, clamped to the highest bucket. |
+| `admission` | `queue_wait_clamped_low` | counter | — | count | sum | Values recorded into queue_wait below its range, clamped to the lowest bucket. |
+| `admission` | `queued` | gauge | — | count | sum | Requests waiting in the tenant queues now. |
+| `admission` | `queued_peak` | gauge | — | count | max | Most requests waiting at once. |
+| `admission` | `removed` | counter | — | count | sum | Queued requests removed because their client left. |
+| `admission` | `rule` | gauge | mode | count | sum | 1 for the queue rule this instance runs (mode: timeout, control-law, fifo, folly; the last two are simulator arms). |
+| `admission` | `rule_states` | gauge | mode | count | sum | Tenant queues in each rule state (mode: normal, standing, dropping, overloaded). |
+| `admission` | `served` | counter | — | count | sum | Requests taken from a queue to a database connection. |
+| `admission` | `shed` | counter | reason | count | sum | Requests shed with 53M01, by reason (rule, at-pop, overflow, total, tenants, deadline, undrained). |
+| `admission` | `shedding` | gauge | — | count | sum | Tenant queues that shed within the last interval. |
+| `admission` | `tenant_capacity` | gauge | tenant | count | sum | Capacity of this tenant's queue. |
+| `admission` | `tenant_depth` | gauge | tenant | count | sum | Requests waiting in this tenant's queue now. |
+| `admission` | `tenant_lifo` | gauge | tenant | count | sum | 1 while this tenant queue serves newest first. |
+| `admission` | `tenant_lifo_switches` | counter | tenant, mode | count | sum | Adaptive LIFO switches of this tenant (mode: on, off). |
+| `admission` | `tenant_load` | gauge | tenant | count | sum | This tenant queue's 0-100 load gauge. |
+| `admission` | `tenant_oldest_age` | gauge | tenant | ns | sum | Age of the oldest request in this tenant's queue. |
+| `admission` | `tenant_pushes` | counter | tenant | count | sum | Requests this tenant offered to its queue. |
+| `admission` | `tenant_queue_wait` | histogram | tenant | ns | by bucket | Time a served request of this tenant waited. |
+| `admission` | `tenant_queue_wait_clamped_high` | counter | tenant | count | sum | Values recorded into tenant_queue_wait above its range, clamped to the highest bucket. |
+| `admission` | `tenant_queue_wait_clamped_low` | counter | tenant | count | sum | Values recorded into tenant_queue_wait below its range, clamped to the lowest bucket. |
+| `admission` | `tenant_removed` | counter | tenant | count | sum | Requests of this tenant removed because the client left. |
+| `admission` | `tenant_rule_state` | gauge | tenant, mode | count | sum | 1 for this tenant queue's rule state (mode: normal, standing, dropping, overloaded). |
+| `admission` | `tenant_served` | counter | tenant | count | sum | Requests of this tenant served from its queue. |
+| `admission` | `tenant_shed` | counter | tenant, reason | count | sum | Requests of this tenant shed, by reason. |
+| `admission` | `tenant_shedding` | gauge | tenant | count | sum | 1 while this tenant queue shed within the last interval. |
+| `admission` | `tenants` | gauge | — | count | sum | Tenant queues that exist now. |
+| `admission` | `tenants_created` | counter | — | count | sum | Tenant queues created on first use. |
+| `admission` | `tenants_evicted` | counter | — | count | sum | Empty tenant queues evicted at the tenant cap for a new tenant. |
+| `admission` | `tenants_peak` | gauge | — | count | max | Most tenant queues at once. |
+| `admission` | `tenants_removed` | counter | — | count | sum | Tenant queues removed after 16 quiet intervals. |
+| `admission` | `unpops` | counter | — | count | sum | Taken requests put back because no connection could be lent. |
 | `classifier` | `extended_discarded` | counter | — | count | sum | Messages dropped while discarding until Sync. |
 | `classifier` | `extended_refused` | counter | — | count | sum | Extended-protocol messages refused. |
 | `classifier` | `extended_synced` | counter | — | count | sum | Discards ended by Sync. |
@@ -233,6 +275,24 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `fakepg` | `write_log_dropped` | counter | — | count | sum | Write log entries not kept. |
 | `fakepg` | `write_log_len` | gauge | — | count | sum | Entries held in the write log. |
 | `fakepg` | `writes_applied` | counter | — | count | sum | Writes applied to the table. |
+| `loadgen` | `completed` | counter | outcome | count | sum | Sent requests by final outcome (ok, db-error, refused, lost). |
+| `loadgen` | `connect_failures` | counter | — | count | sum | Load connections that failed to connect or log in. |
+| `loadgen` | `conns_open` | gauge | — | count | sum | Load connections open now. |
+| `loadgen` | `could_not_send` | counter | — | count | sum | Intended requests that were never sent (no free connection, connection lost, run ended). |
+| `loadgen` | `errors_by_class` | counter | reason (open: no row until a value exists) | count | sum | Error replies by SQLSTATE class (reason, two characters). |
+| `loadgen` | `in_flight` | gauge | — | count | sum | Requests written and not yet answered. |
+| `loadgen` | `intended` | counter | — | count | sum | Requests whose intended send time has come. |
+| `loadgen` | `late` | counter | — | count | sum | Sent requests written later than the late threshold after their intended send time. |
+| `loadgen` | `latency` | histogram | — | ns | by bucket | Request latency from the intended send time to the end of the reply. |
+| `loadgen` | `latency_clamped_high` | counter | — | count | sum | Values recorded into latency above its range, clamped to the highest bucket. |
+| `loadgen` | `latency_clamped_low` | counter | — | count | sum | Values recorded into latency below its range, clamped to the lowest bucket. |
+| `loadgen` | `latency_from_send` | histogram | — | ns | by bucket | Request latency from the actual send (coordinated-omission control). |
+| `loadgen` | `latency_from_send_clamped_high` | counter | — | count | sum | Values recorded into latency_from_send above its range, clamped to the highest bucket. |
+| `loadgen` | `latency_from_send_clamped_low` | counter | — | count | sum | Values recorded into latency_from_send below its range, clamped to the lowest bucket. |
+| `loadgen` | `planned` | gauge | — | count | sum | Requests in the load plan (rate times duration). |
+| `loadgen` | `queued` | gauge | — | count | sum | Requests given to a connection and not yet written. |
+| `loadgen` | `sent` | counter | — | count | sum | Requests written to a connection. |
+| `loadgen` | `target_rate` | gauge | — | count | sum | Target rate of the load plan, requests per second. |
 | `obs` | `adapter_failing` | gauge | reason (open: no row until a value exists) | count | sum | 1 while the adapter's latest export failed, else 0; reason is the adapter name. |
 | `obs` | `adapters` | gauge | — | count | sum | Adapters attached to the collector. |
 | `obs` | `csv_bytes_written` | gauge | — | bytes | sum | Bytes written to the CSV run directory. |

@@ -15,12 +15,16 @@ Pages (all links relative, so the site works under any path prefix):
   book/index.md               -> book/index.html, followed by a table of contents
                                  generated from book/manifest.json
   book/chapters/NN-<slug>.md  -> book/NN-<slug>.html, for every chapter the manifest
-                                 marks "live"
+                                 marks "live" (NN<suffix>-<slug> for a chapter with a suffix)
 The book manifest lists every chapter with its number, chunk, title, file and status
-("planned" or "live"). A live chapter is published and linked from the contents; a planned
+("planned" or "live"). A chapter may also carry a "suffix", one lowercase letter: chapter 6
+with suffix "a" is chapter "6a", its file is book/chapters/06a-<slug>.md, and it is listed
+after chapter 6 and before chapter 7. Two chapters may share a number but not a number and
+suffix. A live chapter is published and linked from the contents; a planned
 chapter is listed as plain text. The build fails if a live chapter's file is missing, if a
 planned chapter's file exists, or if book/chapters/ holds a file the manifest does not list.
-A relative link from a published page to another published page is rewritten to the
+A relative link must name a file or folder git tracks (one that exists only in the working
+tree, such as an ignored gate log, fails the build). A relative link from a published page to another published page is rewritten to the
 built page; a relative link to anything else in the repository goes to GitHub.
 Never published: agent_work/, STATE.md, docs/knowledge/.
 Exit status: 0 on success; 1 with a message if a source is missing, a link is broken or the
@@ -31,6 +35,7 @@ import json
 import posixpath
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -124,7 +129,8 @@ class BuildError(Exception):
 
 def load_book():
     """Read and check book/manifest.json. Returns (title, chapters); each chapter is a dict
-    with number, chunk, title, file, status and out (the page it is published to)."""
+    with number, suffix ("" when the entry has none), chunk, title, file, status and out
+    (the page it is published to), ordered by number and then suffix, no suffix first."""
     path = ROOT / BOOK_MANIFEST
     if not path.is_file():
         raise BuildError("missing source: %s" % BOOK_MANIFEST)
@@ -148,33 +154,46 @@ def load_book():
             raise BuildError("%s: needs a \"title\"" % where)
         if status not in ("planned", "live"):
             raise BuildError("%s: \"status\" must be \"planned\" or \"live\", got %r" % (where, status))
-        m = re.fullmatch(r"book/chapters/((\d\d)-[a-z0-9]+(?:-[a-z0-9]+)*)\.md", file if isinstance(file, str) else "")
-        if not m or int(m.group(2)) != number:
+        suffix = ""
+        if "suffix" in ch:
+            suffix = ch["suffix"]
+            if not isinstance(suffix, str) or not re.fullmatch(r"[a-z]", suffix):
+                raise BuildError("%s: \"suffix\" must be one lowercase letter (a to z), got %r" % (where, suffix))
+        m = re.fullmatch(r"book/chapters/((\d\d)([a-z]?)-[a-z0-9]+(?:-[a-z0-9]+)*)\.md",
+                         file if isinstance(file, str) else "")
+        if not suffix and (not m or m.group(3) or int(m.group(2)) != number):
             raise BuildError("%s: \"file\" must be book/chapters/NN-<slug>.md with NN equal to the number, got %r"
                              % (where, file))
-        if number in seen_numbers or file in seen_files:
+        if suffix and (not m or m.group(3) != suffix or int(m.group(2)) != number):
+            raise BuildError("%s: \"file\" must be book/chapters/NN%s-<slug>.md with NN equal to the number "
+                             "and followed by the suffix, got %r" % (where, suffix, file))
+        if (number, suffix) in seen_numbers or file in seen_files:
             raise BuildError("%s: chapter number or file listed twice" % where)
-        seen_numbers.add(number)
+        seen_numbers.add((number, suffix))
         seen_files.add(file)
         exists = (ROOT / file).is_file()
         if status == "live" and not exists:
-            raise BuildError("%s: chapter %d is live but %s is missing" % (BOOK_MANIFEST, number, file))
+            raise BuildError("%s: chapter %d%s is live but %s is missing" % (BOOK_MANIFEST, number, suffix, file))
         if status == "planned" and exists:
-            raise BuildError("%s: chapter %d is planned but %s exists (set its status to live, or remove the file)"
-                             % (BOOK_MANIFEST, number, file))
-        out.append(dict(ch, out="book/%s.html" % m.group(1)))
+            raise BuildError("%s: chapter %d%s is planned but %s exists (set its status to live, or remove the file)"
+                             % (BOOK_MANIFEST, number, suffix, file))
+        out.append(dict(ch, suffix=suffix, out="book/%s.html" % m.group(1)))
     chapter_dir = ROOT / "book/chapters"
     if chapter_dir.is_dir():
         for p in sorted(chapter_dir.iterdir()):
             if "book/chapters/" + p.name not in seen_files:
                 raise BuildError("book/chapters/%s is not listed in %s" % (p.name, BOOK_MANIFEST))
-    out.sort(key=lambda ch: ch["number"])
+    out.sort(key=lambda ch: (ch["number"], ch["suffix"]))
     return title, out
 
 
 def chapter_label(ch):
+    """The chapter as the contents and the previous and next links show it: "6. Title", or
+    "6a. Title" with a suffix. Chapter 0 without a suffix, the preface, shows its title alone."""
     text = html.escape(ch["title"])
-    return text if ch["number"] == 0 else "%d. %s" % (ch["number"], text)
+    if ch["number"] == 0 and not ch["suffix"]:
+        return text
+    return "%d%s. %s" % (ch["number"], ch["suffix"], text)
 
 
 def book_contents(chapters):
@@ -223,6 +242,22 @@ def pages(chapters):
 COPIES = {"docs/c4/model.json": "c4/model.json", "docs/c4/gen.py": None}
 
 
+_TRACKED = {}
+
+
+def tracked(target):
+    """Whether git tracks the file, or a file below the folder, at target: a link to a file
+    git ignores exists in a working tree but not in the published repository."""
+    if ROOT not in _TRACKED:
+        try:
+            out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], check=True, capture_output=True).stdout
+        except (OSError, subprocess.CalledProcessError) as e:
+            raise BuildError("cannot list the tracked files with git ls-files: %s" % e)
+        _TRACKED[ROOT] = set(out.decode("utf-8").split("\0")) - {""}
+    files = _TRACKED[ROOT]
+    return target in files or target == "." or any(f.startswith(target + "/") for f in files)
+
+
 TAG = re.compile(r"<[A-Za-z][^<>]*>")
 LINK_ATTR = re.compile(r"""(\s)(href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>]+))""", re.I)
 
@@ -246,6 +281,8 @@ def rewrite_links(body, src, out, page_map):
             raise BuildError("%s: link leaves the repository: %s" % (src, href))
         if not (ROOT / target).exists():
             raise BuildError("%s: broken link: %s" % (src, href))
+        if not tracked(target):
+            raise BuildError("%s: link to a file git does not track: %s" % (src, href))
         if target in page_map:
             new = posixpath.relpath(page_map[target], out_dir or ".")
         elif COPIES.get(target):

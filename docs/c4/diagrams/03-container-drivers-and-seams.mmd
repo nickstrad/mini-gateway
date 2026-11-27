@@ -1,10 +1,14 @@
 flowchart TB
   DEVELOPER(["Developer or reader"]):::built
+  OPERATOR(["Operator"]):::built
   PGPROTO3[["pgproto3 (from pgx/v5)"]]:::built
   PG[("Postgres")]:::built
+  PROM[["Prometheus"]]:::planned
   subgraph SCOPE["mini-gateway repository"]
     C_SIM["Simulator harness<br/>internal/sim"]:::planned
     C_E2E["End-to-end suite and load generator<br/>test/e2e"]:::planned
+    C_MGCTL["Operator client (mgctl)<br/>cmd/mgctl"]:::built
+    C_DEV["Dev stack and run targets"]:::built
     C_SHELL["Shell and binary<br/>cmd/mini-gateway"]:::built
     C_ENGINE["Engine<br/>internal/proxy"]:::planned
     C_PGWIRE["Wire layer<br/>internal/pgwire"]:::planned
@@ -13,6 +17,7 @@ flowchart TB
     C_POOL["Pool<br/>internal/pool"]:::planned
     C_COAL["Coalescer<br/>internal/coalesce"]:::planned
     C_RETRY["Retry policy<br/>internal/retry"]:::planned
+    C_CONFIG["Configuration<br/>internal/config"]:::planned
   end
   C_SHELL -->|1| C_ENGINE
   C_ENGINE -->|2| C_SIM
@@ -34,6 +39,19 @@ flowchart TB
   C_SIM -.->|18| C_WORK
   C_SHELL -->|19| PG
   C_SIM -->|20| PG
+  OPERATOR -->|21| C_MGCTL
+  C_MGCTL -->|22| C_SHELL
+  C_MGCTL -->|23| C_PGWIRE
+  C_MGCTL -->|24| C_CONFIG
+  C_MGCTL -->|25| C_SIM
+  C_E2E -->|26| C_MGCTL
+  C_MGCTL -->|27| C_WORK
+  DEVELOPER -->|28| C_DEV
+  C_DEV -->|29| C_SHELL
+  C_DEV -->|30| PG
+  C_DEV -->|31| C_E2E
+  C_DEV -->|32| C_MGCTL
+  C_DEV -->|33| PROM
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned

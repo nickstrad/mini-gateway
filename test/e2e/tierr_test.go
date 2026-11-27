@@ -528,7 +528,8 @@ func TestTierRSlowReader(t *testing.T) {
 // TestTierRQueueFull proves exceeding pool plus queue capacity returns 53M01 while keeping refused clients usable.
 func TestTierRQueueFull(t *testing.T) {
 	env := tierR(t)
-	g := gateway(t, env, GatewayOpts{Scenario: "tierr-queue-full", Conns: 1, QueueCap: 2})
+	g := gateway(t, env, GatewayOpts{Scenario: "tierr-queue-full", Conns: 1, QueueCap: 2,
+		Queue: map[string]any{"interval": "5s", "target": "1s"}})
 	spec := Spec{}
 	for c := 0; c < 5; c++ {
 		spec.Clients = append(spec.Clients, Script{Tenant: c % 4, Steps: []Step{{SQL: "SELECT pg_sleep(0.5)"}, {SQL: "SELECT 9", Delay: 2 * time.Second}}})

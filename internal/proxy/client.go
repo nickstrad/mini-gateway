@@ -466,8 +466,13 @@ func (e *Engine) dequeueGone(c *client) {
 		return
 	}
 	if e.cfg.Plant&PlantQueuedVanishKeepsSlot == 0 {
-		e.seams.Queue.Remove(c.req.id)
+		if e.shedQ != nil {
+			e.shedQ.RemoveAt(e.now, c.req.id)
+		} else {
+			e.seams.Queue.Remove(c.req.id)
+		}
 		delete(e.waiting, c.req.id)
+		e.queueTouched()
 	}
 	e.snap.Queued.Add(-1)
 	e.failNoReply(c.req, work.No)

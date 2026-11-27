@@ -1,28 +1,30 @@
 # C4 diagrams — mini-gateway
 
-**Target architecture of the approved plan.** These diagrams describe what [PLAN.md](../../PLAN.md) sets out to build; Nick approved the plan on 2026-11-24 as amended by his rulings (PLAN.md section 18). The set was updated for those rulings: the batcher is gone (batching was dropped from v1), and TLS is drawn on the shell and the two session machines. The build has started, so each diagram shows two things at once: what exists in the code (status `existing`, drawn solid) and what is still planned (status `planned`, drawn dashed). At every chunk landing the orchestrator marks what the chunk built — one edit to the AS BUILT block at the top of [gen.py](gen.py), described in [docs/knowledge/c4-as-built.md](../knowledge/c4-as-built.md) — and a diagram that no longer matches the code is treated as a defect.
+**Target architecture of the approved plan.** These diagrams describe the system [PLAN.md](../../PLAN.md) sets out to build. Nick approved the plan on 2026-11-24 as amended by his rulings (PLAN.md section 18). The set reflects those rulings: the batcher is gone because batching was dropped from v1, and TLS is drawn on the shell and the two session machines.
 
-Three C4 levels plus a deployment view: system context, containers (two views), components (eight views), and the three-instance deployment.
+Because the build has started, each diagram shows both what exists in the code (status `existing`, drawn solid) and what is still planned (status `planned`, drawn dashed). At every chunk landing the orchestrator marks what the chunk built — one edit to the AS BUILT block at the top of [gen.py](gen.py), described in [docs/knowledge/c4-as-built.md](../knowledge/c4-as-built.md) — and a diagram that no longer matches the code is treated as a defect.
+
+The set covers three C4 levels plus a deployment view: system context, containers (two views), components (eight views), and the three-instance deployment.
 
 ## Diagrams
 
 <!-- diagram-table:start -->
-**Built so far: chunks 0–6. Dashed parts are planned.** The Built column counts the elements of each diagram that exist in the code.
+**Built so far: chunks 0–6a and chunk 8 (chunk 7 has not landed yet). Dashed parts are planned.** The Built column counts the elements of each diagram that exist in the code.
 
 | # | Level | File | Built | Shows |
 | --- | --- | --- | --- | --- |
 | 1 | System context | [01-system-context.md](01-system-context.md) | 5 of 7 | mini-gateway, its clients, its operator, the one Postgres behind it, the readers of its metrics, and its one external library |
 | 2 | Containers | [02-container-request-path.md](02-container-request-path.md) | 4 of 13 | The Go packages inside one mini-gateway process and how a request passes through them |
-| 3 | Containers | [03-container-drivers-and-seams.md](03-container-drivers-and-seams.md) | 5 of 13 | Who drives the engine (the shell or the simulator), where the Postgres codec boundary is, and the work vocabulary the cores are written against |
+| 3 | Containers | [03-container-drivers-and-seams.md](03-container-drivers-and-seams.md) | 8 of 18 | Who drives the engine (the shell or the simulator), where the Postgres codec boundary is, the work vocabulary the cores are written against, and the operator tools that drive a running gateway |
 | 4 | Deployment | [04-deployment-fleet.md](04-deployment-fleet.md) | 0 of 10 | The supported multi-instance deployment: static fleet config, per-instance enforcement, no run-time coordination |
-| 5 | Components | [05-component-engine.md](05-component-engine.md) | 12 of 21 | internal/proxy: the transport seam and its simulator driver, the two connection tables, the request pipeline and its stage seams, the lease end with its reset, the reply relay, the failure classifier, deadlines, the snapshot |
+| 5 | Components | [05-component-engine.md](05-component-engine.md) | 13 of 22 | internal/proxy: the transport seam and its simulator driver, the two connection tables, the request pipeline and its stage seams, the admission queue adapter, the lease end with its reset, the reply relay, the failure classifier, deadlines, the snapshot |
 | 6 | Components | [06-component-wire-layer.md](06-component-wire-layer.md) | 20 of 23 | internal/pgwire: our framer and message coding, both session machines, SCRAM, the two trackers, the wire snapshot, the SQL lexer, the classifier with its courtesy reject list, the safe-shape recogniser, the error contract and reply builders, the test proxies and their scenarios; planned: the pgproto3 codec boundary |
-| 7 | Components | [07-component-admission.md](07-component-admission.md) | 1 of 12 | internal/admission: the rate gate, per-tenant queues, both CoDel modes behind one interface, the dispatcher, the adaptive limit |
+| 7 | Components | [07-component-admission.md](07-component-admission.md) | 6 of 13 | internal/admission: the rate gate, per-tenant queues, both CoDel modes behind one interface, the dispatcher, the adaptive limit |
 | 8 | Components | [08-component-pool.md](08-component-pool.md) | 1 of 10 | internal/pool: the hard cap, the creation limiter, leases per transaction, the breaker, the dirty-connection table |
 | 9 | Components | [09-component-coalescer.md](09-component-coalescer.md) | 1 of 9 | internal/coalesce: the join rule, the flight table, waiters, the flight's own deadline, the shared reply |
 | 10 | Components | [10-component-retry.md](10-component-retry.md) | 1 of 7 | internal/retry: the policy interface, its two policies, the budget |
 | 11 | Components | [11-component-simulator.md](11-component-simulator.md) | 19 of 22 | internal/sim and its sub-packages, internal/testclient and internal/randdist: the loop, the clock, simulated byte streams, the simulated TLS handshake, the fake Postgres, simulated clients, the test client, the scenario world with its baselines and fidelity runner, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol |
-| 12 | Components | [12-component-observability.md](12-component-observability.md) | 24 of 32 | internal/obs: the one raw export (snapshots), the metric registry, the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests and DuckDB, and OTLP to a Collector to Prometheus |
+| 12 | Components | [12-component-observability.md](12-component-observability.md) | 28 of 37 | internal/obs: the one raw export (snapshots), the metric registry, the collector, the adapter interface and its five adapters, and where each output goes: the CSV flush read by tests, DuckDB and the story report, and OTLP to a Collector to Prometheus |
 <!-- diagram-table:end -->
 
 ## Where each required part is drawn
@@ -39,18 +41,19 @@ Three C4 levels plus a deployment view: system context, containers (two views), 
 | Simulator harness | 3, 11 |
 | Observability: snapshot → collector → exporters | 2, 12 |
 | Horizontal scale: static fleet config, three instances | 4 |
+| Operator tools (chunk 6a): the client `mgctl`, the load generator, the dev stack with its run targets, the story report | 3, 12 |
 
 ## Format
 
-- [gen.py](gen.py) is the source. Elements, relationships and diagrams are tables in that file; running it writes everything else here. Edit `gen.py`, not the generated files. What is built is said in one place, the AS BUILT block at its top: `LANDED` (the last landed chunk), `BUILT` (element → chunk), `PARTIAL` (element → what exists so far) and `REL_BUILT` (exceptions to the rule that a relationship is built when both its ends are).
-- [model.json](model.json) is the C4 model as a `c4-sdk` bundle (`schemaVersion: 1`): every element, relationship and diagram. Statuses are the SDK's: `existing` for built, `planned` for the rest; a diagram that holds both has the status `mixed`.
-- Each diagram page has a Mermaid picture, an element table and a numbered relationship table. Edge numbers in the picture match the table rows. A solid box or arrow is built; a dashed one is planned; every picture has a key for the two. An arrow points to the supplier; one marked "implements" means the source implements the target's interface. Both tables have a Status column: `built (chunk N)` or `planned`. An element that is only partly built stays `planned`, and its row says what exists so far.
+- [gen.py](gen.py) is the source for this directory. It defines elements, relationships, and diagrams in tables and generates every other file here when run. Edit `gen.py`, not the generated files. What is built lives in one place, the AS BUILT block at the top of the file: `LANDED` names the last landed chunk (with `LANDED_LETTER` for a lettered chunk such as 6a, which is then written `"6a"` in the tables, and `ALSO_LANDED` for a chunk that landed ahead of an earlier one, as chunk 8 did ahead of chunk 7), `BUILT` maps each built element to its chunk, `PARTIAL` records what exists so far for a partly built element, and `REL_BUILT` lists exceptions to the rule that a relationship is built when both of its ends are.
+- [model.json](model.json) holds the full C4 model — every element, relationship, and diagram — as a `c4-sdk` bundle (`schemaVersion: 1`). It uses the SDK's statuses: `existing` for built items, `planned` for the rest, and `mixed` for a diagram that contains both.
+- Each diagram page contains a Mermaid diagram, an element table, and a numbered relationship table whose row numbers match the edge numbers in the diagram. Solid boxes and arrows represent built parts, dashed ones represent planned parts, and every diagram includes a key. Arrows point to the supplier. An arrow marked "implements" means the source implements the target's interface. Both tables have a Status column showing `built (chunk N)` or `planned`. A partly built element stays `planned`, and its row notes what exists so far.
 - [diagrams/](diagrams/) holds the Mermaid sources, one per diagram.
 
 ## Model notes
 
-1. **Containers are Go packages** inside one `mini-gateway` process, except the simulator harness and the end-to-end suite, which are test code in the same repository.
-2. **Neighbour elements.** `c4-sdk` 0.1.0 accepts a container in another container's component view only when the element is tagged `external`, and the tag belongs to the element, not the view. So each container has a twin with the id prefix `n-`, tagged `external` and `neighbour`, used only in component views. The page tables show the real container's description for it.
+1. **Containers are Go packages** inside one `mini-gateway` process, except the simulator harness and the end-to-end suite, which are test code in the same repository, and the operator tools of chunk 6a: `mgctl` and the load generator are binaries of their own, and the dev stack is scripts and a docker-compose file.
+2. **Neighbour elements.** `c4-sdk` 0.1.0 allows a container in another container's component view only if that element is tagged `external`, and tags belong to the element rather than the view. Each container therefore has a twin with the id prefix `n-`, tagged `external` and `neighbour`, that appears only in component views. In the page tables, the twin displays the real container's description.
 3. **Deployment instances** are instances of the container "Shell and binary", which stands for the whole process.
 4. **Terminal (Unicode) renderings** of these diagrams are not included in this first set; see the open item in STATE.md.
 
@@ -60,10 +63,10 @@ Three C4 levels plus a deployment view: system context, containers (two views), 
 | --- | --- | --- |
 | `model.json` decodes | `decodeArchitecture` from `c4-sdk@0.1.0` (`c4-sdk/core`) | ok, 0 errors, 0 warnings |
 | Every diagram builds a scene | `buildScene` from `c4-sdk/core` | 12 of 12 |
-| Pictures and tables agree with the model | All three are written by `gen.py` from the same tables; it refuses a diagram edge whose ends are not in the diagram and a relationship no diagram uses | passes |
-| Mermaid renders | Each built page opened in a headless browser; every picture drew | 12 of 12 |
+| Pictures and tables agree with the model | `gen.py` writes all three from the same tables and refuses both diagram edges whose ends are not in the diagram and relationships that no diagram uses | passes |
+| Mermaid renders | Each built page was opened in a headless browser, and every diagram rendered | 12 of 12 |
 
-To repeat after a change:
+To repeat these checks after a change:
 
 ```sh
 python3 docs/c4/gen.py

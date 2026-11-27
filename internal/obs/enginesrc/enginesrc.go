@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/nickstrad/mini-gateway/internal/obs"
+	"github.com/nickstrad/mini-gateway/internal/obs/admsrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/clssrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/poolsrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/wiresrc"
@@ -342,6 +343,7 @@ func Sources(e *proxy.Engine, shell func() proxy.ShellSnapshot) []obs.Source {
 		clssrc.Source(func() clssrc.Snapshot {
 			return clssrc.Snapshot{Classifier: e.ClassifierSnapshot(), Replies: e.ReplySnapshot(), Sync: e.SyncSnapshot()}
 		}),
+		admsrc.Source(e.AdmissionSnapshot),
 	}
 }
 
@@ -357,10 +359,10 @@ func Register(c *obs.Collector, e *proxy.Engine, shell func() proxy.ShellSnapsho
 // HealthRules returns the database reachability rule, which reports StateDegraded
 // (never StateFailed) while no database connection is usable and dials are failing.
 func HealthRules() []obs.Rule {
-	return []obs.Rule{{Name: CheckDatabase, Check: func(s obs.InstanceSnapshot) (obs.State, string) {
+	return append([]obs.Rule{{Name: CheckDatabase, Check: func(s obs.InstanceSnapshot) (obs.State, string) {
 		if s.Value(obs.ComponentEngine, MetricDatabaseDown, none) > 0 {
 			return obs.StateDegraded, "database unreachable: no usable connection and dials failing"
 		}
 		return obs.StateOK, "database reachable"
-	}}, poolsrc.HealthRules()[0]}
+	}}, poolsrc.HealthRules()[0]}, admsrc.HealthRules()...)
 }

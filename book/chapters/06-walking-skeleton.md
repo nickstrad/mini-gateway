@@ -2,18 +2,28 @@
 
 Chapters 1 through 5 built the simulator, the fake Postgres 17 server, the observability spine, the wire-protocol state machines, and the statement classifier. None of them forwarded a query from a client to a database or compiled into a proxy binary.
 
-Chunk 6 integrates those pieces into the first runnable proxy — a **walking skeleton** (an end-to-end slice that carries real traffic through every architectural seam while leaving advanced policies as pass-throughs). A client connects over TCP or TLS (Transport Layer Security), authenticates with SCRAM-SHA-256 (Postgres's challenge-response password login), runs statements and multi-statement transactions, and receives answers identical to talking directly to Postgres 17.
+Chunk 6 integrates those pieces into the first runnable proxy—a **walking skeleton** that carries real traffic end to end through every architectural seam while leaving advanced policies as pass-throughs. A client connects over TCP or TLS (Transport Layer Security), authenticates with SCRAM-SHA-256 (Postgres's challenge-response password login), runs statements and multi-statement transactions, and receives answers identical to talking directly to Postgres 17.
 
 What this chunk builds:
 
-- [`internal/proxy`](../../internal/proxy): one single-threaded, **sans-I/O** state machine (**decision D1** — an engine that accepts explicit timestamps and byte/lifecycle events and returns actions, without reading clocks, starting goroutines, or touching sockets), implementing the transaction-lease lifecycle, unconditional `DISCARD ALL` reset after every lease, bounded streaming reply relay, close-on-doubt dirty handling, the error contract, and all stage seams.
+- [`internal/proxy`](../../internal/proxy): a single-threaded, **sans-I/O** state machine (**decision D1**)—an engine that takes explicit timestamps and byte or lifecycle events and returns actions, without reading clocks, starting goroutines, or touching sockets. It implements the transaction-lease lifecycle, unconditional `DISCARD ALL` reset after every lease, bounded streaming reply relay, close-on-doubt dirty handling, the error contract, and all stage seams.
 - [`internal/proxy/proxysim`](../../internal/proxy/proxysim): the simulator driver that runs the exact same `proxy.Engine` over `simnet` and `simtls` against `fakepg` (tier S).
 - [`internal/shell`](../../internal/shell): the real-socket goroutine shell — listeners, per-connection reader and writer goroutines, one bounded mailbox, TLS termination on both legs, socket deadlines, CSV flushing, and an isolated admin HTTP listener (`/healthz`, `/stats`, `/metrics`).
 - [`internal/config`](../../internal/config) and [`cmd/mini-gateway`](../../cmd/mini-gateway): JSON configuration loading with fail-closed validation, and the `mini-gateway` binary (`-config`, `-check`, `-verifier`).
-- [`internal/obs/enginesrc`](../../internal/obs/enginesrc): component `engine` observability export (84 engine and shell metrics) plus the `database` health rule, with code-generated [`docs/timeout-budget.md`](../../docs/timeout-budget.md) and [`docs/capacity-table.md`](../../docs/capacity-table.md), regenerated [`docs/csv-schema.md`](../../docs/csv-schema.md), and [`docs/extension-seams.md`](../../docs/extension-seams.md).
+- [`internal/obs/enginesrc`](../../internal/obs/enginesrc): component `engine` observability export (84 engine and shell metrics) plus the `database` health rule. Four documents come with it: the code-generated [`docs/timeout-budget.md`](../../docs/timeout-budget.md) and [`docs/capacity-table.md`](../../docs/capacity-table.md), the regenerated [`docs/csv-schema.md`](../../docs/csv-schema.md), and [`docs/extension-seams.md`](../../docs/extension-seams.md).
 - [`test/e2e`](../../test/e2e): 21 tier S scenarios, 14 tier R tests against the compiled binary and Postgres 17.11 in Docker (with client TLS on), DuckDB SQL assertions for both tiers, `make chaos`, and the engine operation fuzz target `FuzzEngineOps`.
 
-**What is not built yet.** The proxy here is deliberately plain: a small fixed set of database connections (`FixedSet`, opened at start and re-opened one dial at a time on loss) and one bounded first-in, first-out queue (`FIFO`). **The pool** (dynamic sizing, creation rate, active cancel/rollback/reuse, `on-switch` reset, `lease.reseed`, the 5 s idle-in-transaction rule, and the circuit breaker — Chunk 7), **admission control** (CoDel and adaptive LIFO — Chunk 8), **fairness** (per-tenant queues — Chunk 9), **the adaptive concurrency limit and rate gate** (Chunk 10), **shared reads / coalescing** (Chunk 11), **retries** (Chunk 12), and **multi-instance fleet division and graceful drain** (Chunk 13) are **not built**. Each sits behind an interface in [`internal/proxy/seams.go`](../../internal/proxy/seams.go) backed by a pass-through (`ClosedBreaker`, `OpenRate`, `NoCoalesce`, `RetryOff`, plus a reserved `EvDraining` input) so later chunks replace one stage without re-plumbing the engine.
+**What is not built yet.** This proxy is deliberately plain: it holds a small fixed set of database connections (`FixedSet`, opened at start and re-opened one dial at a time on loss) behind one bounded first-in, first-out queue (`FIFO`). Seven policy stages are **not built** yet:
+
+- **The pool** (dynamic sizing, creation rate, active cancel/rollback/reuse, `on-switch` reset, `lease.reseed`, the 5 s idle-in-transaction rule, and the circuit breaker — Chunk 7)
+- **Admission control** (CoDel and adaptive LIFO — Chunk 8)
+- **Fairness** (per-tenant queues — Chunk 9)
+- **The adaptive concurrency limit and rate gate** (Chunk 10)
+- **Shared reads / coalescing** (Chunk 11)
+- **Retries** (Chunk 12)
+- **Multi-instance fleet division and graceful drain** (Chunk 13)
+
+Each sits behind an interface in [`internal/proxy/seams.go`](../../internal/proxy/seams.go) backed by a pass-through (`ClosedBreaker`, `OpenRate`, `NoCoalesce`, `RetryOff`, plus a reserved `EvDraining` input) so later chunks replace one stage without re-plumbing the engine.
 
 ---
 
@@ -73,11 +83,11 @@ Only two backend message types are held whole (bounded by `MaxMessage + 5` bytes
 - Status `'T'` (in transaction) or `'E'` (failed transaction): the client keeps its held database connection (`cpHeld`). Its next statements bypass draining, gates, and the queue and go straight to that connection (**D4**).
 - Status `'I'` (idle): the lease ends and passes to `ReleasePolicy.AtRelease`. No classifier flag participates in this decision; Postgres's status byte alone decides.
 
-To keep memory bounded (**D5**), the engine pauses a client (`ActClientPause`) the moment a request starts until its entire reply has been written and acknowledged (`c.out == 0`). Unprocessed client bytes already in memory are capped at `4 × MaxRead` (64 KiB; exceeding it closes the client). On the reply side, when a client's unwritten bytes exceed `limits.reply_buffer − MaxRead`, the engine emits `ActDBPause`, resuming at half the buffer; if the client stays stalled past `timeouts.client_write` (5 s), the client is dropped and its lent database connection is destroyed.
+To keep memory bounded (**D5**), the engine pauses a client (`ActClientPause`) as soon as a request starts and keeps it paused until its entire reply has been written and acknowledged (`c.out == 0`). Unprocessed client bytes already in memory are capped at `4 × MaxRead` (64 KiB), and exceeding that cap closes the client. On the reply side, when a client's unwritten bytes exceed `limits.reply_buffer − MaxRead`, the engine emits `ActDBPause` and resumes reading once the buffer drains to half. If the client stays stalled past `timeouts.client_write` (5 s), the engine drops the client and destroys its lent database connection.
 
 ### The reset after every lease (decision D8)
 
-Following Nick's Ruling 9 (Chapter 5), session safety never depends on reading SQL. Whenever a lease ends with status `'I'` and zero unread bytes, `ResetAlwaysPolicy` returns `ReleaseReset` and `startReset` sends `DISCARD ALL` as the proxy's own `Query` message, keeping the connection in phase `dpResetting` (counted in use, never lendable) under `timeouts.reset` (1 s).
+Following Nick's Ruling 9 (Chapter 5), session safety never depends on reading SQL. Whenever a lease ends with status `'I'` and zero unread bytes, `ResetAlwaysPolicy` returns `ReleaseReset` and `startReset` sends `DISCARD ALL` as the proxy's own `Query` message. The connection stays in phase `dpResetting` (counted in use, never lendable) under `timeouts.reset` (1 s).
 
 A dedicated framer (`resetJudge`, capped at 4,096 bytes) in [`internal/proxy/lease.go`](../../internal/proxy/lease.go) verifies the reply:
 
@@ -148,8 +158,8 @@ The same ablation holds on real Postgres 17.11 (tier R, recorded in [`NOTES.md`]
 
 - **One engine goroutine** owns `Core`, reads from a single bounded mailbox (`mailboxCap = 4096`), drives a single `time.Timer` for `ActWake`, and ticks `EvPublish` at `obs.publish_interval`.
 - **Two goroutines per live connection** (`readLoop` and `writeLoop`) perform blocking socket I/O with explicit deadlines and bounded write queues (64 MiB + 2 MiB slack, 65,536 items).
-- **Exact pre-startup reads for TLS (decision D13).** On a newly accepted client, `readLoop` calls `io.ReadFull(nc, buf[:8])` — exactly `FirstClientRead` (8) bytes, unbuffered — and then waits (`readWait`) until the engine answers `ActClientResume` or `ActClientStartTLS`. On a TLS-enabled database connection (`backend_tls.mode` of `require` or `verify-full`), it reads exactly 1 byte (`FirstDBTLSRead`) for Postgres's `'S'`/`'N'` answer. Nothing is ever buffered across the TLS upgrade; plaintext bytes smuggled behind `SSLRequest` are seen by `crypto/tls` as a bad record header and close the connection (`TestSmuggledPlaintextAfterTheTLSRequestClosesTheConnection`).
-- **Isolated admin listener (decision D12).** `/healthz` (three-state: `ok`, `degraded` when no database connection is usable and dials fail, `failed` only when the client listener stops), `/stats` (JSON), and `/metrics` (Prometheus text) read exclusively from an `atomic.Pointer[published]` copy updated on publish ticks. `TestAdminAnswersWhileTheEngineIsBlocked` proves all three answer while the engine goroutine is deliberately blocked.
+- **Exact pre-startup reads for TLS (decision D13).** On a newly accepted client, `readLoop` calls `io.ReadFull(nc, buf[:8])`—exactly `FirstClientRead` (8) bytes, unbuffered—and waits (`readWait`) until the engine answers `ActClientResume` or `ActClientStartTLS`. On a TLS-enabled database connection (`backend_tls.mode` of `require` or `verify-full`), it reads exactly 1 byte (`FirstDBTLSRead`) for Postgres's `'S'`/`'N'` answer. Nothing is ever buffered across the TLS upgrade. Plaintext bytes smuggled behind `SSLRequest` hit `crypto/tls` as a bad record header and close the connection (`TestSmuggledPlaintextAfterTheTLSRequestClosesTheConnection`).
+- **Isolated admin listener (decision D12).** `/healthz`, `/stats` (JSON), and `/metrics` (Prometheus text) read exclusively from an `atomic.Pointer[published]` copy updated on publish ticks. The health endpoint reports three states: `ok`, `degraded` (when no database connection is usable and dials fail), and `failed` (only when the client listener stops). `TestAdminAnswersWhileTheEngineIsBlocked` proves all three endpoints answer while the engine goroutine is deliberately blocked.
 - **Clean teardown.** `TestTeardownLeavesNoGoroutine` exercises 8 teardown paths under `testing/synctest` and `-race` with zero leaked goroutines.
 
 ### Two shell bugs that only real-server tests caught
@@ -165,7 +175,7 @@ Review 1's mutation checks (M1 and M2 in [`REVIEW-1.md`](../../agent_work/chunks
 
 ## Configuration, the binary, and building it
 
-[`internal/config`](../../internal/config) reads JSON using the standard library with a strict token-walking pass (`decode.go`) that rejects unknown keys, wrong-case keys, and duplicate keys with full dotted paths, then validates every cross-field bound and timeout nesting constraint, failing closed with an error naming the offending key (`TestValidationFailsClosedNamingTheKey` checks 62 invalid cases). All tenant SCRAM verifiers must share one iteration count and one salt length (closing Chunk 4's carried item so unknown-user mock challenges match the table's shape).
+[`internal/config`](../../internal/config) reads JSON using the standard library with a strict token-walking pass (`decode.go`) that rejects unknown keys, wrong-case keys, and duplicate keys with full dotted paths. It then checks every cross-field bound and timeout nesting constraint, failing closed with an error naming the offending key (`TestValidationFailsClosedNamingTheKey` checks 62 invalid cases). All tenant SCRAM verifiers must share one iteration count and one salt length (closing Chunk 4's carried item so unknown-user mock challenges match the table's shape).
 
 Building and checking [`cmd/mini-gateway`](../../cmd/mini-gateway/main.go):
 
@@ -187,7 +197,7 @@ $ go run ./cmd/mini-gateway -verifier -password example-pw
 SCRAM-SHA-256$4096:kBVgjCXKmq0dahAkSpUsng==$KQiSGidlWeKbJc+5I4xQZEDv+cJsHhXuzRyOR2zQzoA=:9Ny0JVBKn12YEBNDhjTRHXszs5VkyTQpigzkKXN3K8E=
 ```
 
-Running `-check` on [`internal/config/testdata/example.json`](../../internal/config/testdata/example.json) without its TLS files demonstrates fail-closed validation; switching `client_tls.mode` to `"off"` (or supplying readable `server.crt` and `server.key`) validates and prints the 16-hex-character config fingerprint (SHA-256 of the canonical effective config with `database.password` blanked):
+Running `-check` on [`internal/config/testdata/example.json`](../../internal/config/testdata/example.json) without its TLS files demonstrates fail-closed validation. Switching `client_tls.mode` to `"off"` (or supplying readable `server.crt` and `server.key`) passes validation and prints the 16-hex-character config fingerprint—the SHA-256 of the canonical effective config with `database.password` blanked:
 
 ```sh
 $ go run ./cmd/mini-gateway -config internal/config/testdata/example.json -check
@@ -205,7 +215,7 @@ config /tmp/mg-example-off.json is valid; fingerprint 4a827a9f43a1174e
 
 ### Two tiers from one harness
 
-[`test/e2e`](../../test/e2e) runs 21 named tier S scenarios (`e2e-results`, `e2e-fragment`, `e2e-tx-integrity`, `e2e-reject-list`, `e2e-session-state`, `e2e-client-vanish`, five `e2e-kill-*` database-loss points, `e2e-slow-reader`, `e2e-queue-full`, `e2e-silent-db-startup`, `e2e-silent-db-query`, and six `e2e-reset-*` reset-reply tamper scenarios injected by [`tamper.go`](../../test/e2e/tamper.go) so the frozen `fakepg` stays untouched). Every seed runs twice to verify bit-identical trace/state digests and byte-identical CSV files, checks the CSV round trip, and runs DuckDB SQL conservation and fault-count assertions under `test/analysis/e2e-*/`.
+[`test/e2e`](../../test/e2e) runs 21 named tier S scenarios: `e2e-results`, `e2e-fragment`, `e2e-tx-integrity`, `e2e-reject-list`, `e2e-session-state`, `e2e-client-vanish`, five `e2e-kill-*` database-loss points, `e2e-slow-reader`, `e2e-queue-full`, `e2e-silent-db-startup`, `e2e-silent-db-query`, and six `e2e-reset-*` reset-reply tamper scenarios (injected by [`tamper.go`](../../test/e2e/tamper.go) so the frozen `fakepg` stays untouched). Every seed runs twice to verify bit-identical trace/state digests and byte-identical CSV files, checks the CSV round trip, and runs DuckDB SQL conservation and fault-count assertions under `test/analysis/e2e-*/`.
 
 `make chaos` (now live — its not-built marker was deleted in this chunk) runs `scripts/chaos.sh` concisely, one line per scenario:
 
@@ -236,11 +246,11 @@ R  (skipped: no Docker)
 chaos: all green; runs under /tmp/c06-prose-chaos
 ```
 
-In tier R (14 tests in [`test/e2e/tierr_test.go`](../../test/e2e/tierr_test.go) against Postgres 17.11 with `ssl=on`, SCRAM-SHA-256, and an ephemeral test CA), the entire suite runs with client TLS on, including `psql` (`sslmode=require`, `verify-full`, `disable` refused with `28000`), `pgbench -S -M simple` (800/800 transactions in the gate's tier R log (`G6-tier-r.log`, kept on the build machine, not in the repository)), `pg_stat_ssl` verification of `backend_tls.mode` (`disable`, `require`, `verify-full`, and wrong-CA failure), and DuckDB SQL checks over the binary's flushed CSV files (`test/analysis/tierr-*/`).
+Tier R runs 14 tests in [`test/e2e/tierr_test.go`](../../test/e2e/tierr_test.go) against Postgres 17.11 with `ssl=on`, SCRAM-SHA-256, and an ephemeral test CA, keeping client TLS enabled throughout. The suite covers `psql` (`sslmode=require`, `verify-full`, and `disable` refused with `28000`), `pgbench -S -M simple` (800/800 transactions in the gate's tier R log (`G6-tier-r.log`, kept on the build machine, not in the repository)), `pg_stat_ssl` checks of `backend_tls.mode` (`disable`, `require`, `verify-full`, and wrong-CA failure), and DuckDB SQL assertions over the binary's flushed CSV files (`test/analysis/tierr-*/`).
 
 ### Engine operation fuzzing (`FuzzEngineOps`)
 
-[`FuzzEngineOps`](../../test/e2e/fuzz_test.go) follows [PLAN.md section 6.6](../../PLAN.md#66-rules-for-simulation-level-fuzz-targets-nicks-dst-fuzz-ruling-2026-11-24): the simulator seed is the fixed constant `OpSeed = 1` (never a hash of the fuzz bytes), decoding is total and local (4 bytes per operation, capped at `MaxOps = 48`), and the world is kept small (3 clients, 1 database connection, queue capacity 2, compressed deadlines) so queueing and contention happen frequently and execution stays above the 100/s rate floor (140/s in the gate's `G5-fuzz.tsv`, 2,947 executions in 20 s).
+[`FuzzEngineOps`](../../test/e2e/fuzz_test.go) follows [PLAN.md section 6.6](../../PLAN.md#66-rules-for-simulation-level-fuzz-targets-nicks-dst-fuzz-ruling-2026-11-24). The simulator seed is the fixed constant `OpSeed = 1` (never a hash of the fuzz bytes), and decoding is total and local (4 bytes per operation, capped at `MaxOps = 48`). The simulated world stays small—3 clients, 1 database connection, queue capacity 2, and compressed deadlines—so queueing and contention happen frequently and execution stays above the 100/s rate floor (140/s in the gate's `G5-fuzz.tsv`, 2,947 executions in 20 s).
 
 To prove the fuzzer finds real ordering bugs, `scripts/fuzz-plant.sh` enables `PlantQueuedVanishKeepsSlot` (a queued client closing leaves its queue slot occupied) and runs with an empty fuzz cache:
 
@@ -263,52 +273,6 @@ Unplanted fuzzing found one real harness bug (the fuzz client reported a legitim
 
 ---
 
-## Reviews, Astra's attack, and the two rules that came out of repair
-
-Chunk 6 went through Review 1 (FAIL), Astra's adversarial pass, one repair round, and Review 2 (PASS). Every defect found was reproduced before fixing and locked down with a regression test.
-
-### Review 1's two blockers ([`REVIEW-1.md`](../../agent_work/chunks/c06-walking-skeleton/REVIEW-1.md))
-
-1. **Fragmented queries killed by a mid-message timer that was never cancelled (`internal/proxy/client.go`).** `c.midT` (`timeouts.client_mid_message`, 5 s) was armed whenever a client query arrived across multiple reads (`c.cur.mid()`), but once the final byte completed the message, `startRequest()` moved `c.phase` to `cpQueued` or `cpActive` and `pump()` returned early before reaching `e.t.cancel(&c.midT)`. Worse, `clientTimer()` fired `clientViolation(c)` without checking `c.cur.mid()`. Any fragmented query whose queue wait plus database execution exceeded 5 s (well inside `timeouts.statement` = 30 s) was killed mid-flight with `FATAL 08P01` spliced onto any already-relayed bytes, and its database connection was closed. `e2e-fragment` missed it because its fake statements ran in milliseconds. **Fix (`1f12441`):** cancel `c.midT` whenever `!c.cur.mid()` regardless of phase, and guard `tClientMid` on `c.cur.mid()`. Regression test: `TestFragmentedQueryOutlivesTheMidMessageDeadline`.
-2. **Leftover bytes after `ReadyForQuery 'I'` letting a connection count as reset before `DISCARD ALL` ran (`internal/proxy/lease.go`).** When `relay()` consumed a lease-ending `ReadyForQuery 'I'`, any trailing bytes left in the same `EvDBData` slice stayed in local variable `b` and were not reported in `ReleaseInput.Unread`. `ResetAlwaysPolicy` therefore returned `ReleaseReset`, `startReset()` moved the connection to `dpResetting`, and `dbData()`'s `for len(b) > 0` loop immediately fed those pre-reset bytes into `judgeReset()`. Trailing bytes carrying `CommandComplete "DISCARD ALL"` + `ReadyForQuery 'I'` marked the connection `dpIdle` before `DISCARD ALL` had even reached Postgres. (Astra's `TestAdv_3_ResetWithTrailingReply` found the sister defect at the end of a reset reply: trailing bytes after the reset's `ReadyForQuery` were left for the next lease.) **Fix (`06ef106`):** pass `d.trailing = len(b) > 0` into `ReleaseInput.Unread` so leftover bytes after a lease close the connection dirty (`release-dirty`, no reset), and fail a reset as `protocol-surprise` if `n < len(b)` after the reset's `ReadyForQuery`. Regression tests: `TestBytesAfterReadyForQueryEndingALeaseCloseTheConnection` and `TestBytesAfterTheResetReplyCloseTheConnection`.
-
-Review 1 also caught three major findings (unsynchronised write/close ordering in `internal/shell` — see Rule 2 below; the two missing shell unit tests; and a missing catalog check on `cmd/mini-gateway`'s actual collector wiring, now `TestEveryMetricTheBinaryExportsIsInTheCatalog`) and three minor findings (the reverse `importlint` rule for `enginesrc`, the safe-shape/RLS note in `docs/error-contract.md`'s source text, preventing `FATAL 08P01` splicing on pipelining overflow after partial reply, and cancelling an in-progress dial immediately on `ActDBClose`).
-
-### Two rules established by the repair round
-
-Two engine-wide invariants came directly out of Review 1 and Astra's attacks:
-
-1. **Deadline rule — time passes before the event (`f7f59f3`).** `Engine.Step(now, ev, out)` fires every timer due at or before `now` *before* dispatching `ev`. Previously, `Step` handled data before `finish()` fired timers, so Astra's `TestAdv_3_ResetDeadlineTie` showed a reset reply arriving at the exact instant of its 1 s deadline still succeeded and dispatched queued work. Under the single rule — now documented in [`docs/timeout-budget.md`](../../docs/timeout-budget.md) and proved at equality across five tests in [`internal/proxy/deadline_test.go`](../../internal/proxy/deadline_test.go) — a reply, byte, or freed connection arriving at the exact instant of its deadline is late.
-2. **"Did not reach the database" only on an explicit zero-byte refusal (rule G8, `8077048`).** In the first build, `statementLost()` defaulted `Reached` to `work.No` whenever `d.acked == req.start`. Review 1 Finding 3 showed that because `internal/shell` runs `readLoop` and `writeLoop` in separate goroutines, a database close/reset after executing an `INSERT` or `COMMIT` could post `EvDBClosed` before `writeLoop` posted `EvDBWrote`, causing the proxy to report `Reached: No` and `ERROR 08006` ("safe to retry") for a write — which would compound with Chunk 12's retries into duplicate writes. The repair fixed all three layers:
-   - **Engine (`reachedFor` in `lease.go`):** once `ActDBWrite` is emitted, the request is `work.Yes` ("may have reached") unless the driver explicitly posted `EvDBWriteRefused` at or before `req.start` and `req.relayed == 0`.
-   - **Shell (`io.go`):** on the database leg, `readerExit` calls `c.abort()`, waits on `<-c.writerDone` so every `EvDBWrote` precedes close, and posts `EvDBWriteRefused` before `EvDBClosed` whenever a write stopped short or queued writes were dropped.
-   - **Simulator (`proxysim.go`):** `flush()` posts `EvDBWrote` for any partial `n > 0` before `gone()`, which posts `EvDBWriteRefused` if buffered unwritten bytes remain.
-
-```go
-func reachedFor(d *dbConn, req *request) work.Tri {
-	if req.relayed > 0 || d == nil || !d.refused || d.refusedAt > req.start {
-		return work.Yes
-	}
-	return work.No
-}
-```
-
-### Astra's adversarial pass and Review 2 ([`ADVERSARIAL.md`](../../agent_work/chunks/c06-walking-skeleton/ADVERSARIAL.md), [`RESULTS.md`](../../agent_work/adversarial/c06-walking-skeleton/RESULTS.md))
-
-Astra (`gpt-6-astra`) attacked all 15 claim identifiers (Claims 1–14 and 3b, at least three distinct attacks per claim, seed `6062026`). Its first dispatch was cut by its provider's content filter; the one re-dispatch finished the full harness (including the `ADV_LONG=1` 3,000-input fuzz campaign and three real Postgres 17 isolation attacks in 302.273 s) and recorded **43 held, 3 broken**:
-
-- **Broken 1 & 2 (product defects, both fixed):** `TestAdv_3_ResetWithTrailingReply` and `TestAdv_3_ResetDeadlineTie`. Both now pass.
-- **Broken 3 (specification mismatch, settled by narrowing Claim 13):** `TestAdv_13_ExplicitZeroCapacity` supplied `"capacity": 0` expecting validation to fail under "caps are positive", whereas config defaults replace zero with the documented positive default. The orchestrator kept zero-means-default and narrowed Claim 13 (below).
-- **One previously held attack settled after repair:** `TestAdv_5_ZeroAcceptedBytes` posted `EvDBClosed` with no write report after `ActDBWrite` and expected `Reached: No`. That directly contradicted the rule G8 ruling from Review 1 Finding 3; the orchestrator settled it, and `TestWriteRefusedWithZeroBytesIsNotReached` tests the corrected contract.
-
-Final adversarial tally after the repair round: **44 pass, 2 settled**. Review 2 ([`REVIEW-2.md`](../../agent_work/chunks/c06-walking-skeleton/REVIEW-2.md)) verified all 13 repair mutations (M1–M8b) were caught by their regression tests, ran all 38 test packages cleanly, and returned **VERDICT: PASS**.
-
-### Gate record
-
-There is no `gate/result.json` committed after the repair round. The last full build-stage gate run (commit `dbc896b`, 2026-11-26, 2,222 s, recorded in [`NOTES.md`](../../agent_work/chunks/c06-walking-skeleton/NOTES.md)) passed G0 (tools, gofmt, build, vet, tidy), G1 (detlint, importlint, boundlint, paniccheck), G2 (comments), G3 race, G4 (markers and 200-seed sweep: 9,073 seed runs in 304 s), G5 (16 fuzz targets, 0 seed sweeps; `FuzzEngineOps` 2,947 execs at 140/s), G6 (tier R: 23 tests on Postgres 17.11 in 203 s), G7 (DuckDB CSV assertions: 4,269 run directories, 59 scenarios, 195 SQL files, 0 failures), G8 (gen-docs), G9 (site), and G10 (`fuzz-plant.sh` found the planted bug in 2 s). Its only red check was G3 unit on the two unedited adversarial tests (`TestAdv_5_ZeroAcceptedBytes` and `TestAdv_13_ExplicitZeroCapacity`) before the orchestrator settled them in `9e3460f`. The final-stage gate runs after this prose pass.
-
----
-
 ## Narrowed claim and stated limits
 
 ### Narrowed Claim 13
@@ -320,8 +284,8 @@ Durations follow the same rule (zero or omitted takes the default; explicit `"0s
 ### Stated limits
 
 1. **`DISCARD ALL` residue (decision D8):** four things survive Postgres's `DISCARD ALL`: the PRNG random seed (Chunk 7's `lease.reseed` closes this), the *existence* of a custom placeholder setting name (its value is cleared), in-memory state of loaded extensions and procedural languages (PL/Perl, PL/Python), and privileged replication-origin sessions.
-2. **Safe-shape limits carry into `08006` vs `08007`:** choosing `08006` (`lost-after-read`, retry safe) over `08007` (`lost-after-write`) rests on Chunk 5's `SafeRead`. A view, user-defined operator, shadowed function, or table with a row-level security policy can hide a write behind a statement text that fits the safe shape; databases with such objects should treat `08006` like `08007` (stated in [`docs/error-contract.md`](../../docs/error-contract.md)).
-3. **Graceful client `FIN` while paused:** a client that sends TCP `FIN` while its request is queued or running is noticed only when the proxy next reads that client after its reply (as Postgres itself notices it); the statement completes and the connection resets normally. An abrupt TCP `RST` is noticed immediately and closes the database connection.
-4. **Close on doubt after `ReadyForQuery`:** an asynchronous backend message (`NoticeResponse`, `ParameterStatus`, `NotificationResponse`) arriving in the same read immediately after the `ReadyForQuery` that ends a lease or a reset closes the connection; arriving later on an idle connection closes it as `unsolicited-bytes`.
+2. **Safe-shape limits carry into `08006` vs `08007`:** choosing `08006` (`lost-after-read`, retry safe) over `08007` (`lost-after-write`) rests on Chunk 5's `SafeRead`. A view, user-defined operator, shadowed function, or table with a row-level security policy can hide a write behind a statement text that fits the safe shape. Databases with such objects should treat `08006` like `08007` (stated in [`docs/error-contract.md`](../../docs/error-contract.md)).
+3. **Graceful client `FIN` while paused:** a client that sends TCP `FIN` while its request is queued or running is noticed only when the proxy next reads that client after its reply (as Postgres itself notices it). The statement completes and the connection resets normally. An abrupt TCP `RST` is noticed immediately and closes the database connection.
+4. **Close on doubt after `ReadyForQuery`:** an asynchronous backend message (`NoticeResponse`, `ParameterStatus`, `NotificationResponse`) arriving in the same read immediately after the `ReadyForQuery` that ends a lease or a reset closes the connection. Arriving later on an idle connection closes it as `unsolicited-bytes`.
 5. **"Reached: No" requires driver reporting:** a driver that omits `EvDBWriteRefused` when dropping unwritten bytes makes the engine report `Reached: Yes` conservatively (never a false `No`). Both `internal/shell` and `internal/proxy/proxysim` report it.
-6. **Deferred mechanisms (Chunks 7–13):** `CancelRequest` is recognised and counted only (mapping arrives in Chunk 7); idle-in-transaction uses `timeouts.client_idle` (10 m) until Chunk 7 adds the 5 s rule; with the database down, one dial runs at a time with `timeouts.redial_delay` and queued requests wait for `timeouts.queue_wait` until Chunk 7 adds the circuit breaker; tier R checks CSV file consistency and conservation rather than cross-process in-memory snapshot equality (in-memory round trip is proved in every tier S run); simulated TLS handshakes with an unknown version count in the TLS 1.3 gauge bucket.
+6. **Deferred mechanisms (Chunks 7–13):** `CancelRequest` is recognised and counted only (mapping arrives in Chunk 7). Idle-in-transaction uses `timeouts.client_idle` (10 m) until Chunk 7 adds the 5 s rule. While the database is down, one dial runs at a time with `timeouts.redial_delay` and queued requests wait for `timeouts.queue_wait` until Chunk 7 adds the circuit breaker. Tier R checks CSV file consistency and conservation rather than cross-process in-memory snapshot equality (in-memory round trip is proved in every tier S run). Simulated TLS handshakes with an unknown version count in the TLS 1.3 gauge bucket.

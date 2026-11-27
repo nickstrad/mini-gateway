@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nickstrad/mini-gateway/internal/admission"
 	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 	"github.com/nickstrad/mini-gateway/internal/sim"
@@ -67,6 +68,7 @@ type Spec struct {
 	FakeConns int
 	Path      *PathPlan
 	Flush     time.Duration
+	Admission admission.Config
 }
 
 // ClientResult records the tokenized startup messages, per-step replies, elapsed
