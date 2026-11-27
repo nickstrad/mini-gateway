@@ -123,16 +123,21 @@ func policyRun(t *testing.T, env *RealEnv, reset, reseed string) policyResult {
 	check := dirtyCheck(t)
 	var r policyResult
 	clean := ""
+	lastSecret := ""
 	for round := 0; round < 2; round++ {
 		for i, call := range hostileCalls {
+			sql, secret := hostileLease(call, round*len(hostileCalls)+i)
+			if secret != "" {
+				lastSecret = secret
+			}
 			h, err := env.Dial(g, 2, false)
 			if err != nil {
 				t.Fatal(err)
 			}
-			h.Query(call)
+			h.Query(sql)
 			h.Close()
 			tenant := 1
-			if i%2 == 1 {
+			if (round+i)%2 == 1 {
 				tenant = 2
 			}
 			o, err := env.Dial(g, tenant, false)
@@ -140,6 +145,7 @@ func policyRun(t *testing.T, env *RealEnv, reset, reseed string) policyResult {
 				t.Fatal(err)
 			}
 			got := strings.Join(o.Query(check), " ")
+			seen := secretReadBack(o, lastSecret)
 			o.Close()
 			if clean == "" {
 				d, err := env.DialDirect(false)
@@ -149,7 +155,7 @@ func policyRun(t *testing.T, env *RealEnv, reset, reseed string) policyResult {
 				clean = strings.Join(d.Query(check), " ")
 				d.Close()
 			}
-			if got != clean {
+			if got != clean || seen {
 				if tenant == 2 {
 					r.sameTenant++
 				} else {

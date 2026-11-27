@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -279,48 +280,129 @@ func dirtyCheck(t *testing.T) string {
 	return string(b)
 }
 
-var hostileCalls = []string{"SELECT public.hide_set()", "SELECT public.make_temp()", "SELECT public.take_lock()", "SELECT public.do_prepare()", "SELECT public.do_listen()"}
+const (
+	secretMarker  = "LEASE_SECRET"
+	secretSetting = "mg_hostile.secret"
+)
 
-func sessionRun(t *testing.T, env *RealEnv, g *Gateway) int {
+var hostileCalls = []string{"SELECT public.hide_set()", "SELECT public.make_temp()", "SELECT public.take_lock()", "SELECT public.do_prepare()", "SELECT public.do_listen()",
+	"SELECT public.do_cursor()", "SELECT public.do_role()", "SELECT public.do_custom('" + secretMarker + "')"}
+
+var dirtyColumnName = regexp.MustCompile(`(?m)\bAS\s+(\w+)\s*[,;]?\s*$`)
+
+func dirtyColumns(t *testing.T) []string {
+	t.Helper()
+	var names []string
+	for _, m := range dirtyColumnName.FindAllStringSubmatch(dirtyCheck(t), -1) {
+		names = append(names, m[1])
+	}
+	if len(names) == 0 {
+		t.Fatal("dirty-check.sql: no column names")
+	}
+	return names
+}
+
+func hostileLease(call string, lease int) (string, string) {
+	if !strings.Contains(call, secretMarker) {
+		return call, ""
+	}
+	secret := fmt.Sprintf("secret-%d-%d", time.Now().UnixNano(), lease)
+	return strings.ReplaceAll(call, secretMarker, secret), secret
+}
+
+func secretReadBack(c *RealClient, secret string) bool {
+	if secret == "" {
+		return false
+	}
+	return slices.Contains(c.Query("SELECT current_setting('"+secretSetting+"', true)"), "D:"+secret)
+}
+
+func dataRow(got []string) []string {
+	for _, tk := range got {
+		if v, ok := strings.CutPrefix(tk, "D:"); ok {
+			return strings.Split(v, "|")
+		}
+	}
+	return nil
+}
+
+type sessionResult struct {
+	dirty   int
+	secrets int
+	columns []string
+	moved   []int
+}
+
+func (r sessionResult) String() string {
+	parts := make([]string, 0, len(r.columns)+1)
+	for i, name := range r.columns {
+		parts = append(parts, fmt.Sprintf("%s %d", name, r.moved[i]))
+	}
+	parts = append(parts, fmt.Sprintf("secret read back %d", r.secrets))
+	return strings.Join(parts, ", ")
+}
+
+func (r *sessionResult) observe(clean, got []string) {
+	row := dataRow(got)
+	for i := range r.moved {
+		if i >= len(row) || i >= len(clean) || row[i] != clean[i] {
+			r.moved[i]++
+		}
+	}
+}
+
+func sessionRun(t *testing.T, env *RealEnv, g *Gateway) sessionResult {
 	t.Helper()
 	check := dirtyCheck(t)
+	r := sessionResult{columns: dirtyColumns(t)}
+	r.moved = make([]int, len(r.columns))
 	checker, err := env.Dial(g, 1, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer checker.Close()
 	clean := checker.Query(check)
-	if !HasToken(clean, "D:") {
-		t.Fatalf("dirty-check: %v", clean)
+	cleanRow := dataRow(clean)
+	if len(cleanRow) != len(r.columns) {
+		t.Fatalf("dirty-check: %v, want %d columns %v", clean, len(r.columns), r.columns)
 	}
-	dirty := 0
+	lastSecret := ""
 	for round := 0; round < 3; round++ {
 		for i, call := range hostileCalls {
+			sql, secret := hostileLease(call, round*len(hostileCalls)+i)
+			if secret != "" {
+				lastSecret = secret
+			}
 			h, err := env.Dial(g, 2+(i%2), false)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := h.Query(call); HasToken(got, "E:") {
-				dirty++
+			if got := h.Query(sql); HasToken(got, "E:") {
+				r.dirty++
 			}
 			h.Close()
 			if got := checker.Query(check); !slices.Equal(got, clean) {
-				dirty++
+				r.dirty++
+				r.observe(cleanRow, got)
 			}
 			if got := checker.Query("SHOW search_path"); !slices.Contains(got, `D:"$user", public`) {
-				dirty++
+				r.dirty++
+			}
+			if secretReadBack(checker, lastSecret) {
+				r.dirty++
+				r.secrets++
 			}
 		}
 	}
-	return dirty
+	return r
 }
 
 // TestTierRSessionStateNeverCrossesClients proves DISCARD ALL clears hidden function-driven SET, temp table, lock, PREPARE, and LISTEN state against dirty-check.sql.
 func TestTierRSessionStateNeverCrossesClients(t *testing.T) {
 	env := tierR(t)
 	g := gateway(t, env, GatewayOpts{Scenario: "tierr-session-state", Conns: 1})
-	if n := sessionRun(t, env, g); n != 0 {
-		t.Fatalf("%d dirty observations through the proxy", n)
+	if r := sessionRun(t, env, g); r.dirty != 0 {
+		t.Fatalf("%d dirty observations through the proxy (%s)", r.dirty, r)
 	}
 	final := stopAndRead(t, env, g, "tierr-session-state")
 	c, e := ev(final, "resets_completed", obs.Labels{}), ev(final, "leases_ended", obs.Labels{})
@@ -335,11 +417,19 @@ func TestTierRSessionStateNeverCrossesClients(t *testing.T) {
 func TestTierRSessionAblationWithoutResetCrosses(t *testing.T) {
 	env := tierR(t)
 	g := startInProcess(t, env, GatewayOpts{Scenario: "tierr-session-ablation", Conns: 1}, true)
-	if n := sessionRun(t, env, g); n == 0 {
+	r := sessionRun(t, env, g)
+	if r.dirty == 0 {
 		t.Fatal("no dirty observation with the reset switched off: the scenario cannot fail")
-	} else {
-		t.Logf("tier R ablation: %d dirty observations without the reset", n)
 	}
+	for i, name := range r.columns {
+		if r.moved[i] == 0 {
+			t.Errorf("dirty-check column %s never differed from its clean value with the reset switched off: the hostile set leaves it blind", name)
+		}
+	}
+	if r.secrets == 0 {
+		t.Errorf("the custom setting %s was never read back with the reset switched off: the read-back cannot fail", secretSetting)
+	}
+	t.Logf("tier R ablation: %d dirty observations without the reset (%s)", r.dirty, r)
 }
 
 // TestTierRClientVanishes proves an abruptly reset real client causes its database connection to be closed and never reused dirty.
