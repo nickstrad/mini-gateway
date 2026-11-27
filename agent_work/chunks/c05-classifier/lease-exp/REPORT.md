@@ -252,7 +252,7 @@ remake-always reached 153–159/s. One core of Postgres is used by about 70 conn
 
 - **Pieces and reviews.** E1, E2, E3, E5, E6 by Opus, reviewed by Fable; E4 by Astra,
   reviewed by Opus. E2, E3, E5 and E6 each failed review 1 narrowly and passed after one
-  repair. Review files are on the lab branch.
+  repair. Review files are in [lab-records/](lab-records/).
 - **One knob added beyond the plan: `remake.patience`.** The E2 review found that
   remake-on-switch as first built closed other tenants' idle connections for every waiter and
   reconnected at 130–170/s at every load. The repair bounds those closes and lets a lease
