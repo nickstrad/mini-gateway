@@ -167,15 +167,14 @@ func (m *fmModel) push(now Time, t *fmTenant, id int64) {
 	t.items = append(t.items, fmItem{id: id, seq: m.seq})
 }
 
+func (m *fmModel) under(t *fmTenant) bool { return t.inFlight+1 <= m.share(t) }
+
 func (m *fmModel) eligible(t *fmTenant) bool {
 	total := m.total()
 	if total >= m.limit {
 		return false
 	}
-	if total+1 < m.limit {
-		return true
-	}
-	return t.inFlight+1 <= m.share(t)
+	return total+1 < m.limit || m.under(t)
 }
 
 func (m *fmModel) choose() *fmTenant {
@@ -184,7 +183,10 @@ func (m *fmModel) choose() *fmTenant {
 		if len(t.items) == 0 || !m.eligible(t) {
 			continue
 		}
-		if best == nil || t.turn < best.turn || t.turn == best.turn && t.items[0].seq < best.items[0].seq {
+		if best != nil && m.under(best) && !m.under(t) {
+			continue
+		}
+		if best == nil || m.under(t) && !m.under(best) || t.turn < best.turn || t.turn == best.turn && t.items[0].seq < best.items[0].seq {
 			best = t
 		}
 	}
@@ -570,11 +572,13 @@ func (v claimView) share(w *fairWorld, name string) int {
 	return ShareOf(v.limit, w.weights[i], v.weight)
 }
 
+func (v claimView) under(w *fairWorld, name string) bool { return v.inFlight[name]+1 <= v.share(w, name) }
+
 func (v claimView) eligible(w *fairWorld, name string) bool {
 	if v.total >= v.limit {
 		return false
 	}
-	return v.total+1 < v.limit || v.inFlight[name]+1 <= v.share(w, name)
+	return v.total+1 < v.limit || v.under(w, name)
 }
 
 func (w *fairWorld) claimsAtPop(v claimView, id int64, ok, lend bool) error {
@@ -594,6 +598,13 @@ func (w *fairWorld) claimsAtPop(v claimView, id int64, ok, lend bool) error {
 	if v.total+1 >= v.limit && v.inFlight[x]+1 > v.share(w, x) {
 		return fmt.Errorf("claim share: %s lent to %d in flight with share %d at the limit (%d of %d)", x, v.inFlight[x]+1, v.share(w, x), v.total+1, v.limit)
 	}
+	if !v.under(w, x) {
+		for y := range v.waiting {
+			if v.under(w, y) {
+				return fmt.Errorf("claim share order: %s lent at or above its share (%d, share %d) while %s waits below its share", x, v.inFlight[x], v.share(w, x), y)
+			}
+		}
+	}
 	if !lend {
 		return nil
 	}
@@ -604,7 +615,7 @@ func (w *fairWorld) claimsAtPop(v claimView, id int64, ok, lend bool) error {
 			for i := range fairTenants {
 				y := tenantName(i)
 				since, waiting := c.since[y]
-				if y == x || !waiting || !v.waiting[y] || !v.eligible(w, y) || since >= last {
+				if y == x || !waiting || !v.waiting[y] || !v.eligible(w, y) || since >= last || v.under(w, x) && !v.under(w, y) {
 					continue
 				}
 				if c.lastPick[y] < last {

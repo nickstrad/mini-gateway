@@ -56,7 +56,7 @@ func (c FairConfig) Validate() error {
 		errs = append(errs, fmt.Errorf("%w: %s: %s", ErrConfig, key, fmt.Sprintf(format, args...)))
 	}
 	if c.Limit < 1 || c.Limit > MaxFairLimit {
-		bad("fairness.limit", "must be 1 to %d, got %d", MaxFairLimit, c.Limit)
+		bad("pool.connections", "the fair limit must be 1 to %d, got %d", MaxFairLimit, c.Limit)
 	}
 	if c.MaxLeases < 1 || c.MaxLeases > MaxFairLimit {
 		bad("pool.connections", "must be 1 to %d for the fair dispatcher, got %d", MaxFairLimit, c.MaxLeases)
@@ -208,9 +208,9 @@ func (f *Fair) Share(name string) int {
 	return f.share(name, w)
 }
 
-func (f *Fair) binding() bool {
-	return f.total+1 >= f.cfg.Limit && f.cfg.Plant&FairPlantNoShareBound == 0
-}
+func (f *Fair) lastSlot() bool { return f.total+1 >= f.cfg.Limit }
+
+func (f *Fair) shareOn() bool { return f.cfg.Plant&FairPlantNoShareBound == 0 }
 
 func (f *Fair) Pick(_ Time, active []TenantView) int {
 	f.saved = fairSaved{ok: true, picks: f.c.picks, held: f.held}
@@ -219,18 +219,16 @@ func (f *Fair) Pick(_ Time, active []TenantView) int {
 		f.c.heldLimit++
 		return -1
 	}
-	binding := f.binding()
-	var w int64
-	if binding {
-		w, _ = f.activeWeight()
-	}
-	best := -1
+	last := f.lastSlot()
+	w, _ := f.activeWeight()
+	best, bestUnder := -1, false
 	for i, v := range active {
-		if binding && f.TenantInFlight(v.Name)+1 > f.share(v.Name, w) {
+		under := !f.shareOn() || f.TenantInFlight(v.Name)+1 <= f.share(v.Name, w)
+		if last && !under {
 			continue
 		}
-		if best < 0 || before(v, active[best]) {
-			best = i
+		if best < 0 || under && !bestUnder || under == bestUnder && before(v, active[best]) {
+			best, bestUnder = i, under
 		}
 	}
 	if best < 0 {
@@ -537,4 +535,11 @@ func (q *Queues) fairSnapshot(s *Snapshot) {
 			s.PerTenant[i].Share = int64(f.share(st.name, w))
 		}
 	}
+}
+
+func (q *Queues) Depth(tenant string) int {
+	if t := q.byName[tenant]; t != nil {
+		return t.ring.len()
+	}
+	return 0
 }

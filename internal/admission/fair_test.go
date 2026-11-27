@@ -392,8 +392,8 @@ func TestFairConfigFailsClosedNamingTheKey(t *testing.T) {
 		cfg FairConfig
 		key string
 	}{
-		{FairConfig{Limit: -1}, "fairness.limit"},
-		{FairConfig{Limit: MaxFairLimit + 1}, "fairness.limit"},
+		{FairConfig{Limit: -1}, "pool.connections"},
+		{FairConfig{Limit: MaxFairLimit + 1}, "pool.connections"},
 		{FairConfig{DefaultWeight: -2}, "fairness.default_weight"},
 		{FairConfig{DefaultWeight: MaxWeight + 1}, "fairness.default_weight"},
 		{FairConfig{Weights: []TenantWeight{{Tenant: "a", Weight: -1}}}, "fairness.weights[0].weight"},
