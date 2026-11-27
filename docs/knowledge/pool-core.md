@@ -132,4 +132,11 @@ core path in `internal/proxy`, or the pool scenarios. Full record:
 - To run chunk 7's engine tests behind the admission queue set the package variable
   `coreAdmission` (`internal/proxy/core_test.go`); a test that calls `Quiesce` right after
   traffic fails there by chunk 8's design (the tenant queue's 16-interval quiet window).
-- Record: `agent_work/chunks/c07-pool/NOTES.md`, "Join with chunk 8".
+- A scenario that wants the breaker to refuse a standing queue (`shed{breaker}`) behind the
+  timeout rule must open the breaker inside the rule's interval (100 ms by default) from the
+  first request queued after the fault; otherwise the rule sheds the queue `53M01` first. At
+  `fleet.connect_rate_per_s` 20 the five dial failures of the default `breaker.failures` take
+  about 100.8 ms (review 3's flaky seeds); `pool-admission-restart` dials at 1000/s (opens
+  under 3 ms). Debug such races by stepping the simulator event by event (`w.S.Step()`) and
+  reading `PoolSnapshot` / `AdmissionSnapshot` after each step.
+- Record: `agent_work/chunks/c07-pool/NOTES.md`, "Join with chunk 8" and "Join repair round".
