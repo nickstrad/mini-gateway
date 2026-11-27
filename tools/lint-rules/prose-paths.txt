@@ -23,7 +23,7 @@ allow ^book/
 # adds another generated document adds its line here.
 allow ^docs/.*\.md$
 deny ^docs/c4/
-deny ^docs/(error-contract|timeout-budget|capacity-table|reject-list|safe-shape|csv-schema|fleet-guarantees)\.md$
+deny ^docs/(error-contract|timeout-budget|capacity-table|reject-list|safe-shape|csv-schema|fleet-guarantees|fault-matrix)\.md$
 
 allow ^README\.md$
 allow ^agent_work/chunks/{chunk}/PROSE-NOTES\.md$

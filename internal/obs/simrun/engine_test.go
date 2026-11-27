@@ -64,7 +64,7 @@ func shortSkipped() []string {
 			out = append(out, sc.Spec.Name)
 		}
 	}
-	return out
+	return append(out, e2e.RetryScenarioNames()...)
 }
 
 func inParallel[T any](n int, work func(int) T) []T {
@@ -107,5 +107,10 @@ func engineRuns(dir string) error {
 	}
 	adm, err := e2e.AdmissionBaseline(dir, !testing.Short())
 	baselineFinals = append(baselineFinals, adm...)
+	if err != nil || testing.Short() {
+		return err
+	}
+	rt, err := e2e.RetryBaseline(dir)
+	baselineFinals = append(baselineFinals, rt...)
 	return err
 }

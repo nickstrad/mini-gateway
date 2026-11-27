@@ -16,6 +16,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/retry"
 	"github.com/nickstrad/mini-gateway/internal/retry/retrytest"
 	"github.com/nickstrad/mini-gateway/internal/sim/fakepg"
+	"github.com/nickstrad/mini-gateway/internal/sim/workload"
 )
 
 type RetryArm uint8
@@ -148,7 +149,8 @@ func RunRetry(sp RetrySpec, arm RetryArm, seed int64, dir, replay string) (*Retr
 	if dir == "" {
 		err = run()
 	} else {
-		srcs := append(enginesrc.Sources(w.Proxy.Engine, nil), simsrc.Kernel(w.S), simsrc.Net(w.Net), simsrc.Fake(w.Fake))
+		srcs := append(enginesrc.Sources(w.Proxy.Engine, nil), simsrc.Kernel(w.S), simsrc.Net(w.Net), simsrc.Fake(w.Fake),
+			obs.NewSource(obs.ComponentWorkload, simsrc.WorkloadMetrics(), r.WorkloadSnapshot, simsrc.MapWorkload))
 		r.Flush, err = simrun.Custom(sp.Name, seed, retryFingerprint(sp, arm), simrun.Options{Dir: dir, Arm: arm.String(), Replay: replay,
 			Interval: retryFlush}, w.S, srcs, run)
 		if r.Flush != nil {
@@ -338,4 +340,34 @@ func RetryBaseline(dir string) ([]obs.InstanceSnapshot, error) {
 		}
 	}
 	return out, nil
+}
+
+func (r *RetryRun) WorkloadSnapshot() workload.Snapshot {
+	tenants := make([]workload.TenantSnapshot, max(r.Spec.Tenants, 1))
+	empty := obs.NewDurationHistogram().Snapshot()
+	for i := range tenants {
+		tenants[i].Name = proxysim.TenantName(i)
+		tenants[i].Latency, tenants[i].LatencyFromSend = empty, empty
+	}
+	out := workload.Snapshot{Clients: int64(len(r.Clients))}
+	for i, c := range r.Clients {
+		t := &tenants[i%len(tenants)]
+		t.Reconnects += c.Redials
+		for _, o := range c.Ops {
+			t.Intended++
+			t.Sent++
+			t.Retries += int64(o.Attempts - 1)
+			switch {
+			case o.OK:
+				t.OK++
+			case o.Code == "closed":
+				t.Lost++
+			default:
+				t.Errors++
+				addCode(t, o.Code)
+			}
+		}
+	}
+	out.Tenants = tenants
+	return out
 }

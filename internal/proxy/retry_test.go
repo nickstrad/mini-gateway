@@ -404,3 +404,18 @@ func TestRetryForwardedStatementEndsAtTheRequestDeadline(t *testing.T) {
 		t.Fatalf("client got %q at %d", got, r.now-arrived)
 	}
 }
+
+func TestRetryNeverInsideATransactionMidStatement(t *testing.T) {
+	r := newRetryRig(t, nil)
+	id := r.firstLease(11, "BEGIN")
+	r.db(id, complete("BEGIN", 'T'))
+	r.send(11, insertSQL)
+	r.ev(proxy.EvDBWrote, id, nil, len(query(insertSQL)))
+	a := r.run(r.ev(proxy.EvDBClosed, id, nil, 0))
+	if got := written(a, proxy.ActClientWrite, 11); !bytes.Contains(got, []byte("08006")) || !bytes.Contains(got, []byte("FATAL")) {
+		t.Fatalf("client got %q", got)
+	}
+	if p := r.retrySnap(); p.Retries != 0 || p.Refused[retry.RefusedInTx] != 1 {
+		t.Fatalf("%+v", p)
+	}
+}
