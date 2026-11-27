@@ -162,6 +162,7 @@ func New(cfg Config) (*Table, error) {
 	t.snap.MaxReplyBytes = cfg.MaxReplyBytes
 	t.snap.NoShareMax = int64(cfg.NoShareMax)
 	t.snap.NoShareFor = int64(cfg.NoShareFor)
+	t.snap.HotKeysMax = int64(cfg.HotKeys)
 	return t, nil
 }
 
@@ -522,6 +523,7 @@ func (t *Table) advance(now Instant) {
 func (t *Table) expire(fi int) {
 	f := &t.flights[fi]
 	t.snap.Expired++
+	t.snap.SharedErrors++
 	t.notify(NoticeExpireOwner, f.id, f.owner)
 	delete(t.members, f.owner)
 	t.snap.Waiting.Add(-1)

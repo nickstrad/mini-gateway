@@ -55,7 +55,8 @@ func fragmented(o simnet.Options) simnet.Options {
 
 func (spec Spec) engineConfig() proxy.Config {
 	c := proxy.Config{Connections: spec.Conns, QueueCap: spec.QueueCap, Timeouts: spec.Timeouts,
-		ReplyBufferCap: spec.ReplyCap, Plant: spec.Plant, MaxClients: 1024, MaxStartup: 1024, Admission: spec.Admission}
+		ReplyBufferCap: spec.ReplyCap, Plant: spec.Plant, MaxClients: 1024, MaxStartup: 1024, Admission: spec.Admission,
+		Coalesce: spec.Coalesce, KeyScope: spec.KeyScope}
 	if spec.Pool != nil {
 		pc := *spec.Pool
 		c.Pool = &pc
@@ -153,9 +154,9 @@ func RunSim(spec Spec, seed int64, o SimOptions) (*SimRun, error) {
 
 func fingerprint(spec Spec) string {
 	if spec.Pool != nil {
-		return fmt.Sprintf("%s-c%d-q%d-p%d-pool%d-%s-r%v", spec.Name, spec.Conns, spec.QueueCap, spec.Plant, spec.Pool.Plant, spec.Reset, spec.Reseed) + admFingerprint(spec.Admission)
+		return fmt.Sprintf("%s-c%d-q%d-p%d-pool%d-%s-r%v", spec.Name, spec.Conns, spec.QueueCap, spec.Plant, spec.Pool.Plant, spec.Reset, spec.Reseed) + admFingerprint(spec.Admission) + coalFingerprint(spec)
 	}
-	return fmt.Sprintf("%s-c%d-q%d-p%d", spec.Name, spec.Conns, spec.QueueCap, spec.Plant) + admFingerprint(spec.Admission)
+	return fmt.Sprintf("%s-c%d-q%d-p%d", spec.Name, spec.Conns, spec.QueueCap, spec.Plant) + admFingerprint(spec.Admission) + coalFingerprint(spec)
 }
 
 // ErrCheck is wrapped by scenario check failures.

@@ -11,6 +11,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 	"github.com/nickstrad/mini-gateway/internal/obs/admsrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/clssrc"
+	"github.com/nickstrad/mini-gateway/internal/obs/coalsrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/csvflush"
 	"github.com/nickstrad/mini-gateway/internal/obs/enginesrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/poolsrc"
@@ -42,6 +43,9 @@ func Registry() (*obs.Registry, error) {
 		return nil, err
 	}
 	if err := reg.Declare(obs.ComponentAdmission, admsrc.Metrics()...); err != nil {
+		return nil, err
+	}
+	if err := reg.Declare(obs.ComponentCoalescer, coalsrc.Metrics()...); err != nil {
 		return nil, err
 	}
 	for _, d := range simsrc.All() {

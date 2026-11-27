@@ -46,6 +46,7 @@ type Snapshot struct {
 	MaxReplyBytes int64
 	NoShareMax    int64
 	NoShareFor    int64
+	HotKeysMax    int64
 
 	NotEligible     int64
 	Offered         int64

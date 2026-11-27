@@ -537,6 +537,9 @@ func (e *Engine) cancelDone(id ConnID) {
 
 func (e *Engine) clientCancel(key pgwire.BackendKey) {
 	t := e.keys[key]
+	if e.coalCancel(t) {
+		return
+	}
 	switch {
 	case t == nil || t.phase == cpClosed:
 		e.snap.CancelsUnmatched++
@@ -608,6 +611,7 @@ func (e *Engine) refuseAdmitted() {
 }
 
 func (e *Engine) refuseWaiting(c *client) {
+	e.coalRefused(c, pgwire.ErrRowBreakerOpen)
 	e.t.cancel(&c.queueT)
 	e.snap.Queued.Add(-1)
 	e.snap.Shed++

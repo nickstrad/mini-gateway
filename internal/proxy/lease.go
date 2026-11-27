@@ -35,6 +35,10 @@ func (e *Engine) startRequest(c *client, body []byte) {
 	if !e.gates(c) {
 		return
 	}
+	if e.coal != nil {
+		e.coalJoin(c, req)
+		return
+	}
 	e.snap.Accepted++
 	c.req = req
 	if e.seams.Coalescer.Join(e.now, req.id, &req.unit) {
@@ -98,6 +102,7 @@ func (e *Engine) enqueue(c *client) {
 }
 
 func (e *Engine) shed(c *client) {
+	e.coalRefused(c, pgwire.ErrRowShed)
 	e.snap.Shed++
 	c.req = nil
 	c.phase = cpIdle
@@ -177,6 +182,7 @@ func (e *Engine) forward(c *client) {
 	d.cycle.QuerySent()
 	e.writeDB(d, req.msg)
 	e.t.arm(&d.stmtT, e.after(e.cfg.Timeouts.Statement), tDBStatement, nil, d)
+	e.coalSent(req)
 }
 
 func (e *Engine) relay(d *dbConn, b []byte) []byte {
@@ -231,6 +237,9 @@ func (e *Engine) holdCap() int {
 }
 
 func (e *Engine) relayed(c *client, seg []byte) {
+	if e.coalStoring(c, seg) {
+		return
+	}
 	if c.req != nil {
 		c.req.relayed += int64(len(seg))
 	}
@@ -264,6 +273,7 @@ func (e *Engine) relayEvents(d *dbConn, evs []pgwire.CycleEvent, held []byte) {
 				e.leaseFailed(d, CloseDBServerFatal)
 				return
 			}
+			e.coalSawError(c)
 			e.relayed(c, held)
 		case pgwire.CycleParameterStatus:
 			e.snap.ParamStatusTurn++
@@ -271,6 +281,9 @@ func (e *Engine) relayEvents(d *dbConn, evs []pgwire.CycleEvent, held []byte) {
 			if c.req == nil {
 				e.leaseFailed(d, CloseDBViolation)
 				return
+			}
+			if e.coalReady(d, c, held, ev.Status) {
+				continue
 			}
 			e.relayed(c, held)
 			e.replyDone(d, c, ev.Status)
@@ -370,6 +383,7 @@ func (e *Engine) statementLost(c *client, d *dbConn) {
 	reached := reachedFor(d, req)
 	e.reached(reached)
 	row := lostRow(req, reached)
+	e.coalFailed(c, req, row, reached)
 	if e.seams.Retry.Retry(e.now, Failure{Request: req.id, Tenant: c.tenant, Reached: reached, Row: uint8(row), InTx: req.inTx}) {
 		e.snap.RetryAsked++
 	}

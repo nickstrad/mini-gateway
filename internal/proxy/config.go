@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/admission"
+	"github.com/nickstrad/mini-gateway/internal/coalesce"
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
 	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/work"
@@ -228,6 +229,7 @@ type Config struct {
 	Pool           *pool.Config
 	Reseed         bool
 	Admission      admission.Config
+	Coalesce       coalesce.Config
 }
 
 func (c Config) admissionConfig() admission.Config {
@@ -278,6 +280,7 @@ func (c Config) WithDefaults() Config {
 			*p.v = p.def
 		}
 	}
+	c.Coalesce = c.coalesceDefaults()
 	return c
 }
 
@@ -321,6 +324,7 @@ func (c Config) Validate() error {
 	if c.Admission.Rule != 0 {
 		errs = append(errs, c.admissionConfig().Validate())
 	}
+	errs = append(errs, c.coalesceErrors()...)
 	return errors.Join(errs...)
 }
 

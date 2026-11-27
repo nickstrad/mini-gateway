@@ -9,10 +9,12 @@ import (
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/admission"
+	"github.com/nickstrad/mini-gateway/internal/coalesce"
 	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 	"github.com/nickstrad/mini-gateway/internal/sim"
 	"github.com/nickstrad/mini-gateway/internal/sim/fakepg"
+	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
 // Vanish selects when a scripted client abruptly disconnects without Terminate.
@@ -69,6 +71,8 @@ type Spec struct {
 	Path      *PathPlan
 	Flush     time.Duration
 	Admission admission.Config
+	Coalesce  coalesce.Config
+	KeyScope  work.KeyScope
 }
 
 // ClientResult records the tokenized startup messages, per-step replies, elapsed

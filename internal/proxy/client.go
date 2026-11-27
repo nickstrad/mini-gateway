@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"github.com/nickstrad/mini-gateway/internal/coalesce"
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
@@ -14,6 +15,7 @@ const (
 	cpActive
 	cpHeld
 	cpClosed
+	cpCoalesced
 )
 
 const maxClientInput = 4 * MaxRead
@@ -27,6 +29,10 @@ type request struct {
 	sent    Instant
 	start   int64
 	relayed int64
+	fl      coalesce.FlightID
+	store   bool
+	stored  []byte
+	sawErr  bool
 }
 
 type client struct {
@@ -54,6 +60,8 @@ type client struct {
 	midT     *timer
 	writeT   *timer
 	queueT   *timer
+	fl       coalesce.FlightID
+	wid      RequestID
 }
 
 func (e *Engine) accept(id ConnID) {
@@ -415,6 +423,7 @@ func (e *Engine) closeClient(c *client, reason CloseReason) {
 	if c.phase == cpClosed {
 		return
 	}
+	e.coalClosing(c)
 	for _, slot := range []**timer{&c.startupT, &c.idleT, &c.midT, &c.writeT, &c.queueT} {
 		e.t.cancel(slot)
 	}
