@@ -261,3 +261,33 @@ func (r *FollyRule) State(now Time, n int) RuleState {
 	}
 	return StateNormal
 }
+
+type ruleState struct {
+	timeout TimeoutRule
+	law     ControlLaw
+	folly   FollyRule
+}
+
+func saveRule(r QueueRule) ruleState {
+	var s ruleState
+	switch v := r.(type) {
+	case *TimeoutRule:
+		s.timeout = *v
+	case *ControlLaw:
+		s.law = *v
+	case *FollyRule:
+		s.folly = *v
+	}
+	return s
+}
+
+func restoreRule(r QueueRule, s ruleState) {
+	switch v := r.(type) {
+	case *TimeoutRule:
+		*v = s.timeout
+	case *ControlLaw:
+		*v = s.law
+	case *FollyRule:
+		*v = s.folly
+	}
+}

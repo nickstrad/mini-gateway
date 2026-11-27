@@ -177,3 +177,7 @@ func (c Config) Validate() error {
 }
 
 func (c Config) Quiet() Time { return QuietIntervals * c.Interval }
+
+func pendingRefuseAt(cfg Config) int { return cfg.Capacity + maxPendingShedPad - 1 }
+
+func pendingCap(cfg Config) int { return pendingRefuseAt(cfg) + cfg.Capacity + 1 }

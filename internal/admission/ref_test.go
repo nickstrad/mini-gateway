@@ -53,9 +53,10 @@ type refModel struct {
 }
 
 type refPop struct {
-	t    *refTenant
-	item refItem
-	back bool
+	t      *refTenant
+	item   refItem
+	back   bool
+	before *refTenant
 }
 
 func newRef(cfg Config) *refModel { return &refModel{cfg: cfg.WithDefaults()} }
@@ -330,16 +331,14 @@ func (m *refModel) push(now Time, name string, id int64) (bool, error) {
 			}
 			m.tenants = slices.Delete(m.tenants, victim, victim+1)
 		}
-		t = &refTenant{name: name, created: now, emptyAt: now, follyEnd: now, follyReset: true, gaugeEnd: now, gaugeReset: true}
+		t = &refTenant{name: name, created: now, emptyAt: now, follyEnd: now, follyReset: true, gaugeEnd: now + m.cfg.Interval, gaugeReset: true}
 		m.tenants = append(m.tenants, t)
 	}
+	wasEmpty := len(t.items) == 0
 	if len(t.items) == m.cfg.TenantCapacity {
 		it := t.items[0]
 		t.items = t.items[1:]
 		m.shed(t, it, now, ReasonOverflow)
-		if len(t.items) == 0 {
-			m.becameEmpty(t, now)
-		}
 	} else if m.total() >= m.cfg.Capacity {
 		var o *refTenant
 		for _, c := range m.tenants {
@@ -350,11 +349,11 @@ func (m *refModel) push(now Time, name string, id int64) (bool, error) {
 		it := o.items[0]
 		o.items = o.items[1:]
 		m.shed(o, it, now, ReasonTotal)
-		if len(o.items) == 0 {
+		if len(o.items) == 0 && o != t {
 			m.becameEmpty(o, now)
 		}
 	}
-	if len(t.items) == 0 && m.cfg.Plant&PlantFirstBurst == 0 {
+	if wasEmpty && m.cfg.Plant&PlantFirstBurst == 0 {
 		t.lastEmpty = now
 	}
 	m.seq++
@@ -426,6 +425,8 @@ func (m *refModel) pop(now Time) (int64, bool, error) {
 		m.gauge(t, now, delay)
 		m.lastPop = &refPop{t: t, item: it, back: back}
 		if len(t.items) == 0 {
+			before := *t
+			m.lastPop.before = &before
 			m.becameEmpty(t, now)
 		}
 		return it.id, true, nil
@@ -437,6 +438,9 @@ func (m *refModel) unpop() bool {
 	m.lastPop = nil
 	if p == nil || m.find(p.t.name) != p.t {
 		return false
+	}
+	if b := p.before; b != nil {
+		p.t.emptyAt, p.t.lastEmpty, p.t.firstAboveTime, p.t.dropping, p.t.pendingAdvance = b.emptyAt, b.lastEmpty, b.firstAboveTime, b.dropping, b.pendingAdvance
 	}
 	if p.back {
 		p.t.items = append(p.t.items, p.item)
