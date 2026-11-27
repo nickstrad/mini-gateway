@@ -409,3 +409,53 @@ func TestJoinShutdownSweepsTheLastQueuedClientAtItsDeadline(t *testing.T) {
 		}
 	}
 }
+
+func replyAt(a []proxy.Action, id proxy.ConnID, code string) int {
+	for i, x := range a {
+		if x.Kind == proxy.ActClientWrite && x.Conn == id && bytes.Contains(x.Data, []byte(code)) {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestJoinBreakerOpeningAtARuleDeadlineAnswersTheDueShedBeforeTheRefusals(t *testing.T) {
+	interval := time.Duration(admission.DefaultInterval)
+	r := joinRig(t, admission.Config{Rule: admission.RuleTimeout, LIFO: admission.LIFOOff}, func(c *proxy.Config) {
+		c.Connections = 2
+		c.Pool.BreakerFailures = 1
+		c.Timeouts.DBConnect = interval + time.Millisecond
+	})
+	r.firstLease(10, "SELECT pg_sleep(1)")
+	r.login(12, 1)
+	r.tick(time.Millisecond)
+	dials := len(r.dbs)
+	r.q(12, "SELECT 2")
+	if len(r.dbs) != dials+1 {
+		t.Fatalf("premise: %d dials for a waiting request", len(r.dbs)-dials)
+	}
+	r.tick(time.Millisecond)
+	r.login(11, 0)
+	r.q(11, "SELECT 1")
+	due := r.now + proxy.Instant(interval)
+	r.tick(time.Millisecond)
+	if a := r.cancelFrom(21, r.clientKey(12)); !replied(a, 12, "57014") {
+		t.Fatalf("premise: the cancel of client 12 got %q", written(a, proxy.ActClientWrite, 12))
+	}
+	r.tick(interval / 2)
+	r.login(13, 2)
+	r.q(13, "SELECT 3")
+	r.at(due)
+	a := r.run(r.ev(proxy.EvTimer, 0, nil, 0))
+	if r.pool().Breaker != int64(pool.BreakerOpen) {
+		t.Fatalf("premise: breaker %d after the connect deadline", r.pool().Breaker)
+	}
+	shed, refused := replyAt(a, 11, "53M01"), replyAt(a, 13, "53M03")
+	if shed < 0 || refused < 0 || shed > refused {
+		t.Fatalf("at the deadline: client 11 53M01 at %d, client 13 53M03 at %d, want the due shed first", shed, refused)
+	}
+	s, as := r.agree()
+	if as.Shed[admission.ReasonRule] != 1 || as.Shed[admission.ReasonBreaker] != 1 || s.BreakerFlushed != 1 {
+		t.Fatalf("rule sheds %d, breaker sheds %d, engine flushed %d", as.Shed[admission.ReasonRule], as.Shed[admission.ReasonBreaker], s.BreakerFlushed)
+	}
+}
