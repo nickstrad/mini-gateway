@@ -92,6 +92,10 @@ func TestNightTrickleEachRemedyAloneCarriesTheRamp(t *testing.T) {
 			if s.NoReply != 0 || clientErrors(r, "08006")+clientErrors(r, "08007") != 0 {
 				t.Errorf("check alone: %d statements hung on a dead connection", s.NoReply)
 			}
+			if n := anyClientErrors(r); n != 0 || s.BreakerTransitions[pool.TransClosedOpen] != 0 || s.Closes[pool.CloseCheckFailed] == 0 {
+				t.Errorf("check alone: %d client errors, breaker opened %d times, %d checks failed; failed checks of idle connections must not open the breaker",
+					n, s.BreakerTransitions[pool.TransClosedOpen], s.Closes[pool.CloseCheckFailed])
+			}
 			continue
 		}
 		if err := checkNight(true)(r); err != nil {
