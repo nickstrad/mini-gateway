@@ -239,7 +239,7 @@ func (m *model) checkAccounting() {
 	if err := m.p.Invariants(); err != nil {
 		m.fail("%v", err)
 	}
-	if m.p.Breaker() != BreakerClosed && m.p.Allow(m.now) {
+	if m.p.Breaker() == BreakerOpen && m.p.Allow(m.now) {
 		m.fail("breaker %s allows work", m.p.Breaker())
 	}
 }
@@ -304,7 +304,8 @@ func (m *model) apply(o op) {
 			m.tenant++
 		}
 		t := m.tenantName()
-		allowed := p.Allow(m.now)
+		p.Allow(m.now)
+		allowed := p.Breaker() == BreakerClosed
 		id, ok, acts := p.Checkout(m.now, t, nil)
 		if !ok && m.waiting < 6 {
 			m.waiting++

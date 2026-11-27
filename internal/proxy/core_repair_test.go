@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
+	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
@@ -111,5 +112,29 @@ func TestCoreDrainDoesNotTakeTheTailOfASplitMessageForReadyForQuery(t *testing.T
 		if !bytes.Equal(written(a, proxy.ActDBWrite, id), query("DISCARD ALL")) {
 			t.Fatalf("tail %q: after the reply ended wrote %q", tail, written(a, proxy.ActDBWrite, id))
 		}
+	}
+}
+
+func TestCoreHalfOpenBreakerLetsARequestWaitForTheTrial(t *testing.T) {
+	r := newCoreRig(t, func(c *proxy.Config) { c.Pool.BreakerFailures = 2 })
+	r.login(11, 0)
+	r.q(11, "SELECT 1")
+	for i := 0; i < 2; i++ {
+		r.run(r.ev(proxy.EvDBDialFailed, r.dbs[len(r.dbs)-1], nil, 0))
+		r.tick(10 * time.Millisecond)
+	}
+	if r.pool().Breaker != int64(pool.BreakerOpen) {
+		t.Fatalf("breaker %d", r.pool().Breaker)
+	}
+	r.tick(pool.DefaultBreakerOpenFor)
+	dials := len(r.dbs)
+	a := r.q(11, "SELECT 3")
+	if bytes.Contains(written(a, proxy.ActClientWrite, 11), []byte("53M03")) || len(r.dbs) != dials+1 {
+		t.Fatalf("half-open: client got %q, dials %d -> %d, want the request queued behind one trial", written(a, proxy.ActClientWrite, 11), dials, len(r.dbs))
+	}
+	trial := r.dbs[len(r.dbs)-1]
+	a = r.open(trial)
+	if !bytes.HasSuffix(written(a, proxy.ActDBWrite, trial), query("SELECT 3")) || r.pool().Breaker != int64(pool.BreakerClosed) {
+		t.Fatalf("after the trial: wrote %q breaker %d", written(a, proxy.ActDBWrite, trial), r.pool().Breaker)
 	}
 }

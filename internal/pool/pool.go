@@ -288,9 +288,8 @@ func (p *Pool) Allow(now Instant) bool {
 	p.brk.tick(p.now)
 	if !p.brk.allow() {
 		p.brk.wanted = true
-		return false
 	}
-	return true
+	return p.brk.state != BreakerOpen
 }
 
 func (p *Pool) Breaker() BreakerState { return p.brk.state }
@@ -594,7 +593,9 @@ func (p *Pool) Checkout(now Instant, tenant work.TenantID, out []Action) (ConnID
 }
 
 func (p *Pool) checkout(tenant work.TenantID) (ConnID, bool) {
-	if !p.Allow(p.now) {
+	p.brk.tick(p.now)
+	if !p.brk.allow() {
+		p.brk.wanted = true
 		return 0, false
 	}
 	for checks := 0; ; {

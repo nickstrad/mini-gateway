@@ -436,8 +436,11 @@ func TestBreakerOpensOnConnectionFailuresSendsOneTrialAndRecovers(t *testing.T) 
 	}
 	now += Instant(time.Second)
 	trial := dials(p.Tick(now, nil))
-	if len(trial) != 1 || p.Breaker() != BreakerHalfOpen || p.Allow(now) {
-		t.Fatalf("half-open: trial %v state %s", trial, p.Breaker())
+	if len(trial) != 1 || p.Breaker() != BreakerHalfOpen || !p.Allow(now) {
+		t.Fatalf("half-open: trial %v state %s, want one trial and requests admitted to wait for it", trial, p.Breaker())
+	}
+	if _, ok, _ := p.Checkout(now, tenantA, nil); ok {
+		t.Fatal("lent while half-open")
 	}
 	if d := dials(p.Demand(now, 4, nil)); len(d) != 0 {
 		t.Fatalf("a second trial %v", d)
