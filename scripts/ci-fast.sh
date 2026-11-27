@@ -25,5 +25,5 @@
 # Exit status: as scripts/gate.sh (0 green, 1 a check is red, 2 usage or setup error).
 set -u
 here=$(cd "$(dirname "$0")" && pwd -P)
-unset SWEEP_SEEDS FUZZ_SECONDS GATE_BASE GATE_PREPROSE
+unset SWEEP_SEEDS FUZZ_SECONDS FUZZ_RATE_FLOOR FUZZ_MAX_RETRIES GATE_BASE GATE_PREPROSE
 GATE_ONLY=G0,G1,G3 GATE_SHORT=1 GATE_STAGE=build GATE_OUT=agent_work/ci/gate exec "$here/gate.sh" ci
