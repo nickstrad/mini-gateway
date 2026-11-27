@@ -411,8 +411,8 @@ admission queue first sweeps the core at the instant (due sheds are answered `53
 `breaker`; it does not mark the tenant queue as shedding (the queue did not overload; the pool
 component's `breaker` health rule reports the outage). The FIFO path (chunk 6/7 scenarios) is
 unchanged. Canary: `proxy.PlantBreakerFlushPops` (tests only) restores the pop path;
-`TestCanaryJoinBreakerFlushThroughPopBreaksTheAdmissionCount` shows the scenario's invariant
-catching it.
+`TestCanaryJoinBreakerFlushThroughPopBreaksTheAdmissionCount` shows the simulator's invariant
+catching it (it requires `sim: invariant` and `admission:` in the failure since the repair round).
 
 **A second one, with chunk 6a (which chunk 8 carries).** Chunk 7's error row
 `lost-mid-statement-in-transaction` (`FATAL 08006`) had exactly the message of
@@ -522,7 +522,7 @@ chunk 7 is the new error row's message text (same code and facts).
 | `TestJoinEveryCoreEngineTestHoldsWithTheAdmissionQueue` | 18 of chunk 7's 20 engine core tests rerun behind the timeout rule and the control law (interval 10 s, target 5 s, so the rule never sheds), every event checked by both chunks' invariants. Left out: `TestCoreCancelDoneMakesTheConnectionIdleInTheEngineToo` and `TestCoreQuiesceAndShutdownLeaveNothing`, which call `Quiesce` right after traffic, when chunk 8's tenant queue is still in its quiet window (by chunk 8's design; the previous test covers it) |
 | `internal/admission` `TestRefuseCountsABreakerShedTheCallerAnswersAndKeepsTheQueueHealthy` | `Refuse` counts reason `breaker`, leaves nothing for `TakeShed`, refuses only queued ids, keeps `Check` and conservation, does not set shedding |
 | `internal/config` `TestBinaryDefaultRunsThePoolCoreBehindTheTimeoutRule`, `TestPoolAndQueueKeysAreValidatedTogether` | decisions (d) and (e) |
-| `test/e2e` `TestScenarioPool/pool-admission-restart` | chunk 7's database restart (`checkRestart` unchanged: breaker opens and closes, `53M03` fast, goodput back) behind the default timeout rule with adaptive LIFO; admission `shed{breaker}` > 0 and = engine `BreakerFlushed`, shed totals equal, `pushes = served + shed + removed`, nothing queued, no tenant queue at the end. Seed 1: 968 pushes, 960 served, 4 breaker, 4 rule sheds. Replay law through `runPool`. SQL `test/analysis/pool-admission-restart/admission-pool.sql`. Canary `TestCanaryJoinBreakerFlushThroughPopBreaksTheAdmissionCount` |
+| `test/e2e` `TestScenarioPool/pool-admission-restart` | chunk 7's database restart (`checkRestart` unchanged: breaker opens and closes, `53M03` fast, goodput back) behind the default timeout rule with adaptive LIFO; admission `shed{breaker}` > 0 and = engine `BreakerFlushed`, shed totals equal, `pushes = served + shed + removed`, nothing queued, no tenant queue at the end. Dials at 1000/s (`admissionRestartDialRate`; chunk 7's `pool-db-restart` keeps 20/s) so the breaker opens inside the rule's interval on every seed (repair round). Seed 1: 964 pushes, 960 served, 4 breaker, 0 rule sheds. Replay law through `runPool`. SQL `test/analysis/pool-admission-restart/admission-pool.sql`. Canary `TestCanaryJoinBreakerFlushThroughPopBreaksTheAdmissionCount` |
 
 The breaker join tests were run against the naive merge's flush (the pop path): both fail on
 chunk 8's invariant (`admission: the core shed 0, the engine answered 3` / `… 2`).
@@ -562,6 +562,65 @@ All on 2026-11-27, host load 5–8 (other agents and a landing gate's tier R on 
 | chunk 8 gate extra (`agent_work/chunks/c08-admission/gate/extra.sh`) | `8791d9a` | pass; `fuzz-plant.sh` 2 s / 5 s / 1 s; `admission-head-to-head.sh --check`: the table reproduced exactly |
 | `GATE_BASE=work/c08-admission GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh c07-pool`, once | `9f4cbd0` (clean) | **overall pass** (`counts_for_landing=false`, partial by request): G0 all pass; G1 detlint (27 package patterns), importlint, boundlint, paniccheck pass; G2 comments pass against baseline `3f38a1d` (chunk 8's tip: main does not hold chunk 8 yet, so the default baseline, the merge base with main, would count chunk 8's prose-seat comments as new); G3 unit pass (394 s, every package incl. every adversarial package; none of the wall-clock growth tests failed), G3 race pass (6 patterns). `result.json` not committed |
 | tier R, all of it: `MG_TIER_R=1 go test -run '^TestTierR' ./test/e2e`, then `csv-assert.sh` over every `tierr-*` directory with SQL files | `1117772` | first run of the chunk 7 / 8 / 6 subset at `9f4cbd0`: `TestTierRPoolHeadline…` and `TestTierRPoolReconnectionStorm…` failed (256 and 259 of 500 served: chunk 8's tenant ring, (d)); fixed in `1117772` (tier R test only, after the gate: `gofmt` and `go vet ./test/e2e` clean, no comment); then all 22 tier R tests pass (headline: 500 connected, 0 refused, 16 backends, 500 queries ok; storm: 500 of 500; `TestTierRAdmissionOverloadWithPgSleep` on the pool core: timeout 295 ok / 5,705 shed at 85/s against 89/s, max served-wait bucket 73 ms; control law 320 / 5,680 at 84/s), and the 17 `tierr-*` SQL directories 0 failures |
+
+## Join repair round
+
+Builder: Opus (`claude-opus-5-5`), 2026-11-27, the one repair round after review 3
+(`REVIEW-3.md`, FAIL), under the orchestrator's decisions in
+`/root/briefs/zgateway-p2-c07-join-repair.md`. Mutations were applied in a scratch copy
+(`/tmp/zgw-c07/repo`), never in this tree.
+
+| Finding | Fix | Commit | Test | Mutation that now fails |
+| --- | --- | --- | --- | --- |
+| 1 BLOCKER `pool-admission-restart` fails on ~1 seed in 5 | the scenario, not the checks: `AdmissionRestartSpec` dials at `admissionRestartDialRate` = 1000/s (was chunk 7's 20/s, inherited from `RestartSpec`); the admission config stays the binary's default (timeout rule, interval 100 ms, target 5 ms, adaptive LIFO); `checkAdmissionRestart` and `admission-pool.sql` unchanged | `687cbaa` | `TestScenarioPool/pool-admission-restart`: seeds 1–200 green and their SQL 0 failures, plus seeds 42, 99, 1001 (see "Repair results") | the property itself: at 20/s seeds 9, 13, 16, 19 fail (review 3) |
+| 1 (sibling) half-open trials fired by gate refusals | intended, now held: a refused arrival is demand (decision 6) and the trigger is bounded | `c177aa7` | `internal/pool` `TestRefusedArrivalsStartOneTrialPerHalfOpenPeriod` (with `TestHalfOpenSendsNoTrialWhileNoWorkWasRefused`) | dropping the `trialSent` guard in `maybeDial` (a second trial while the first is in flight); keeping `wanted` across a re-open (a trial in a half-open period with no refusal) |
+| 2 MAJOR dropping either invariant block from `Engine.Invariants` is not caught | the canary requires the simulator's invariant; two fast tests drive an engine running both chunks into a broken state with `unchecked` steps and require `Engine.Invariants` itself to fail with the right chunk's error | `ccf14c9` | `test/e2e` `TestCanaryJoinBreakerFlushThroughPopBreaksTheAdmissionCount` (requires `sim: invariant` and `admission:`); `internal/proxy` `TestJoinInvariantsRunTheAdmissionChecksOnAnEngineWithThePoolCore` (`PlantBreakerFlushPops`, error prefix `admission:`), `TestJoinInvariantsRunThePoolCoreChecksOnAnEngineWithTheAdmissionQueue` (`pool.PlantNoRate` with `max_connecting` 1: two connecting, error prefix `pool:`) | M3a (no `admissionCheck`): the canary ("caught by something other than the admission accounting: … refused 0 for the breaker") and the first test (`<nil>`); M3b (no `coreAgrees` / `pool.Invariants`): the second test (`<nil>`) |
+| 3 MINOR deleting `e.sweepAdmission()` from `Shutdown` is not caught | test only: the last queued client (last in `clientList`, the sole queued one) exactly at its admission deadline at `Shutdown`, pool core lent and admission queue active, LIFO off and adaptive | `ccf14c9` | `internal/proxy` `TestJoinShutdownSweepsTheLastQueuedClientAtItsDeadline`: `53M01`, `Invariants` and `Quiesce` pass, rule sheds 1 = engine shed, removed 0, pool empty | M2: "off: the queued client at its deadline got "", want 53M01". This also closes chunk 8's review 2 open finding (the same shutdown-at-the-deadline gap) |
+| M8 (listed MISSED) skip the sweep in `refuseAdmitted` | test only: a breaker opening (a connect deadline armed before the admission timer was last re-armed, so it fires first at the shared instant) at the instant a rule shed is due | `e742621` | `internal/proxy` `TestJoinBreakerOpeningAtARuleDeadlineAnswersTheDueShedBeforeTheRefusals`: the due client's `53M01` is written before the other tenant's `53M03`; rule 1, breaker 1, engine flushed 1 | M8: "client 11 53M01 at 2, client 13 53M03 at 1". Codes and counters are the same under M8 (review 3 is right); only this reply order differs, and it is the order the join's notes state (sweep, then refuse) |
+
+### Why `pool-admission-restart` now holds on every seed
+
+What fails is a race between two clocks that start at the first request queued after the
+restart (call it P): the timeout rule may shed that request at P + 100 ms (interval; its tenant
+queue was empty when it was pushed, so `LastEmpty` = P, and no standing queue can form before
+P + 100 ms); the breaker opens at the fifth failure. Measured by stepping the simulator event by
+event (a scratch probe, not committed): at 20 dials/s the breaker opened 100.76–100.82 ms after P
+on every seed (five dial failures, 50 ms apart, each a round trip to the fake's `57P03`) — a
+tie with the rule, decided by where the clients' 50 ms think times fell, which is the 1-in-5.
+
+The fix makes the breaker win by construction:
+
+1. No request queued after the restart can leave before the breaker opens except by the rule:
+   nothing is lendable (every backend was killed at the restart, every dial is refused),
+   the scripts never cancel or disconnect, the 8 clients cannot fill a tenant ring of 64, and
+   `timeouts.queue_wait` is 3 s.
+2. The breaker needs five failures and at most four can come from connections that existed at
+   the restart (cap 4), so at least one dial must fail; the pool dials only while
+   `waiting > supply`, i.e. while a request is queued, and keeps dialling, one per
+   1/rate, while the request from 1. stays queued.
+3. At 1000 dials/s five refused dials take about 4 ms plus five round trips: the breaker opens
+   at most 2.84 ms after P (worst of 200 seeds; every seed 1–200 measured), against the rule's
+   100 ms — a margin of about 35×. Before the restart the tenant queues were empty at the
+   restart instant on all 200 seeds, so no earlier `LastEmpty` shortens the 100 ms. At the
+   opening at least 3 requests were queued on every seed; all are refused `53M03` as `shed{breaker}`.
+
+Rule sheds in this scenario went from 4 per seed (the race's losers) to 0 on seed 1; the
+scenario still runs behind the binary's default rule, so (a)'s exit table is unchanged.
+
+**The sibling question (review 3, finding 1, in passing).** After the breaker opens with
+nothing queued, the next half-open period sends its trial at once if any arrival was refused at
+the gate while open (`Allow` sets `wanted`). This is chunk 7's decision 6, intended: a refused
+arrival is demand, and probing at once means the next client after a quiet outage does not have to
+wait for a dial. It is bounded: one trial per half-open period (`trialSent`), half-open periods
+are `breaker.open_for` apart (a failed trial re-opens for the full period), `wanted` is cleared
+on every opening, and the trial goes through the creation rate limiter.
+`TestRefusedArrivalsStartOneTrialPerHalfOpenPeriod` holds it: five open periods with refusals
+every 10 ms and 50 more arrivals while each trial is in flight give exactly five trials and six
+dials; a sixth period with no refusal sends none.
+
+### Repair results
+
+RESULTS-PLACEHOLDER
 
 ## Commands
 
