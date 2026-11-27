@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "id": "mini-gateway",
  "title": "mini-gateway — target architecture",
- "revision": "target-approved-2026-11-24-rulings+built-through-chunk-6",
+ "revision": "target-approved-2026-11-24-rulings+built-through-chunk-6a",
  "defaultDiagramId": "context",
  "model": {
   "elements": [
@@ -23,7 +23,7 @@
     "id": "operator",
     "kind": "person",
     "name": "Operator",
-    "description": "Runs proxy instances, writes the config file with its static fleet block, reads health and stats, stops an instance with SIGTERM (a plain stop so far; a graceful drain from chunk 13).",
+    "description": "Runs proxy instances, writes the config file with its static fleet block, reads health and stats (directly or with mgctl), stops an instance with SIGTERM (a plain stop so far; a graceful drain from chunk 13).",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -36,7 +36,7 @@
     "id": "developer",
     "kind": "person",
     "name": "Developer or reader",
-    "description": "Runs simulator scenarios from a seed, replays a failure from its printed REPLAY line, runs make test / chaos / bench.",
+    "description": "Runs simulator scenarios from a seed, replays a failure from its printed REPLAY line, runs make test / chaos / bench, starts the dev stack and puts load on it (make run-up / load / run-down), reads a run as a report (make report).",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -53,7 +53,7 @@
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunk 6: a working proxy, the walking skeleton — cmd/mini-gateway terminates client TLS, logs clients in with SCRAM-SHA-256, lends one of a fixed set of database connections per transaction, resets it after every lease, queues waiting requests in one bounded first-come queue, and serves health, stats and metrics from snapshots. Not built: the pool with its breaker, per-tenant admission with the two CoDel modes, read coalescing, the retry policy, the OTLP push, and the fleet division and drain of N instances."
+     "Built in chunk 6: a working proxy, the walking skeleton — cmd/mini-gateway terminates client TLS, logs clients in with SCRAM-SHA-256, lends one of a fixed set of database connections per transaction, resets it after every lease, queues waiting requests in one bounded first-come queue, and serves health, stats and metrics from snapshots. Not built: the pool with its breaker, per-tenant admission with the two CoDel modes, read coalescing, the retry policy, the OTLP push, and the fleet division and drain of N instances. Chunk 6a built the operator tools around it: the client mgctl, the load generator, the dev stack with its run targets, and the story report."
     ],
     "docIds": [],
     "sourceIds": [
@@ -144,12 +144,14 @@
     "id": "prom",
     "kind": "softwareSystem",
     "name": "Prometheus",
-    "description": "End of the production path. Scrapes the Collector; sees low-cardinality labels and the bounded tenant label only. Fleet totals are sums over the instance label.",
+    "description": "End of the production path. Scrapes the Collector; sees low-cardinality labels and the bounded tenant label only. Fleet totals are sums over the instance label. It can scrape an instance's /metrics directly instead, as the dev stack's Prometheus does.",
     "status": "planned",
     "tags": [
      "external"
     ],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 6a (deploy/dev): the dev stack starts a Prometheus v3.9.1 that scrapes the gateway's /metrics directly, every second. Not built: the production path through the Collector (chunk 15)."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -464,11 +466,11 @@
     "id": "c-obs",
     "kind": "container",
     "name": "Observability",
-    "description": "internal/obs and its sub-packages; test/analysis; scripts/csv-assert.sh. Snapshot conventions (the one raw export), integer histogram, metric registry, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health, and the SQL assertions over flushed files.",
+    "description": "internal/obs and its sub-packages; test/analysis; scripts/csv-assert.sh; scripts/report.sh. Snapshot conventions (the one raw export), integer histogram, metric registry, collector, the adapter interface and its adapters (Prometheus text, JSON, CSV flush, log line, OTLP push), fleet merge, health, the SQL assertions over flushed files, and the story report over the same files.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunks 1, 3, 4, 5 and 6: everything except the OTLP push adapter (chunk 15) and the health rules for shedding, an open breaker, the limit's floor and draining (chunk 7 on). Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness."
+     "Built in chunks 1, 3, 4, 5 and 6: everything except the OTLP push adapter (chunk 15) and the health rules for shedding, an open breaker, the limit's floor and draining (chunk 7 on). Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness. Chunk 6a: the story report, and the load generator's metrics in the catalog."
     ],
     "docIds": [],
     "sourceIds": [
@@ -489,7 +491,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunks 1, 3, 4, 5 and 6: everything except the OTLP push adapter (chunk 15) and the health rules for shedding, an open breaker, the limit's floor and draining (chunk 7 on). Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness."
+     "Built in chunks 1, 3, 4, 5 and 6: everything except the OTLP push adapter (chunk 15) and the health rules for shedding, an open breaker, the limit's floor and draining (chunk 7 on). Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness. Chunk 6a: the story report, and the load generator's metrics in the catalog."
     ],
     "docIds": [],
     "sourceIds": [
@@ -583,20 +585,20 @@
     "id": "c-e2e",
     "kind": "container",
     "name": "End-to-end suite and load generator",
-    "description": "test/e2e and cmd/loadgen. Each scenario is written once and runs on the simulator (tier S) and on the real binary against a real Postgres (tier R), with the CSV flush on and SQL assertions over the files. Holds the engine's operation fuzz target and the canaries. The load generator is open-loop.",
+    "description": "test/e2e; cmd/loadgen with internal/loadgen. Each scenario is written once and runs on the simulator (tier S) and on the real binary against a real Postgres (tier R), with the CSV flush on and SQL assertions over the files. Holds the engine's operation fuzz target and the canaries. The load generator is open-loop at a constant rate: every request has an intended send time that depends only on the rate, the duration and the seed, and it never waits for a reply before the next send. Operations, keys and payloads are drawn from the printed seed; two profiles, simple and errors. Latency is measured from the intended send time. Late and could-not-send requests are counted, and a SHORTFALL line with exit status 3 says when the achieved rate is below the target. Its own snapshot goes through a collector and the CSV flush.",
     "status": "planned",
     "tags": [
      "test"
     ],
     "plannedNotes": [
-     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Not built: cmd/loadgen, the open-loop load generator (chunk 6a), and make bench."
+     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Built in chunk 6a: the load generator (cmd/loadgen, internal/loadgen with its runner live and its test fake loadgentest), all of what is said of it here; the seeded mgctl model test in both tiers; and a tier R test of the run targets (16 tier R tests now). Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14)."
     ],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
     "parentId": "gw",
-    "technology": "Go test code",
+    "technology": "Go test code, Go CLI",
     "containerType": "application"
    },
    {
@@ -610,14 +612,84 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Not built: cmd/loadgen, the open-loop load generator (chunk 6a), and make bench."
+     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Built in chunk 6a: the load generator (cmd/loadgen, internal/loadgen with its runner live and its test fake loadgentest), all of what is said of it here; the seeded mgctl model test in both tiers; and a tier R test of the run targets (16 tier R tests now). Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14)."
     ],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
     "parentId": "gw",
-    "technology": "Go test code",
+    "technology": "Go test code, Go CLI",
+    "containerType": "application"
+   },
+   {
+    "id": "c-mgctl",
+    "kind": "container",
+    "name": "Operator client (mgctl)",
+    "description": "cmd/mgctl and internal/mgctl. A read-only client for a running gateway. Subcommands: health, stats (with -watch), metrics, tenants (the tenant-labelled points of the stats — none until a component exports a tenant label — and the configured tenant users), config show (instance, build, fingerprint and the capacity gauges; with a file, its effective settings and whether its fingerprint matches), config check (a file checked offline with the gateway's own validation), verifier (a tenant's SCRAM verifier from a password, which it never prints), and query (one statement through the proxy as a tenant: the rows, or the SQLSTATE with its error-contract row). Every admin request is a GET, so it changes nothing in a running gateway. Standard-library flag; the logic in internal/mgctl imports neither flag nor net/http. MGCTL_TRANSCRIPT=<file> writes a step log with passwords hidden.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go CLI, standard library",
+    "containerType": "application"
+   },
+   {
+    "id": "n-mgctl",
+    "kind": "container",
+    "name": "Operator client (mgctl)",
+    "description": "Neighbour in a component view: stands for the container `c-mgctl`.",
+    "status": "existing",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Go CLI, standard library",
+    "containerType": "application"
+   },
+   {
+    "id": "c-dev",
+    "kind": "container",
+    "name": "Dev stack and run targets",
+    "description": "deploy/dev and the Makefile targets run-up, load and run-down. make run-up builds the gateway, mgctl and the load generator, starts a Postgres 17 and a Prometheus with docker-compose (pinned images, every port on 127.0.0.1 only, tmpfs data, names prefixed mg-), starts the gateway on the host with a generated config, waits until Prometheus reports the gateway's /metrics target up, and prints the URLs of three ready-made graphs. make load puts open-loop load on it; make run-down stops the gateway and removes every container, network and volume, keeping the CSV runs for the report.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Bash, docker-compose, make",
+    "containerType": "application"
+   },
+   {
+    "id": "n-dev",
+    "kind": "container",
+    "name": "Dev stack and run targets",
+    "description": "Neighbour in a component view: stands for the container `c-dev`.",
+    "status": "existing",
+    "tags": [
+     "external",
+     "neighbour"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "gw",
+    "technology": "Bash, docker-compose, make",
     "containerType": "application"
    },
    {
@@ -1733,7 +1805,7 @@
     "id": "s-simtest",
     "kind": "component",
     "name": "Seeds, replay, sweep",
-    "description": "internal/sim/simtest. The seed flag and variables, pinned seeds, the sweep over seeds, the run-twice check, the failure report with the trace tail and the REPLAY line. scripts/sweep.sh and scripts/fuzz.sh run the scenario tests and fuzz targets through it.",
+    "description": "internal/sim/simtest. The seed flag and variables, pinned seeds, the sweep over seeds, the run-twice check, the failure report with the trace tail and the REPLAY line. scripts/sweep.sh and scripts/fuzz.sh run the scenario tests and fuzz targets through it; sweep.sh prints one line per scenario and a failure's lines under it (the raw output under VERBOSE=1).",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -2084,7 +2156,7 @@
     "id": "o-catalog",
     "kind": "component",
     "name": "Metric catalog and schema document",
-    "description": "internal/obs/catalog. The registry of every source the product registers, and the generator of docs/csv-schema.md (columns of the three files and every metric). Its test fails when the committed document differs from the code; scripts/gen-docs.sh regenerates or checks it.",
+    "description": "internal/obs/catalog. The registry of every source the product registers, with the load generator's metrics beside them, and the generator of docs/csv-schema.md (columns of the three files and every metric). Its test fails when the committed document differs from the code; scripts/gen-docs.sh regenerates or checks it.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -2117,6 +2189,23 @@
     "kind": "component",
     "name": "SQL assertions and their runner",
     "description": "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The assertion files check the direct baselines' counts and, for each wire scenario, that startup failures by reason, TLS requests by answer and handshake failures equal what was injected and sent, and for the classifier scenarios that rejects equal the statements sent and the fake Postgres started only what was forwarded (nothing in the reject-only scenario). For the end-to-end scenarios of both tiers: conservation per instance, the resets against the leases ended and, where the scenario has a fault, error-contract replies by row = faults injected; in tier S also proxy completed = workload completed and replies by row = what the clients saw.",
+    "status": "existing",
+    "tags": [
+     "test"
+    ],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Bash, SQL"
+   },
+   {
+    "id": "o-report",
+    "kind": "component",
+    "name": "Story report",
+    "description": "scripts/report.sh and test/analysis/report; make report RUNS=<dirs> or SEEDS=N. Reads the flushed files of any set of runs and prints seven sections for people: what the runs prove, how the data was collected, the inputs, coverage (requests by outcome, replies by error-contract row, statements by class, the load generator's totals), every failed assertion in full, every oracle mismatch in full, and a verdict table that ends in one VERDICT line. Runs each scenario's assertion files and five built-in checks of the load generator's numbers. Fails closed; exits 1 on any failed check; the same runs give byte-identical output. The assertions stay the gate.",
     "status": "existing",
     "tags": [
      "test"
@@ -2678,7 +2767,7 @@
     "id": "s11",
     "sourceId": "c-e2e",
     "targetId": "c-shell",
-    "label": "Tier R: runs the real binary and drives it with test clients (open-loop load from chunk 6a)",
+    "label": "Tier R: runs the real binary and drives it with test clients. The load generator logs in as its tenants and sends open-loop load",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -2777,6 +2866,175 @@
      "plan"
     ],
     "technology": "Go types"
+   },
+   {
+    "id": "g1",
+    "sourceId": "operator",
+    "targetId": "c-mgctl",
+    "label": "Asks a running gateway how it is; checks a config file; derives a verifier; runs one statement as a tenant",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Command line"
+   },
+   {
+    "id": "g2",
+    "sourceId": "c-mgctl",
+    "targetId": "c-shell",
+    "label": "Reads /healthz, /stats and /metrics (GET only); logs in as a tenant and runs one statement",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "HTTP admin port; Postgres wire protocol, TCP, TLS on request"
+   },
+   {
+    "id": "g3",
+    "sourceId": "c-mgctl",
+    "targetId": "c-pgwire",
+    "label": "Names an error reply by its error-contract row; uses the SCRAM client and the verifier functions",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go import"
+   },
+   {
+    "id": "g4",
+    "sourceId": "c-mgctl",
+    "targetId": "c-config",
+    "label": "config check and config show load a file with the gateway's own validation and fingerprint",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go import"
+   },
+   {
+    "id": "g5",
+    "sourceId": "c-mgctl",
+    "targetId": "c-sim",
+    "label": "Its session frames and decodes messages with the test client (internal/testclient)",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go import"
+   },
+   {
+    "id": "g6",
+    "sourceId": "c-e2e",
+    "targetId": "c-mgctl",
+    "label": "The load generator logs in with mgctl's session and TLS settings and tells a proxy-made reply by its lookup",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go import"
+   },
+   {
+    "id": "g7",
+    "sourceId": "c-mgctl",
+    "targetId": "c-work",
+    "label": "Prints whether an error-contract row says the statement reached the database (the three-valued type)",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go types"
+   },
+   {
+    "id": "d1",
+    "sourceId": "developer",
+    "targetId": "c-dev",
+    "label": "make run-up, make load, make run-down",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "make"
+   },
+   {
+    "id": "d2",
+    "sourceId": "c-dev",
+    "targetId": "c-shell",
+    "label": "Builds the binary and starts it on the host with a generated config",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Process"
+   },
+   {
+    "id": "d3",
+    "sourceId": "c-dev",
+    "targetId": "pg",
+    "label": "Starts a Postgres 17 container with the gateway's role and the table the load uses",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "docker-compose"
+   },
+   {
+    "id": "d4",
+    "sourceId": "c-dev",
+    "targetId": "c-e2e",
+    "label": "make load runs the load generator against the gateway",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Process"
+   },
+   {
+    "id": "d5",
+    "sourceId": "c-dev",
+    "targetId": "c-mgctl",
+    "label": "Derives the tenants' verifiers, checks the generated config and waits for health with it",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Process"
+   },
+   {
+    "id": "d6",
+    "sourceId": "c-dev",
+    "targetId": "prom",
+    "label": "Starts a Prometheus that scrapes the gateway's /metrics every second; waits until the target is up",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "docker-compose, HTTP"
    },
    {
     "id": "e1",
@@ -5044,7 +5302,7 @@
     "id": "m51",
     "sourceId": "n-e2e",
     "targetId": "s-testclient",
-    "label": "The scripted clients of both tiers frame, decode and track their session with it",
+    "label": "The scripted clients of both tiers frame, decode and track their session with it; the load generator encodes its statements with it",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -5278,14 +5536,14 @@
     "id": "o18",
     "sourceId": "n-e2e",
     "targetId": "o-csv",
-    "label": "Turns the flush on for every run in both tiers; checks the final flush equals the snapshot (tier R: reads the binary's files back and runs the round-trip check on them)",
+    "label": "Turns the flush on for every run in both tiers; checks the final flush equals the snapshot (tier R: reads the binary's files back and runs the round-trip check on them). The load generator flushes its own snapshot through the bounded queue",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
-    "technology": "Go test"
+    "technology": "Go test, Go"
    },
    {
     "id": "o19",
@@ -5318,7 +5576,7 @@
     "sourceId": "prom",
     "targetId": "n-shell",
     "label": "Can scrape /metrics directly instead (no Collector)",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -5886,6 +6144,84 @@
     "technology": "Go test"
    },
    {
+    "id": "o70",
+    "sourceId": "n-e2e",
+    "targetId": "o-collector",
+    "label": "The load generator registers its own source (component loadgen), publishes once a second and at the end of the run",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o71",
+    "sourceId": "o-catalog",
+    "targetId": "n-e2e",
+    "label": "Lists every metric the load generator declares",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o72",
+    "sourceId": "n-mgctl",
+    "targetId": "o-json",
+    "label": "Decodes the /stats document back into a snapshot",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o73",
+    "sourceId": "o-report",
+    "targetId": "o-assert",
+    "label": "Uses its guard and views, and runs each scenario's assertion files",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Bash, SQL"
+   },
+   {
+    "id": "o74",
+    "sourceId": "o-report",
+    "targetId": "duckdb",
+    "label": "Runs the guard, the views, its section queries and every check",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "DuckDB CLI"
+   },
+   {
+    "id": "o75",
+    "sourceId": "o-report",
+    "targetId": "csvfiles",
+    "label": "Finds the run directories and reads the three files of each",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Bash, read_csv"
+   },
+   {
     "id": "o50",
     "sourceId": "n-sim",
     "targetId": "o-conserve",
@@ -6373,6 +6709,9 @@
      "elementId": "developer"
     },
     {
+     "elementId": "operator"
+    },
+    {
      "elementId": "c-sim",
      "detail": {
       "diagramId": "component-simulator"
@@ -6380,6 +6719,12 @@
     },
     {
      "elementId": "c-e2e"
+    },
+    {
+     "elementId": "c-mgctl"
+    },
+    {
+     "elementId": "c-dev"
     },
     {
      "elementId": "c-shell"
@@ -6412,10 +6757,16 @@
      "elementId": "c-retry"
     },
     {
+     "elementId": "c-config"
+    },
+    {
      "elementId": "pgproto3"
     },
     {
      "elementId": "pg"
+    },
+    {
+     "elementId": "prom"
     }
    ],
    "edges": [
@@ -6478,6 +6829,45 @@
     },
     {
      "relationshipId": "s16"
+    },
+    {
+     "relationshipId": "g1"
+    },
+    {
+     "relationshipId": "g2"
+    },
+    {
+     "relationshipId": "g3"
+    },
+    {
+     "relationshipId": "g4"
+    },
+    {
+     "relationshipId": "g5"
+    },
+    {
+     "relationshipId": "g6"
+    },
+    {
+     "relationshipId": "g7"
+    },
+    {
+     "relationshipId": "d1"
+    },
+    {
+     "relationshipId": "d2"
+    },
+    {
+     "relationshipId": "d3"
+    },
+    {
+     "relationshipId": "d4"
+    },
+    {
+     "relationshipId": "d5"
+    },
+    {
+     "relationshipId": "d6"
     }
    ],
    "legend": {
@@ -8172,6 +8562,9 @@
      "elementId": "o-assert"
     },
     {
+     "elementId": "o-report"
+    },
+    {
      "elementId": "n-engine"
     },
     {
@@ -8179,6 +8572,9 @@
     },
     {
      "elementId": "n-e2e"
+    },
+    {
+     "elementId": "n-mgctl"
     },
     {
      "elementId": "n-sim"
@@ -8397,6 +8793,24 @@
     },
     {
      "relationshipId": "o48"
+    },
+    {
+     "relationshipId": "o70"
+    },
+    {
+     "relationshipId": "o71"
+    },
+    {
+     "relationshipId": "o72"
+    },
+    {
+     "relationshipId": "o73"
+    },
+    {
+     "relationshipId": "o74"
+    },
+    {
+     "relationshipId": "o75"
     }
    ],
    "legend": {
@@ -8476,7 +8890,7 @@
    "id": "plan",
    "title": "mini-gateway PLAN.md (approved 2026-11-24)",
    "url": "https://github.com/nickstrad/mini-gateway/blob/main/PLAN.md",
-   "notes": "Target architecture. Built so far: chunks 0–6. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
+   "notes": "Target architecture. Built so far: chunks 0–6a. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
   }
  ]
 }
