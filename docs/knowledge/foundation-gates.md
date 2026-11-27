@@ -218,6 +218,9 @@ points at an unpacked copy elsewhere.
 - The link check reads every `href` and `src` attribute of every tag in a page, Markdown
   links and raw HTML alike, in double quotes, single quotes or none. Not read: `srcset`,
   URLs inside CSS, and links a script builds at run time.
+- A relative link must name a file (or a folder holding a file) in `git ls-files`: a file
+  that exists only in the worktree, such as an ignored gate log, fails the build (chunk 6a,
+  canary `g9-ignored-link`).
 
 ## CI leaves out the attack harnesses (2026-11-25)
 

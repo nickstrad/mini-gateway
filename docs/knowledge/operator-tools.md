@@ -39,6 +39,11 @@ Facts a later builder needs before touching `cmd/loadgen`, `cmd/mgctl`, `deploy/
   with `-config` compares that file's fingerprint with the running one.
 - `config check` is `config.Load`, the gateway's own path; its output equals
   `mini-gateway -check` after the program-name prefix (binary differential test).
+- `mgctl query` names a proxy-made error by the longest row message that matches, preferring
+  a row of the reply's severity: `lost-after-read`'s message is a prefix of
+  `lost-in-transaction`'s (both 08006).
+- `-password -` (mgctl and loadgen) reads one line with `mgctl.ReadPasswordLine`: more than
+  1,024 bytes is refused, never cut.
 - The model test in tier S drives the logic against `proxysim.World` with a pull-style
   `io.ReadWriter` over simnet (`Read` steps the simulator until bytes arrive).
 
@@ -72,6 +77,11 @@ Facts a later builder needs before touching `cmd/loadgen`, `cmd/mgctl`, `deploy/
 - Recorded runs for the golden tests are `test/analysis/report/testdata/e2e-runs.tar.gz`
   (re-record command in the chunk notes); `MG_REPORT_UPDATE=1` rewrites the goldens.
   `REPORT_PLANT=ignore-failures` is the report's test-only canary.
+- The report fails a run whose metrics.csv has fewer distinct `flush_seq` values than run.csv's
+  `flushes` (`sections/flushes.sql`, run with the schema guard), and a directory argument with
+  no run below it. The `errors_by_class` label `other` is the load tool's bounded overflow.
+- `chaos.sh` fails on a non-zero `go test` exit even when every scenario passed, and on a
+  failed parent scenario; `run-down` fails when Docker cannot list the stack.
 - `sweep.sh`/`chaos.sh` have `SWEEP_GO`/`CHAOS_GO` seams for fast script tests with a stub `go`.
 
 ## The promotion pass
