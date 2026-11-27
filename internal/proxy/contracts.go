@@ -74,7 +74,7 @@ func configured(def string) string { return def + "; zero means the default" }
 func CapacityRows(c Config) []CapacityRow {
 	c = c.WithDefaults()
 	a := c.admissionConfig()
-	return []CapacityRow{
+	return append([]CapacityRow{
 		{"Client connections", "proxy memory and file descriptors", configured(itoa(c.MaxClients)), "limits.max_clients", "FATAL 53300 (too-many-clients), connection closed", "timeouts.client_startup", "engine.clients_connected"},
 		{"Clients in startup", "handshake and SCRAM CPU during a reconnection storm", configured(itoa(c.MaxStartup)), "limits.max_startup", "FATAL 53300 (too-many-clients), connection closed", "timeouts.client_startup", "engine.clients_in_startup"},
 		{"Database connections, open plus connecting (pool core; the fleet share of fleet.backend_connections)", "the database's connection slots", configured(itoa(c.Connections)), "pool.connections", "Requests wait in the queue; a checkout at the cap counts as exhausted", "timeouts.database_connect", "pool.open_plus_connecting"},
@@ -89,5 +89,5 @@ func CapacityRows(c Config) []CapacityRow {
 		{"Unprocessed client input", "proxy memory under a pipelining client", itoa(maxClientInput) + " bytes", "(constant)", "FATAL 08P01, connection closed", "timeouts.client_mid_message", "-"},
 		{"Held error or end-marker message of a reply", "proxy memory", "database max message + 5 bytes", "(constant)", "Database connection closed as a protocol violation", "timeouts.statement", "-"},
 		{"Reset reply", "proxy memory", itoa(MaxResetReply) + " bytes", "(constant)", "Reset fails, connection closed", "timeouts.reset", "engine.resets_failed"},
-	}
+	}, fairnessCapacityRows(c)...)
 }

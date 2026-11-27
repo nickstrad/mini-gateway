@@ -22,7 +22,7 @@ var none = obs.Labels{}
 
 // Metrics returns the full metric descriptor catalog for component "admission".
 func Metrics() []obs.MetricDesc {
-	return []obs.MetricDesc{
+	return append([]obs.MetricDesc{
 		obs.GaugeDesc("rule", lm, "1 for the queue rule this instance runs (mode: timeout, control-law, fifo, folly; the last two are simulator arms)."),
 		obs.GaugeDesc("lifo_adaptive", 0, "1 when adaptive LIFO is on (queue.lifo adaptive), 0 when off."),
 		obs.GaugeDesc("capacity", 0, "Total capacity across the tenant queues (queue.capacity)."),
@@ -61,7 +61,7 @@ func Metrics() []obs.MetricDesc {
 		obs.GaugeDesc("tenant_load", lt, "This tenant queue's 0-100 load gauge."),
 		obs.GaugeDesc("tenant_shedding", lt, "1 while this tenant queue shed within the last interval."),
 		obs.HistogramDesc("tenant_queue_wait", lt, obs.UnitNs, "Time a served request of this tenant waited."),
-	}
+	}, fairMetrics()...)
 }
 
 func b(v bool) int64 {
@@ -105,6 +105,7 @@ func Map(s admission.Snapshot, e *obs.Emitter) {
 	}
 	e.Gauge("load", none, s.Load)
 	e.Gauge(MetricShedding, none, s.Shedding)
+	mapFair(s.Fair, e)
 	if e.Detail() {
 		e.Histogram("queue_wait", none, s.QueueWait)
 		for _, t := range s.PerTenant {
@@ -135,6 +136,7 @@ func mapTenant(t admission.TenantSnapshot, e *obs.Emitter) {
 	if t.QueueWait.Count > 0 {
 		e.Histogram("tenant_queue_wait", l, t.QueueWait)
 	}
+	mapFairTenant(t, e)
 }
 
 // Source wraps a snapshot provider as an obs.Source for component "admission".

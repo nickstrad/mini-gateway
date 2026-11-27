@@ -68,10 +68,20 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 
 | Component | Metric | Kind | Labels | Unit | Merge | Help |
 | --- | --- | --- | --- | --- | --- | --- |
+| `admission` | `active_tenants` | gauge | — | count | sum | Tenants with a request waiting or a lease in flight now; the limit is divided among them. |
+| `admission` | `active_tenants_peak` | gauge | — | count | max | Most active tenants at once. |
 | `admission` | `capacity` | gauge | — | count | sum | Total capacity across the tenant queues (queue.capacity). |
+| `admission` | `fair_states` | gauge | — | count | sum | Tenants with a lease in flight, each holding one dispatcher state. |
+| `admission` | `fair_states_peak` | gauge | — | count | max | Most tenants with a lease in flight at once. |
+| `admission` | `held` | counter | reason | count | sum | Selections that lent nothing, by reason (limit: the limit is reached; share: one lease short of the limit, every waiting tenant is at or above its share). |
+| `admission` | `in_flight` | gauge | — | count | sum | Leases in flight now across tenants; a transaction held open counts until its lease ends. |
+| `admission` | `in_flight_peak` | gauge | — | count | max | Most leases in flight at once. |
+| `admission` | `lease_ends` | counter | — | count | sum | Leases ended on any path (release, dirty connection, lost connection, shutdown). |
+| `admission` | `lease_starts` | counter | — | count | sum | Leases started, as reported to the dispatcher. |
 | `admission` | `lifo_adaptive` | gauge | — | count | sum | 1 when adaptive LIFO is on (queue.lifo adaptive), 0 when off. |
 | `admission` | `lifo_switches` | counter | mode | count | sum | Adaptive LIFO switches (mode: on, off). |
 | `admission` | `lifo_tenants` | gauge | — | count | sum | Tenant queues serving newest first now. |
+| `admission` | `limit` | gauge | — | count | sum | Most leases in flight at once across tenants (the fair limit; pool.connections). |
 | `admission` | `load` | gauge | — | count | sum | Highest 0-100 load gauge over the tenant queues: 100 x min queue delay of the interval / (2 x target). |
 | `admission` | `max_tenants` | gauge | — | count | sum | Cap on tenant queues (queue.max_tenants). |
 | `admission` | `oldest_age` | gauge | — | ns | sum | Age of the oldest queued request at the last queue operation. |
@@ -84,13 +94,16 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `admission` | `queued` | gauge | — | count | sum | Requests waiting in the tenant queues now. |
 | `admission` | `queued_peak` | gauge | — | count | max | Most requests waiting at once. |
 | `admission` | `removed` | counter | — | count | sum | Queued requests removed because their client left. |
+| `admission` | `rounds` | counter | — | count | sum | Turns given: requests chosen for a connection in round-robin order across tenants. |
 | `admission` | `rule` | gauge | mode | count | sum | 1 for the queue rule this instance runs (mode: timeout, control-law, fifo, folly; the last two are simulator arms). |
 | `admission` | `rule_states` | gauge | mode | count | sum | Tenant queues in each rule state (mode: normal, standing, dropping, overloaded). |
+| `admission` | `saturated_time` | counter | — | ns | sum | Time with leases in flight at the limit. |
 | `admission` | `served` | counter | — | count | sum | Requests taken from a queue to a database connection. |
 | `admission` | `shed` | counter | reason | count | sum | Requests shed, by reason (rule, at-pop, overflow, total, tenants, deadline, undrained: 53M01; breaker: 53M03, refused while queued because the breaker opened). |
 | `admission` | `shedding` | gauge | — | count | sum | Tenant queues that shed within the last interval. |
 | `admission` | `tenant_capacity` | gauge | tenant | count | sum | Capacity of this tenant's queue. |
 | `admission` | `tenant_depth` | gauge | tenant | count | sum | Requests waiting in this tenant's queue now. |
+| `admission` | `tenant_in_flight` | gauge | tenant | count | sum | Leases this tenant holds now, held transactions included. |
 | `admission` | `tenant_lifo` | gauge | tenant | count | sum | 1 while this tenant queue serves newest first. |
 | `admission` | `tenant_lifo_switches` | counter | tenant, mode | count | sum | Adaptive LIFO switches of this tenant (mode: on, off). |
 | `admission` | `tenant_load` | gauge | tenant | count | sum | This tenant queue's 0-100 load gauge. |
@@ -102,8 +115,10 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `admission` | `tenant_removed` | counter | tenant | count | sum | Requests of this tenant removed because the client left. |
 | `admission` | `tenant_rule_state` | gauge | tenant, mode | count | sum | 1 for this tenant queue's rule state (mode: normal, standing, dropping, overloaded). |
 | `admission` | `tenant_served` | counter | tenant | count | sum | Requests of this tenant served from its queue. |
+| `admission` | `tenant_share` | gauge | tenant | count | sum | This tenant's share of the limit now (limit x weight / active weight, at least 1); 0 while inactive. |
 | `admission` | `tenant_shed` | counter | tenant, reason | count | sum | Requests of this tenant shed, by reason. |
 | `admission` | `tenant_shedding` | gauge | tenant | count | sum | 1 while this tenant queue shed within the last interval. |
+| `admission` | `tenant_time_at_share` | counter | tenant | ns | sum | Time this tenant held at least its share of the limit. |
 | `admission` | `tenants` | gauge | — | count | sum | Tenant queues that exist now. |
 | `admission` | `tenants_created` | counter | — | count | sum | Tenant queues created on first use. |
 | `admission` | `tenants_evicted` | counter | — | count | sum | Empty tenant queues evicted at the tenant cap for a new tenant. |
