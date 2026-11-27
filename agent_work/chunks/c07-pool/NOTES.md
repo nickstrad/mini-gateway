@@ -283,4 +283,22 @@ Tests: +2,563. Inside the brief's 2,500–3,000 estimate for product code; no sp
 
 ## Gate result
 
-GATE-PLACEHOLDER
+Full run: `scripts/gate.sh c07-pool` (build stage) at `8659484`, 2026-11-27, clean tree, host load
+13–18 (three builds at once). **overall fail, for one reason outside this chunk's code**:
+
+| Check | Result |
+| --- | --- |
+| G0 tools, gofmt, build, vet, tools-vet, tools-test, tidy | pass |
+| G1 detlint (24 package patterns), importlint, boundlint, paniccheck | pass |
+| G2 comments | pass |
+| G3 unit | **fail**: only `internal/pgwire` `TestClassifierSpanKeywordChecksGrowLinearly` and `agent_work/adversarial/c05-classifier-neon` `TestAdv_5_QuadraticSpanScanDoS` — both wall-clock ratio tests of chunk 5's classifier (16× input must take ≤ 96× time; measured 98.6× and 187×). This chunk does not change the classifier (it adds one error-table row). Each passed 3 of 3 runs alone right after (load 13.6). Every other package passed, `test/e2e` in 313 s. |
+| G3 race | pass (4 package patterns) |
+| G4 markers, sweep | pass (200 seeds per scenario, pool scenarios capped at 20 / 3; 1,095 s) |
+| G5 fuzz | pass: 17 targets, 15 fuzz, 2 seed-sweep at the 100/s floor on the loaded host |
+| G6 tier R | pass (299 s; chunk 6 and chunk 7 tier R tests) |
+| G7 CSV assertions | pass (4,632 run directories, 80 scenarios with SQL files; 2,630 s) |
+| G8 generated documents | pass |
+| G9 site | pass |
+| G10 chunk extra | pass: `FuzzEngineOps` found its planted bug after 3 s; `FuzzPoolOps` found `PlantResetClearsSuspect` after 3 s (budget 20 s each) |
+
+`result.json` is not committed. RERUN-PLACEHOLDER
