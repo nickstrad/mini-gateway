@@ -482,7 +482,8 @@ set behind the admission core; `pool-admission-restart` is the one tier S run of
 
 | Test | Change | Why |
 | --- | --- | --- |
-| chunk 7 tier R pool tests (`TestTierRPool*`) | none in code; they now start the gateway with chunk 8's `GatewayOpts.Queue` default `RelaxedQueue` (interval 5 s, target 1 s) | the binary now sheds by the timeout rule; chunk 8 gave every tier R gateway the relaxed rule because those tests queue longer than 100 ms on purpose (the headline's 500 clients through 16 connections) |
+| chunk 7 tier R pool tests (`TestTierRPool*`) | they start the gateway with chunk 8's `GatewayOpts.Queue` default `RelaxedQueue` (interval 5 s, target 1 s) | the binary now sheds by the timeout rule; chunk 8 gave every tier R gateway the relaxed rule because those tests queue longer than 100 ms on purpose |
+| chunk 7 `TestTierRPoolHeadlineDatabaseConnectionsDirectAgainstProxy`, `TestTierRPoolReconnectionStormWithClientTLS` | `Queue: oneTenantQueue()` = `RelaxedQueue` plus `queue.tenant_capacity: 500` (commit `1117772`) | all 500 clients are one tenant; chunk 8's tenant ring defaults to min(256, `queue.capacity`), so 244 requests were shed `53M01` (overflow) and the tests saw 256 / 259 of 500 served. The tests already set `queue.capacity` to the client count for the same reason; the tenant ring is the same configuration one level down, not a weaker claim (500 of 500 served, 16 backends) |
 | chunk 8 `TestTierRAdmissionOverloadWithPgSleep` | none in code; it now runs on the pool core (on-demand dials, the core's reset accounting) instead of the fixed set | the binary's pool is chunk 7's |
 | chunk 6 `TestTierRQueueFull` | both chunks' edits kept: chunk 7's warm-up query, chunk 8's explicit interval 5 s / target 1 s | each chunk's default needed one of them |
 | chunk 6 `TestTierRDatabaseLegTLSModes` | chunk 7's edit kept (accepts `53M03` as well as `53M01` for the wrong CA) | unchanged by the join |
@@ -490,8 +491,8 @@ set behind the admission core; `pool-admission-restart` is the one tier S run of
 | `internal/proxy` `newCoreRig` | applies the package variable `coreAdmission` (zero by default, so every chunk 7 engine test runs as before) | lets `TestJoinEveryCoreEngineTestHoldsWithTheAdmissionQueue` rerun chunk 7's engine tests behind each product rule |
 | `internal/obs/simrun` baseline tests | merged as above | both chunks changed them |
 
-Tier R was not part of this join's required checks (G6 runs at landing); see "Join results" for
-what was run.
+Tier R was not part of this join's required checks (G6 runs at landing); it was run once anyway
+(see "Join results"), which found the two headline tests above.
 
 **(e) Config keys.** One `File.validate` validates both chunks' keys and joins every error:
 `proxyCaps().Validate()` (the engine config with the pool core's config and the admission
@@ -559,6 +560,8 @@ All on 2026-11-27, host load 5–8 (other agents and a landing gate's tier R on 
 | 5-seed sweep: `DST_SEEDS=5 RUN_DIR=… go test -run '^(TestScenarioPool|TestScenarioAdmission.*)$' ./test/e2e` | `8791d9a` | pass (127 s); then `scripts/csv-assert.sh` per scenario directory over its `test/analysis/<scenario>/*.sql`: 28 directories (22 pool incl. `pool-admission-restart`, 6 admission), every SQL file 0 failures. Heavy pool scenarios ran 3 seeds, chunk 8's overload scenarios 1 (both by design) |
 | chunk 7 gate extra (`agent_work/chunks/c07-pool/gate/extra.sh`, now with `TestCanaryJoin` and `TestJoin`) | `8791d9a` | pass; `fuzz-plant.sh`: `FuzzEngineOps` 13 s, `FuzzPoolOps` 3 s, `FuzzAdmissionOps` 2 s (budget 20 s each) |
 | chunk 8 gate extra (`agent_work/chunks/c08-admission/gate/extra.sh`) | `8791d9a` | pass; `fuzz-plant.sh` 2 s / 5 s / 1 s; `admission-head-to-head.sh --check`: the table reproduced exactly |
+| `GATE_BASE=work/c08-admission GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh c07-pool`, once | `9f4cbd0` (clean) | **overall pass** (`counts_for_landing=false`, partial by request): G0 all pass; G1 detlint (27 package patterns), importlint, boundlint, paniccheck pass; G2 comments pass against baseline `3f38a1d` (chunk 8's tip: main does not hold chunk 8 yet, so the default baseline, the merge base with main, would count chunk 8's prose-seat comments as new); G3 unit pass (394 s, every package incl. every adversarial package; none of the wall-clock growth tests failed), G3 race pass (6 patterns). `result.json` not committed |
+| tier R, all of it: `MG_TIER_R=1 go test -run '^TestTierR' ./test/e2e`, then `csv-assert.sh` over every `tierr-*` directory with SQL files | `1117772` | first run of the chunk 7 / 8 / 6 subset at `9f4cbd0`: `TestTierRPoolHeadline…` and `TestTierRPoolReconnectionStorm…` failed (256 and 259 of 500 served: chunk 8's tenant ring, (d)); fixed in `1117772` (tier R test only, after the gate: `gofmt` and `go vet ./test/e2e` clean, no comment); then all 22 tier R tests pass (headline: 500 connected, 0 refused, 16 backends, 500 queries ok; storm: 500 of 500; `TestTierRAdmissionOverloadWithPgSleep` on the pool core: timeout 295 ok / 5,705 shed at 85/s against 89/s, max served-wait bucket 73 ms; control law 320 / 5,680 at 84/s), and the 17 `tierr-*` SQL directories 0 failures |
 
 ## Commands
 
