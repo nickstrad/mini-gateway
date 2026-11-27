@@ -1,0 +1,32 @@
+func advQuery(t *testing.T,c *RealClient,q string) []string {t.Helper();r:=c.Query(q);if HasToken(r,"E:")||!HasToken(r,"Z:"){t.Fatalf("query %q: %v",q,r)};return r}
+func advDial(t *testing.T,env *RealEnv,g *Gateway,tenant int)*RealClient{t.Helper();c,e:=env.Dial(g,tenant,false);if e!=nil{t.Fatal(e)};t.Cleanup(c.Close);return c}
+func advLive(t *testing.T,ending,policy,reseed string,large bool){
+ t.Log("seed=271828")
+ env:=tierR(t);g:=gateway(t,env,GatewayOpts{Scenario:"adv-"+t.Name(),Conns:1,Reset:policy,Reseed:reseed})
+ h:=advDial(t,env,g,2)
+ secret:="adv-271828-'quoted-雪";if large{secret=strings.Repeat("a",32768)+secret}
+ quoted:=strings.ReplaceAll(secret,"'","''")
+ advQuery(t,h,"BEGIN")
+ if ending=="savepoint"{advQuery(t,h,"SAVEPOINT before_state")}
+ advQuery(t,h,"SELECT public.do_custom('"+quoted+"'), public.do_cursor()")
+ advQuery(t,h,"SELECT public.do_role()")
+ probe:="SELECT coalesce(current_setting('mg_hostile.secret',true),''), (SELECT count(*) FROM pg_cursors), current_user <> session_user"
+ got:=advQuery(t,h,probe)
+ if !slices.Contains(got,"D:"+secret+"|1|t"){t.Fatalf("state not planted: %v",got)}
+ switch ending{case "rollback":advQuery(t,h,"ROLLBACK");case "savepoint":advQuery(t,h,"ROLLBACK TO before_state");advQuery(t,h,"COMMIT");default:advQuery(t,h,"COMMIT")}
+ h.Close()
+ if policy=="on-switch"{
+  same:=advDial(t,env,g,2);got=advQuery(t,same,probe);same.Close()
+  if !slices.Contains(got,"D:"+secret+"|1|t"){t.Fatalf("same-tenant state lost: %v",got)}
+ }
+ other:=advDial(t,env,g,1);got=advQuery(t,other,probe)
+ if !slices.Contains(got,"D:|0|f"){t.Fatalf("state on immediate next tenant lease: %v",got)}
+ // A second observation also proves recovery and reuse after cleanup.
+ if !HasToken(advQuery(t,other,"SELECT 271828"),"D:271828"){t.Fatal("no successful query after cleanup")}
+}
+func TestProbeLive_CommitMixed(t *testing.T){advLive(t,"commit","always","off",false)}
+func TestProbeLive_RollbackMixed(t *testing.T){advLive(t,"rollback","always","off",false)}
+func TestProbeLive_SavepointMixed(t *testing.T){advLive(t,"savepoint","always","off",false)}
+func TestProbeLive_AlwaysLargeSecret(t *testing.T){advLive(t,"commit","always","on",true)}
+func TestProbeLive_OnSwitchImmediate(t *testing.T){advLive(t,"commit","on-switch","off",false)}
+func TestProbeLive_OnSwitchReseed(t *testing.T){advLive(t,"commit","on-switch","on",false)}
