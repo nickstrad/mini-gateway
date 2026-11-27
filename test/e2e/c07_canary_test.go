@@ -65,7 +65,7 @@ func TestCanaryJoinBreakerFlushThroughPopBreaksTheAdmissionCount(t *testing.T) {
 	sp := AdmissionRestartSpec()
 	sp.Plant |= proxy.PlantBreakerFlushPops
 	got := mustFail(t, sp, checkAdmissionRestart)
-	if !strings.Contains(got, "admission") {
+	if !strings.Contains(got, "sim: invariant") || !strings.Contains(got, "admission:") {
 		t.Fatalf("the plant was caught by something other than the admission accounting: %s", got)
 	}
 	t.Logf("caught: %s", got)

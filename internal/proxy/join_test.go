@@ -2,6 +2,7 @@ package proxy_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 
@@ -329,5 +330,82 @@ func TestJoinQuiesceWaitsForTheQuietTenantQueueThenPasses(t *testing.T) {
 			t.Fatalf("%v: pool idle %d open %d after the quiet window", rule, p.Idle.Value, p.Open.Value)
 		}
 		r.agree()
+	}
+}
+
+func (r *coreRig) unchecked(k proxy.EventKind, id proxy.ConnID, b []byte) []proxy.Action {
+	return r.e.Step(r.now, proxy.Event{Kind: k, Conn: id, Data: b}, nil)
+}
+
+func TestJoinInvariantsRunTheAdmissionChecksOnAnEngineWithThePoolCore(t *testing.T) {
+	r := joinRig(t, quietRule, func(c *proxy.Config) {
+		c.Connections = 1
+		c.Pool.BreakerFailures = 1
+		c.Plant |= proxy.PlantBreakerFlushPops
+	})
+	id := r.firstLease(10, "SELECT pg_sleep(1)")
+	r.login(11, 0)
+	r.q(11, "SELECT 1")
+	r.login(12, 1)
+	r.q(12, "SELECT 2")
+	r.agree()
+	r.unchecked(proxy.EvDBClosed, id, nil)
+	if r.pool().Breaker != int64(pool.BreakerOpen) || r.e.Snapshot().BreakerFlushed != 2 {
+		t.Fatalf("premise: breaker %d, flushed %d", r.pool().Breaker, r.e.Snapshot().BreakerFlushed)
+	}
+	err := r.e.Invariants()
+	if err == nil || !strings.HasPrefix(err.Error(), "admission:") {
+		t.Fatalf("a breaker flush counted as served passed Engine.Invariants: %v", err)
+	}
+}
+
+func TestJoinInvariantsRunThePoolCoreChecksOnAnEngineWithTheAdmissionQueue(t *testing.T) {
+	r := joinRig(t, quietRule, func(c *proxy.Config) {
+		c.Connections = 4
+		c.Pool.MaxConnecting = 1
+		c.Pool.Plant = pool.PlantNoRate
+	})
+	r.login(10, 0)
+	r.q(10, "SELECT 1")
+	r.login(11, 1)
+	r.unchecked(proxy.EvClientData, 11, query("SELECT 2"))
+	if p := r.pool(); p.Connecting.Value != 2 || r.e.AdmissionSnapshot().Queued.Value != 2 {
+		t.Fatalf("premise: %d connecting, %d queued", p.Connecting.Value, r.e.AdmissionSnapshot().Queued.Value)
+	}
+	err := r.e.Invariants()
+	if err == nil || !strings.HasPrefix(err.Error(), "pool:") {
+		t.Fatalf("a pool above max_connecting passed Engine.Invariants: %v", err)
+	}
+}
+
+func TestJoinShutdownSweepsTheLastQueuedClientAtItsDeadline(t *testing.T) {
+	for _, lifo := range []admission.LIFOMode{admission.LIFOOff, admission.LIFOAdaptive} {
+		r := joinRig(t, admission.Config{Rule: admission.RuleTimeout, LIFO: lifo}, func(c *proxy.Config) { c.Connections = 1 })
+		r.firstLease(10, "SELECT pg_sleep(1)")
+		r.login(11, 1)
+		r.q(11, "SELECT 1")
+		queued := r.now
+		if as := r.e.AdmissionSnapshot(); as.Queued.Value != 1 {
+			t.Fatalf("%v: premise: queued %d", lifo, as.Queued.Value)
+		}
+		r.at(queued + proxy.Instant(admission.DefaultInterval))
+		a := r.e.Shutdown(r.now, nil)
+		if !replied(a, 11, "53M01") {
+			t.Fatalf("%v: the queued client at its deadline got %q, want 53M01", lifo, written(a, proxy.ActClientWrite, 11))
+		}
+		if err := r.e.Invariants(); err != nil {
+			t.Fatalf("%v: after shutdown: %v", lifo, err)
+		}
+		if err := r.e.Quiesce(); err != nil {
+			t.Fatalf("%v: quiesce after shutdown: %v", lifo, err)
+		}
+		s, as := r.e.Snapshot(), r.e.AdmissionSnapshot()
+		if as.Shed[admission.ReasonRule] != 1 || s.Shed != 1 || as.Removed != 0 || as.Pushes != as.Served+as.ShedTotal()+as.Removed {
+			t.Fatalf("%v: engine shed %d; admission rule sheds %d removed %d pushes %d served %d", lifo, s.Shed,
+				as.Shed[admission.ReasonRule], as.Removed, as.Pushes, as.Served)
+		}
+		if p := r.pool(); p.Open.Value != 0 || p.Connecting.Value != 0 {
+			t.Fatalf("%v: pool open %d connecting %d after shutdown", lifo, p.Open.Value, p.Connecting.Value)
+		}
 	}
 }
