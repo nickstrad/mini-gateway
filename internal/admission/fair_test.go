@@ -517,3 +517,27 @@ func TestPlantedUnpopTurnBugIsCaughtByTheFairnessModel(t *testing.T) {
 		}
 	}
 }
+
+func TestTimeAtShareChangesAtTheInstantASweepEmptiesAQueue(t *testing.T) {
+	q, err := New(Config{Rule: RuleTimeout, Target: 5 * Millisecond, Interval: 100 * Millisecond, LIFO: LIFOOff})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, _ := NewFair(FairConfig{Limit: 2, MaxLeases: 2})
+	q.SetDispatcher(f)
+	mustPush(t, q, 0, "a", 1)
+	if id, ok := q.Pop(0); !ok || id != 1 || !q.LeaseStart(0, "a") {
+		t.Fatal("premise: a leased")
+	}
+	mustPush(t, q, 0, "b", 2)
+	q.Sweep(300 * Millisecond)
+	s, ok := q.TakeShed()
+	if !ok || s.ID != 2 || s.Wait != 100*Millisecond {
+		t.Fatalf("b's request must be shed at its deadline 100ms: %+v", s)
+	}
+	for _, row := range q.Snapshot().PerTenant {
+		if row.Tenant == "a" && row.AtShare != 100*Millisecond {
+			t.Fatalf("a was at its share of 1 while b waited, from 0 to the sweep at 100ms, and not after: %d", row.AtShare)
+		}
+	}
+}
