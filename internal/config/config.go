@@ -131,7 +131,8 @@ type Tenant struct {
 	Verifier string `json:"verifier"`
 }
 
-// Pool configures the size of the backend connection set.
+// Pool configures the backend connection pool's size, dial limits, timeouts,
+// pre-lend checks, and cancel concurrency.
 type Pool struct {
 	Connections    int      `json:"connections"`
 	MaxConnecting  int      `json:"max_connecting"`
@@ -177,7 +178,8 @@ type Timeouts struct {
 	Cleanup          Duration `json:"cleanup"`
 }
 
-// Lease configures lease-release behaviour (only "always" is accepted in chunk 6).
+// Lease configures lease-release reset policy ("always" or "on-switch") and
+// optional random-seed re-seeding ("off" or "on").
 type Lease struct {
 	Reset  string `json:"reset"`
 	Reseed string `json:"reseed"`

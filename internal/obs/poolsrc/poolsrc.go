@@ -1,3 +1,5 @@
+// Package poolsrc maps pool.Snapshot onto the observability spine as component
+// "pool" and defines the breaker health rule (degraded while open or half-open).
 package poolsrc
 
 import (
@@ -10,12 +12,15 @@ const (
 	lr = obs.LabelReason
 	lm = obs.LabelMode
 
+	// MetricBreaker is the pool metric name reporting breaker state (0/1/2).
 	MetricBreaker = "breaker_state"
-	CheckBreaker  = "breaker"
+	// CheckBreaker is the health-check rule name for the pool circuit breaker.
+	CheckBreaker = "breaker"
 )
 
 var none = obs.Labels{}
 
+// Metrics returns the complete metric descriptor list for component "pool".
 func Metrics() []obs.MetricDesc {
 	return []obs.MetricDesc{
 		obs.GaugeDesc("capacity", 0, "The cap on open plus connecting database connections (pool.connections, the fleet share)."),
@@ -77,6 +82,7 @@ func Metrics() []obs.MetricDesc {
 	}
 }
 
+// Map emits every gauge, counter, and (when detail is enabled) histogram of s.
 func Map(s pool.Snapshot, e *obs.Emitter) {
 	gauges := []struct {
 		name string
@@ -132,10 +138,13 @@ func Map(s pool.Snapshot, e *obs.Emitter) {
 	}
 }
 
+// Source returns an obs.Source that collects component "pool" from snap.
 func Source(snap func() pool.Snapshot) obs.Source {
 	return obs.NewSource(obs.ComponentPool, Metrics(), snap, Map)
 }
 
+// HealthRules returns the breaker health rule, reporting StateDegraded while
+// the breaker is open or half-open and StateOK while closed.
 func HealthRules() []obs.Rule {
 	return []obs.Rule{{Name: CheckBreaker, Check: func(s obs.InstanceSnapshot) (obs.State, string) {
 		switch s.Value(obs.ComponentPool, MetricBreaker, none) {

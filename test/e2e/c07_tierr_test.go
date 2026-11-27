@@ -49,6 +49,9 @@ func poolMetric(final obs.InstanceSnapshot, metric string) int64 {
 	return final.Value(obs.ComponentPool, metric, obs.Labels{})
 }
 
+// TestTierRPoolEmptyQueryCheckAndServerKeepalive proves against real Postgres 17
+// that the empty query returns EmptyQueryResponse+ReadyForQuery(I), server keepalive
+// startup parameters take effect, and database sockets carry a kernel keepalive timer.
 func TestTierRPoolEmptyQueryCheckAndServerKeepalive(t *testing.T) {
 	env := tierR(t)
 	d, err := env.DialDirect(false)
@@ -181,6 +184,9 @@ func policyRun(t *testing.T, env *RealEnv, reset, reseed string) policyResult {
 	return r
 }
 
+// TestTierRPoolSessionStateUnderEachReleasePolicy proves on Postgres 17 that all
+// four always/on-switch x reseed combinations have zero cross-tenant leaks, same-tenant
+// carry-over only under on-switch, and random-seed residue removed across tenants when reseed is on.
 func TestTierRPoolSessionStateUnderEachReleasePolicy(t *testing.T) {
 	env := tierR(t)
 	for _, arm := range []struct{ reset, reseed string }{{"always", "off"}, {"on-switch", "off"}, {"always", "on"}, {"on-switch", "on"}} {
@@ -222,6 +228,8 @@ func cancelThrough(g *Gateway, env *RealEnv, c *RealClient) error {
 	return err
 }
 
+// TestTierRPoolCancelReachesTheRightStatementOnly proves against Postgres 17 that
+// cancelling one client's pg_sleep ends it with 57014 without disturbing another client's query.
 func TestTierRPoolCancelReachesTheRightStatementOnly(t *testing.T) {
 	env := tierR(t)
 	g := gateway(t, env, GatewayOpts{Scenario: "tierr-pool-cancel", Conns: 2})
@@ -311,6 +319,8 @@ func queryAll(clients []*RealClient, sql string) int64 {
 	return ok.Load()
 }
 
+// TestTierRPoolHeadlineDatabaseConnectionsDirectAgainstProxy runs Headline Benchmark 1
+// on Postgres 17, comparing 500 direct clients against 500 proxied clients over a 16-connection pool.
 func TestTierRPoolHeadlineDatabaseConnectionsDirectAgainstProxy(t *testing.T) {
 	env := tierR(t)
 	base := backends(t, env)
@@ -344,6 +354,8 @@ func TestTierRPoolHeadlineDatabaseConnectionsDirectAgainstProxy(t *testing.T) {
 	}
 }
 
+// TestTierRPoolReconnectionStormWithClientTLS proves 500 TLS clients dropping and
+// reconnecting stay within both the 16-connection pool cap and the 64-client startup cap.
 func TestTierRPoolReconnectionStormWithClientTLS(t *testing.T) {
 	env := tierR(t)
 	base := backends(t, env)

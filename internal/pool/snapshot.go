@@ -7,6 +7,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 )
 
+// Snapshot is an immutable point-in-time view of all pool gauges, counters,
+// breaker state, and duration histograms for observability and invariant checks.
 type Snapshot struct {
 	Cap           int64
 	MaxConnecting int64
@@ -75,6 +77,7 @@ func sum(v []int64) int64 {
 	return n
 }
 
+// Check verifies exact counter conservation and capacity bounds across s.
 func (s Snapshot) Check() error {
 	var errs []error
 	fail := func(format string, args ...any) { errs = append(errs, fmt.Errorf(format, args...)) }

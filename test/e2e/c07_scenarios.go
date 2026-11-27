@@ -21,6 +21,7 @@ const (
 	poolSweepSeeds = 20
 )
 
+// PoolScenario pairs a tier S pool Spec with its seed-sweep weight and check function.
 type PoolScenario struct {
 	Spec   Spec
 	Heavy  bool
@@ -69,6 +70,7 @@ func manyClients(name string, n, conns int, start func(i int) time.Duration, ste
 	return sp
 }
 
+// HardCapSpec builds the 1,000-client simultaneous connect scenario over an 8-connection pool.
 func HardCapSpec(plant pool.Plant) Spec {
 	sp := manyClients("pool-hard-cap", 1000, 8, func(i int) time.Duration { return time.Duration(i%50) * time.Microsecond },
 		func(i int) []Step { return []Step{{SQL: read(i%4, "a")}} })
@@ -77,6 +79,7 @@ func HardCapSpec(plant pool.Plant) Spec {
 	return sp
 }
 
+// StormSpec builds the 500-client disconnect and reconnection storm over an 8-connection pool.
 func StormSpec() Spec {
 	steps := func(i int) []Step {
 		return []Step{{SQL: read(i%4, "a")}, {SQL: read(i%4, "b"), Delay: 10 * time.Millisecond, Vanish: VanishAfterReply}}
@@ -91,6 +94,7 @@ func StormSpec() Spec {
 	return sp
 }
 
+// ColdStartSpec builds the empty-pool full-load scenario verifying dial creation-rate pacing.
 func ColdStartSpec(plant pool.Plant) Spec {
 	sp := manyClients("pool-cold-start", 200, 32, func(int) time.Duration { return 0 },
 		func(i int) []Step { return steps(read(i%4, "a"), read(i%4, "b")) })
@@ -98,6 +102,7 @@ func ColdStartSpec(plant pool.Plant) Spec {
 	return withCore(sp, sp.Name, func(c *pool.Config) { c.RatePerSec = 20; c.MaxConnecting = 32; c.Plant = plant })
 }
 
+// LifetimesSpec builds the co-created pool lifetime scenario verifying ±10% expiry jitter.
 func LifetimesSpec(noJitter bool) Spec {
 	sp := Spec{Name: "pool-lifetimes", Tenants: 4, Conns: 16, QueueCap: 256, Rows: clientRows(4), Timeouts: poolTimeouts(),
 		Duration: 40 * time.Second, Service: fakepg.Service{PerKind: []fakepg.KindTime{{Kind: fakepg.KindRead, Time: 20 * time.Millisecond}}}}
@@ -111,6 +116,7 @@ func LifetimesSpec(noJitter bool) Spec {
 	})
 }
 
+// RestartSpec builds the database-restart scenario exercising breaker open, fast 53M03, single trial, and recovery.
 func RestartSpec(breaker bool) Spec {
 	sp := Spec{Name: "pool-db-restart", Tenants: 2, Conns: 4, QueueCap: 64, Rows: clientRows(4), Timeouts: poolTimeouts(),
 		Duration: 12 * time.Second}
@@ -129,6 +135,9 @@ func RestartSpec(breaker bool) Spec {
 
 const admissionRestartDialRate = 1000
 
+// AdmissionRestartSpec combines the database-restart scenario with the default
+// adaptive-LIFO timeout admission queue, dialing fast enough that the breaker
+// opens well inside the 100ms queue interval on every seed.
 func AdmissionRestartSpec() Spec {
 	sp := RestartSpec(true)
 	sp.Name = "pool-admission-restart"
@@ -139,6 +148,7 @@ func AdmissionRestartSpec() Spec {
 	return sp
 }
 
+// IdleInTxSpec builds the idle-in-transaction scenario verifying FATAL 25P03, ROLLBACK, and connection reuse.
 func IdleInTxSpec() Spec {
 	sp := Spec{Name: "pool-idle-in-tx", Tenants: 2, Conns: 1, QueueCap: 16, Rows: clientRows(2), Timeouts: poolTimeouts(), Duration: 5 * time.Second}
 	sp.Clients = []Script{
@@ -148,6 +158,7 @@ func IdleInTxSpec() Spec {
 	return withCore(sp, sp.Name, nil)
 }
 
+// CancelSpec builds the client-cancel scenario verifying targeted cancel forwarding without affecting sibling queries.
 func CancelSpec() Spec {
 	sp := Spec{Name: "pool-cancel", Tenants: 2, Conns: 2, QueueCap: 16, Rows: clientRows(2), Duration: 5 * time.Second,
 		Timeouts: proxy.Timeouts{Statement: 5 * time.Second, Cleanup: 300 * time.Millisecond}}
@@ -159,6 +170,7 @@ func CancelSpec() Spec {
 	return withCore(sp, sp.Name, nil)
 }
 
+// PolicySpec builds the session-isolation scenario under the given reset policy and re-seed flag.
 func PolicySpec(reset proxy.ResetPolicy, reseed bool, plant pool.Plant) Spec {
 	sp := sessionSpec(0)
 	name := "pool-session-" + reset.String()
@@ -196,17 +208,20 @@ func pathSpec(name string, plan PathPlan, edit func(*pool.Config)) Spec {
 	return withCore(sp, name, edit)
 }
 
+// MassDeathSpec builds the simultaneous blackhole or peer-forgot death scenario (G9 tests 2 and 3).
 func MassDeathSpec(f PathFault, plant pool.Plant) Spec {
 	name := "pool-mass-" + f.String()
 	ev := PathEvent{At: pathDeath, Fault: f}
 	return pathSpec(name, PathPlan{Events: []PathEvent{ev}}, func(c *pool.Config) { c.Plant = plant; c.CheckAfterIdle = 5 * time.Second })
 }
 
+// PoliteCloseSpec builds the server-side polite idle close scenario (G9 test 4).
 func PoliteCloseSpec() Spec {
 	ev := PathEvent{At: 2 * time.Second, Fault: PathPoliteClose, Target: faultTargetIdleAge, MinAge: time.Second}
 	return pathSpec("pool-polite-close", PathPlan{Events: []PathEvent{ev}}, nil)
 }
 
+// CheckHangsSpec builds the hanging pre-lend check scenario verifying check_timeout bounds delay (G9 test 5).
 func CheckHangsSpec(plant pool.Plant) Spec {
 	sp := Spec{Name: "pool-check-hangs", Tenants: 2, Conns: 2, QueueCap: 16, Rows: clientRows(2), Timeouts: poolTimeouts(), Duration: 8 * time.Second}
 	sp.Clients = []Script{
@@ -218,6 +233,7 @@ func CheckHangsSpec(plant pool.Plant) Spec {
 	return withCore(sp, sp.Name, func(c *pool.Config) { c.Plant = plant })
 }
 
+// SlotsHeldSpec builds the post-blackhole held-server-slot scenario (G9 test 6).
 func SlotsHeldSpec() Spec {
 	ev := PathEvent{At: pathDeath, Fault: PathBlackhole}
 	sp := pathSpec("pool-slots-held", PathPlan{Events: []PathEvent{ev}, ReapAfter: slotsReap}, func(c *pool.Config) { c.RatePerSec = 10 })
@@ -227,6 +243,7 @@ func SlotsHeldSpec() Spec {
 	return sp
 }
 
+// Remedies selects which of the three 5 a.m. defenses are active in NightTrickleSpec.
 type Remedies struct{ Keepalive, IdleTimeout, Check bool }
 
 func (m Remedies) name() string {
@@ -253,6 +270,7 @@ const (
 	remedyOff    = 23 * time.Hour
 )
 
+// NightTrickleSpec builds the 2-hour idle-drop night-trickle and morning-ramp scenario (G9 test 1).
 func NightTrickleSpec(m Remedies) Spec {
 	sp := Spec{Name: "pool-night-" + m.name(), Tenants: 2, Conns: 8, QueueCap: 64, Rows: clientRows(8),
 		Timeouts: poolTimeouts(), Duration: nightTrickle + 2*time.Minute,
@@ -285,8 +303,10 @@ func NightTrickleSpec(m Remedies) Spec {
 	})
 }
 
+// CoreRerun adapts an existing fixed-set Spec to run against the pool core under name.
 func CoreRerun(sp Spec, name string) Spec { return withCore(sp, name, nil) }
 
+// PoolScenarios returns the full suite of tier S pool scenarios and their checks.
 func PoolScenarios() []PoolScenario {
 	out := []PoolScenario{
 		{Spec: CoreRerun(ResultsSpec("", false), "pool-results"), Check: checkResults},

@@ -291,8 +291,9 @@ func (p *FixedSet) Remove(id ConnID) {
 }
 
 // ShedQueue extends Queue for timer-driven admission cores that sweep expired
-// requests on deadlines, return decided sheds to be answered at once, and
-// support returning a popped request when pool checkout fails.
+// requests on deadlines, return decided sheds to be answered at once, support
+// breaker refusals via Refuse (53M03), and return a popped request via Unpop
+// when pool checkout fails.
 type ShedQueue interface {
 	Queue
 	RemoveAt(now Instant, id RequestID) bool

@@ -36,6 +36,8 @@ func arbitrationIdlePool(t *testing.T, n, cap int, mode proxy.ResetPolicy, failu
 	return r
 }
 
+// TestCoreArbitrationOneRequestBoundsPreparation proves a single queued request
+// triggers at most one switch reset or four stale checks instead of fanning out across the pool.
 func TestCoreArbitrationOneRequestBoundsPreparation(t *testing.T) {
 	for _, tc := range []struct {
 		name          string

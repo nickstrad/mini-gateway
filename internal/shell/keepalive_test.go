@@ -36,6 +36,8 @@ func sockopts(t *testing.T, c net.Conn) (on, idle, intvl, cnt int) {
 	return on, idle, intvl, cnt
 }
 
+// TestKeepAliveDialerSetsTheDatabaseSocketOptions proves keepAliveDialer applies
+// SO_KEEPALIVE and TCP_KEEP* options on Linux sockets and clears them when disabled.
 func TestKeepAliveDialerSetsTheDatabaseSocketOptions(t *testing.T) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

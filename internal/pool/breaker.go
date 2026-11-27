@@ -1,16 +1,22 @@
 package pool
 
+// BreakerState is the state of the pool's single database-down circuit breaker.
 type BreakerState uint8
 
 const (
+	// BreakerClosed allows normal checkouts and dials.
 	BreakerClosed BreakerState = iota
+	// BreakerOpen refuses work with no dial until open_for elapses.
 	BreakerOpen
+	// BreakerHalfOpen admits requests to wait behind a single trial connection.
 	BreakerHalfOpen
+	// NumBreakerStates is the number of defined BreakerState values.
 	NumBreakerStates
 )
 
 var breakerNames = [NumBreakerStates]string{"closed", "open", "half-open"}
 
+// String returns the canonical lowercase name of s, or "?" if unknown.
 func (s BreakerState) String() string {
 	if s < NumBreakerStates {
 		return breakerNames[s]
@@ -18,18 +24,25 @@ func (s BreakerState) String() string {
 	return "?"
 }
 
+// Transition identifies one state change of the circuit breaker for metrics.
 type Transition uint8
 
 const (
+	// TransClosedOpen records consecutive connection failures opening the breaker.
 	TransClosedOpen Transition = iota
+	// TransOpenHalfOpen records open_for elapsing into half-open.
 	TransOpenHalfOpen
+	// TransHalfOpenClosed records a half-open trial succeeding and closing the breaker.
 	TransHalfOpenClosed
+	// TransHalfOpenOpen records a half-open trial failing and re-opening the breaker.
 	TransHalfOpenOpen
+	// NumTransitions is the number of defined Transition values.
 	NumTransitions
 )
 
 var transitionNames = [NumTransitions]string{"closed-open", "open-half-open", "half-open-closed", "half-open-open"}
 
+// String returns the canonical hyphenated name of t, or "?" if unknown.
 func (t Transition) String() string {
 	if t < NumTransitions {
 		return transitionNames[t]
@@ -74,6 +87,7 @@ func (b *breaker) open(now Instant, t Transition) {
 	b.trans[t]++
 	b.openUntil = now + b.openFor
 	b.trialSent = false
+	// Clear demand so a subsequent quiet outage does not probe without new arrivals.
 	b.wanted = false
 	b.trial = 0
 }

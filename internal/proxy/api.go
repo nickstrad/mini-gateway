@@ -52,6 +52,8 @@ const (
 	// at the last acknowledged offset; it must precede EvDBClosed so rule G8 can
 	// prove zero bytes of a request were accepted.
 	EvDBWriteRefused
+	// EvDBCancelDone reports that the secondary cancel connection for Conn finished
+	// or hit its clean-up deadline.
 	EvDBCancelDone
 	numEventKinds
 )
@@ -110,6 +112,9 @@ const (
 	ActWake
 	// ActPublish instructs the driver to publish the current observability snapshot.
 	ActPublish
+	// ActDBCancel asks the driver to open a short-lived cancel connection with ID
+	// Conn, write the CancelRequest in Data, read to EOF or cleanup deadline, and
+	// post EvDBCancelDone.
 	ActDBCancel
 	numActionKinds
 )

@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+// TestSlotsHeldCheckRejectsFailedLateClient proves checkSlotsHeld fails if the
+// post-reap verification client does not recover.
 func TestSlotsHeldCheckRejectsFailedLateClient(t *testing.T) {
 	r := mustPass(t, SlotsHeldSpec(), checkSlotsHeld)
 	r.Spec.Clients[0].Start = pathDeath + r.Spec.Timeouts.Statement + r.Spec.Timeouts.Cleanup + time.Second

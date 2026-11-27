@@ -7,6 +7,8 @@ import (
 	"testing"
 )
 
+// TestCoreArbitrationTrialFailureRefusesWithIdleSibling proves a failed half-open
+// trial flushes queued requests with 53M03 even when an idle sibling connection remains.
 func TestCoreArbitrationTrialFailureRefusesWithIdleSibling(t *testing.T) {
 	for _, n := range []int{1, 2} {
 		t.Run(string(rune('0'+n)), func(t *testing.T) {

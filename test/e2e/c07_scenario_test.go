@@ -42,6 +42,8 @@ func runPool(t *testing.T, sc PoolScenario, seed int64) *SimRun {
 	return a
 }
 
+// TestScenarioPool runs every tier S pool scenario across the configured seed
+// set, asserting scenario checks, CSV round-trips, and bit-identical replay.
 func TestScenarioPool(t *testing.T) {
 	for _, sc := range PoolScenarios() {
 		t.Run(sc.Spec.Name, func(t *testing.T) {

@@ -131,6 +131,8 @@ func (r *coreRig) finishReset(id proxy.ConnID) {
 	}
 }
 
+// TestCoreDialsOnDemandAndResetsAfterEveryLease proves the pool core opens a
+// connection only on demand and resets it with DISCARD ALL after each clean lease.
 func TestCoreDialsOnDemandAndResetsAfterEveryLease(t *testing.T) {
 	r := newCoreRig(t, nil)
 	id := r.firstLease(11, "SELECT 1")
@@ -148,6 +150,8 @@ func TestCoreDialsOnDemandAndResetsAfterEveryLease(t *testing.T) {
 	}
 }
 
+// TestCoreChecksALongIdleConnectionOffTheRequestPath proves a connection idle
+// past check_after_idle runs an empty-query check off-path before serving the client.
 func TestCoreChecksALongIdleConnectionOffTheRequestPath(t *testing.T) {
 	r := newCoreRig(t, nil)
 	id := r.firstLease(11, "SELECT 1")
@@ -167,6 +171,8 @@ func TestCoreChecksALongIdleConnectionOffTheRequestPath(t *testing.T) {
 	}
 }
 
+// TestCoreCheckThatHangsEndsAtItsDeadlineWithNoClientError proves a blackholed
+// check closes at pool.check_timeout and the queued request is served by a replacement dial.
 func TestCoreCheckThatHangsEndsAtItsDeadlineWithNoClientError(t *testing.T) {
 	r := newCoreRig(t, nil)
 	id := r.firstLease(11, "SELECT 1")
@@ -194,6 +200,8 @@ func TestCoreCheckThatHangsEndsAtItsDeadlineWithNoClientError(t *testing.T) {
 	}
 }
 
+// TestCoreStatementDeadlineWithNoReplyCancelsDrainsAndReuses proves a zero-reply
+// statement timeout enters the dirty table (cancel, drain, reset, await cancel) and marks suspect.
 func TestCoreStatementDeadlineWithNoReplyCancelsDrainsAndReuses(t *testing.T) {
 	r := newCoreRig(t, func(c *proxy.Config) { c.Timeouts.Statement = time.Second })
 	id := r.firstLease(11, "SELECT v FROM kv WHERE k = 'a'")
@@ -223,6 +231,8 @@ func TestCoreStatementDeadlineWithNoReplyCancelsDrainsAndReuses(t *testing.T) {
 	}
 }
 
+// TestCoreClientVanishedInsideATransactionIsRolledBackAndReused proves a client
+// departing between statements inside a transaction triggers ROLLBACK, DISCARD ALL, and reuse.
 func TestCoreClientVanishedInsideATransactionIsRolledBackAndReused(t *testing.T) {
 	r := newCoreRig(t, nil)
 	id := r.firstLease(11, "BEGIN")
@@ -241,6 +251,8 @@ func TestCoreClientVanishedInsideATransactionIsRolledBackAndReused(t *testing.T)
 	}
 }
 
+// TestCoreClientVanishedMidStatementCancelsTheStatement proves a client vanishing
+// mid-statement cancels the backend query, drains, resets, and reuses after CancelDone.
 func TestCoreClientVanishedMidStatementCancelsTheStatement(t *testing.T) {
 	r := newCoreRig(t, nil)
 	id := r.firstLease(11, "SELECT pg_sleep(5)")
@@ -256,6 +268,8 @@ func TestCoreClientVanishedMidStatementCancelsTheStatement(t *testing.T) {
 	}
 }
 
+// TestCoreIdleInTransactionIsRolledBackWith25P03 proves exceeding idle_in_transaction
+// replies FATAL 25P03, closes the client, and rolls back and reuses the backend connection.
 func TestCoreIdleInTransactionIsRolledBackWith25P03(t *testing.T) {
 	r := newCoreRig(t, nil)
 	id := r.firstLease(11, "BEGIN")
@@ -278,6 +292,8 @@ func TestCoreIdleInTransactionIsRolledBackWith25P03(t *testing.T) {
 	}
 }
 
+// TestCoreBreakerRefusesAtOnceWithNoDial proves an open breaker answers 53M03
+// immediately without dialing and marks DBDown.
 func TestCoreBreakerRefusesAtOnceWithNoDial(t *testing.T) {
 	r := newCoreRig(t, func(c *proxy.Config) { c.Pool.BreakerFailures = 2 })
 	r.login(11, 0)
@@ -299,6 +315,8 @@ func TestCoreBreakerRefusesAtOnceWithNoDial(t *testing.T) {
 	}
 }
 
+// TestCoreClientCancelReachesOnlyTheLentConnection proves client CancelRequests
+// forward only for active lent connections and ignore idle clients.
 func TestCoreClientCancelReachesOnlyTheLentConnection(t *testing.T) {
 	r := newCoreRig(t, nil)
 	r.login(12, 1)
@@ -339,6 +357,8 @@ func (r *coreRig) cancelFrom(id proxy.ConnID, k pgwire.BackendKey) []proxy.Actio
 	return append(a, r.run(r.ev(proxy.EvClientData, id, b[proxy.FirstClientRead:], 0))...)
 }
 
+// TestCoreCancelWhileQueuedAnswers57014 proves cancelling a queued request
+// dequeues it and replies ERROR 57014 without touching the database.
 func TestCoreCancelWhileQueuedAnswers57014(t *testing.T) {
 	r := newCoreRig(t, func(c *proxy.Config) { c.Connections = 1 })
 	id := r.firstLease(11, "SELECT 1")
@@ -351,6 +371,8 @@ func TestCoreCancelWhileQueuedAnswers57014(t *testing.T) {
 	_ = id
 }
 
+// TestCoreOnSwitchLendsTheSameTenantAsIsAndResetsOnASwitch proves on-switch
+// skips DISCARD ALL for same-tenant reuse and resets on checkout before switching tenants.
 func TestCoreOnSwitchLendsTheSameTenantAsIsAndResetsOnASwitch(t *testing.T) {
 	r := newCoreRig(t, func(c *proxy.Config) { c.Reset = proxy.ResetOnSwitch; c.Connections = 1 })
 	id := r.firstLease(11, "SELECT 1")
@@ -377,6 +399,8 @@ func TestCoreOnSwitchLendsTheSameTenantAsIsAndResetsOnASwitch(t *testing.T) {
 	}
 }
 
+// TestCoreReseedFollowsTheResetAndIsJudged proves lease.reseed pipelines
+// SELECT setseed(...) after DISCARD ALL and judges both replies before lending.
 func TestCoreReseedFollowsTheResetAndIsJudged(t *testing.T) {
 	r := newCoreRig(t, func(c *proxy.Config) { c.Reseed = true })
 	id := r.firstLease(11, "SELECT 1")
@@ -396,6 +420,8 @@ func TestCoreReseedFollowsTheResetAndIsJudged(t *testing.T) {
 	}
 }
 
+// TestCoreLossMidStatementInsideATransactionIsFatal08006UnlessItMayCommit proves
+// mid-statement loss in a transaction replies FATAL 08006 unless the message may end it (08007).
 func TestCoreLossMidStatementInsideATransactionIsFatal08006UnlessItMayCommit(t *testing.T) {
 	for _, c := range []struct {
 		sql  string
@@ -416,6 +442,8 @@ func TestCoreLossMidStatementInsideATransactionIsFatal08006UnlessItMayCommit(t *
 	}
 }
 
+// TestCoreQuiesceAndShutdownLeaveNothing proves a quiet core engine passes
+// Quiesce and Shutdown closes all pooled connections with Invariants green.
 func TestCoreQuiesceAndShutdownLeaveNothing(t *testing.T) {
 	r := newCoreRig(t, nil)
 	id := r.firstLease(11, "SELECT 1")

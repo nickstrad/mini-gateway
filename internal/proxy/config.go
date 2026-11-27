@@ -70,12 +70,19 @@ const (
 	CloseClientShutdown
 	// CloseDBShutdown records a database connection closed by Engine.Shutdown.
 	CloseDBShutdown
+	// CloseClientIdleInTx records a client closed for exceeding timeouts.idle_in_transaction.
 	CloseClientIdleInTx
+	// CloseDBIdle records a pooled database connection closed at its jittered idle timeout.
 	CloseDBIdle
+	// CloseDBLifetime records a pooled database connection closed at its jittered max lifetime.
 	CloseDBLifetime
+	// CloseDBCheckFailed records a database connection closed after failing a pre-lend check.
 	CloseDBCheckFailed
+	// CloseDBNoReply records a database connection closed after a zero-reply statement deadline.
 	CloseDBNoReply
+	// CloseDBCleanupFailed records a dirty database connection closed after clean-up failed or timed out.
 	CloseDBCleanupFailed
+	// CloseDBCancelCap records a dirty database connection closed because pool.max_cancels was reached.
 	CloseDBCancelCap
 	// NumCloseReasons is the cardinality of CloseReason for fixed-size metric arrays.
 	NumCloseReasons
@@ -107,6 +114,8 @@ type ResetPolicy uint8
 const (
 	// ResetAlways sends DISCARD ALL after every cleanly ended lease.
 	ResetAlways ResetPolicy = iota + 1
+	// ResetOnSwitch tags a cleanly released connection with its last tenant and
+	// resets it on checkout only when switching to another tenant.
 	ResetOnSwitch
 )
 
@@ -140,6 +149,8 @@ const (
 	// PlantSkipCourtesy bypasses the courtesy reject list so session-mutating statements
 	// reach the fake database in tier S reset tests.
 	PlantSkipCourtesy
+	// PlantBreakerFlushPops flushes queued requests on breaker open via Queue.Pop
+	// instead of ShedQueue.Refuse (canary proving admission/engine shed invariants catch it).
 	PlantBreakerFlushPops
 )
 

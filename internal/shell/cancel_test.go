@@ -13,6 +13,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
+// TestCancelRequestGoesOutOnASecondConnectionAndReportsDone proves ActDBCancel
+// writes the CancelRequest on a separate socket and posts EvDBCancelDone on EOF.
 func TestCancelRequestGoesOutOnASecondConnectionAndReportsDone(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		l, core := newPipeListener(), newCore()
@@ -46,6 +48,8 @@ func TestCancelRequestGoesOutOnASecondConnectionAndReportsDone(t *testing.T) {
 	})
 }
 
+// TestCancelToASilentDatabaseEndsAtTheCleanupDeadline proves a cancel connection
+// to a blackholed peer stops at timeouts.cleanup and still posts EvDBCancelDone.
 func TestCancelToASilentDatabaseEndsAtTheCleanupDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		l, core := newPipeListener(), newCore()

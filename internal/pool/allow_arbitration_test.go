@@ -2,6 +2,8 @@ package pool
 
 import "testing"
 
+// TestArbitrationAllowRefreshesBreakerSnapshot proves Allow updates the
+// snapshot's breaker state and transition counters when open_for elapses.
 func TestArbitrationAllowRefreshesBreakerSnapshot(t *testing.T) {
 	cfg := modelConfig()
 	cfg.BreakerFailures = 1

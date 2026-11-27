@@ -14,17 +14,23 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/simnet"
 )
 
+// PathFault selects the middlebox or peer failure injected on a relayed backend connection.
 type PathFault uint8
 
 const (
+	// PathNormal forwards bytes normally in both directions.
 	PathNormal PathFault = iota
+	// PathBlackhole accepts and silently discards bytes in both directions without closing.
 	PathBlackhole
+	// PathPeerForgot accepts the first write and resets the proxy leg after PeerDelay.
 	PathPeerForgot
+	// PathPoliteClose sends a clean FIN on both legs of matching idle connections.
 	PathPoliteClose
 )
 
 var pathFaultNames = [...]string{"normal", "blackhole", "peer-forgot", "polite-close"}
 
+// String returns the canonical hyphenated name of f, or "?" if unknown.
 func (f PathFault) String() string {
 	if int(f) < len(pathFaultNames) {
 		return pathFaultNames[f]
@@ -42,6 +48,7 @@ const (
 	faultTargetIdleAge = -1
 )
 
+// PathEvent schedules one fault injection or clearing event on pathRelay.
 type PathEvent struct {
 	At     time.Duration
 	Fault  PathFault
@@ -50,6 +57,7 @@ type PathEvent struct {
 	Clear  bool
 }
 
+// PathPlan configures the path-fault relay placed between the proxy and fakepg.
 type PathPlan struct {
 	Events        []PathEvent
 	IdleDrop      time.Duration
@@ -60,6 +68,7 @@ type PathPlan struct {
 	RewriteReseed bool
 }
 
+// PathStats records connections, injected faults, reaped slots, and re-seeds seen by pathRelay.
 type PathStats struct {
 	Pairs      int64
 	Blackholed int64

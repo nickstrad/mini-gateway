@@ -56,6 +56,8 @@ func collect(t *testing.T, s pool.Snapshot, detail bool) obs.InstanceSnapshot {
 	return out
 }
 
+// TestMappingExportsEveryFieldOfThePoolSnapshot proves poolsrc.Map exports
+// every non-histogram field of pool.Snapshot without omission.
 func TestMappingExportsEveryFieldOfThePoolSnapshot(t *testing.T) {
 	var s pool.Snapshot
 	f := &filler{paths: map[int64]string{}}
@@ -77,6 +79,8 @@ func TestMappingExportsEveryFieldOfThePoolSnapshot(t *testing.T) {
 	}
 }
 
+// TestPoolCountersMoveAndConserveInARealRun proves pool counters advance and
+// conserve through a real dial, checkout, release, and reset cycle.
 func TestPoolCountersMoveAndConserveInARealRun(t *testing.T) {
 	p, err := pool.New(pool.Config{Cap: 2, RatePerSec: 1000})
 	if err != nil {
@@ -109,6 +113,8 @@ func TestPoolCountersMoveAndConserveInARealRun(t *testing.T) {
 	}
 }
 
+// TestHealthIsDegradedWhileTheBreakerIsOpen proves the breaker health rule
+// reports StateOK when closed and StateDegraded when open.
 func TestHealthIsDegradedWhileTheBreakerIsOpen(t *testing.T) {
 	p, err := pool.New(pool.Config{Cap: 2, RatePerSec: 1000, BreakerFailures: 1, BreakerOpenFor: time.Second})
 	if err != nil {

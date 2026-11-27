@@ -369,6 +369,8 @@ func clientOf(tag string) int {
 	return n
 }
 
+// TenantCrossings scans the fake Postgres statement log and counts dirty
+// session-setting handoffs across different tenants and within the same tenant.
 func TenantCrossings(r *SimRun) (cross, same int) {
 	type state struct {
 		tag   string

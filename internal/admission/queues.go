@@ -7,7 +7,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 )
 
-// Reason explains why a queued or arriving request was shed with 53M01.
+// Reason explains why a queued or arriving request was shed (53M01, except
+// ReasonBreaker which the caller answers with 53M03).
 type Reason uint8
 
 const (
@@ -25,6 +26,7 @@ const (
 	ReasonDeadline
 	// ReasonUndrained means Push refused an arrival because pending sheds reached the safety cap.
 	ReasonUndrained
+	// ReasonBreaker means the caller refused a queued request via Refuse because the pool circuit breaker opened (answered 53M03).
 	ReasonBreaker
 	// NumReasons is the number of defined Reason values.
 	NumReasons
@@ -519,6 +521,9 @@ func (q *Queues) Remove(now Time, id int64) bool { return q.take(now, id, false)
 // it as shed with ReasonDeadline.
 func (q *Queues) Expire(now Time, id int64) bool { return q.take(now, id, true) }
 
+// Refuse removes a queued request because the pool circuit breaker opened,
+// counting it as shed with ReasonBreaker without queuing a TakeShed entry or
+// marking the tenant queue as shedding (the caller answers 53M03 directly).
 func (q *Queues) Refuse(now Time, id int64) bool { return q.takeAs(now, id, takeRefused) }
 
 type takeKind uint8

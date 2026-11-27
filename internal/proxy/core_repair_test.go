@@ -26,6 +26,8 @@ func (r *coreRig) cancelledThenReset(client proxy.ConnID, sql string) proxy.Conn
 	return id
 }
 
+// TestCoreCancelDoneMakesTheConnectionIdleInTheEngineToo proves CancelDone
+// resynchronizes engine phases and gauges with the pool core for quiesce, reuse, and idle bytes.
 func TestCoreCancelDoneMakesTheConnectionIdleInTheEngineToo(t *testing.T) {
 	t.Run("quiesce", func(t *testing.T) {
 		r := newCoreRig(t, func(c *proxy.Config) { c.Timeouts.Statement = time.Second })
@@ -72,6 +74,8 @@ func TestCoreCancelDoneMakesTheConnectionIdleInTheEngineToo(t *testing.T) {
 	})
 }
 
+// TestCoreLifetimeEndingDuringAResetCountsTheResetOnce proves a connection
+// closing at max lifetime right as its reset succeeds counts one completed reset and zero failures.
 func TestCoreLifetimeEndingDuringAResetCountsTheResetOnce(t *testing.T) {
 	r := newCoreRig(t, func(c *proxy.Config) {
 		c.Pool.MaxLifetime = 2 * time.Second
@@ -96,6 +100,8 @@ func TestCoreLifetimeEndingDuringAResetCountsTheResetOnce(t *testing.T) {
 	}
 }
 
+// TestCoreDrainDoesNotTakeTheTailOfASplitMessageForReadyForQuery proves draining
+// starting mid-frame never mistakes payload bytes resembling 'Z' for ReadyForQuery.
 func TestCoreDrainDoesNotTakeTheTailOfASplitMessageForReadyForQuery(t *testing.T) {
 	for _, tail := range [][]byte{{'Z', 0, 0, 0, 5, 'I'}, {'Z', 'I', 'x', 'y', 'z'}} {
 		r := newCoreRig(t, nil)
@@ -115,6 +121,8 @@ func TestCoreDrainDoesNotTakeTheTailOfASplitMessageForReadyForQuery(t *testing.T
 	}
 }
 
+// TestCoreHalfOpenBreakerLetsARequestWaitForTheTrial proves an arrival while
+// half-open queues behind the single trial dial and is served once it opens.
 func TestCoreHalfOpenBreakerLetsARequestWaitForTheTrial(t *testing.T) {
 	r := newCoreRig(t, func(c *proxy.Config) { c.Pool.BreakerFailures = 2 })
 	r.login(11, 0)

@@ -1,3 +1,16 @@
+// Package pool implements the deterministic, sans-I/O connection pool core.
+//
+// It manages backend connection lifecycle by opaque ConnID without Postgres
+// types, clocks, or goroutines: a hard cap on open+connecting connections,
+// concurrent-connect and creation-rate limits, jittered idle timeouts and
+// maximum lifetimes, most-recently-used checkout with off-path staleness and
+// suspect checks, a single database-down circuit breaker, dirty-connection
+// clean-up, release policies (always and on-switch with optional re-seeding),
+// and bounded concurrent cancels.
+//
+// Every action-returning method follows the engine's deadline law: time passes
+// before the event, expiring every deadline at or before now before applying
+// the call.
 package pool
 
 import (
@@ -10,24 +23,35 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// Instant is monotonic virtual or wall-clock time in nanoseconds.
 type Instant int64
 
+// ConnID uniquely identifies a pooled database connection or cancel connection
+// allocated by the pool core.
 type ConnID int64
 
+// State is the lifecycle state of a connection tracked by Pool.
 type State uint8
 
 const (
+	// StateConnecting means a dial or backend startup is in progress.
 	StateConnecting State = iota + 1
+	// StateIdle means the connection is open and eligible for checkout (subject to checks or switch resets).
 	StateIdle
+	// StateChecking means an off-path empty-query liveness check is in flight.
 	StateChecking
+	// StateLent means a client currently holds the connection for a transaction lease.
 	StateLent
+	// StateCleaning means the connection is in the dirty-connection table (cancel, drain, rollback, or awaiting cancel completion).
 	StateCleaning
+	// StateResetting means a session reset (and optional re-seed) is in flight.
 	StateResetting
 	numStates
 )
 
 var stateNames = [numStates]string{"?", "connecting", "idle", "checking", "lent", "cleaning", "resetting"}
 
+// String returns the canonical lowercase name of s, or "?" if unknown.
 func (s State) String() string {
 	if s < numStates {
 		return stateNames[s]
@@ -46,21 +70,30 @@ const (
 	stepAwaitCancel
 )
 
+// ActKind identifies one side effect emitted by Pool for the engine to execute.
 type ActKind uint8
 
 const (
+	// ActDial instructs the engine to open a new backend connection with Action.Conn.
 	ActDial ActKind = iota + 1
+	// ActCheck instructs the engine to send an empty-query check on Action.Conn.
 	ActCheck
+	// ActCancel instructs the engine to open cancel connection Action.Cancel targeting Action.Conn.
 	ActCancel
+	// ActRollback instructs the engine to send ROLLBACK on Action.Conn.
 	ActRollback
+	// ActReset instructs the engine to send DISCARD ALL (and setseed when Action.Reseed is true) on Action.Conn.
 	ActReset
+	// ActClose instructs the engine to close Action.Conn immediately with Action.Reason.
 	ActClose
+	// ActRefuseQueued instructs the engine to flush all queued requests with 53M03 because the breaker is open.
 	ActRefuseQueued
 	numActKinds
 )
 
 var actNames = [numActKinds]string{"?", "dial", "check", "cancel", "rollback", "reset", "close", "refuse-queued"}
 
+// String returns the canonical hyphenated name of k, or "?" if unknown.
 func (k ActKind) String() string {
 	if k < numActKinds {
 		return actNames[k]
@@ -68,6 +101,7 @@ func (k ActKind) String() string {
 	return "?"
 }
 
+// Action is one side effect returned by Pool methods for the engine to execute in order.
 type Action struct {
 	Kind   ActKind
 	Conn   ConnID
@@ -77,28 +111,44 @@ type Action struct {
 	Seed   uint32
 }
 
+// CloseReason classifies why Pool closed a connection or failed a dial.
 type CloseReason uint8
 
 const (
+	// CloseIdle means an idle connection reached its jittered idle timeout.
 	CloseIdle CloseReason = iota
+	// CloseLifetime means a connection reached its jittered max lifetime while idle or at release.
 	CloseLifetime
+	// CloseDirty means a released connection had unread bytes or non-idle status.
 	CloseDirty
+	// CloseCheckFailed means a pre-lend check timed out, errored, or returned unexpected bytes.
 	CloseCheckFailed
+	// ClosePeerClosedIdle means the peer closed an idle connection without unsolicited bytes.
 	ClosePeerClosedIdle
+	// CloseIdleError means an idle connection received unsolicited bytes or a protocol error.
 	CloseIdleError
+	// CloseNoReply means a dirty clean-up after a zero-reply statement deadline failed or timed out.
 	CloseNoReply
+	// CloseError means a lent connection was lost or hit a wire/server error.
 	CloseError
+	// CloseResetFailed means a session reset or re-seed failed, timed out, or lost its connection.
 	CloseResetFailed
+	// CloseCleanupFailed means a dirty-connection clean-up failed, timed out, or had an expired cancel.
 	CloseCleanupFailed
+	// CloseCancelCap means a dirty connection needed a cancel while MaxCancels were already in flight.
 	CloseCancelCap
+	// CloseConnectFailed means a dial or backend startup failed or timed out.
 	CloseConnectFailed
+	// CloseShutdown means Pool.Shutdown closed the connection.
 	CloseShutdown
+	// NumCloseReasons is the number of defined CloseReason values.
 	NumCloseReasons
 )
 
 var closeNames = [NumCloseReasons]string{"idle", "lifetime", "dirty", "check_failed", "peer_closed_idle", "idle_error",
 	"no_reply", "error", "reset_failed", "cleanup_failed", "cancel_cap", "connect_failed", "shutdown"}
 
+// String returns the canonical snake_case metric label for r, or "?" if unknown.
 func (r CloseReason) String() string {
 	if r < NumCloseReasons {
 		return closeNames[r]
@@ -106,23 +156,34 @@ func (r CloseReason) String() string {
 	return "?"
 }
 
+// EndKind classifies how a lent connection's lease ended when returned to Release.
 type EndKind uint8
 
 const (
+	// EndClean means the lease finished with ReadyForQuery 'I' and no unread bytes.
 	EndClean EndKind = iota
+	// EndUnread means the release policy ordered an immediate close (unread bytes or non-'I' status).
 	EndUnread
+	// EndVanishedMidStatement means the client disconnected while a statement was in flight.
 	EndVanishedMidStatement
+	// EndVanishedInTx means the client disconnected between statements inside a transaction.
 	EndVanishedInTx
+	// EndIdleInTx means the client exceeded timeouts.idle_in_transaction between statements.
 	EndIdleInTx
+	// EndWriteStalled means the client exceeded timeouts.client_write while receiving a reply.
 	EndWriteStalled
+	// EndStatementDeadline means the database exceeded timeouts.statement.
 	EndStatementDeadline
+	// EndLost means the lent connection was lost via Lost rather than Release.
 	EndLost
+	// NumEndKinds is the number of defined EndKind values.
 	NumEndKinds
 )
 
 var endNames = [NumEndKinds]string{"clean", "unread", "vanished-mid-statement", "vanished-in-transaction",
 	"idle-in-transaction", "write-stalled", "statement-deadline", "lost"}
 
+// String returns the canonical hyphenated metric label for k, or "?" if unknown.
 func (k EndKind) String() string {
 	if k < NumEndKinds {
 		return endNames[k]
@@ -130,6 +191,7 @@ func (k EndKind) String() string {
 	return "?"
 }
 
+// End describes the state of a lent connection at lease end.
 type End struct {
 	Kind      EndKind
 	Tenant    work.TenantID
@@ -138,34 +200,49 @@ type End struct {
 	ZeroReply bool
 }
 
+// LossKind classifies a connection loss reported to Lost.
 type LossKind uint8
 
 const (
+	// LossClosed means the transport reached EOF or closed cleanly.
 	LossClosed LossKind = iota
+	// LossBytes means unsolicited bytes arrived on an idle connection.
 	LossBytes
+	// LossViolation means the database sent malformed or unexpected wire frames.
 	LossViolation
+	// LossFatal means the database sent a FATAL or PANIC ErrorResponse.
 	LossFatal
 )
 
+// Fail classifies a non-transport failure of an internal check, rollback, or reset step.
 type Fail uint8
 
 const (
+	// FailError means the database returned an ErrorResponse.
 	FailError Fail = iota
+	// FailUnexpected means the reply carried an unexpected frame, tag, status, or trailing bytes.
 	FailUnexpected
 )
 
+// CheckResult classifies the outcome of a pre-lend empty-query check.
 type CheckResult uint8
 
 const (
+	// CheckOK means the check received EmptyQueryResponse followed by ReadyForQuery 'I'.
 	CheckOK CheckResult = iota
+	// CheckTimeout means the check hit pool.check_timeout.
 	CheckTimeout
+	// CheckError means the check received an ErrorResponse or transport close.
 	CheckError
+	// CheckUnexpected means the check received any unexpected frame or trailing bytes.
 	CheckUnexpected
+	// NumCheckResults is the number of defined CheckResult values.
 	NumCheckResults
 )
 
 var checkNames = [NumCheckResults]string{"ok", "timeout", "error", "unexpected"}
 
+// String returns the canonical lowercase name of r, or "?" if unknown.
 func (r CheckResult) String() string {
 	if r < NumCheckResults {
 		return checkNames[r]
@@ -173,17 +250,23 @@ func (r CheckResult) String() string {
 	return "?"
 }
 
+// ResetCause classifies why a session reset was started.
 type ResetCause uint8
 
 const (
+	// ResetAtRelease means a reset started immediately on clean release under ResetAlways.
 	ResetAtRelease ResetCause = iota
+	// ResetAtSwitch means a reset started on checkout under ResetOnSwitch to switch tenants.
 	ResetAtSwitch
+	// ResetAfterCleanup means a reset started after dirty-connection drain or rollback.
 	ResetAfterCleanup
+	// NumResetCauses is the number of defined ResetCause values.
 	NumResetCauses
 )
 
 var resetCauseNames = [NumResetCauses]string{"always", "on-switch", "cleanup"}
 
+// String returns the canonical metric label for c, or "?" if unknown.
 func (c ResetCause) String() string {
 	if c < NumResetCauses {
 		return resetCauseNames[c]
@@ -221,6 +304,8 @@ type cancelEntry struct {
 	expires Instant
 }
 
+// Pool is the sans-I/O state machine that manages backend connections, dials,
+// checks, clean-ups, resets, cancels, and the database-down circuit breaker.
 type Pool struct {
 	cfg       Config
 	rng       *rand.Rand
@@ -242,6 +327,7 @@ type Pool struct {
 	out       []Action
 }
 
+// New constructs a validated Pool from cfg after applying defaults.
 func New(cfg Config) (*Pool, error) {
 	cfg = cfg.WithDefaults()
 	if err := cfg.Validate(); err != nil {
@@ -258,6 +344,7 @@ func New(cfg Config) (*Pool, error) {
 	return p, nil
 }
 
+// Config returns the pool's effective configuration after defaults.
 func (p *Pool) Config() Config { return p.cfg }
 
 func (p *Pool) begin(now Instant, out []Action) {
@@ -265,6 +352,7 @@ func (p *Pool) begin(now Instant, out []Action) {
 		p.now = now
 	}
 	p.out = out
+	// Time passes before the event: advance the breaker and expire due timers first.
 	p.brk.tick(p.now)
 	p.expire()
 }
@@ -281,6 +369,11 @@ func (p *Pool) end() []Action {
 
 func (p *Pool) emit(a Action) { p.out = append(p.out, a) }
 
+// Allow reports whether the gate should admit a request at now. It advances
+// only the breaker and updates its snapshot fields; while open it returns false
+// and records demand so the next half-open period starts a single trial. While
+// half-open it returns true so requests queue behind that trial instead of
+// failing immediately after a quiet outage.
 func (p *Pool) Allow(now Instant) bool {
 	if now > p.now {
 		p.now = now
@@ -294,14 +387,19 @@ func (p *Pool) Allow(now Instant) bool {
 	return p.brk.state != BreakerOpen
 }
 
+// Breaker returns the current circuit-breaker state without advancing time.
 func (p *Pool) Breaker() BreakerState { return p.brk.state }
 
+// Demand records the current queue depth and emits any permitted dials or
+// half-open trial needed to meet it.
 func (p *Pool) Demand(now Instant, waiting int, out []Action) []Action {
 	p.begin(now, out)
 	p.waiting = max(waiting, 0)
 	return p.end()
 }
 
+// Tick advances the pool clock to now, expiring deadlines and emitting any
+// resulting closes, rate-limited dials, or half-open trial.
 func (p *Pool) Tick(now Instant, out []Action) []Action {
 	p.begin(now, out)
 	return p.end()
@@ -417,6 +515,8 @@ func (p *Pool) dial(trial bool) {
 	p.emit(Action{Kind: ActDial, Conn: c.id})
 }
 
+// Opened marks a dialing connection ready for use, resets the breaker's failure
+// streak (closing it if id was the half-open trial), and places id in StateIdle.
 func (p *Pool) Opened(now Instant, id ConnID, out []Action) []Action {
 	p.begin(now, out)
 	if c := p.conns[id]; c != nil && c.state == StateConnecting {
@@ -432,6 +532,8 @@ func (p *Pool) Opened(now Instant, id ConnID, out []Action) []Action {
 	return p.end()
 }
 
+// DialFailed records that dialing or starting up id failed, counts a breaker
+// failure (or re-opens on a failed trial), and frees the connecting slot.
 func (p *Pool) DialFailed(now Instant, id ConnID, out []Action) []Action {
 	p.begin(now, out)
 	if c := p.conns[id]; c != nil && c.state == StateConnecting {
@@ -582,6 +684,10 @@ func (p *Pool) pick(tenant work.TenantID) *conn {
 	return best
 }
 
+// Checkout attempts to lend an idle connection to tenant without waiting.
+// Stale or suspect candidates are moved off-path into StateChecking (up to
+// maxChecksPerCheckout per call); under ResetOnSwitch a connection tagged for
+// another tenant starts a switch reset instead of lending.
 func (p *Pool) Checkout(now Instant, tenant work.TenantID, out []Action) (ConnID, bool, []Action) {
 	p.begin(now, out)
 	p.snap.Checkouts++
@@ -661,6 +767,9 @@ func (p *Pool) startReset(c *conn, cause ResetCause) {
 	p.emit(a)
 }
 
+// Release returns a lent connection according to e: clean leases reset or
+// return to idle tagged under ResetOnSwitch, unread releases close at once,
+// and dirty releases enter the clean-up sequence (cancel, drain, rollback, reset).
 func (p *Pool) Release(now Instant, id ConnID, e End, out []Action) []Action {
 	p.begin(now, out)
 	c := p.conns[id]
@@ -743,6 +852,8 @@ func (p *Pool) cancel(c *conn) bool {
 	return true
 }
 
+// ClientCancel forwards a client's cancel request for lent connection id if
+// MaxCancels permits, reporting whether a cancel action was emitted (or already pending).
 func (p *Pool) ClientCancel(now Instant, id ConnID, out []Action) (bool, []Action) {
 	p.begin(now, out)
 	p.snap.ClientCancels++
@@ -756,6 +867,8 @@ func (p *Pool) ClientCancel(now Instant, id ConnID, out []Action) (bool, []Actio
 	return ok, p.end()
 }
 
+// CancelDone records that cancel connection cancel finished, releasing any
+// connection waiting in stepAwaitCancel back to idle.
 func (p *Pool) CancelDone(now Instant, cancel ConnID, out []Action) []Action {
 	p.begin(now, out)
 	for i, e := range p.cancels {
@@ -781,6 +894,8 @@ func (p *Pool) cancelCleared(id ConnID) {
 	}
 }
 
+// StepDone reports successful completion of an internal check, drain, rollback,
+// or reset step on id, with status carrying the trailing ReadyForQuery byte.
 func (p *Pool) StepDone(now Instant, id ConnID, status byte, out []Action) []Action {
 	p.begin(now, out)
 	c := p.conns[id]
@@ -817,6 +932,8 @@ func (p *Pool) StepDone(now Instant, id ConnID, status byte, out []Action) []Act
 	return p.end()
 }
 
+// StepFailed reports an ErrorResponse or unexpected reply during a check,
+// clean-up, or reset step on id, closing the connection.
 func (p *Pool) StepFailed(now Instant, id ConnID, f Fail, out []Action) []Action {
 	p.begin(now, out)
 	c := p.conns[id]
@@ -848,15 +965,21 @@ func (p *Pool) cleanupReason(c *conn) CloseReason {
 func (p *Pool) checkFailed(c *conn, r CheckResult) {
 	p.snap.ChecksByResult[r]++
 	trial := c.trial
+	// Leave StateChecking before remove so CheckError is not double-counted.
 	c.state = StateIdle
 	c.trial = false
 	p.remove(c, CloseCheckFailed)
+	// A non-trial idle check failure proves only an old flow died, not that new
+	// dials fail; only a failed half-open trial counts toward the breaker.
 	if trial {
 		p.trialFailed(c.id)
 	}
 	p.markSuspect()
 }
 
+// Lost records an unexpected close, unsolicited bytes, wire violation, or
+// server FATAL on open connection id, closing it and marking siblings suspect.
+// A polite close (LossClosed) of an idle connection does not count toward the breaker.
 func (p *Pool) Lost(now Instant, id ConnID, k LossKind, out []Action) []Action {
 	p.begin(now, out)
 	c := p.conns[id]
@@ -951,6 +1074,9 @@ func (p *Pool) expireOne(c *conn) bool {
 	return false
 }
 
+// Next returns the earliest instant at which Tick must be called to expire a
+// deadline, idle timeout, lifetime, cancel wait, breaker lockout, or dial
+// rate-limit slot, or 0 if no timer is needed.
 func (p *Pool) Next() Instant {
 	if p.stopped {
 		return 0
@@ -982,6 +1108,8 @@ func (p *Pool) Next() Instant {
 	return next
 }
 
+// Shutdown stops further dials, closes every open and connecting connection,
+// drops pending cancels, and clears all timers so Next returns 0.
 func (p *Pool) Shutdown(now Instant, out []Action) []Action {
 	p.begin(now, out)
 	p.stopped = true
@@ -1004,6 +1132,7 @@ func (p *Pool) Shutdown(now Instant, out []Action) []Action {
 	return o
 }
 
+// State returns the current lifecycle state of id, or 0 if id is not tracked.
 func (p *Pool) State(id ConnID) State {
 	if c := p.conns[id]; c != nil {
 		return c.state
@@ -1011,11 +1140,13 @@ func (p *Pool) State(id ConnID) State {
 	return 0
 }
 
+// Suspect reports whether id is currently suspect or marked suspect on return.
 func (p *Pool) Suspect(id ConnID) bool {
 	c := p.conns[id]
 	return c != nil && (c.suspect || c.suspectLater)
 }
 
+// Tag returns the last-tenant tag currently held by id, or empty if untagged.
 func (p *Pool) Tag(id ConnID) work.TenantID {
 	if c := p.conns[id]; c != nil {
 		return c.tag
@@ -1023,6 +1154,7 @@ func (p *Pool) Tag(id ConnID) work.TenantID {
 	return ""
 }
 
+// Lendable returns the count of connections currently in StateIdle.
 func (p *Pool) Lendable() int {
 	n := 0
 	for _, c := range p.list {
@@ -1033,6 +1165,7 @@ func (p *Pool) Lendable() int {
 	return n
 }
 
+// Usable reports whether at least one open (non-connecting) connection exists.
 func (p *Pool) Usable() bool {
 	for _, c := range p.list {
 		if c.state != StateConnecting {
@@ -1068,6 +1201,7 @@ func (p *Pool) gauges() {
 	p.snap.BreakerFailures = p.brk.observed
 }
 
+// Snapshot returns an immutable copy of all pool metrics and duration histograms.
 func (p *Pool) Snapshot() Snapshot {
 	s := p.snap
 	s.LeaseTime = p.leaseHist.Snapshot()
@@ -1075,6 +1209,8 @@ func (p *Pool) Snapshot() Snapshot {
 	return s
 }
 
+// Quiesce verifies that no connection is lent, checking, cleaning, resetting,
+// or suspect and that no cancel connection remains in flight.
 func (p *Pool) Quiesce() error {
 	var errs []error
 	for _, c := range p.list {
@@ -1091,6 +1227,7 @@ func (p *Pool) Quiesce() error {
 	return errors.Join(errs...)
 }
 
+// Invariants verifies hard caps, internal index consistency, and snapshot conservation.
 func (p *Pool) Invariants() error {
 	open, connecting := p.counts()
 	if open+connecting > p.cfg.Cap {

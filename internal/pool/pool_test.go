@@ -60,6 +60,8 @@ func firstViolation(cfg Config, runs int) (runResult, bool) {
 	return runResult{}, false
 }
 
+// TestPoolMatchesTheReferenceModelOnRandomOperations proves the pool core obeys
+// every accounting, suspect, reset, and cancel invariant across random operation lists.
 func TestPoolMatchesTheReferenceModelOnRandomOperations(t *testing.T) {
 	for _, name := range []string{"always", "on-switch", "always-reseed", "on-switch-reseed"} {
 		cfg := configs()[name]
@@ -71,6 +73,8 @@ func TestPoolMatchesTheReferenceModelOnRandomOperations(t *testing.T) {
 	}
 }
 
+// TestOperationsExerciseEveryMechanism proves the random property workload hits
+// every pool path (checks, cancels, rollbacks, breaker, rate limit, dirty reuse).
 func TestOperationsExerciseEveryMechanism(t *testing.T) {
 	r := rand.New(rand.NewPCG(propertySeed, 1))
 	var total Snapshot
@@ -113,6 +117,8 @@ func TestOperationsExerciseEveryMechanism(t *testing.T) {
 	}
 }
 
+// TestEveryPlantedBugIsCaughtByTheModel proves the reference model fails when
+// any core mechanism is disabled by its test-only Plant switch.
 func TestEveryPlantedBugIsCaughtByTheModel(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -147,6 +153,8 @@ func nearResetClearsSuspect() [][]op {
 	return [][]op{noLoss, append(slices.Clone(noLoss), op{opStepDone, 0, 0}, op{opCheckout, 0, 0})}
 }
 
+// TestNearMissSeedsPassAndAreOneByteFromThePlantedBug proves the fuzz corpus's
+// near-miss seeds do not already fail under PlantResetClearsSuspect.
 func TestNearMissSeedsPassAndAreOneByteFromThePlantedBug(t *testing.T) {
 	cfg := modelConfig()
 	cfg.Plant = PlantResetClearsSuspect
@@ -157,6 +165,8 @@ func TestNearMissSeedsPassAndAreOneByteFromThePlantedBug(t *testing.T) {
 	}
 }
 
+// TestShrunkResetClearsSuspectOrderingBugReplays proves the minimal ordering
+// sequence passes normally and trips the suspect invariant under the plant.
 func TestShrunkResetClearsSuspectOrderingBugReplays(t *testing.T) {
 	cfg := modelConfig()
 	if res := runOps(cfg, resetClearsSuspectOps); res.violation != "" {
@@ -169,6 +179,8 @@ func TestShrunkResetClearsSuspectOrderingBugReplays(t *testing.T) {
 	}
 }
 
+// TestReplayGivesTheSameActionsForTheSameOperations proves identical operation
+// sequences emit bit-identical action traces.
 func TestReplayGivesTheSameActionsForTheSameOperations(t *testing.T) {
 	r := rand.New(rand.NewPCG(propertySeed, 2))
 	for i := 0; i < 200; i++ {
@@ -180,6 +192,8 @@ func TestReplayGivesTheSameActionsForTheSameOperations(t *testing.T) {
 	}
 }
 
+// TestOpDecodingIsTotalBoundedAndLocal proves fuzz byte decoding is total,
+// capped at maxOps, and localized so mutating one op does not shift later ops.
 func TestOpDecodingIsTotalBoundedAndLocal(t *testing.T) {
 	r := rand.New(rand.NewPCG(3, 3))
 	for i := 0; i < 500; i++ {
@@ -205,6 +219,8 @@ func TestOpDecodingIsTotalBoundedAndLocal(t *testing.T) {
 	}
 }
 
+// TestFuzzPoolOpsCostIsBounded proves worst-case fuzz execution stays well
+// below 5 ms so fuzzing runs far above the 100 execs/s floor.
 func TestFuzzPoolOpsCostIsBounded(t *testing.T) {
 	worst := make([]byte, 0, maxOps*opBytes*2)
 	for i := 0; i < 2*maxOps; i++ {
@@ -231,6 +247,8 @@ func fuzzPlant() Plant {
 	return 0
 }
 
+// FuzzPoolOps drives arbitrary operation sequences against the reference model
+// using a constant jitter seed (modelSeed).
 func FuzzPoolOps(f *testing.F) {
 	r := rand.New(rand.NewPCG(propertySeed, 4))
 	for i := 0; i < 8; i++ {
@@ -253,6 +271,8 @@ func FuzzPoolOps(f *testing.F) {
 	})
 }
 
+// TestShareSumsToAtMostTheTotalAndIsNeverZero proves fleet division rounds down
+// without exceeding total and refuses any total below instances.
 func TestShareSumsToAtMostTheTotalAndIsNeverZero(t *testing.T) {
 	for n := 1; n <= 64; n++ {
 		for total := 0; total <= 300; total++ {
@@ -273,6 +293,8 @@ func TestShareSumsToAtMostTheTotalAndIsNeverZero(t *testing.T) {
 	}
 }
 
+// TestDefaultsAndValidationNameTheKey proves Config defaults are valid and
+// every out-of-range value fails closed naming its config key.
 func TestDefaultsAndValidationNameTheKey(t *testing.T) {
 	cfg := Config{}.WithDefaults()
 	if err := cfg.Validate(); err != nil {
@@ -329,6 +351,8 @@ func open(t *testing.T, cfg Config, n int) (*Pool, []ConnID, Instant) {
 
 const tenantA, tenantB = work.TenantID("a"), work.TenantID("b")
 
+// TestLendTheMostRecentlyUsedIdleConnection proves checkout selects idle
+// connections in most-recently-used order (G3).
 func TestLendTheMostRecentlyUsedIdleConnection(t *testing.T) {
 	p, ids, now := open(t, Config{Cap: 3, RatePerSec: 100}, 3)
 	var lent []ConnID
@@ -349,6 +373,8 @@ func TestLendTheMostRecentlyUsedIdleConnection(t *testing.T) {
 	}
 }
 
+// TestCheckStartsAtExactlyCheckAfterIdleAndEndsAtItsDeadline proves stale
+// checks trigger at equality with check_after_idle and close at check_timeout.
 func TestCheckStartsAtExactlyCheckAfterIdleAndEndsAtItsDeadline(t *testing.T) {
 	p, ids, now := open(t, Config{Cap: 1, RatePerSec: 100}, 1)
 	idle := p.conns[ids[0]].lastUsed
@@ -374,6 +400,8 @@ func TestCheckStartsAtExactlyCheckAfterIdleAndEndsAtItsDeadline(t *testing.T) {
 	}
 }
 
+// TestOneFailureMakesEveryIdleSiblingSuspect proves losing one connection marks
+// every idle sibling suspect until each passes a pre-lend check (G6).
 func TestOneFailureMakesEveryIdleSiblingSuspect(t *testing.T) {
 	p, ids, now := open(t, Config{Cap: 3, RatePerSec: 100}, 3)
 	a, _, _ := p.Checkout(now, tenantA, nil)
@@ -396,6 +424,8 @@ func TestOneFailureMakesEveryIdleSiblingSuspect(t *testing.T) {
 	}
 }
 
+// TestZeroReplyDeadlineSetsSuspectButDoesNotCountTowardTheBreaker proves a
+// zero-reply statement timeout marks siblings suspect without tripping the breaker.
 func TestZeroReplyDeadlineSetsSuspectButDoesNotCountTowardTheBreaker(t *testing.T) {
 	p, _, now := open(t, Config{Cap: 3, RatePerSec: 100, BreakerFailures: 1}, 3)
 	a, _, _ := p.Checkout(now, tenantA, nil)
@@ -408,6 +438,8 @@ func TestZeroReplyDeadlineSetsSuspectButDoesNotCountTowardTheBreaker(t *testing.
 	}
 }
 
+// TestBreakerOpensOnConnectionFailuresSendsOneTrialAndRecovers proves the
+// breaker locks out dials while open, sends one half-open trial, and closes on success.
 func TestBreakerOpensOnConnectionFailuresSendsOneTrialAndRecovers(t *testing.T) {
 	p, err := New(Config{Cap: 4, RatePerSec: 1000, BreakerFailures: 2, BreakerOpenFor: time.Second})
 	if err != nil {
@@ -455,6 +487,8 @@ func TestBreakerOpensOnConnectionFailuresSendsOneTrialAndRecovers(t *testing.T) 
 	}
 }
 
+// TestHalfOpenSendsNoTrialWhileNoWorkWasRefused proves an idle proxy does not
+// probe a dead database until demand arrives.
 func TestHalfOpenSendsNoTrialWhileNoWorkWasRefused(t *testing.T) {
 	p, err := New(Config{Cap: 2, RatePerSec: 1000, BreakerFailures: 1})
 	if err != nil {
@@ -472,6 +506,8 @@ func TestHalfOpenSendsNoTrialWhileNoWorkWasRefused(t *testing.T) {
 	}
 }
 
+// TestCreationRateSpacesDialsAndConcurrentConnectsAreCapped proves dials obey
+// both the 1/rate GCRA spacing and MaxConnecting.
 func TestCreationRateSpacesDialsAndConcurrentConnectsAreCapped(t *testing.T) {
 	p, err := New(Config{Cap: 50, MaxConnecting: 3, RatePerSec: 10})
 	if err != nil {
@@ -499,6 +535,8 @@ func TestCreationRateSpacesDialsAndConcurrentConnectsAreCapped(t *testing.T) {
 	}
 }
 
+// TestJitterSpreadsTheExpiryOfConnectionsCreatedTogether proves ±10% jitter
+// bounds simultaneous expiries among 200 co-created connections.
 func TestJitterSpreadsTheExpiryOfConnectionsCreatedTogether(t *testing.T) {
 	p, err := New(Config{Cap: 200, RatePerSec: MaxRatePerSec, MaxConnecting: 200, Seed: 5})
 	if err != nil {
@@ -543,6 +581,8 @@ func fill(p *Pool, n int) {
 	}
 }
 
+// TestOnSwitchPrefersTheSameTenantAndResetsWhenItMustSwitch proves on-switch
+// lends same-tenant connections as-is and resets on checkout before switching tenants.
 func TestOnSwitchPrefersTheSameTenantAndResetsWhenItMustSwitch(t *testing.T) {
 	p, _, now := open(t, Config{Cap: 2, RatePerSec: 100, Reset: ResetOnSwitch}, 2)
 	a, _, _ := p.Checkout(now, tenantA, nil)
@@ -565,6 +605,8 @@ func TestOnSwitchPrefersTheSameTenantAndResetsWhenItMustSwitch(t *testing.T) {
 	}
 }
 
+// TestDirtyTableCancelsDrainsRollsBackAndResetsBeforeReuse proves a vanished
+// mid-statement transaction walks cancel -> drain -> rollback -> reset -> await cancel before reuse.
 func TestDirtyTableCancelsDrainsRollsBackAndResetsBeforeReuse(t *testing.T) {
 	p, _, now := open(t, Config{Cap: 1, RatePerSec: 100}, 1)
 	a, _, _ := p.Checkout(now, tenantA, nil)
@@ -595,6 +637,8 @@ func TestDirtyTableCancelsDrainsRollsBackAndResetsBeforeReuse(t *testing.T) {
 	}
 }
 
+// TestCleanupDeadlineClosesAndNoReplyNamesTheReason proves a zero-reply dirty
+// clean-up closes with CloseNoReply at exactly timeouts.cleanup.
 func TestCleanupDeadlineClosesAndNoReplyNamesTheReason(t *testing.T) {
 	p, _, now := open(t, Config{Cap: 1, RatePerSec: 100}, 1)
 	a, _, _ := p.Checkout(now, tenantA, nil)
@@ -609,6 +653,8 @@ func TestCleanupDeadlineClosesAndNoReplyNamesTheReason(t *testing.T) {
 	}
 }
 
+// TestCancelsAreCappedAndAClientCancelOnlyReachesALentConnection proves cancels
+// respect MaxCancels, ignore idle connections, and hold reuse until CancelDone.
 func TestCancelsAreCappedAndAClientCancelOnlyReachesALentConnection(t *testing.T) {
 	p, _, now := open(t, Config{Cap: 3, RatePerSec: 100, MaxCancels: 1}, 3)
 	a, _, _ := p.Checkout(now, tenantA, nil)
@@ -635,6 +681,8 @@ func TestCancelsAreCappedAndAClientCancelOnlyReachesALentConnection(t *testing.T
 	}
 }
 
+// TestIdleTimeoutAndLifetimeCloseOnlyIdleConnections proves max lifetime never
+// interrupts a lent connection and closes it on release instead.
 func TestIdleTimeoutAndLifetimeCloseOnlyIdleConnections(t *testing.T) {
 	p, _, now := open(t, Config{Cap: 2, RatePerSec: 100, NoJitter: true, MaxLifetime: time.Hour, IdleTimeout: time.Minute, CheckAfterIdle: 2 * time.Hour}, 2)
 	a, _, _ := p.Checkout(now, tenantA, nil)
@@ -652,6 +700,8 @@ func TestIdleTimeoutAndLifetimeCloseOnlyIdleConnections(t *testing.T) {
 	}
 }
 
+// TestBreakerOpeningRefusesQueuedWorkOnlyWhenNothingIsUsable proves opening
+// the breaker emits ActRefuseQueued to flush waiting requests.
 func TestBreakerOpeningRefusesQueuedWorkOnlyWhenNothingIsUsable(t *testing.T) {
 	p, err := New(Config{Cap: 2, RatePerSec: 1000, BreakerFailures: 1})
 	if err != nil {
@@ -668,6 +718,8 @@ func TestBreakerOpeningRefusesQueuedWorkOnlyWhenNothingIsUsable(t *testing.T) {
 	}
 }
 
+// TestSnapshotCheckCatchesBrokenConservation proves Snapshot.Check detects
+// violations of each cap and counter-conservation equation.
 func TestSnapshotCheckCatchesBrokenConservation(t *testing.T) {
 	p, _, now := open(t, Config{Cap: 2, RatePerSec: 100}, 2)
 	p.Checkout(now, tenantA, nil)
@@ -687,6 +739,8 @@ func TestSnapshotCheckCatchesBrokenConservation(t *testing.T) {
 	}
 }
 
+// TestShutdownClosesEverythingAndLeavesNoTimer proves Shutdown closes all
+// connections, stops future dials, and leaves Next() at 0.
 func TestShutdownClosesEverythingAndLeavesNoTimer(t *testing.T) {
 	p, _, now := open(t, Config{Cap: 3, RatePerSec: 100}, 3)
 	a, _, _ := p.Checkout(now, tenantA, nil)
@@ -704,6 +758,8 @@ func TestShutdownClosesEverythingAndLeavesNoTimer(t *testing.T) {
 	}
 }
 
+// TestRefusedArrivalsStartOneTrialPerHalfOpenPeriod proves gate refusals trigger
+// at most one trial per open_for window and zero trials during quiet outages.
 func TestRefusedArrivalsStartOneTrialPerHalfOpenPeriod(t *testing.T) {
 	openFor := Instant(time.Second)
 	p, err := New(Config{Cap: 4, RatePerSec: 1000, BreakerFailures: 1, BreakerOpenFor: time.Second})

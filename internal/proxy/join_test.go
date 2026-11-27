@@ -48,6 +48,8 @@ func replied(a []proxy.Action, id proxy.ConnID, code string) bool {
 	return bytes.Contains(written(a, proxy.ActClientWrite, id), []byte(code))
 }
 
+// TestJoinOverloadWithAHealthyPoolShedsByTheRuleAndLeavesThePoolUntouched proves
+// admission-rule shedding under overload answers 53M01 without disturbing pool state or breaker counters.
 func TestJoinOverloadWithAHealthyPoolShedsByTheRuleAndLeavesThePoolUntouched(t *testing.T) {
 	r := joinRig(t, admission.Config{Rule: admission.RuleTimeout, LIFO: admission.LIFOOff}, func(c *proxy.Config) { c.Connections = 1 })
 	id := r.firstLease(10, "SELECT pg_sleep(1)")
@@ -89,6 +91,8 @@ func TestJoinOverloadWithAHealthyPoolShedsByTheRuleAndLeavesThePoolUntouched(t *
 	r.agree()
 }
 
+// TestJoinBreakerOpeningRefusesTheStandingQueueWith53M03AndCountersAgree proves
+// opening the breaker flushes standing tenant queues via Refuse (53M03) while keeping engine and admission counters equal.
 func TestJoinBreakerOpeningRefusesTheStandingQueueWith53M03AndCountersAgree(t *testing.T) {
 	r := joinRig(t, quietRule, func(c *proxy.Config) {
 		c.Connections = 1
@@ -146,6 +150,8 @@ func TestJoinBreakerOpeningRefusesTheStandingQueueWith53M03AndCountersAgree(t *t
 	r.agree()
 }
 
+// TestJoinHalfOpenTrialWithQueuedRequestsFromTwoTenants proves two tenants waiting
+// behind a half-open trial both succeed when it passes and both get 53M03 when it fails.
 func TestJoinHalfOpenTrialWithQueuedRequestsFromTwoTenants(t *testing.T) {
 	open := func(t *testing.T) (*coreRig, proxy.ConnID) {
 		r := joinRig(t, quietRule, func(c *proxy.Config) { c.Pool.BreakerFailures = 1 })
@@ -204,6 +210,8 @@ func TestJoinHalfOpenTrialWithQueuedRequestsFromTwoTenants(t *testing.T) {
 	})
 }
 
+// TestJoinShutdownWithQueuedRequestsAndConnectionsInEveryPoolState proves ordered
+// Shutdown cleans queued admission requests and connections in every pool state with no armed timer.
 func TestJoinShutdownWithQueuedRequestsAndConnectionsInEveryPoolState(t *testing.T) {
 	r := joinRig(t, quietRule, func(c *proxy.Config) {
 		c.Connections = 16
@@ -262,6 +270,8 @@ func TestJoinShutdownWithQueuedRequestsAndConnectionsInEveryPoolState(t *testing
 	}
 }
 
+// TestJoinEveryCoreEngineTestHoldsWithTheAdmissionQueue proves the pool core's
+// engine tests continue to hold behind both timeout and control-law admission queues.
 func TestJoinEveryCoreEngineTestHoldsWithTheAdmissionQueue(t *testing.T) {
 	for _, rule := range []admission.RuleKind{admission.RuleTimeout, admission.RuleControlLaw} {
 		a := quietRule
@@ -296,6 +306,8 @@ func TestJoinEveryCoreEngineTestHoldsWithTheAdmissionQueue(t *testing.T) {
 	coreAdmission = admission.Config{}
 }
 
+// TestJoinCancelWhileQueuedLeavesItsTenantQueueAsRemoved proves cancelling a
+// request queued in an admission ring answers 57014 and counts it as removed, not shed.
 func TestJoinCancelWhileQueuedLeavesItsTenantQueueAsRemoved(t *testing.T) {
 	r := joinRig(t, quietRule, func(c *proxy.Config) { c.Connections = 1 })
 	r.firstLease(11, "SELECT 1")
@@ -311,6 +323,8 @@ func TestJoinCancelWhileQueuedLeavesItsTenantQueueAsRemoved(t *testing.T) {
 	}
 }
 
+// TestJoinQuiesceWaitsForTheQuietTenantQueueThenPasses proves Quiesce reflects
+// the admission queue's 16-interval quiet-removal window alongside the idle pool.
 func TestJoinQuiesceWaitsForTheQuietTenantQueueThenPasses(t *testing.T) {
 	for _, rule := range []admission.RuleKind{admission.RuleTimeout, admission.RuleControlLaw} {
 		r := joinRig(t, admission.Config{Rule: rule, LIFO: admission.LIFOOff}, nil)
@@ -337,6 +351,8 @@ func (r *coreRig) unchecked(k proxy.EventKind, id proxy.ConnID, b []byte) []prox
 	return r.e.Step(r.now, proxy.Event{Kind: k, Conn: id, Data: b}, nil)
 }
 
+// TestJoinInvariantsRunTheAdmissionChecksOnAnEngineWithThePoolCore proves
+// Engine.Invariants detects broken admission accounting when the pool core is active.
 func TestJoinInvariantsRunTheAdmissionChecksOnAnEngineWithThePoolCore(t *testing.T) {
 	r := joinRig(t, quietRule, func(c *proxy.Config) {
 		c.Connections = 1
@@ -359,6 +375,8 @@ func TestJoinInvariantsRunTheAdmissionChecksOnAnEngineWithThePoolCore(t *testing
 	}
 }
 
+// TestJoinInvariantsRunThePoolCoreChecksOnAnEngineWithTheAdmissionQueue proves
+// Engine.Invariants detects broken pool bounds when an admission queue is active.
 func TestJoinInvariantsRunThePoolCoreChecksOnAnEngineWithTheAdmissionQueue(t *testing.T) {
 	r := joinRig(t, quietRule, func(c *proxy.Config) {
 		c.Connections = 4
@@ -378,6 +396,8 @@ func TestJoinInvariantsRunThePoolCoreChecksOnAnEngineWithTheAdmissionQueue(t *te
 	}
 }
 
+// TestJoinShutdownSweepsTheLastQueuedClientAtItsDeadline proves Shutdown sweeps
+// a due admission shed before closing remaining queued clients.
 func TestJoinShutdownSweepsTheLastQueuedClientAtItsDeadline(t *testing.T) {
 	for _, lifo := range []admission.LIFOMode{admission.LIFOOff, admission.LIFOAdaptive} {
 		r := joinRig(t, admission.Config{Rule: admission.RuleTimeout, LIFO: lifo}, func(c *proxy.Config) { c.Connections = 1 })
@@ -419,6 +439,8 @@ func replyAt(a []proxy.Action, id proxy.ConnID, code string) int {
 	return -1
 }
 
+// TestJoinBreakerOpeningAtARuleDeadlineAnswersTheDueShedBeforeTheRefusals proves
+// breaker flush sweeps due 53M01 rule sheds before refusing remaining requests with 53M03.
 func TestJoinBreakerOpeningAtARuleDeadlineAnswersTheDueShedBeforeTheRefusals(t *testing.T) {
 	interval := time.Duration(admission.DefaultInterval)
 	r := joinRig(t, admission.Config{Rule: admission.RuleTimeout, LIFO: admission.LIFOOff}, func(c *proxy.Config) {

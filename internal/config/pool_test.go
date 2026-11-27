@@ -25,6 +25,8 @@ func parseEdited(t *testing.T, edits map[string]any) (*config.File, error) {
 	return config.Parse(b)
 }
 
+// TestPoolRulesFailClosedNamingTheKey proves every pool, keepalive, lease, and
+// breaker validation rule fails closed naming the offending config key.
 func TestPoolRulesFailClosedNamingTheKey(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -68,6 +70,8 @@ func TestPoolRulesFailClosedNamingTheKey(t *testing.T) {
 	}
 }
 
+// TestKeepaliveWholeSecondsAreAcceptedAndSentToTheServer proves whole-second
+// keepalive settings are emitted as Postgres startup parameters when server_keepalive is on.
 func TestKeepaliveWholeSecondsAreAcceptedAndSentToTheServer(t *testing.T) {
 	f, err := parseEdited(t, map[string]any{"backend.tcp_keepalive.mode": "off", "backend.tcp_keepalive.idle": "7s", "backend.tcp_keepalive.interval": "2s"})
 	if err != nil {
@@ -87,6 +91,8 @@ func TestKeepaliveWholeSecondsAreAcceptedAndSentToTheServer(t *testing.T) {
 	}
 }
 
+// TestFleetDivisionSetsEachInstancesConnections proves omitted pool.connections
+// inherits total/instances rounded down and refuses explicit values above the share.
 func TestFleetDivisionSetsEachInstancesConnections(t *testing.T) {
 	r := &fixedRandom{}
 	for _, c := range []struct {
@@ -124,6 +130,8 @@ func TestFleetDivisionSetsEachInstancesConnections(t *testing.T) {
 	}
 }
 
+// TestWarningsNameEveryRiskySetting proves Warnings reports disabled keepalives
+// and uneven fleet remainders while staying empty on defaults.
 func TestWarningsNameEveryRiskySetting(t *testing.T) {
 	f, err := parseEdited(t, map[string]any{"backend.tcp_keepalive.mode": "off", "backend.server_keepalive": "off",
 		"fleet.instances": 3, "fleet.backend_connections": 21, "fleet.connect_rate_per_s": 10})

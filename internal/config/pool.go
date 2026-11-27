@@ -11,6 +11,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
+// Default values, enum strings, and validation bounds for pool, keepalive,
+// lease, and breaker settings.
 const (
 	LeaseResetAlways   = "always"
 	LeaseResetOnSwitch = "on-switch"
@@ -28,12 +30,15 @@ const (
 	DefaultJitterPercent     = pool.DefaultJitterPermille / 10
 )
 
+// Backend configures TCP keepalives on proxy-to-Postgres sockets, server-side
+// keepalive startup parameters, and the operator's stated path idle timeout.
 type Backend struct {
 	TCPKeepalive    Keepalive `json:"tcp_keepalive"`
 	ServerKeepalive string    `json:"server_keepalive"`
 	PathIdleLimit   Duration  `json:"path_idle_limit"`
 }
 
+// Keepalive configures proxy-side TCP keepalive probes on database sockets.
 type Keepalive struct {
 	Mode     string   `json:"mode"`
 	Idle     Duration `json:"idle"`
@@ -41,6 +46,7 @@ type Keepalive struct {
 	Count    int      `json:"count"`
 }
 
+// Breaker configures the pool's database-down circuit breaker.
 type Breaker struct {
 	Failures int      `json:"failures"`
 	OpenFor  Duration `json:"open_for"`
@@ -158,6 +164,8 @@ func (f *File) validatePool() error {
 	return errors.Join(errs...)
 }
 
+// Warnings reports valid but risky or lossy settings (disabled keepalives or
+// fleet budgets that leave a remainder when divided across instances).
 func (f *File) Warnings() []string {
 	var out []string
 	if f.Backend.TCPKeepalive.Mode == KeepaliveOff {
@@ -177,6 +185,7 @@ func (f *File) Warnings() []string {
 	return out
 }
 
+// KeepAlive returns the net.KeepAliveConfig for database sockets dialed by the shell.
 func (f *File) KeepAlive() net.KeepAliveConfig {
 	ka := f.Backend.TCPKeepalive
 	if ka.Mode == KeepaliveOff {

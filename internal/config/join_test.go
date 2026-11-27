@@ -9,6 +9,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
+// TestBinaryDefaultRunsThePoolCoreBehindTheTimeoutRule proves the default config
+// wires the pool core behind the adaptive-LIFO timeout admission queue.
 func TestBinaryDefaultRunsThePoolCoreBehindTheTimeoutRule(t *testing.T) {
 	f, err := parseEdited(t, nil)
 	if err != nil {
@@ -34,6 +36,8 @@ func TestBinaryDefaultRunsThePoolCoreBehindTheTimeoutRule(t *testing.T) {
 	}
 }
 
+// TestPoolAndQueueKeysAreValidatedTogether proves File.validate joins errors
+// from both pool and admission-queue keys in one pass.
 func TestPoolAndQueueKeysAreValidatedTogether(t *testing.T) {
 	_, err := parseEdited(t, map[string]any{"queue.rule": "fifo", "pool.max_connecting": 257, "queue.interval": "2m", "breaker.failures": 1001})
 	if err == nil {

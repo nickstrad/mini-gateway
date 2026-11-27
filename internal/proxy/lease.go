@@ -606,6 +606,8 @@ func (e *Engine) judgeReset(d *dbConn, b []byte) []byte {
 	if e.core != nil && v == rvDone && n == len(b) {
 		e.snap.ResetsCompleted++
 		e.resetHist.Record(int64(e.now - d.resetAt))
+		// Leave dpResetting before notifying the pool core so a lifetime close
+		// emitted inside StepDone does not also count as a failed reset.
 		e.coreSetPhase(d, dpCleaning)
 		e.coreStepDone(d, pgwire.StatusIdle)
 		return nil

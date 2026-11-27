@@ -8,11 +8,15 @@ import (
 )
 
 const (
+	// closeWriteWait bounds TLS close-notify on abort so closing a blackholed socket never stalls.
 	closeWriteWait = 100 * time.Millisecond
 	maxCancels     = 1024
 	cancelReadMax  = 64
 )
 
+// cancelRequest opens a short-lived plaintext cancel connection bounded by
+// timeouts.cleanup and posts EvDBCancelDone once the server closes it or the
+// deadline expires.
 func (s *Shell) cancelRequest(id proxy.ConnID, data []byte) {
 	if len(s.cancels) >= maxCancels || s.stopping() {
 		if len(s.deferred) >= maxDeferred {

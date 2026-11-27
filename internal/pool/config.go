@@ -6,13 +6,18 @@ import (
 	"time"
 )
 
+// ResetMode selects when the pool resets a cleanly released connection (decision D8).
 type ResetMode uint8
 
 const (
+	// ResetAlways sends a reset after every clean lease release.
 	ResetAlways ResetMode = iota + 1
+	// ResetOnSwitch tags a cleanly released connection with its last tenant and
+	// resets it on checkout only when a different tenant needs it.
 	ResetOnSwitch
 )
 
+// String returns the config string for m ("always" or "on-switch").
 func (m ResetMode) String() string {
 	switch m {
 	case ResetAlways:
@@ -23,6 +28,7 @@ func (m ResetMode) String() string {
 	return "?"
 }
 
+// Default and hard-limit configuration constants for the pool core.
 const (
 	DefaultCap             = 4
 	DefaultMaxConnecting   = 4
@@ -48,6 +54,8 @@ const (
 	maxDuration            = 24 * time.Hour
 )
 
+// Config configures the pool core's caps, timeouts, breaker, release policy,
+// deterministic jitter stream, and test-only fault plants.
 type Config struct {
 	Cap             int
 	MaxConnecting   int
@@ -69,19 +77,31 @@ type Config struct {
 	Plant           Plant
 }
 
+// Plant is a bitmask of test-only fault switches for canaries, ablations, and
+// fuzz verification. It is never exposed through internal/config.
 type Plant uint8
 
 const (
+	// PlantNoCap disables the open+connecting hard cap (cap canary).
 	PlantNoCap Plant = 1 << iota
+	// PlantNoRate disables concurrent-connect and creation-rate limits (cold-start ablation).
 	PlantNoRate
+	// PlantNoCheckDeadline omits the check-before-reuse deadline (check-hang canary).
 	PlantNoCheckDeadline
+	// PlantNoSuspect suppresses marking sibling connections suspect after a failure (mass-death canary).
 	PlantNoSuspect
+	// PlantIgnoreTag treats every idle connection as untagged under ResetOnSwitch (tenant-isolation canary).
 	PlantIgnoreTag
+	// PlantResetClearsSuspect wrongly clears suspect on reset completion without a check (FuzzPoolOps plant).
 	PlantResetClearsSuspect
 )
 
+// ErrConfig is wrapped by all pool configuration validation errors.
 var ErrConfig = errors.New("pool: bad configuration")
 
+// WithDefaults returns a copy of c with any zero capacity, timeout, jitter, or
+// reset mode replaced by its default. Negative values are left untouched so
+// Validate fails closed on them.
 func (c Config) WithDefaults() Config {
 	ints := []struct {
 		v   *int
@@ -113,6 +133,8 @@ func (c Config) WithDefaults() Config {
 	return c
 }
 
+// Validate checks every pool cap, duration, jitter spread, and reset policy,
+// returning joined errors that each name the offending config key.
 func (c Config) Validate() error {
 	var errs []error
 	bad := func(key, format string, args ...any) {
@@ -159,8 +181,13 @@ func (c Config) Validate() error {
 	return errors.Join(errs...)
 }
 
+// ErrShare is wrapped by Share errors when a fleet budget cannot give each
+// instance at least one unit.
 var ErrShare = errors.New("pool: fleet budget")
 
+// Share divides a fleet-wide budget evenly across instances, rounding down so
+// the instances' shares never exceed total. It fails when instances < 1 or
+// total < instances so no instance ever receives zero.
 func Share(total, instances int) (int, error) {
 	if instances < 1 {
 		return 0, fmt.Errorf("%w: %d instances", ErrShare, instances)

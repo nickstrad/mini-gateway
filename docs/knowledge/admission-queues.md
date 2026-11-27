@@ -39,7 +39,7 @@ the engine's queue stage or the admission scenarios. Full record:
 - `proxy.Config.Admission` with `Rule != 0` builds `proxy.AdmissionQueue`; `Rule == 0` keeps
   chunk 6's `FIFO`, so every chunk 6 tier S scenario still runs on `FIFO`. The binary always
   sets a rule (default `timeout`).
-- The seam grew additively: `proxy.ShedQueue` (`RemoveAt`, `Expire`, `Sweep`, `Next`,
+- The seam grew additively: `proxy.ShedQueue` (`RemoveAt`, `Expire`, `Refuse`, `Sweep`, `Next`,
   `TakeShed`, `Unpop`, `Close`). `Engine.Shutdown` sweeps the core at its instant first
   (answering due sheds), then removes the rest as client-gone, then `Close`s the empty
   tenant queues and cancels `tAdmission`; `Invariants()` holds the core's shed total equal to

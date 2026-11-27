@@ -61,6 +61,8 @@ const (
 	ErrRowProtocolVersion
 	// ErrRowNoUser is returned when a startup packet omits the user parameter.
 	ErrRowNoUser
+	// ErrRowLostMidStatementInTransaction is returned when a database connection fails
+	// mid-statement inside a transaction and the message holds no COMMIT, END, or PREPARE.
 	ErrRowLostMidStatementInTransaction
 	// ErrRowCount is the sentinel count of rows in ErrorRows.
 	ErrRowCount

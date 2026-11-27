@@ -27,6 +27,8 @@ func dialsIn(acts []Action) []ConnID {
 	return ids
 }
 
+// TestEveryOperationExpiresWhatIsDueBeforeApplyingIt proves time passes before
+// every event at exact equality for lifetime, idle, check, reset, and cleanup deadlines.
 func TestEveryOperationExpiresWhatIsDueBeforeApplyingIt(t *testing.T) {
 	base := Config{Cap: 1, RatePerSec: 100, NoJitter: true, CheckAfterIdle: time.Hour, IdleTimeout: 2 * time.Hour, MaxLifetime: 3 * time.Hour}
 	t.Run("checkout at the lifetime", func(t *testing.T) {
@@ -80,6 +82,8 @@ func TestEveryOperationExpiresWhatIsDueBeforeApplyingIt(t *testing.T) {
 	})
 }
 
+// TestCreationRateBoundHoldsForRatesThatDoNotDivideASecond proves ceiling GCRA
+// spacing holds floor(W*rate/1s)+1 across non-divisor rates.
 func TestCreationRateBoundHoldsForRatesThatDoNotDivideASecond(t *testing.T) {
 	for _, rate := range []int{3, 7, 9, 11, 13, 999, 7919} {
 		p, err := New(Config{Cap: MaxCap, MaxConnecting: MaxConnectingLimit, RatePerSec: rate, NoJitter: true, CheckAfterIdle: time.Hour, IdleTimeout: 24 * time.Hour, MaxLifetime: 24 * time.Hour})
@@ -109,6 +113,8 @@ func TestCreationRateBoundHoldsForRatesThatDoNotDivideASecond(t *testing.T) {
 	}
 }
 
+// TestJitterSpreadsSmallDurationsAndRefusesOnesTooSmallToSpread proves sub-ms
+// jitter spreads fail closed naming the key and nanosecond jitter separates small durations.
 func TestJitterSpreadsSmallDurationsAndRefusesOnesTooSmallToSpread(t *testing.T) {
 	for _, c := range []struct {
 		cfg Config
@@ -138,6 +144,8 @@ func TestJitterSpreadsSmallDurationsAndRefusesOnesTooSmallToSpread(t *testing.T)
 	}
 }
 
+// TestAnExpiredCancelNeverLetsItsConnectionBeLentAgain proves a connection whose
+// cancel timed out is tainted and closed on its next return instead of reused.
 func TestAnExpiredCancelNeverLetsItsConnectionBeLentAgain(t *testing.T) {
 	for _, mode := range []ResetMode{ResetAlways, ResetOnSwitch} {
 		p, ids, now := open(t, Config{Cap: 1, RatePerSec: 100, Reset: mode, CheckAfterIdle: time.Hour}, 1)
@@ -165,6 +173,8 @@ func TestAnExpiredCancelNeverLetsItsConnectionBeLentAgain(t *testing.T) {
 	}
 }
 
+// TestAFailedCheckOfAnIdleConnectionDoesNotCountTowardTheBreaker proves non-trial
+// check failures close the dead connection without opening the breaker so dials decide.
 func TestAFailedCheckOfAnIdleConnectionDoesNotCountTowardTheBreaker(t *testing.T) {
 	for _, fail := range []string{"error", "unexpected", "timeout", "lost"} {
 		p, ids, now := open(t, Config{Cap: 3, RatePerSec: 100, BreakerFailures: 1, CheckAfterIdle: time.Second}, 3)
@@ -197,6 +207,8 @@ func TestAFailedCheckOfAnIdleConnectionDoesNotCountTowardTheBreaker(t *testing.T
 	}
 }
 
+// TestATrialThatFailsOrALossWhileOpenRefusesQueuedWork proves re-opening on a
+// failed trial or losing a connection while open flushes queued work.
 func TestATrialThatFailsOrALossWhileOpenRefusesQueuedWork(t *testing.T) {
 	p, err := New(Config{Cap: 2, RatePerSec: 1000, BreakerFailures: 1})
 	if err != nil {
@@ -222,6 +234,8 @@ func TestATrialThatFailsOrALossWhileOpenRefusesQueuedWork(t *testing.T) {
 	}
 }
 
+// TestShutdownLeavesNoTimerWhileTheBreakerIsOpenOrTheRateLimits proves Next()
+// returns 0 after Shutdown even when breaker or rate-limit timers were armed.
 func TestShutdownLeavesNoTimerWhileTheBreakerIsOpenOrTheRateLimits(t *testing.T) {
 	p, err := New(Config{Cap: 2, RatePerSec: 1000, BreakerFailures: 1})
 	if err != nil {

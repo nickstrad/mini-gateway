@@ -37,30 +37,37 @@ func mustPass(t *testing.T, spec Spec, check func(*SimRun) error) *SimRun {
 	return r
 }
 
+// TestCanaryPoolCapPlantBreaksTheHardCap proves pool-hard-cap fails when the hard cap is planted off.
 func TestCanaryPoolCapPlantBreaksTheHardCap(t *testing.T) {
 	t.Logf("caught: %s", mustFail(t, HardCapSpec(pool.PlantNoCap), checkHardCap))
 }
 
+// TestAblationColdStartWithoutTheCreationRateExceedsTheBound proves cold start violates dial spacing without the creation-rate limiter.
 func TestAblationColdStartWithoutTheCreationRateExceedsTheBound(t *testing.T) {
 	t.Logf("caught: %s", mustFail(t, ColdStartSpec(pool.PlantNoRate), checkColdStart))
 }
 
+// TestCanaryPoolCheckDeadlinePlantHoldsTheQueuedRequest proves pool-check-hangs fails when the check deadline is disabled.
 func TestCanaryPoolCheckDeadlinePlantHoldsTheQueuedRequest(t *testing.T) {
 	t.Logf("caught: %s", mustFail(t, CheckHangsSpec(pool.PlantNoCheckDeadline), checkCheckHangs))
 }
 
+// TestCanaryPoolSuspectPlantCostsClientsAfterAMassDeath proves disabling suspect marking pushes mass-death client errors past the lent bound.
 func TestCanaryPoolSuspectPlantCostsClientsAfterAMassDeath(t *testing.T) {
 	t.Logf("caught: %s", mustFail(t, MassDeathSpec(PathBlackhole, pool.PlantNoSuspect), checkMassDeath))
 }
 
+// TestCanaryPoolOnSwitchIgnoringTheTagCrossesTenants proves ignoring tenant tags under on-switch causes session-state crossings.
 func TestCanaryPoolOnSwitchIgnoringTheTagCrossesTenants(t *testing.T) {
 	t.Logf("caught: %s", mustFail(t, PolicySpec(proxy.ResetOnSwitch, false, pool.PlantIgnoreTag), checkPolicy(proxy.ResetOnSwitch, false)))
 }
 
+// TestAblationRestartWithoutTheBreakerAnswersNo53M03 proves pool-db-restart fails when the circuit breaker cannot open.
 func TestAblationRestartWithoutTheBreakerAnswersNo53M03(t *testing.T) {
 	t.Logf("caught: %s", mustFail(t, RestartSpec(false), checkRestart))
 }
 
+// TestCanaryJoinBreakerFlushThroughPopBreaksTheAdmissionCount proves the simulator invariant catches breaker flushes routed through Pop instead of Refuse.
 func TestCanaryJoinBreakerFlushThroughPopBreaksTheAdmissionCount(t *testing.T) {
 	sp := AdmissionRestartSpec()
 	sp.Plant |= proxy.PlantBreakerFlushPops
@@ -71,6 +78,7 @@ func TestCanaryJoinBreakerFlushThroughPopBreaksTheAdmissionCount(t *testing.T) {
 	t.Logf("caught: %s", got)
 }
 
+// TestAblationLifetimesWithoutJitterExpireTogether proves co-created connections expire simultaneously when jitter is disabled.
 func TestAblationLifetimesWithoutJitterExpireTogether(t *testing.T) {
 	if testing.Short() {
 		t.Skip("long scenario")
@@ -78,6 +86,7 @@ func TestAblationLifetimesWithoutJitterExpireTogether(t *testing.T) {
 	t.Logf("caught: %s", mustFail(t, LifetimesSpec(true), checkLifetimes))
 }
 
+// TestAblationNightTrickleWithEveryRemedyOffHangsTheRamp proves the 5 a.m. scenario hangs morning statements when all three remedies are disabled.
 func TestAblationNightTrickleWithEveryRemedyOffHangsTheRamp(t *testing.T) {
 	if testing.Short() {
 		t.Skip("two virtual hours")
@@ -86,6 +95,7 @@ func TestAblationNightTrickleWithEveryRemedyOffHangsTheRamp(t *testing.T) {
 	t.Logf("all remedies off: %d client errors, %d no-reply deadlines, %s", anyClientErrors(r), poolSnap(r).NoReply, r.Path)
 }
 
+// TestNightTrickleEachRemedyAloneCarriesTheRamp proves keepalive, idle timeout, and pre-lend check each individually prevent morning hangs without opening the breaker.
 func TestNightTrickleEachRemedyAloneCarriesTheRamp(t *testing.T) {
 	if testing.Short() {
 		t.Skip("two virtual hours per arm")
@@ -134,6 +144,8 @@ func relayWorld(t *testing.T, plan PathPlan, scripts []Script) ([]ClientResult, 
 	return res, relay
 }
 
+// TestPathFaultOnOneConnectionLeavesTheOtherUnchangedAndClearingRestores proves
+// the path-fault relay isolates faults per connection and restores clean behaviour when cleared (G9 test 8).
 func TestPathFaultOnOneConnectionLeavesTheOtherUnchangedAndClearingRestores(t *testing.T) {
 	a := Script{Tenant: 0, Steps: []Step{{SQL: read(0, "a")}, {SQL: read(0, "b"), Delay: 2 * time.Second}}}
 	b := Script{Tenant: 1, Start: 10 * time.Millisecond, Steps: []Step{{SQL: read(1, "a")}, {SQL: read(1, "b"), Delay: 3 * time.Second}}}

@@ -19,11 +19,14 @@ const (
 	drainMidFrame  = 0
 )
 
+// CorePool adapts *pool.Pool to the engine's Pool seam, buffering pool actions
+// emitted during Checkout until finish drains them in corePump.
 type CorePool struct {
 	p    *pool.Pool
 	acts []pool.Action
 }
 
+// NewCorePool constructs a CorePool wrapping a validated pool.Pool.
 func NewCorePool(cfg pool.Config) (*CorePool, error) {
 	p, err := pool.New(cfg)
 	if err != nil {
@@ -32,20 +35,27 @@ func NewCorePool(cfg pool.Config) (*CorePool, error) {
 	return &CorePool{p: p}, nil
 }
 
+// Core returns the underlying sans-I/O pool state machine.
 func (cp *CorePool) Core() *pool.Pool { return cp.p }
 
+// Snapshot returns the pool core's current observability snapshot.
 func (cp *CorePool) Snapshot() pool.Snapshot { return cp.p.Snapshot() }
 
+// Checkout asks the pool core for a lendable connection for tenant, buffering
+// any off-path check or switch-reset actions for corePump.
 func (cp *CorePool) Checkout(now Instant, tenant work.TenantID) (ConnID, bool) {
 	id, ok, acts := cp.p.Checkout(pool.Instant(now), tenant, cp.acts)
 	cp.acts = acts
 	return ConnID(id), ok
 }
 
+// Checkin is a no-op because the engine drives releases directly through pool.Pool.Release.
 func (cp *CorePool) Checkin(Instant, ConnID) {}
 
+// Remove is a no-op because the engine reports losses directly through pool.Pool.Lost.
 func (cp *CorePool) Remove(ConnID) {}
 
+// Idle returns the number of connections currently lendable in the pool core.
 func (cp *CorePool) Idle() int { return cp.p.Lendable() }
 
 func (cp *CorePool) take() []pool.Action {
@@ -54,14 +64,21 @@ func (cp *CorePool) take() []pool.Action {
 	return a
 }
 
+// CoreBreaker adapts CorePool's database-down circuit breaker to the Breaker seam.
 type CoreBreaker struct{ cp *CorePool }
 
+// Allow reports whether the breaker permits requests to enter the queue at now.
 func (b CoreBreaker) Allow(now Instant) bool { return b.cp.p.Allow(pool.Instant(now)) }
 
+// Observe is a no-op because connection-class failures reach the breaker directly
+// through the pool core's dial, loss, and trial paths.
 func (CoreBreaker) Observe(Instant, work.Outcome) {}
 
+// CorePolicy implements ReleasePolicy for the pool core's always and on-switch modes.
 type CorePolicy struct{ Mode pool.ResetMode }
 
+// AtRelease closes connections with unread bytes or non-idle status, lends as-is
+// under ResetOnSwitch, and resets under ResetAlways.
 func (p CorePolicy) AtRelease(_ Instant, in ReleaseInput) ReleaseAction {
 	switch {
 	case in.Status != pgwire.StatusIdle || in.Unread:
@@ -426,6 +443,8 @@ func (e *Engine) coreDirty(d *dbConn, kind pool.EndKind, mid, inTx bool) {
 		case d.holding:
 			d.drained = append(d.drained[:0], d.hold[:min(len(d.hold), drainHeader)]...)
 		case d.cur.mid():
+			// Mark an already-open frame with a non-'Z' byte so its tail cannot
+			// look like a ReadyForQuery header during drain.
 			d.drained = append(d.drained[:0], drainMidFrame)
 		default:
 			d.drained = d.drained[:0]
@@ -569,6 +588,8 @@ func (e *Engine) refuseQueued() {
 }
 
 func (e *Engine) refuseAdmitted() {
+	// Sweep first so any request already due at e.now leaves as a 53M01 rule shed
+	// before remaining queued requests are refused with 53M03.
 	e.sweepAdmission()
 	ids := make([]RequestID, 0, len(e.waiting))
 	for id := range e.waiting {
@@ -670,6 +691,8 @@ func (e *Engine) coreUsable() bool {
 	return false
 }
 
+// PoolSnapshot returns the pool core's current snapshot and true, or the zero
+// snapshot and false when the engine uses the fixed connection set.
 func (e *Engine) PoolSnapshot() (pool.Snapshot, bool) {
 	if e.core == nil {
 		return pool.Snapshot{}, false
@@ -677,6 +700,7 @@ func (e *Engine) PoolSnapshot() (pool.Snapshot, bool) {
 	return e.core.Snapshot(), true
 }
 
+// ClientKey returns the Postgres BackendKey issued to authenticated client id.
 func (e *Engine) ClientKey(id ConnID) (pgwire.BackendKey, bool) {
 	c := e.clients[id]
 	if c == nil || c.sess == nil || c.phase == cpStartup {

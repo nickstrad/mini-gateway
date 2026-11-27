@@ -171,6 +171,7 @@ func New(core Core, cfg Config) (*Shell, error) {
 
 func keepAliveDialer(ka net.KeepAliveConfig) DialFunc {
 	d := net.Dialer{KeepAliveConfig: ka}
+	// Disable Go's default 15s keepalive explicitly when the operator turned keepalive off.
 	if !ka.Enable {
 		d.KeepAlive = -1
 	}

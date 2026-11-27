@@ -2,6 +2,8 @@ package admission
 
 import "testing"
 
+// TestRefuseCountsABreakerShedTheCallerAnswersAndKeepsTheQueueHealthy proves
+// Queues.Refuse counts ReasonBreaker without queuing TakeShed or marking the queue shedding.
 func TestRefuseCountsABreakerShedTheCallerAnswersAndKeepsTheQueueHealthy(t *testing.T) {
 	q := mustNew(t, Config{Rule: RuleTimeout, Detail: true, TenantCapacity: 4, Capacity: 8})
 	q.Push(0, "a", 1)
