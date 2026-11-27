@@ -285,6 +285,22 @@ scripts/gate.sh c08-admission
 
 ## Gate result
 
+**Repair round:** `scripts/gate.sh c08-admission` (build stage) at `40cc0a6`, 2026-11-27, clean
+tree, run once: **overall fail, counts_for_landing false, red only in G3 unit.** G0, G1, G2, G3
+race, G4 markers and sweep (200 seeds), G5 fuzz (17 targets), G6 tier R, G7 csv (66 scenarios
+with SQL), G8 gen-docs, G9 site and G10 extra (incl. `admission-head-to-head.sh --check`, exact)
+all pass. G3 unit failed on:
+- `TestAdv_4_BurstyTenfoldLoad`: the narrowed claim 4, red by the orchestrator's decision (code
+  not changed, adversarial tests not edited);
+- `internal/pgwire` `TestLexOperatorRunsGrowLinearly` and `TestClassifierTimeGrowsLinearly`:
+  growth-timing tests under load average 15–25; this branch does not touch `internal/pgwire`;
+  both passed in the plain `go test -count=1 ./...` run before the gate and pass when rerun
+  alone (8 s). Review 1 saw the same flake.
+`go test -count=1 ./...` before the gate: every package passes except `TestAdv_4_BurstyTenfoldLoad`.
+`result.json` is not committed.
+
+**Before the repair round:**
+
 `scripts/gate.sh c08-admission` (build stage) at `10516b7`, 2026-11-27, clean tree:
 **overall pass, counts_for_landing true.** `result.json` is not committed (the orchestrator
 runs the landing gate).
