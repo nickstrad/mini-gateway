@@ -90,6 +90,10 @@ func (e *Engine) initCore() error {
 		return nil
 	}
 	pc := e.cfg.poolConfig()
+	if e.cfg.Plant&PlantNoReset != 0 {
+		pc.Reset = pool.ResetOnSwitch
+		pc.Plant |= pool.PlantIgnoreTag
+	}
 	if cp, ok := e.seams.Pool.(*CorePool); ok {
 		e.core = cp
 	} else {

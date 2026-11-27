@@ -18,5 +18,21 @@ func engineRuns(dir string) error {
 		}
 		baselineFinals = append(baselineFinals, r.Final)
 	}
+	for _, sc := range e2e.PoolScenarios() {
+		r, err := e2e.RunSim(sc.Spec, 1, e2e.SimOptions{Dir: dir})
+		if err == nil {
+			err = sc.Check(r)
+		}
+		if err == nil {
+			err = r.Flush.Check()
+		}
+		if err == nil && sc.Direct {
+			_, err = e2e.RunSim(sc.Spec, 1, e2e.SimOptions{Dir: dir, Direct: true, Arm: "direct"})
+		}
+		if err != nil {
+			return err
+		}
+		baselineFinals = append(baselineFinals, r.Final)
+	}
 	return nil
 }

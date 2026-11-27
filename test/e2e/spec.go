@@ -66,6 +66,7 @@ type Spec struct {
 	Reseed    bool
 	FakeConns int
 	Path      *PathPlan
+	Flush     time.Duration
 }
 
 // ClientResult records the tokenized startup messages, per-step replies, elapsed

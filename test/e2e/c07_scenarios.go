@@ -241,6 +241,7 @@ func NightTrickleSpec(m Remedies) Spec {
 		Timeouts: poolTimeouts(), Duration: nightTrickle + 2*time.Minute,
 		Service: fakepg.Service{PerKind: []fakepg.KindTime{{Kind: fakepg.KindRead, Time: 40 * time.Millisecond}}}}
 	sp.Timeouts.ClientIdle = 24 * time.Hour
+	sp.Flush = time.Minute
 	for c := 0; c < 8; c++ {
 		sp.Clients = append(sp.Clients, Script{Tenant: c % 2, Start: time.Duration(c) * time.Millisecond, Steps: steps(read(c, "a"))})
 	}

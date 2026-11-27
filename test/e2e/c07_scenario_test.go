@@ -47,8 +47,14 @@ func TestScenarioPool(t *testing.T) {
 		t.Run(sc.Spec.Name, func(t *testing.T) {
 			t.Parallel()
 			seeds := simtest.Seeds(t)
+			if sc.Heavy && testing.Short() {
+				t.Skip("heavy pool scenario: runs without -short (sweep, gate)")
+			}
 			if sc.Heavy && len(seeds) > heavySeeds {
 				seeds = seeds[:heavySeeds]
+			}
+			if testing.Short() && len(seeds) > 1 {
+				seeds = seeds[:1]
 			}
 			for _, seed := range seeds {
 				t.Run("seed="+itoa(int(seed)), func(t *testing.T) { runPool(t, sc, seed) })
