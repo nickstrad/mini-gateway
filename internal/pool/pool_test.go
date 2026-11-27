@@ -703,3 +703,59 @@ func TestShutdownClosesEverythingAndLeavesNoTimer(t *testing.T) {
 		t.Fatalf("dialled after shutdown: %v", acts)
 	}
 }
+
+func TestRefusedArrivalsStartOneTrialPerHalfOpenPeriod(t *testing.T) {
+	openFor := Instant(time.Second)
+	p, err := New(Config{Cap: 4, RatePerSec: 1000, BreakerFailures: 1, BreakerOpenFor: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dials := func(acts []Action) (ids []ConnID) {
+		for _, a := range acts {
+			if a.Kind == ActDial {
+				ids = append(ids, a.Conn)
+			}
+		}
+		return
+	}
+	acts := p.Demand(0, 1, nil)
+	p.DialFailed(0, dials(acts)[0], nil)
+	p.Demand(0, 0, nil)
+	opened := Instant(0)
+	const periods = 5
+	for period := 1; period <= periods; period++ {
+		for now := opened + Instant(time.Millisecond); now < opened+openFor; now += Instant(10 * time.Millisecond) {
+			if p.Allow(now) {
+				t.Fatalf("period %d: admitted at %d while open", period, now)
+			}
+			if d := dials(p.Tick(now, nil)); len(d) != 0 {
+				t.Fatalf("period %d: dialled %v at %d while open", period, d, now)
+			}
+		}
+		now := opened + openFor
+		trial := dials(p.Tick(now, nil))
+		if len(trial) != 1 || p.Breaker() != BreakerHalfOpen {
+			t.Fatalf("period %d: trials %v, breaker %s at the end of open_for", period, trial, p.Breaker())
+		}
+		for i := 0; i < 50; i++ {
+			now += Instant(time.Millisecond)
+			p.Allow(now)
+			if d := dials(p.Demand(now, 3, nil)); len(d) != 0 {
+				t.Fatalf("period %d: a second trial %v while the first is in flight", period, d)
+			}
+		}
+		p.Demand(now, 0, nil)
+		p.DialFailed(now, trial[0], nil)
+		if p.Breaker() != BreakerOpen {
+			t.Fatalf("period %d: a failed trial left the breaker %s", period, p.Breaker())
+		}
+		opened = now
+	}
+	if d := dials(p.Tick(opened+openFor, nil)); len(d) != 0 || p.Breaker() != BreakerHalfOpen {
+		t.Fatalf("a half-open period with no refused arrival sent a trial %v, breaker %s", d, p.Breaker())
+	}
+	s := p.Snapshot()
+	if s.BreakerTrials != periods || s.BreakerTransitions[TransOpenHalfOpen] != periods+1 || s.Dials != periods+1 {
+		t.Fatalf("trials %d, half-open periods %d, dials %d", s.BreakerTrials, s.BreakerTransitions[TransOpenHalfOpen], s.Dials)
+	}
+}
