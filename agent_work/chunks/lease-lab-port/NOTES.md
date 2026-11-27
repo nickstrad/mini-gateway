@@ -389,4 +389,11 @@ grep '^| `' agent_work/chunks/lease-lab-port/NOTES.md | awk -F'`' 'NF>=7 && $4 !
 
 ## Gate
 
-Pending: run on the clean tree after this file was committed.
+`GATE_ONLY=G0,G1,G2,G3,G6 scripts/gate.sh lease-lab-port` on the clean tree at `c7ea95e`
+(stage build, baseline `98cee87`, `dirty_tree=false`): **overall pass**, exit 0,
+`counts_for_landing=false` because `GATE_ONLY` was used. Not the full gate: G4, G5, G7–G10
+were not run (deviation 1). Rows: G0 tools, gofmt, build, vet, tools-vet, tools-test, tidy
+pass; G1 detlint (27 package patterns), importlint, boundlint, paniccheck pass; G2 comments
+pass; G3 unit pass (1,245 s under load), counted pass (5 tests), race pass (6 package
+patterns); G6 tier-r pass (380 s, Postgres 17.11). `gate/result.json` is not committed. The
+only commit after `c7ea95e` changes this section of NOTES.md.
