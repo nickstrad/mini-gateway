@@ -464,7 +464,7 @@ func (p *Pool) refuseIfOpen() {
 		return
 	}
 	p.refuse = false
-	if p.brk.state == BreakerOpen && !p.Usable() {
+	if p.brk.state == BreakerOpen {
 		p.emit(Action{Kind: ActRefuseQueued})
 	}
 }

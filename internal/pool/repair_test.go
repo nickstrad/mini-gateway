@@ -214,8 +214,8 @@ func TestATrialThatFailsOrALossWhileOpenRefusesQueuedWork(t *testing.T) {
 	}
 
 	q, ids, now := open(t, Config{Cap: 3, RatePerSec: 100, BreakerFailures: 1}, 2)
-	if acts := q.Lost(now, ids[0], LossBytes, nil); q.Breaker() != BreakerOpen || count(acts, ActRefuseQueued) != 0 {
-		t.Fatalf("first loss: breaker %s acts %v, want open with a usable connection left", q.Breaker(), acts)
+	if acts := q.Lost(now, ids[0], LossBytes, nil); q.Breaker() != BreakerOpen || count(acts, ActRefuseQueued) != 1 {
+		t.Fatalf("first loss: breaker %s acts %v, want queued work refused despite the idle connection left", q.Breaker(), acts)
 	}
 	if acts := q.Lost(now, ids[1], LossClosed, nil); count(acts, ActRefuseQueued) != 1 {
 		t.Fatalf("last usable connection lost while open: acts %v, want queued work refused", acts)
