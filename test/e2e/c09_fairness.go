@@ -316,7 +316,7 @@ func TenantStats(s workload.Snapshot, name string) workload.TenantSnapshot {
 }
 
 func FairScenarios() []string {
-	return []string{NoisySpec(FairArmFair).Scenario, ManySpec(FairArmFair).Scenario, HeldSpec(FairArmFair).Scenario}
+	return []string{NoisySpec(FairArmFair).Scenario, ManySpec(FairArmFair).Scenario, HeldSpec(FairArmFair).Scenario, FairResultsSpec().Name}
 }
 
 func fairBaselineSpecs() []FairSpec {
@@ -339,5 +339,38 @@ func FairBaseline(dir string, run bool) ([]obs.InstanceSnapshot, error) {
 		}
 		out = append(out, r.Flush.Final)
 	}
-	return out, nil
+	r, err := RunSim(FairResultsSpec(), 1, SimOptions{Dir: dir})
+	if err == nil {
+		err = CheckFairResults(r)
+	}
+	if err == nil {
+		err = r.Flush.Check()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return append(out, r.Final), nil
+}
+
+func FairResultsSpec() Spec {
+	sp := CoreRerun(ResultsSpec("", false), "fair-results")
+	sp.Admission = admission.Config{Rule: admission.RuleTimeout, LIFO: admission.LIFOAdaptive, Target: admission.Second, Interval: 5 * admission.Second, Detail: true}
+	return sp
+}
+
+func CheckFairResults(r *SimRun) error {
+	if err := checkResults(r); err != nil {
+		return err
+	}
+	a := r.World.Proxy.Engine.AdmissionSnapshot()
+	tenants := 0
+	for _, row := range a.PerTenant {
+		if row.Served > 0 {
+			tenants++
+		}
+	}
+	if !a.Fair.On || a.Fair.Rounds == 0 || a.Fair.LeaseStarts != r.Engine.LeasesStarted || a.Fair.InFlight.Value != 0 || tenants != r.Spec.Tenants {
+		return failf("the fair dispatcher did not carry the results run: %+v, %d tenants served, engine leases %d", a.Fair, tenants, r.Engine.LeasesStarted)
+	}
+	return nil
 }

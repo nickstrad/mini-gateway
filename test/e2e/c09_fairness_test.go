@@ -269,3 +269,9 @@ func TestCanaryFairHeldTransactionsNotCountedInFlight(t *testing.T) {
 		t.Fatalf("in flight that ignores held transactions was not caught by the scenario's invariants: %v", err)
 	}
 }
+
+func TestScenarioFairResultsEqualDirect(t *testing.T) {
+	simtest.Sweep(t, func(t *testing.T, seed int64) {
+		runScenario(t, Scenario{Spec: FairResultsSpec(), Check: CheckFairResults}, seed)
+	})
+}
