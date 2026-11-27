@@ -703,5 +703,6 @@ gate.
   - G3: unit passes (373 s; includes `agent_work/adversarial/...`, so Astra's 31 attacks
     and chunk 5's harnesses pass). **counted** passes (2 s; 5 tests under
     `-tags clscount`). race passes (19 s).
-- `gate/result.json` was not committed, and the `gate/` directory was removed. The only
-  change after the gate run is this section.
+- After the gate run there are two changes, neither touching code: this section, and
+  `eda307a`. That commit removes a `gate/result.json` (from the first, red run) that
+  `da7c6e1` had committed by mistake.
