@@ -34,13 +34,8 @@ from pathlib import Path
 # LANDED_LETTER  a lettered chunk that landed after chunk LANDED: "a" while chunk 6a is the last
 #           landing, so the pages say "chunks 0–6a". A chunk number in BUILT and REL_BUILT is then
 #           a whole number or such a name in quotes ("6a"). Set it back to "" when LANDED moves on.
-# ALSO_LANDED  whole-numbered chunks that landed out of order, ahead of LANDED: [8] while chunk 8 has
-#           landed and chunk 7 (the pool) has not. LANDED stays the end of the unbroken run, so the pages
-#           say "chunks 0–6a and chunk 8" and claim nothing of chunk 7. When the missing chunk lands, move
-#           LANDED on and empty this list.
-LANDED = 6
-LANDED_LETTER = "a"
-ALSO_LANDED = [8]
+LANDED = 8
+LANDED_LETTER = ""
 
 BUILT = {
     # chunk 1 — simulator kernel (diagram 11)
@@ -81,9 +76,9 @@ BUILT = {
     "o-csv": 3,       # internal/obs/csvflush (schema.go, writer.go, reader.go)
     "o-log": 3,       # internal/obs/logline
     "o-simsrc": 3,    # internal/obs/simsrc (chunk 4 added the fake's authentication counters and the clients' startup counters)
-    "o-catalog": 3,   # internal/obs/catalog; scripts/gen-docs.sh, scripts/gen-docs.d/c03-csv-schema.sh; docs/csv-schema.md (chunk 5 added the classifier source, chunk 6 the engine and shell metrics, chunk 6a the load generator's metrics, chunk 8 the admission metrics)
-    "o-simrun": 6,    # internal/obs/simrun (chunk 3); chunk 4 added wire.go (the wire scenarios), chunk 5 classifier.go (the classifier scenarios), chunk 6 custom.go (a run handed its sources); chunk 8: its baseline test also runs the admission scenarios (e2e.AdmissionBaseline in engine_test.go)
-    "o-assert": 6,    # scripts/csv-assert.sh, test/analysis (views.sql, guard.sql, 210 assertion files: 5 of chunk 3, 57 of chunk 4, 3 of chunk 5, 130 of chunk 6, 15 of chunk 8); make csv-assert; scripts/chaos.sh (chunk 6a: one line per scenario, a failure's rows and REPLAY line under it)
+    "o-catalog": 3,   # internal/obs/catalog; scripts/gen-docs.sh, scripts/gen-docs.d/c03-csv-schema.sh; docs/csv-schema.md (chunk 5 added the classifier source, chunk 6 the engine and shell metrics, chunk 6a the load generator's metrics, chunk 7 the pool metrics, chunk 8 the admission metrics)
+    "o-simrun": 6,    # internal/obs/simrun (chunk 3); chunk 4 added wire.go (the wire scenarios), chunk 5 classifier.go (the classifier scenarios), chunk 6 custom.go (a run handed its sources); chunk 7: its tests run the scenarios and their SQL on 4 workers and skip the four heavy pool scenarios under -short; chunk 8: its baseline test also runs the admission scenarios (e2e.AdmissionBaseline in engine_test.go)
+    "o-assert": 6,    # scripts/csv-assert.sh, test/analysis (views.sql, guard.sql, 237 assertion files: 5 of chunk 3, 57 of chunk 4, 3 of chunk 5, 130 of chunk 6, 27 of chunk 7, 15 of chunk 8); make csv-assert; scripts/chaos.sh (chunk 6a: one line per scenario, a failure's rows and REPLAY line under it)
     "o-wiresrc": 4,   # internal/obs/wiresrc
     "o-clssrc": 5,    # internal/obs/clssrc
     "csvfiles": 3,    # written by internal/obs/csvflush; described in docs/csv-schema.md
@@ -106,54 +101,71 @@ BUILT = {
     "w-rejects": 5,   # internal/pgwire: rejectlist.go, rejectlist_doc.go; docs/reject-list.md
     "w-classifier": 5,  # internal/pgwire: classify.go, snapshot_classifier.go
     "w-share": 5,     # internal/pgwire: share.go, share_doc.go; docs/safe-shape.md; tier R test in share_tierr_test.go
-    "w-errors": 5,    # internal/pgwire: errors.go, errors_doc.go, reply.go; docs/error-contract.md
+    "w-errors": 5,    # internal/pgwire: errors.go, errors_doc.go, reply.go; docs/error-contract.md (chunk 7 added the row lost-mid-statement-in-transaction)
     "w-clsworld": 5,  # internal/pgwire/pgwiretest/clsworld; run by internal/pgwire/classify_e2e_test.go and internal/obs/simrun/classifier_test.go
     # chunk 6 — walking skeleton (diagrams 1, 2, 3, 5 and 12)
     "app": 6,         # a client connects, logs in and runs statements through cmd/mini-gateway (test/e2e tier R: psql, pgbench-style runs)
     "operator": 6,    # the config file (internal/config), /healthz, /stats and /metrics (internal/shell/admin.go), SIGTERM (cmd/mini-gateway/main.go); chunk 6a added cmd/mgctl
     "pg": 6,          # the proxy now stands in front of it: tier R of test/e2e runs the binary against Postgres 17
-    "c-shell": 6,     # cmd/mini-gateway (main.go); internal/shell (shell.go, engine.go, conn.go, io.go, admin.go, stats.go)
-    "e-transport": 6, # internal/proxy: api.go (events, actions, the read constants)
-    "e-sessions": 6,  # internal/proxy: client.go
-    "e-backends": 6,  # internal/proxy: dbconn.go
-    "e-pipeline": 6,  # internal/proxy: startRequest, gates, enqueue, dispatch, lend, forward in lease.go (chunk 8: the queueTouched calls, Expire and Unpop)
-    "e-seams": 6,     # internal/proxy: seams.go (chunk 8 added ShedQueue)
-    "e-reset": 6,     # internal/proxy: replyDone, release, startReset, resetJudge, judgeReset in lease.go
-    "e-fail": 6,      # internal/proxy: leaseFailed, statementLost, reachedFor, lostRow in lease.go; reply in client.go
-    "e-clock": 6,     # internal/proxy: timers.go; fireTimers in engine.go (chunk 8 added the timer kind tAdmission)
-    "e-publish": 6,   # internal/proxy: snapshot.go; Snapshot and the EvPublish case in engine.go; chunk 8: AdmissionSnapshot in admission.go
-    "e-proxysim": 6,  # internal/proxy/proxysim (proxysim.go, world.go)
-    "o-enginesrc": 6, # internal/obs/enginesrc
+    "c-shell": 6,     # cmd/mini-gateway (main.go); internal/shell (shell.go, engine.go, conn.go, io.go, admin.go, stats.go); chunk 7: cancel.go, keepAliveDialer in shell.go, the write deadline in conn.abort
+    "e-transport": 6, # internal/proxy: api.go (events, actions, the read constants; chunk 7 added ActDBCancel and EvDBCancelDone)
+    "e-sessions": 6,  # internal/proxy: client.go (chunk 7: the key map e.keys, the timer tClientIdleTx)
+    "e-backends": 6,  # internal/proxy: dbconn.go (chunk 7: the phases dpChecking and dpCleaning, the core path)
+    "e-pipeline": 6,  # internal/proxy: startRequest, gates, enqueue, dispatch, lend, forward in lease.go (chunk 7: the breaker seam now refuses with 53M03, one checkout per enqueue; chunk 8: the queueTouched calls, Expire and Unpop)
+    "e-seams": 6,     # internal/proxy: seams.go (chunk 8 added ShedQueue, chunk 7's join its Refuse)
+    "e-reset": 6,     # internal/proxy: replyDone, release, startReset, resetJudge, judgeReset in lease.go (chunk 7: coreRelease in corepool.go, the re-seed in the judge)
+    "e-fail": 6,      # internal/proxy: leaseFailed, statementLost, reachedFor, lostRow in lease.go; reply in client.go (chunk 7: the row for a loss mid-statement inside a transaction)
+    "e-clock": 6,     # internal/proxy: timers.go; fireTimers in engine.go (chunk 7 added the timer kinds tPool and tClientIdleTx, chunk 8 tAdmission)
+    "e-publish": 6,   # internal/proxy: snapshot.go; Snapshot and the EvPublish case in engine.go; chunk 7: PoolSnapshot in corepool.go; chunk 8: AdmissionSnapshot in admission.go
+    "e-proxysim": 6,  # internal/proxy/proxysim (proxysim.go, world.go; chunk 7: the cancel connection)
+    "o-enginesrc": 6, # internal/obs/enginesrc (chunk 7: mapPoolPath, the pool source and the breaker rule; chunk 8: the admission source and rule)
     # chunk 6a — operator tools (diagrams 3 and 12)
     "c-mgctl": "6a",  # cmd/mgctl (main.go); internal/mgctl (commands.go, contract.go, session.go, password.go, tls.go)
     "c-dev": "6a",    # deploy/dev (docker-compose.yml, init.sql, env.sh, up.sh, load.sh, down.sh); the run-up, load and run-down blocks of the Makefile
     "o-report": "6a", # scripts/report.sh; test/analysis/report (sections/*.sql, report_test.go, testdata); make report
-    # chunk 8 — admission queues (diagrams 5, 7 and 12). Landed before chunk 7: see ALSO_LANDED.
-    "a-queues": 8,    # internal/admission: queues.go, ring.go; observeLIFO and loadGauge in tenant.go
+    # chunk 7 — the pool (diagrams 2, 3, 5, 8 and 12)
+    "c-pool": 7,      # internal/pool (pool.go, breaker.go, rate.go, config.go, snapshot.go; the reference model and FuzzPoolOps in its tests)
+    "p-acct": 7,      # internal/pool: State and counts in pool.go; Share in config.go; Invariants; Snapshot.Check in snapshot.go
+    "p-create": 7,    # internal/pool: Demand, maybeDial and dial in pool.go; the limiter in rate.go
+    "p-lease": 7,     # internal/pool: Checkout, pick, lend, Release and cleanEnd in pool.go; ResetMode in config.go
+    "p-check": 7,     # internal/pool: needsCheck, startCheck, checkFailed and markSuspect in pool.go
+    "p-breaker": 7,   # internal/pool: breaker.go; Allow, connFailure, trialFailed, checkTrial and refuseIfOpen in pool.go
+    "p-dirty": 7,     # internal/pool: Release, rollback, StepDone, StepFailed and Lost in pool.go
+    "p-reaper": 7,    # internal/pool: expire, expireOne and jitter in pool.go
+    "p-cancel": 7,    # internal/pool: cancel, ClientCancel, CancelDone and cancelCleared in pool.go
+    "p-snap": 7,      # internal/pool: snapshot.go
+    "e-corepool": 7,  # internal/proxy: corepool.go; the Pool field in config.go; the tPool case in engine.go
+    "o-poolsrc": 7,   # internal/obs/poolsrc
+    # chunk 8 — admission queues (diagrams 5, 7 and 12)
+    "a-queues": 8,    # internal/admission: queues.go, ring.go; observeLIFO and loadGauge in tenant.go (chunk 7's join: Refuse and the shed reason breaker)
     "a-rule": 8,      # internal/admission: QueueRule in rule.go; ParseProductRule in config.go; queue.rule in internal/config/queue.go
     "a-rule-timeout": 8,  # internal/admission: TimeoutRule in rule.go
     "a-rule-law": 8,  # internal/admission: ControlLaw, Law and IntervalOverSqrt in rule.go
     "a-arms": 8,      # internal/admission: fifoRule and FollyRule in rule.go; RuleKind.ComparisonArm in config.go
-    "e-admq": 8,      # internal/proxy: admission.go; the Admission field in config.go; the tAdmission case and Shutdown in engine.go
+    "e-admq": 8,      # internal/proxy: admission.go; the Admission field in config.go; the tAdmission case and Shutdown in engine.go (chunk 7's join: Refuse)
     "o-admsrc": 8,    # internal/obs/admsrc
     "o-h2h": 8,       # scripts/admission-head-to-head.sh; test/analysis/admission-head-to-head (head-to-head.query, head-to-head.md)
 }
 
 PARTIAL = {
     "gw": "Built in chunk 6: a working proxy, the walking skeleton — cmd/mini-gateway terminates client TLS, logs "
-          "clients in with SCRAM-SHA-256, lends one of a fixed set of database connections per transaction, resets it "
+          "clients in with SCRAM-SHA-256, lends a database connection per transaction, resets it "
           "after every lease, queues waiting requests, and serves health, stats and "
           "metrics from snapshots. Chunk 6a built the operator tools around it: the client mgctl, the load "
           "generator, the dev stack with its run targets, and the story report. Chunk 8 built the admission "
           "queues: one bounded queue per tenant with the two CoDel modes (the config file selects one), adaptive "
-          "LIFO, and every shed request answered at once with 53M01. Not built: the pool with its breaker (chunk "
-          "7 is built but has not landed), fairness between tenants, the adaptive limit and the rate gate, read "
-          "coalescing, the retry policy, the OTLP push, and the fleet division and drain of N instances.",
+          "LIFO, and every shed request answered at once with 53M01. Chunk 7 built the pool: connections opened on "
+          "demand under a hard cap and a creation limit, checked before reuse, cleaned up or closed when a lease "
+          "ends badly, reset by one of two release policies, client cancels forwarded, one breaker that answers "
+          "53M03 while the database is down, TCP keepalive on the database sockets, and the connection and "
+          "creation-rate budgets taken from the fleet block. Not built: fairness between tenants, the adaptive "
+          "limit and the rate gate, read coalescing, the retry policy, the OTLP push, and the rest of the fleet "
+          "configuration and the drain of N instances.",
     "c-engine": "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two "
                 "parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). "
-                "Chunk 8 put the admission queues behind the queue seam (admission.go). The stages that belong to "
-                "cores not landed yet run their stand-ins: a breaker that is always closed, a rate gate that "
-                "always allows, no coalescing, a fixed set of connections, retry off.",
+                "Chunk 7 put the pool core behind the pool, breaker and release seams (corepool.go) and chunk 8 the "
+                "admission queues behind the queue seam (admission.go). The stages that belong to "
+                "cores not built yet run their stand-ins: a rate gate that always allows, no coalescing, retry off.",
     "e-relay": "Built in chunk 6 (internal/proxy: relay, relayEvents and relayed in lease.go; writeClient and the "
                "pauses in client.go): all of it for the one client of a reply. Not built: the fan-out to every waiter "
                "of a shared read (chunk 11).",
@@ -165,11 +177,15 @@ PARTIAL = {
     "c-config": "Built in chunk 6 (internal/config): the JSON config file with its defaults, validation that fails "
                 "closed and names the key (the timeout nesting too), the client_tls and backend_tls blocks, the "
                 "config fingerprint, and the fleet block parsed and checked (pool.connections must fit "
-                "fleet.backend_connections / fleet.instances, which must divide evenly and fit the database's limit "
-                "with a reserve). Built in chunk 8 (queue.go): the queue keys rule, target, interval, "
+                "fleet.backend_connections / fleet.instances, and the fleet total must fit the database's limit "
+                "with a reserve). Built in chunk 7 (pool.go): the pool, lease, breaker, backend and timeout keys, "
+                "all of what is said of them here; an omitted pool.connections takes the fleet's connections "
+                "divided by the instance count and the creation rate is the fleet's rate divided the same way, "
+                "both rounded down and never zero (a total below the instance count is refused, a remainder is a "
+                "warning). Built in chunk 8 (queue.go): the queue keys rule, target, interval, "
                 "tenant_capacity, max_tenants, lifo and lifo_hold, with their defaults; queue.rule accepts only "
-                "timeout and control-law. Not built: nothing takes its budget from the division yet (chunk 7 on; the fleet "
-                "configuration is chunk 13).",
+                "timeout and control-law. Not built: the division of budgets whose cores are not built (the rate "
+                "gate's rates, chunk 10) and the full fleet block (chunk 13).",
     "c-e2e": "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in "
              "tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz "
              "target FuzzEngineOps, and make chaos (scripts/chaos.sh). Built in chunk 6a: the load generator "
@@ -179,14 +195,21 @@ PARTIAL = {
              "the simulator, one connection, a fixed read time) with the head-to-head scenarios (four arms at "
              "1.2×, 2× and 10× load), anti-bufferbloat with recovery for both rules against a first-come control, "
              "the first burst after idle, two canaries, and a tier R overload test against Postgres with "
-             "pg_sleep (17 tier R tests now). Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14).",
+             "pg_sleep (17 tier R tests). Built in chunk 7: the pool scenarios (22, among them the hard cap under "
+             "1,000 clients at once, the reconnection storm, cold start, lifetimes, the database restart alone and "
+             "behind the admission queues, silent mass death, the night trickle, cancel, idle in a transaction, and "
+             "session state under each release policy), run with the pool core where the chunk 6 scenarios keep "
+             "the fixed set; a relay between the proxy and the fake Postgres that injects the path faults "
+             "(blackhole, a peer that forgot the connection, idle drop, polite close, slots held); their canaries "
+             "and ablations; and five tier R pool tests (22 tier R tests now), among them 500 clients on 16 "
+             "database connections. Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14).",
     "c-sim": "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy "
              "protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS "
              "handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no "
              "proxy) and the fidelity runner, and scripts/tier-r.sh. Since chunk 6 the engine runs on it, through the "
              "engine's own test package internal/proxy/proxysim. Not built: no synthetic workload drives the cores "
-             "(the one core that has landed, admission, is driven by its own reference-model tests and through "
-             "the engine).",
+             "(the two cores built so far, the pool and admission, are driven by their own reference-model "
+             "tests and through the engine).",
     "c-pgwire": "Built in chunks 4 and 5 (internal/pgwire): every component drawn here except the codec boundary. Chunk 4: "
                 "the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the "
                 "two trackers, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest and "
@@ -196,27 +219,29 @@ PARTIAL = {
                 "(three startup rows added). Not built: the "
                 "codec boundary (no file in the package imports pgproto3; the reply builders code their messages by "
                 "hand). Nothing produces outcomes yet.",
-    "c-obs": "Built in chunks 1, 3, 4, 5, 6 and 8: everything except the OTLP push adapter (chunk 15) and the health "
-             "rules for an open breaker, the limit's floor and draining. Since chunk 6 the "
+    "c-obs": "Built in chunks 1, 3, 4, 5, 6, 7 and 8: everything except the OTLP push adapter (chunk 15) and the health "
+             "rules for the limit's floor and draining. Since chunk 6 the "
              "shell creates a collector in the real process, with the engine, wire and classifier sources, and "
              "serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line "
              "adapter is attached only by the scenario flush harness. Chunk 6a: the story report, and the load "
-             "generator's metrics in the catalog. Chunk 8: the admission source with the health rule for shedding, "
-             "and the head-to-head table.",
+             "generator's metrics in the catalog. Chunk 7: the pool source with the health rule for the breaker. "
+             "Chunk 8: the admission source with the health rule for shedding, and the head-to-head table.",
     "prom": "Built in chunk 6a (deploy/dev): the dev stack starts a Prometheus v3.9.1 that scrapes the gateway's "
             "/metrics directly, every second. Not built: the production path through the Collector (chunk 15).",
-    "o-health": "Built in chunks 3, 6 and 8. Chunk 3 (internal/obs: health.go): the three states, the rule table "
+    "o-health": "Built in chunks 3, 6, 7 and 8. Chunk 3 (internal/obs: health.go): the three states, the rule table "
                 "(overall state is the worst rule), the collector rule and the JSON body. Chunk 6: the rule database "
                 "(internal/obs/enginesrc: degraded while no database connection is usable and the last connect "
-                "failed) and the rule listener (internal/shell: failed while the client listener is down). Chunk 8: "
+                "failed) and the rule listener (internal/shell: failed while the client listener is down). Chunk 7: "
+                "the rule breaker (internal/obs/poolsrc: degraded while the breaker is open or half-open). Chunk 8: "
                 "the rule admission (internal/obs/admsrc: degraded while a tenant queue shed within the last "
-                "interval). Not built: the rules for an open breaker, the limit's floor and draining.",
+                "interval). Not built: the rules for the limit's floor and draining.",
     "c-adm": "Built in chunk 8 (internal/admission): the per-tenant queues, the QueueRule interface, the timeout "
              "rule, the control-law rule and the two comparison arms, all of what is said of them here; the "
              "Dispatcher interface with one default (oldest head first); and Snapshot() for the queues. The engine "
              "runs them behind its queue seam, and the config file always selects one of the two rules. The core "
              "does not import internal/work so far: it takes a tenant as a string and a request as an integer id, "
-             "and the engine converts. Not built: round robin with shares (chunk 9), the adaptive limit and the "
+             "and the engine converts. Chunk 7's join added Refuse and the shed reason breaker, for the queued "
+             "requests an opening breaker refuses. Not built: round robin with shares (chunk 9), the adaptive limit and the "
              "rate gate (chunk 10), and the tenant table's in-flight counts, shares and gate state.",
     "a-tenants": "Built in chunk 8 (internal/admission: tenantFor, dropQuiet, evictEmpty and statsFor in "
                  "queues.go; tenant.go): one entry per tenant with a queue (its ring, rule state, LIFO state and "
@@ -261,7 +286,7 @@ REL_BUILT = {
     # Chunk 6. Context arrows of the partly built system that are wholly true of the binary:
     "r-app-gw": 6,  # test/e2e tier R: psql and scripted clients through cmd/mini-gateway, client TLS on
     "r-op-gw": 6,   # internal/config (the file, the fleet block), internal/shell/admin.go, signalContext in cmd/mini-gateway/main.go
-    "r-gw-pg": 6,   # the fixed set of pool.connections, lent per transaction (internal/proxy/lease.go)
+    "r-gw-pg": 6,   # pool.connections, lent per transaction (internal/proxy/lease.go); since chunk 7 opened on demand by the pool core
     "r-tel-gw": 6,  # /metrics and /stats on the admin port (internal/shell/admin.go)
     # Chunk 6. Container arrows with the partly built engine, wire layer, observability, config or suite at one end:
     "c3": 6,    # shell/engine.go: the mailbox, core.Step, execute
@@ -327,7 +352,7 @@ REL_BUILT = {
     # Chunk 8. Arrows of the admission queues that are wholly true although one end is only partly built:
     "c16": 8,   # admission/snapshot.go and tenant.go: obs.Gauge, obs.Histogram, obs.Conserve; obs/admsrc reads the snapshot
     "e30": 8,   # proxy/admission.go: AdmissionQueue holds an *admission.Queues
-    "a2": 8,    # proxy/admission.go: Push, Pop, RemoveAt, Expire, Sweep, Next, TakeShed, Unpop, Close
+    "a2": 8,    # proxy/admission.go: Push, Pop, RemoveAt, Expire, Refuse, Sweep, Next, TakeShed, Unpop, Close
     "a5": 8,    # proxy/admission.go: Engine.AdmissionSnapshot
     "a10": 8,   # admission/queues.go: pick calls Dispatcher.Pick over the tenants with waiting work
     "a14": 8,   # admission/queues.go: tenantFor; a tenantQueue holds the ring
@@ -335,14 +360,25 @@ REL_BUILT = {
     "o76": 8,   # admsrc/admsrc.go: Map(admission.Snapshot)
     "o79": 8,   # admsrc/admsrc.go: HealthRules; appended in enginesrc.HealthRules
     "o82": 8,   # scripts/admission-head-to-head.sh: run() calls go test -run TestScenarioAdmissionHeadToHead ./test/e2e
+    # Chunk 7. Arrows of the pool that are wholly true although the engine, observability or health is only partly built:
+    "c7": 7,    # proxy/corepool.go: CorePool holds a *pool.Pool; engine.go and dbconn.go call it
+    "c17": 7,   # pool/snapshot.go and pool.go: obs.Gauge, obs.Histogram; obs/poolsrc reads the snapshot
+    "p1": 7,    # proxy/corepool.go: CorePool.Checkout; coreRelease and coreDirty call Release
+    "p2": 7,    # proxy/corepool.go: CoreBreaker.Allow; dbconn.go: DialFailed; coreLost: Lost; coreExec: ActRefuseQueued
+    "p3": 7,    # proxy/corepool.go: coreDirty (Release with an End), coreStepDone, coreStepFailed
+    "p4": 7,    # proxy/corepool.go: clientCancel calls ClientCancel; cancelDone calls CancelDone
+    "p5": 7,    # proxy/corepool.go: Engine.PoolSnapshot
+    "p17": 7,   # proxy/corepool.go: coreExec performs ActCheck; coreStepDone and coreStepFailed report the result
+    "p18": 7,   # pool/snapshot.go: obs.Gauge, obs.HistogramSnapshot; pool.go: obs.Histogram
+    "p19": 7,   # proxy/corepool.go: corePump calls Demand, coreOpened calls Opened; dbconn.go: DialFailed
+    "p20": 7,   # proxy/corepool.go: poolTimer calls Tick; corePump arms tPool at Next
+    "o86": 7,   # poolsrc/poolsrc.go: HealthRules; appended in enginesrc.HealthRules
 }
 # =========================================================================== end of AS BUILT
 
 HERE = Path(__file__).resolve().parent
 LANDED_NAME = "%d%s" % (LANDED, LANDED_LETTER)
-assert all(isinstance(c, int) and c > LANDED + 1 for c in ALSO_LANDED) and ALSO_LANDED == sorted(set(ALSO_LANDED)), \
-    "ALSO_LANDED holds whole chunks that landed past a chunk that has not: %s" % ALSO_LANDED
-REVISION = "target-approved-2026-11-24-rulings+built-through-chunk-%s" % "+".join([LANDED_NAME] + ["%d" % c for c in ALSO_LANDED])
+REVISION = "target-approved-2026-11-24-rulings+built-through-chunk-%s" % LANDED_NAME
 SRC = ["plan"]
 
 E = {}      # id -> element
@@ -446,7 +482,9 @@ container("c-shell", "Shell and binary",
           "client listener, one reader and one writer goroutine per connection, one bounded mailbox into the engine's "
           "goroutine, a bounded write queue per connection, a deadline on every socket operation, TLS on both legs "
           "with crypto/tls (it reads exactly the 8 bytes of a client's first packet, upgrades the socket when the "
-          "engine says so and buffers nothing across the upgrade), the admin listener on its own port, the collector "
+          "engine says so and buffers nothing across the upgrade), TCP keepalive on the database sockets by config, "
+          "each cancel request sent on a database connection of its own, a short write deadline before every "
+          "close so no close can wait, the admin listener on its own port, the collector "
           "with its JSON, Prometheus and CSV adapters, and signal handling: SIGTERM or SIGINT stops the process (a "
           "plain stop so far; the graceful drain is chunk 13). "
           "Makes no decisions: it posts events to the engine and performs the actions the engine returns.",
@@ -471,8 +509,12 @@ container("c-adm", "Admission",
           "gauge, round-robin dispatcher with shares that bind under saturation, adaptive concurrency limit.",
           tech="Go, pure core")
 container("c-pool", "Pool",
-          "internal/pool. Hard-capped database connections, creation limiter, leases per transaction, the one breaker, "
-          "the dirty-connection table.", tech="Go, pure core")
+          "internal/pool. Hard-capped database connections opened on demand, a creation limiter, leases with two "
+          "release policies, a check before reuse, the one breaker, the dirty-connection table, cancels. A "
+          "deterministic core with no Postgres types and no I/O: every call takes the time and returns actions "
+          "(dial, check, cancel, roll back, reset, close, refuse the queued requests), and it owns every pool "
+          "deadline. Its tests check it against a reference model and with the fuzz target FuzzPoolOps.",
+          tech="Go, pure core")
 container("c-coal", "Coalescer",
           "internal/coalesce. Identical statements share one database read: in auto mode those the wire layer marks as "
           "fitting the safe shape, in hinted mode those carrying the client's mark. Never writes.",
@@ -489,9 +531,11 @@ container("c-obs", "Observability",
           tech="Go, standard library")
 container("c-config", "Configuration",
           "internal/config. The config file (JSON), the client_tls and backend_tls blocks, the queue block (the "
-          "rule and its times, the capacities, adaptive LIFO), the static fleet block "
-          "(instance count N; fleet budgets divided by N), load-time validation that fails closed and names the key, "
-          "and the config fingerprint.", tech="Go")
+          "rule and its times, the capacities, adaptive LIFO), the pool keys (connect cap, idle timeout, "
+          "lifetime, jitter, the check, the cancel cap), the lease keys (reset: always or on-switch; reseed), the "
+          "breaker keys, the backend keys (TCP keepalive, server keepalive, the path's idle limit), the static "
+          "fleet block (instance count N; fleet budgets divided by N), load-time validation that fails closed "
+          "and names the key, warnings for risky settings, and the config fingerprint.", tech="Go")
 container("c-sim", "Simulator harness",
           "internal/sim and its sub-packages simnet, simtls, fakepg, workload, world, simtest and simtoy; internal/testclient; "
           "internal/randdist; cmd/mgsim; scripts/tier-r.sh. A deterministic single-threaded world: virtual clock, "
@@ -543,22 +587,23 @@ rel("c3", "c-shell", "c-engine", "Posts events (bytes arrived, bytes written, co
 rel("c4", "c-engine", "c-pgwire", "Runs the session machines and trackers over the bytes; turns each Query into a work unit; builds the replies the proxy makes itself", "Go, in-process")
 rel("c5", "c-engine", "c-adm", "Gate, enqueue, pick the next request, report completions", "Go, in-process")
 rel("c6", "c-engine", "c-coal", "Join or start a shared read; fan the reply out", "Go, in-process")
-rel("c7", "c-engine", "c-pool", "Lend and release connections; open and close decisions; breaker state", "Go, in-process")
+rel("c7", "c-engine", "c-pool", "Lend and release connections; performs the pool's open, check, clean-up, reset and close decisions; breaker state", "Go, in-process")
 rel("c9", "c-engine", "c-retry", "Ask whether a failure may be retried", "Go, in-process")
-rel("c10", "c-shell", "pg", "Opens the pooled connections and moves their bytes", "Postgres wire protocol; TCP, TLS by config")
+rel("c10", "c-shell", "pg", "Opens the pooled connections, with TCP keepalive, and moves their bytes; sends each cancel request on a connection of its own", "Postgres wire protocol; TCP, TLS by config")
 rel("c11", "c-engine", "c-obs", "Keeps its counters as one plain snapshot (histograms, gauges, a conservation check); answers each publish event with a publish action", "Go, plain structs")
 rel("c12", "c-shell", "c-obs", "Creates the collector and publishes once per interval; the admin listener serves exporters and health from the last published snapshot", "Go, in-process")
 rel("c13", "telemetry", "c-shell", "Scrapes Prometheus text and JSON stats", "HTTP admin port")
 rel("c14", "c-obs", "telemetry", "Pushes OTLP metrics to a Collector that feeds Prometheus (last build chunk); flushes CSV files; writes log lines", "OTLP/HTTP JSON, files")
 rel("c15", "c-shell", "c-config", "Loads and validates the config and the fleet block at start", "Go, in-process")
 rel("c16", "c-adm", "c-obs", "Keeps its counters as one plain snapshot (gauges with peaks, queue-wait histograms, a conservation check); the admission source mapping reads it", "Go, plain structs")
+rel("c17", "c-pool", "c-obs", "Keeps its counters as one plain snapshot (gauges with peaks, two histograms, a conservation check); the pool source mapping reads it", "Go, plain structs")
 
 # --------------------------------------------------------------------------- container view B (drivers and seams)
 rel("s1", "c-engine", "c-sim", "The engine's test package proxysim runs the same engine on the simulator's event loop, over simulated byte streams", "Go, transport seam, test code")
 rel("s2", "c-pgwire", "pgproto3", "The codec boundary: message structs encoded and decoded here and nowhere else in product code", "Go import")
 rel("s3", "c-pgwire", "c-work", "Produces work units and outcomes", "Go types")
 rel("s4", "c-adm", "c-work", "Written against these types only", "Go types")
-rel("s5", "c-pool", "c-work", "Written against these types only", "Go types")
+rel("s5", "c-pool", "c-work", "Written against these types only: so far it uses the tenant id", "Go types")
 rel("s6", "c-coal", "c-work", "Written against these types only", "Go types")
 rel("s8", "c-retry", "c-work", "Written against these types only", "Go types")
 rel("s9", "c-sim", "pgproto3", "The fake Postgres and the test client encode and decode real wire messages, in one file each", "Go import, test code")
@@ -590,40 +635,48 @@ rel("d6", "c-dev", "prom", "Starts a Prometheus that scrapes the gateway's /metr
 P = "c-engine"
 comp(P, "e-transport", "Transport seam",
      "The engine's contract with its driver, as plain events and actions (no Go interface). Events in: accepted, "
-     "bytes arrived, bytes written, write refused, closed, dial failed, TLS result, timer, publish. Actions out: "
-     "write, close, start TLS, pause and resume reading, open a database connection, wake at a time, publish. "
+     "bytes arrived, bytes written, write refused, closed, dial failed, TLS result, cancel done, timer, publish. "
+     "Actions out: write, close, start TLS, pause and resume reading, open a database connection, send a cancel "
+     "request on a connection of its own, wake at a time, publish. "
      "Knows no protocol; its read rule (exactly 8 bytes of a new client, one unprocessed read per connection) keeps "
      "bytes from crossing a TLS upgrade. Two implementations: TCP in the shell, simulated streams in proxysim.",
      tech="Go types: events and actions")
 comp(P, "e-sessions", "Client session table",
      "One entry per client connection: its wire state machines, tenant, phase (startup, idle, queued, active, "
      "holding a connection), transaction status, the single request it may have inside the proxy, a bounded input "
-     "buffer and the count of reply bytes not yet written. Caps the clients connected and the clients in startup.")
+     "buffer and the count of reply bytes not yet written. Caps the clients connected and the clients in startup. "
+     "Keeps the map from proxy-issued key data to its client, which a cancel request is looked up in, and the "
+     "idle-in-transaction deadline of a client that holds a connection (with the pool core).")
 comp(P, "e-backends", "Database connection table",
      "One entry per database connection: its wire state machine, the query-cycle tracker, its phase (dialing, "
-     "startup, idle, lent, resetting) and who holds it. So far it also keeps the fixed set full itself: opens the "
-     "configured number at start, one dial at a time, and dials again after a loss, after a short delay when the "
-     "connect failed (the pool decides this from chunk 7).")
+     "startup, idle, lent, resetting, checking, cleaning) and who holds it. With the pool core, every open and "
+     "close is the core's decision and the phase mirrors the core's state. With the fixed set (tests only since "
+     "chunk 7) the table keeps the set full itself: opens the configured number at start, one dial at a time, and "
+     "dials again after a loss, after a short delay when the connect failed.")
 comp(P, "e-pipeline", "Request pipeline",
      "The fixed order every request takes: classify, reject list, draining, breaker, rate gate, coalesce, queue, "
      "lease, forward, release. Each stage is counted as passed or refused, and each refusal is answered with its "
-     "error-contract row. A queued request has a wait deadline, the outer bound whatever the queue rule; a "
-     "request the queue sheds is answered at once with 53M01. Statements inside an open transaction skip from "
+     "error-contract row: while the breaker is open, 53M03 at once and no dial. A queued request has a wait "
+     "deadline, the outer bound whatever the queue rule; a request the queue sheds is answered at once with "
+     "53M01. A request waits only in the queue: a checkout that cannot lend leaves it there. Statements inside an open transaction skip from "
      "the reject list straight to forward on the connection the client already holds.")
 comp(P, "e-seams", "Stage seams and stand-ins",
      "The small interfaces the pipeline calls: classifier, breaker, rate gate, coalescer, queue, pool, release "
-     "policy, retry policy. The queue seam has an extension for a queue that sheds: remove or expire at an instant, "
-     "sweep, next deadline, take the shed requests, put back a popped one, close. Also the implementations used "
-     "until each core lands: a breaker that is always closed, a rate gate that always allows, no coalescing, a "
-     "fixed set of connections, reset after every lease, retry off; and one bounded first-come queue, which an "
-     "engine configured without a queue rule still uses (tests only: the config file always names a rule). The "
-     "engine's config can replace any of them.", tech="Go interfaces")
+     "policy, retry policy. The queue seam has an extension for a queue that sheds: remove, expire or refuse at an "
+     "instant, sweep, next deadline, take the shed requests, put back a popped one, close. Also the stand-ins: a "
+     "rate gate that always allows, no coalescing and retry off, used until their cores are built; and a breaker "
+     "that is always closed, a fixed set of connections, reset after every lease and one bounded first-come "
+     "queue, which an engine configured without the pool core or without a queue rule still uses (tests only: "
+     "the config file always gives both). The engine's config can replace any of them.", tech="Go interfaces")
 comp(P, "e-reset", "Lease end and reset",
      "A lease ends when a reply ends with status idle; while the status is in-transaction or failed the client "
      "keeps its connection. At release the policy answers reset, lend as is, or close (close when the status is not "
      "idle or bytes are left unread). The reset is DISCARD ALL sent as the proxy's own Query: the connection is "
      "lent again only after exactly that tag and status idle, with nothing after them, inside the reset deadline. "
-     "Anything else closes it, counted by reason. Nothing of the reset's reply reaches a client.")
+     "Anything else closes it, counted by reason. Nothing of the reset's reply reaches a client. With the pool "
+     "core the release is the core's: under on-switch a clean connection is tagged with its tenant and not reset "
+     "until another tenant needs it; with lease.reseed on, a SELECT setseed follows DISCARD ALL and its reply is "
+     "judged too; and a lease that does not end clean goes to the dirty-connection table instead of being closed.")
 comp(P, "e-relay", "Reply relay",
      "Streams database messages to the client (or to every waiter of a shared read) as they arrive, through a "
      "bounded buffer per client, with back pressure in both directions: reading the database connection is paused "
@@ -633,22 +686,24 @@ comp(P, "e-relay", "Reply relay",
 comp(P, "e-fail", "Failure classifier",
      "For every failure records whether the request may have reached the database (no only when the driver reports "
      "that its first write was refused with zero bytes accepted) and picks the error-contract row: 08006 for a safe "
-     "read or when nothing reached, 08007 otherwise, FATAL 08006 when a transaction lost its connection, and a "
+     "read or when nothing reached, 08007 otherwise, FATAL 08006 when a transaction lost its connection (between "
+     "statements, or mid-statement unless the message could have ended the transaction: then 08007), and a "
      "close with no message once part of the reply was sent. Hands the fact to the retry seam.")
 comp(P, "e-clock", "Deadline table",
      "Every wait the engine has, as deadlines on the clock passed in with each event: one heap, and the next "
-     "wake-up time returned as an action. The admission queues' next deadline is one timer in it. Timers due at or before an event's time fire before the event is "
+     "wake-up time returned as an action. The admission queues' next deadline is one timer in it, and the pool core's next deadline another. Timers due at or before an event's time fire before the event is "
      "processed, so whatever arrives at the instant of its deadline is late.")
 comp(P, "e-drain", "Drain controller",
      "Sequences shutdown: stop admitting, finish transactions in progress within a bound, close idle connections, exit.")
 comp(P, "e-publish", "Snapshot publisher",
      "Snapshot(): the engine's counters as one plain struct — clients, requests by stage and outcome, replies by "
-     "row, leases, resets, relay, connections, three histograms — with its conservation check, beside the wire, "
-     "classifier, reply and admission snapshots the engine holds. On a publish event the engine returns a publish action; its "
+     "row, leases, resets, relay, connections, cancels, three histograms — with its conservation check, beside the wire, "
+     "classifier, reply, pool and admission snapshots the engine holds. On a publish event the engine returns a publish action; its "
      "driver then has the collector read the snapshots, between events.")
 comp(P, "e-proxysim", "Simulator driver",
      "internal/proxy/proxysim. The engine on the simulator: accepts and dials on simulated streams, keeps the same "
      "read rule as the shell, plays the simulated TLS handshake on both legs, reports writes and refused writes, "
+     "sends a cancel request on a simulated connection of its own, "
      "and registers the engine's invariants, quiesce check and state with the simulator. Its World builds the "
      "simulator, the network, the fake Postgres and the engine for a scenario.", tags=("test",))
 comp(P, "e-admq", "Admission queue adapter",
@@ -656,8 +711,18 @@ comp(P, "e-admq", "Admission queue adapter",
      "After every queue operation the engine takes the sheds the core decided, answers each at once with 53M01 "
      "and an end marker, and arms its one admission timer at the core's next deadline. With it no connection is "
      "lent directly: every request is pushed and popped, so the rule sees zero-wait requests too. At a stop it "
-     "sweeps first and answers what was due, then removes the rest as client-gone. The engine's invariants "
-     "require the core's shed count to equal the sheds answered.")
+     "sweeps first and answers what was due, then removes the rest as client-gone. When the breaker opens it "
+     "sweeps, then refuses every queued request in arrival order: each is a shed with reason breaker, answered "
+     "53M03. The engine's invariants require the core's shed count to equal the sheds answered.")
+comp(P, "e-corepool", "Pool core adapter",
+     "internal/proxy/corepool.go. Puts the pool core behind the pool, breaker and release-policy seams and "
+     "performs the actions the core returns: dial, the empty-query check, a cancel request, ROLLBACK, the reset "
+     "with its re-seed, close, and refusing the queued requests with 53M03. It reports back every result, loss "
+     "and lease end, drains a cancelled statement's reply, tells the core how many requests wait, and arms one "
+     "timer at the core's next deadline. A client's cancel request goes to the connection that client holds; "
+     "for a request still queued the client gets 57014 at once. A client idle inside a transaction past its "
+     "deadline gets FATAL 25P03 and its connection is rolled back, reset and reused. The engine's invariants "
+     "require every connection's phase to agree with the core after every event.")
 rel("e1", "n-shell", "e-transport", "Implements it with TCP sockets; posts events through one bounded mailbox", "Go", "implementation")
 rel("e2", "e-proxysim", "e-transport", "Implements it with simulated byte streams on the simulator's event loop", "Go", "implementation")
 rel("e22", "e-proxysim", "n-sim", "Runs on the simulator's loop, byte streams and simulated TLS handshake; starts the fake Postgres", "Go, test code")
@@ -674,14 +739,21 @@ rel("e30", "e-admq", "n-adm", "Push, pop, remove, expire, sweep; takes the sheds
 rel("e32", "e-admq", "e-fail", "Each shed request, answered at once with 53M01", "Go")
 rel("e33", "e-clock", "e-admq", "The admission deadline was reached: sweep", "Go")
 rel("e9", "e-pipeline", "n-coal", "Join or lead a shared read", "Go")
-rel("e10", "e-pipeline", "n-pool", "Lend, release, breaker state, dirty connections", "Go")
+rel("e10", "e-pipeline", "n-pool", "Through the pool core adapter: the breaker at the gate, a lend at dispatch, the release at the lease end", "Go")
+rel("e34", "e-corepool", "e-seams", "Implements the pool, breaker and release-policy seams", "Go", "implementation")
+rel("e35", "e-corepool", "n-pool", "Checkout, release, results, losses, cancels, demand, tick; takes the actions and the next deadline", "Go")
+rel("e36", "e-corepool", "e-backends", "Opens, checks, cleans up, resets and closes connections as the core says; keeps each phase equal to the core's state", "Go")
+rel("e37", "e-clock", "e-corepool", "The pool deadline was reached: tick", "Go")
+rel("e38", "e-corepool", "e-fail", "Each queued request the breaker refuses, answered 53M03; 57014 for a cancelled queued request; 25P03 for a client idle in a transaction", "Go")
+rel("e39", "e-corepool", "e-admq", "When the breaker opens: sweep, then refuse every queued request", "Go")
+rel("e40", "e-sessions", "e-corepool", "A client's cancel request, found by its key; a client idle inside a transaction past its deadline", "Go")
 rel("e12", "e-pipeline", "n-retry", "May this failure be retried", "Go")
 rel("e13", "e-pipeline", "e-backends", "Forwards the statement on the lent connection", "Go")
 rel("e14", "e-backends", "e-relay", "Reply messages and the end-of-reply status byte", "Go")
 rel("e15", "e-relay", "e-sessions", "Reply bytes for each recipient", "Go")
 rel("e24", "e-relay", "e-reset", "The reply ended, with its status byte", "Go")
 rel("e25", "e-reset", "e-backends", "Writes the reset on the connection; makes it idle or closes it", "Go")
-rel("e26", "e-reset", "e-seams", "Asks the release policy; returns the connection to the pool seam", "Go")
+rel("e26", "e-reset", "e-seams", "Asks the release policy; returns the connection to the pool seam (with the pool core: hands the lease end to the adapter)", "Go")
 rel("e29", "e-reset", "n-pgwire", "Encodes the reset's Query; frames its reply", "Go")
 rel("e16", "e-pipeline", "e-fail", "Every refusal and failure", "Go")
 rel("e17", "e-fail", "n-pgwire", "Builds the error reply for its contract row", "Go")
@@ -764,12 +836,13 @@ comp(P, "w-share", "Safe-shape recogniser",
      "nothing. docs/safe-shape.md is generated from its tables. Stated limit: it cannot see a view, operator or "
      "row-level security policy that hides a side effect.")
 comp(P, "w-errors", "Error contract and reply builders",
-     "One table of 23 rows: each refusal and failure, its reply form, its SQLSTATE, whether anything reached the "
+     "One table of 24 rows: each refusal and failure, its reply form, its SQLSTATE, whether anything reached the "
      "database, whether a write may have applied, and what happens to the client connection. The reply builder "
      "appends the ErrorResponse and the correct end marker for a row and counts replies by row. The "
      "discard-until-Sync rule refuses extended-protocol messages. docs/error-contract.md is generated from the "
-     "table. The engine sends the rows of the walking skeleton and the client session machine the startup rows; "
-     "the rows of cores not built yet (breaker, rate gate and others) are not sent so far.")
+     "table. The engine sends the rows of the walking skeleton, the admission shed row and the pool's rows "
+     "(breaker open, cancelled while queued, idle in a transaction), and the client session machine the startup "
+     "rows; the rows of cores not built yet (rate gate and others) are not sent so far.")
 comp(P, "w-harness", "Startup-only test proxy and startup fidelity runner",
      "internal/pgwire/pgwiretest. A proxy for tests on simulated streams: the two session machines back to back, "
      "one database connection per client, no pool; after login it relays queries and replies through both trackers. "
@@ -795,9 +868,9 @@ rel("w3", "n-engine", "w-cycle", "Reply bytes in; status and message boundaries 
 rel("w4", "n-engine", "w-classifier", "Statement text in; work unit out", "Go")
 rel("w5", "n-engine", "w-errors", "Contract row in; reply bytes out", "Go")
 rel("w17", "n-engine", "w-front", "Client bytes after login in; queries and terminate out", "Go")
-rel("w53", "n-engine", "w-framer", "Frames the reply of the reset it sends after every lease", "Go")
+rel("w53", "n-engine", "w-framer", "Frames the replies of the statements it sends itself: the reset, the re-seed, the check, the rollback", "Go")
 rel("w54", "n-engine", "w-snapshot", "Keeps one set of wire counters for all its sessions and trackers", "Go")
-rel("w55", "n-engine", "w-msgs", "Encodes each Query it forwards, and the reset", "Go")
+rel("w55", "n-engine", "w-msgs", "Encodes each Query it forwards, its own statements (reset, re-seed, check, rollback) and the cancel request", "Go")
 rel("w9", "w-errors", "w-msgs", "Encodes ErrorResponse and ReadyForQuery by hand", "Go")
 rel("w10", "w-codec", "w-framer", "Framed message bodies (no caller yet)", "Go")
 rel("w11", "w-codec", "pgproto3", "Message structs: Encode, Decode", "Go import")
@@ -855,7 +928,9 @@ comp(P, "a-queues", "Per-tenant queues",
      "items are swept from the head, at every operation and at the core's own next deadline, and answered at once. "
      "A full ring sheds its head, not the arrival; a full total sheds the oldest request of all. Serves "
      "newest-first while the rule reports overload (adaptive LIFO), and oldest-first again once the rule has "
-     "reported no overload for a hold time. Keeps folly's minimum-delay figure as a load gauge, 0 to 100.")
+     "reported no overload for a hold time. Keeps folly's minimum-delay figure as a load gauge, 0 to 100. A "
+     "queued request the caller refuses (the breaker opened) is counted as a shed with reason breaker and does "
+     "not mark the queue as shedding.")
 comp(P, "a-rule", "QueueRule",
      "The interface both shedding rules implement; chosen by config (queue.rule: timeout or control-law), per "
      "instance.", tech="Go interface")
@@ -881,7 +956,7 @@ comp(P, "a-snap", "Admission snapshot",
      "Snapshot(): per tenant and total — depth, capacity, oldest-item age, queue-wait histogram, rule state, LIFO "
      "switches, sheds by reason, the load gauge, in flight, share, limit and its changes, gate refusals.")
 rel("a1", "n-engine", "a-gate", "May this request enter", "Go")
-rel("a2", "n-engine", "a-queues", "Enqueue, pop, remove; sweep expired; take the shed requests and the next deadline", "Go")
+rel("a2", "n-engine", "a-queues", "Enqueue, pop, remove, refuse; sweep expired; take the shed requests and the next deadline", "Go")
 rel("a3", "n-engine", "a-dispatch", "Capacity freed: who runs next", "Go")
 rel("a4", "n-engine", "a-limit", "Statement time and outcome of each completion", "Go")
 rel("a5", "n-engine", "a-snap", "Snapshot()", "Go")
@@ -900,40 +975,77 @@ rel("a16", "a-snap", "n-obs", "Uses the gauge, the histogram and the conservatio
 # --------------------------------------------------------------------------- pool components
 P = "c-pool"
 comp(P, "p-acct", "Connection accounting",
-     "Every database connection is connecting, idle, lent or closing. Invariant: open + connecting never exceeds the "
-     "pool size, which is the fleet budget divided by the instance count.")
+     "Every database connection is connecting, idle, checking, lent, cleaning or resetting; a closed one is "
+     "forgotten in the step that issues its close. Invariant: open + connecting never exceeds the cap, which is "
+     "pool.connections or, when that is omitted, the fleet budget divided by the instance count (rounded down, "
+     "never zero).")
 comp(P, "p-create", "Creation limiter",
-     "Caps concurrent connects and the rate of new connections, so a storm or a cold start cannot flood the database.")
+     "Opens connections only on demand: while more requests wait than connections are idle or being prepared. No "
+     "prefill. Caps concurrent connects and the rate of new connections (consecutive dials at least 1/rate "
+     "apart; the rate is the fleet's divided by the instance count), so a storm or a cold start cannot flood "
+     "the database. The breaker's trial dial and the redials after a mass death pass through it too.")
 comp(P, "p-lease", "Lease table",
-     "Lends a connection for one transaction: held while the status byte says in-transaction or failed, released on "
-     "idle. Enforces the idle-in-transaction deadline.")
+     "Checkout and release. Lends the most recently used idle connection, and never one in doubt. A checkout "
+     "that cannot lend is refused, so a request never waits inside the pool. Two release policies: always "
+     "resets after every lease; on-switch tags the connection with its tenant, prefers a connection last held "
+     "by the same tenant and lends it as is, and resets one that must switch tenants, at checkout. With the "
+     "re-seed on, every reset carries a new random seed. The engine decides when a lease ends (the status byte) "
+     "and holds the idle-in-transaction deadline; the pool is told how the lease ended.")
+comp(P, "p-check", "Check before reuse",
+     "An idle connection that is suspect, or idle for the check-after-idle time or longer, is sent an empty query "
+     "before it is lent, off the request path and under its own short deadline; a failed check closes it and "
+     "costs no client. The suspect rule: any connection-class failure marks every other connection suspect, "
+     "and only a passed check clears the mark. At most four checks start per checkout.")
 comp(P, "p-breaker", "Database-down breaker",
-     "The one circuit breaker. Counts connection-class failures only, never SQL errors. Open: requests are refused at "
-     "once and no dial is made. Half-open: one trial connect.")
+     "The one circuit breaker. Counts consecutive connection-class failures only (a failed dial, bytes on an idle "
+     "connection, the loss of a connection in use); never SQL errors, a polite close of an idle connection, or "
+     "a failed check that is not its trial. Open: requests are refused at once, no dial is made, and the queued "
+     "requests are refused. Half-open after a set time: requests are admitted and wait behind exactly one trial "
+     "— a dial, or a check of an idle connection when the pool is at its cap — sent only when work wants it. A "
+     "failed trial opens it again.")
 comp(P, "p-dirty", "Dirty-connection table",
-     "What to do with a connection whose client vanished or that surprised us: cancel, wait a bounded time, roll back, "
-     "then reuse only if it is idle and clean; otherwise close. Destroy on doubt.")
+     "What to do with a connection whose lease did not end clean (client gone, idle in a transaction, a statement "
+     "or write deadline): cancel a statement still running and drain its reply, roll back an open transaction, "
+     "reset, and wait for the cancel to finish, all inside the clean-up deadline; reuse only after every step "
+     "succeeded, otherwise close. A lost connection or one with unread bytes is closed. Destroy on doubt.")
 comp(P, "p-reaper", "Idle and lifetime reaper",
-     "Closes idle and old connections, with jitter so they do not all expire together; checks a long-idle connection "
-     "before reuse.")
-comp(P, "p-cancel", "Cancel map",
-     "Maps proxy-issued key data to the connection a client currently holds, so a client's cancel request reaches its "
-     "own statement and no one else's. Caps concurrent cancels.")
+     "Closes a connection that has been idle past its idle timeout, or that is idle and older than its lifetime. "
+     "Each connection draws its own two limits at dial time, spread by the jitter (10% either way by default), "
+     "so connections made together do not expire together. Also ends a check, a reset or a clean-up at its "
+     "deadline. Deadlines fire at equality: what arrives at its deadline is late.")
+comp(P, "p-cancel", "Cancel table",
+     "A client's cancel is accepted only for a lent connection, and the table's own cancels come from the "
+     "dirty-connection table. Each goes out on a second connection that is outside the cap; at most a set "
+     "number are in flight. A connection is not lent again until its cancel has finished, and one whose cancel "
+     "never reported is closed at its next return. The engine, not the pool, maps a client's key data to the "
+     "connection it holds.")
 comp(P, "p-snap", "Pool snapshot",
-     "Snapshot(): open, idle, lent, connecting, creation rate, closes by reason, exhaustion events, breaker state and "
-     "transitions, dirty-table outcomes, lease-time histogram.")
-rel("p1", "n-engine", "p-lease", "Lend to a work unit; release on outcome", "Go")
-rel("p2", "n-engine", "p-breaker", "Reports connect and connection failures; asks whether to fail fast", "Go")
-rel("p3", "n-engine", "p-dirty", "Client vanished, deadline passed, or protocol surprise", "Go")
-rel("p4", "n-engine", "p-cancel", "Client cancel request", "Go")
+     "Snapshot(): the caps; open, connecting, idle, lent, checking, cleaning, resetting and suspect, with peaks; "
+     "dials, failures and waits for the creation rate; closes by reason; checkouts, exhaustion events, lends as "
+     "is, tenant switches; lease ends and dirty-table outcomes by kind; resets by cause and outcome, re-seeds; "
+     "checks by result; cancels; breaker state, transitions, trials and failures; lease-time and idle-age "
+     "histograms. Its check holds the cap and the conservation laws (every dial, checkout, check and cancel "
+     "ends in exactly one outcome).")
+rel("p1", "n-engine", "p-lease", "Checkout for a tenant; release, with how the lease ended", "Go")
+rel("p2", "n-engine", "p-breaker", "Asks at the gate whether a request may enter; reports failed dials and lost connections; is told to refuse the queued requests when it opens", "Go")
+rel("p3", "n-engine", "p-dirty", "A lease that did not end clean; the result of each clean-up step", "Go")
+rel("p4", "n-engine", "p-cancel", "A client's cancel for the connection it holds; a cancel connection finished", "Go")
 rel("p5", "n-engine", "p-snap", "Snapshot()", "Go")
+rel("p17", "n-engine", "p-check", "Performs the check; reports its result", "Go")
+rel("p19", "n-engine", "p-create", "How many requests wait; performs the dial and reports opened or failed", "Go")
+rel("p20", "n-engine", "p-reaper", "A tick at the pool's next deadline", "Go")
 rel("p6", "p-lease", "p-acct", "Idle to lent and back", "Go")
+rel("p13", "p-lease", "p-check", "Before a lend: must this connection be checked first", "Go")
 rel("p7", "p-acct", "p-create", "May another connection be opened now", "Go")
-rel("p8", "p-create", "p-breaker", "Is the database marked down", "Go")
+rel("p8", "p-create", "p-breaker", "No dial while open; when half-open, the one trial dial", "Go")
 rel("p9", "p-dirty", "p-acct", "Reuse or close", "Go")
+rel("p16", "p-dirty", "p-cancel", "Cancel a statement still running", "Go")
 rel("p10", "p-reaper", "p-acct", "Close idle and old connections", "Go")
-rel("p11", "p-cancel", "p-lease", "Finds the lent connection", "Go")
-rel("p12", "p-lease", "n-work", "Work units and outcomes (released clean, still held, dirty)", "Go types")
+rel("p14", "p-check", "p-acct", "Idle to checking and back, or close", "Go")
+rel("p15", "p-breaker", "p-check", "At the cap, the half-open trial is a check", "Go")
+rel("p11", "p-cancel", "p-lease", "Only a lent connection is cancelled; none with a cancel in flight is lent", "Go")
+rel("p12", "p-lease", "n-work", "The tenant id: the tag of a connection's last holder", "Go types")
+rel("p18", "p-snap", "n-obs", "Uses the gauge and the histogram; the pool source mapping reads the snapshot", "Go, plain structs")
 
 # --------------------------------------------------------------------------- coalescer components
 P = "c-coal"
@@ -1069,7 +1181,7 @@ rel("m2", "s-cli", "s-toy", "Looks up a toy scenario by name and runs it", "Go")
 rel("m3", "s-simtest", "s-loop", "Runs a scenario twice from one seed", "Go")
 rel("m4", "s-loop", "s-clock", "Advances time to the next event", "Go")
 rel("m5", "s-net", "s-loop", "Schedules every delivery and notification as its own event", "Go")
-rel("m6", "n-engine", "s-net", "The engine's simulator driver (proxysim) implements the transport seam on these streams: listens, dials, reads, writes, closes", "Go, test code")
+rel("m6", "n-engine", "s-net", "The engine's simulator driver (proxysim) implements the transport seam on these streams: listens, dials, reads, writes, closes, sends cancel requests", "Go, test code")
 rel("m7", "s-workload", "s-net", "Opens client connections; sends and reads", "Go")
 rel("m8", "s-fakepg", "s-net", "Accepts database connections; replies", "Go")
 rel("m9", "s-faults", "s-net", "Applies the network faults at their instants", "Go")
@@ -1097,7 +1209,7 @@ rel("m40", "s-fakepg", "s-inv", "Registers its conservation laws, the connection
 rel("m41", "s-workload", "s-inv", "Registers request conservation per tenant and its quiesce check", "Go")
 rel("m42", "s-world", "s-faults", "Scenario fault schedules; random schedules decoded from fuzz input", "Go")
 rel("m17", "n-engine", "s-trace", "The engine's simulator driver appends a record for each connection it closes and writes the engine's counters for the state digest", "Go, test code")
-rel("m18", "n-engine", "s-inv", "The engine's simulator driver registers the engine's invariants (snapshot conservation, one client per lent connection) and its quiesce check", "Go, test code")
+rel("m18", "n-engine", "s-inv", "The engine's simulator driver registers the engine's invariants (snapshot conservation, one client per lent connection, the pool's and the admission queues' checks) and its quiesce check", "Go, test code")
 rel("m19", "s-simtest", "s-trace", "Compares the digests of the two runs; prints the trace tail on failure", "Go")
 rel("m20", "s-toy", "s-net", "Echo over simulated streams, for the meta-tests", "Go")
 rel("m21", "s-net", "s-streams", "Latency and fragment sizes, one stream per connection and direction", "Go")
@@ -1199,8 +1311,14 @@ comp(P, "o-enginesrc", "Engine source mapping",
      "internal/obs/enginesrc. The metric declarations of component engine and the mapping to points from two "
      "snapshots: the engine's, and the shell's (mailbox depth and peak, goroutines, readers and writers, deadlines; "
      "names shell_...). Labels are outcome, reason and mode; no tenant label so far. Registers the engine's wire, "
-     "classifier and admission sources beside its own. Holds the health rule database: degraded while no database "
-     "connection is usable and the last connect failed; hands on the admission rule with it.")
+     "classifier, pool and admission sources beside its own. Holds the health rule database: degraded while no "
+     "database connection is usable and the last connect failed or the breaker is not closed; hands on the "
+     "breaker rule and the admission rule with it.")
+comp(P, "o-poolsrc", "Pool source mapping",
+     "internal/obs/poolsrc. The metric declarations of component pool and the mapping from the pool snapshot to "
+     "points: every field of the snapshot, with labels reason (closes, lease ends, dirty-table outcomes), "
+     "outcome (checkouts, checks) and mode (resets, breaker transitions); no tenant label. The two histograms "
+     "only with obs.detail on. Holds the health rule breaker: degraded while the breaker is open or half-open.")
 comp(P, "o-admsrc", "Admission source mapping",
      "internal/obs/admsrc. The metric declarations of component admission and the mapping from the admission "
      "snapshot to points. Totals always: the rule, capacities, queued, tenant queues, pushes, served, removed, sheds "
@@ -1237,7 +1355,10 @@ comp(P, "o-assert", "SQL assertions and their runner",
      "against the leases ended and, where the scenario has a fault, error-contract replies by row = faults "
      "injected; in tier S also proxy completed = workload completed and replies by row = what the clients saw. "
      "For the admission scenarios: conservation (the engine's sheds = the queues' sheds too), served-wait bounds "
-     "from the histogram buckets, depth, and 53M01 replies = sheds.",
+     "from the histogram buckets, depth, and 53M01 replies = sheds. For the pool scenarios: in every flush "
+     "open + connecting is at most the cap, every dial and checkout has one outcome, nothing is lent at the "
+     "end, and each scenario's own claim (the dial rate, the breaker's recovery, the fake's connection peak, "
+     "no statement left without a reply).",
      tech="Bash, SQL", tags=("test",))
 comp(P, "o-report", "Story report",
      "scripts/report.sh and test/analysis/report; make report RUNS=<dirs> or SEEDS=N. Reads the flushed files of "
@@ -1303,9 +1424,9 @@ rel("o57", "o-clssrc", "n-pgwire", "Reads the classifier, reply-builder and disc
 rel("o58", "o-clssrc", "o-collector", "Gives it one source for component classifier, with its metric declarations", "Go")
 rel("o59", "o-catalog", "o-clssrc", "Lists every metric it declares", "Go")
 rel("o60", "o-simrun", "o-clssrc", "Takes the classifier source of the scenario's test gateway", "Go")
-rel("o61", "o-enginesrc", "n-engine", "Reads the engine snapshot and the wire, classifier and reply snapshots the engine holds", "Go")
+rel("o61", "o-enginesrc", "n-engine", "Reads the engine snapshot and the wire, classifier, reply, pool and admission snapshots the engine holds", "Go")
 rel("o62", "o-enginesrc", "n-shell", "Reads the shell's counters through a function the shell hands over", "Go")
-rel("o63", "o-enginesrc", "o-collector", "Registers the engine source (shell metrics included) and the engine's wire, classifier and admission sources", "Go")
+rel("o63", "o-enginesrc", "o-collector", "Registers the engine source (shell metrics included) and the engine's wire, classifier, pool and admission sources", "Go")
 rel("o64", "o-enginesrc", "o-wiresrc", "Takes the wire source for the engine's wire snapshot", "Go")
 rel("o65", "o-enginesrc", "o-clssrc", "Takes the classifier source for the engine's classifier and reply snapshots", "Go")
 rel("o66", "o-enginesrc", "o-health", "Supplies the rule database", "Go")
@@ -1322,6 +1443,10 @@ rel("o76", "o-admsrc", "n-adm", "Reads the admission snapshot", "Go")
 rel("o77", "o-enginesrc", "o-admsrc", "Takes the admission source for the engine's admission snapshot", "Go")
 rel("o78", "o-catalog", "o-admsrc", "Lists every metric it declares", "Go")
 rel("o79", "o-admsrc", "o-health", "Supplies the rule admission", "Go")
+rel("o83", "o-poolsrc", "n-pool", "Reads the pool snapshot", "Go")
+rel("o84", "o-enginesrc", "o-poolsrc", "Takes the pool source for the engine's pool snapshot", "Go")
+rel("o85", "o-catalog", "o-poolsrc", "Lists every metric it declares", "Go")
+rel("o86", "o-poolsrc", "o-health", "Supplies the rule breaker", "Go")
 rel("o80", "o-h2h", "duckdb", "Runs its one query", "DuckDB CLI")
 rel("o81", "o-h2h", "csvfiles", "Reads the flushed runs of every arm and load", "read_csv")
 rel("o82", "o-h2h", "n-e2e", "--run and --check run the head-to-head scenarios into a run directory", "go test")
@@ -1380,7 +1505,7 @@ diagram("container", "container", "Containers: the request path", "02-container-
               "Observability hangs off the side: the engine publishes snapshots, and the admin listener serves them.",
         nodes=["app", "operator", "c-shell", "c-engine", "c-pgwire", "c-adm", "c-coal", "c-pool", "c-retry",
                "c-obs", "c-config", "pg", "telemetry"],
-        rels=["c%d" % i for i in range(1, 17) if i != 8], boundary="mini-gateway process",
+        rels=["c%d" % i for i in range(1, 18) if i != 8], boundary="mini-gateway process",
         detail={"c-engine": "component-engine", "c-pgwire": "component-wire", "c-adm": "component-admission",
                 "c-pool": "component-pool", "c-coal": "component-coalescer",
                 "c-retry": "component-retry", "c-obs": "component-observability"})
@@ -1418,22 +1543,26 @@ def component_diagram(id, title, file, scope, shows, intro, extra_nodes, rels):
 
 
 component_diagram("component-engine", "Components: engine", "05-component-engine", "c-engine",
-                  "internal/proxy: the transport seam and its simulator driver, the two connection tables, the request pipeline and its stage seams, the admission queue adapter, the lease end with its reset, the reply relay, the failure classifier, deadlines, the snapshot",
+                  "internal/proxy: the transport seam and its simulator driver, the two connection tables, the request pipeline and its stage seams, the pool core adapter, the admission queue adapter, the lease end with its reset, the reply relay, the failure classifier, deadlines, the snapshot",
                   "The engine is where the seams meet. Below it, the transport seam has two implementations. Above it, "
                   "the pipeline calls each core through a small stage interface, so a core can be replaced by a "
                   "pass-through. That is how each scenario's ablation run is made. Chunk 6 built the walking skeleton: "
-                  "the whole path of a request, with a stand-in at every stage whose core is not built yet. Chunk 8 "
-                  "put the admission queues behind the queue seam, through the admission queue adapter. The "
+                  "the whole path of a request, with a stand-in at every stage whose core is not built yet. Chunk 7 "
+                  "put the pool core behind the pool, breaker and release seams, through the pool core adapter, "
+                  "and chunk 8 the admission queues behind the queue seam, through the admission queue adapter. "
+                  "Where the two meet, a request waits in one place, its tenant's queue, and a breaker that opens "
+                  "refuses the queue through the admission queues. The "
                   "pipeline's arrow to admission stays dashed until the dispatcher, the limit and the gate exist, "
-                  "and so do the arrows to the coalescer, the pool, and the retry policy.",
+                  "and so do the arrows to the coalescer and the retry policy.",
                   ["n-shell", "n-sim", "n-pgwire", "n-adm", "n-coal", "n-pool", "n-retry", "n-obs", "n-work"],
-                  ["e%d" % i for i in (1, 2, 22, 3, 4, 5, 6, 7, 27, 23, 8, 31, 30, 32, 33, 9, 10, 12, 13, 14, 15, 24, 25, 26, 29, 16, 17, 28, 18, 19, 20, 21)])
+                  ["e%d" % i for i in (1, 2, 22, 3, 4, 5, 6, 7, 27, 23, 8, 31, 30, 32, 33, 9, 10, 34, 35, 36, 37, 38, 39, 40, 12, 13, 14, 15, 24, 25, 26, 29, 16, 17, 28, 18, 19, 20, 21)])
 component_diagram("component-wire", "Components: wire layer", "06-component-wire-layer", "c-pgwire",
                   "internal/pgwire: our framer and message coding, both session machines, SCRAM, the two trackers, the wire snapshot, the SQL lexer, the classifier with its courtesy reject list, the safe-shape recogniser, the error contract and reply builders, the test proxies and their scenarios; planned: the pgproto3 codec boundary",
                   "pgproto3 provides message structs and nothing else. The framer, session machines, SCRAM, "
                   "transaction tracking, classification, and error mapping are ours. Everything here is a pure state "
                   "machine or a pure function. Chunk 4 built the sessions, and chunk 5 built the classifier and the "
-                  "contracts. Because the pool will reset every connection after every lease, session safety does not "
+                  "contracts. Because a connection is reset before another tenant can get it (after every lease by "
+                  "default), session safety does not "
                   "depend on reading SQL, so the reject list is a courtesy. A recogniser that does not use the lexer "
                   "decides what may be shared. The machines, trackers, and reply builders code their messages "
                   "by hand, so no file in the package imports pgproto3 and the codec boundary has no caller yet. Since "
@@ -1454,11 +1583,15 @@ component_diagram("component-admission", "Components: admission", "07-component-
                   "nothing in it imports the work vocabulary yet.",
                   ["n-engine", "n-work", "n-obs"], ["a%d" % i for i in range(1, 17)])
 component_diagram("component-pool", "Components: pool", "08-component-pool", "c-pool",
-                  "internal/pool: the hard cap, the creation limiter, leases per transaction, the breaker, the dirty-connection table",
-                  "A request never waits inside the pool: the dispatcher releases it only when a lease is available. "
-                  "The pool enforces the cap, controls the creation rate, and lends a connection only when it is idle "
-                  "and clean.",
-                  ["n-engine", "n-work"], ["p%d" % i for i in range(1, 13)])
+                  "internal/pool: the hard cap, the creation limiter, leases with their release policies, the check before reuse, the breaker, the dirty-connection table, the reaper, cancels, the snapshot",
+                  "A request never waits inside the pool: a checkout either lends a connection or is refused, and "
+                  "the request stays in the engine's queue. The pool enforces the cap, controls the creation rate, "
+                  "and lends a connection only when it is idle, clean, and not in doubt. Chunk 7 built all of it "
+                  "as one deterministic state machine, the type Pool; the components drawn here are its parts, not "
+                  "separate types. It does no I/O: the engine performs the actions it returns and reports each "
+                  "result, and one engine timer wakes it at its next deadline.",
+                  ["n-engine", "n-work", "n-obs"],
+                  ["p%d" % i for i in (1, 2, 3, 4, 5, 17, 19, 20, 6, 13, 7, 8, 9, 16, 10, 14, 15, 11, 12, 18)])
 component_diagram("component-coalescer", "Components: coalescer", "09-component-coalescer", "c-coal",
                   "internal/coalesce: the join rule, the flight table, waiters, the flight's own deadline, the shared reply",
                   "Followers take no queue slot and no connection. The leader passes through admission like any request.",
@@ -1493,18 +1626,19 @@ component_diagram("component-observability", "Components: observability", "12-co
                   "the real process, the shell creates the collector and publishes; in the simulator, the scenario "
                   "flush harness does. Chunk 6a added the story report over the flushed files, the load "
                   "generator's own source, and a Prometheus in the dev stack that scrapes /metrics directly. "
+                  "Chunk 7 added the pool source and its health rule for the breaker. "
                   "Chunk 8 added the admission source, the gateway's first with per-tenant rows, its health rule for "
                   "shedding, and the head-to-head table.",
-                  ["n-engine", "n-shell", "n-e2e", "n-mgctl", "n-sim", "n-pgwire", "n-adm", "csvfiles", "duckdb", "otelcol", "prom"],
+                  ["n-engine", "n-shell", "n-e2e", "n-mgctl", "n-sim", "n-pgwire", "n-adm", "n-pool", "csvfiles", "duckdb", "otelcol", "prom"],
                   ["o%d" % i for i in (1, 2, 25, 26, 27, 3, 24, 28, 29, 4, 15, 8, 9, 10, 11, 12, 31, 32, 5, 6, 7, 16, 18, 17, 19,
-                                         13, 20, 21, 14, 33, 22, 23, 50, 51, 34, 35, 52, 53, 57, 58, 61, 62, 63, 64, 65, 66, 68, 37, 54, 59, 67, 38, 39, 40, 41, 42, 55, 56, 60, 69, 43, 44, 45, 46, 47, 48, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82)])
+                                         13, 20, 21, 14, 33, 22, 23, 50, 51, 34, 35, 52, 53, 57, 58, 61, 62, 63, 64, 65, 66, 68, 37, 54, 59, 67, 38, 39, 40, 41, 42, 55, 56, 60, 69, 43, 44, 45, 46, 47, 48, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 83, 84, 85, 86, 80, 81, 82)])
 
 
 # --------------------------------------------------------------------------- output
 def landed(chunk):
-    """True for a chunk that has landed: a whole number up to LANDED or in ALSO_LANDED, or a lettered name such as "6a"."""
+    """True for a chunk that has landed: a whole number up to LANDED, or a lettered name such as "6a"."""
     if isinstance(chunk, int) and not isinstance(chunk, bool):
-        return 0 <= chunk <= LANDED or chunk in ALSO_LANDED
+        return 0 <= chunk <= LANDED
     m = re.fullmatch(r"(\d+)([a-z])", chunk) if isinstance(chunk, str) else None
     return bool(m) and (int(m.group(1)) < LANDED or (int(m.group(1)) == LANDED and m.group(2) <= LANDED_LETTER))
 
@@ -1550,15 +1684,7 @@ def built_rel(i):
 def built_line():
     if LANDED == 0:
         return "Built so far: chunk 0, which built no part of these diagrams. Dashed parts are planned."
-    if not ALSO_LANDED:
-        return "Built so far: chunks 0–%s. Dashed parts are planned." % LANDED_NAME
-
-    def names(chunks):
-        t = ["%d" % c for c in chunks]
-        return ("chunk " if len(t) == 1 else "chunks ") + (t[0] if len(t) == 1 else ", ".join(t[:-1]) + " and " + t[-1])
-    missing = [c for c in range(LANDED + 1, ALSO_LANDED[-1]) if c not in ALSO_LANDED]
-    return "Built so far: chunks 0–%s and %s (%s %s not landed yet). Dashed parts are planned." % (
-        LANDED_NAME, names(ALSO_LANDED), names(missing), "has" if len(missing) == 1 else "have")
+    return "Built so far: chunks 0–%s. Dashed parts are planned." % LANDED_NAME
 
 
 def counts(d):
