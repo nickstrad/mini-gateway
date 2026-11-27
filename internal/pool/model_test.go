@@ -204,7 +204,7 @@ func (m *model) absorb(acts []Action) {
 			}
 			c.open = false
 			switch a.Reason {
-			case CloseCheckFailed, CloseIdleError, CloseError, CloseNoReply, ClosePeerClosedIdle:
+			case CloseCheckFailed, CloseIdleError, CloseError, ClosePeerClosedIdle:
 				m.suspectAll(a.Conn)
 			}
 		}
