@@ -682,3 +682,72 @@ func TestMakeReport(t *testing.T) {
 		_ = os.RemoveAll(m[1])
 	}
 }
+
+func loadRoot(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	copyTree(t, testdata(t, "load-errors"), filepath.Join(root, "load-errors"))
+	return root
+}
+
+func dropFlush(t *testing.T, file string, seq string) {
+	t.Helper()
+	b, err := os.ReadFile(file)
+	must(t, err)
+	var keep []string
+	for _, l := range strings.Split(string(b), "\n") {
+		if !strings.HasPrefix(l, "1,"+loadRun+","+seq+",") {
+			keep = append(keep, l)
+		}
+	}
+	must(t, os.WriteFile(file, []byte(strings.Join(keep, "\n")), 0o644))
+}
+
+func wantFailure(t *testing.T, r result, check, detail string) {
+	t.Helper()
+	if r.code != 1 {
+		t.Fatalf("exit status %d\n%s", r.code, r.out)
+	}
+	if err := checkVerdict(r); err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`(?m)^\| ` + regexp.QuoteMeta(check) + ` .*\| FAIL +\|$`).MatchString(r.out) {
+		t.Fatalf("no FAIL row for %q\n%s", check, r.out)
+	}
+	if !strings.Contains(section(r.out, secAssert, secOracle), detail) {
+		t.Fatalf("section 5 lacks %q\n%s", detail, r.out)
+	}
+}
+
+func TestReportLoadLabelsAcceptOtherAndRefuseMalformedClasses(t *testing.T) {
+	requireDuckDB(t)
+	t.Parallel()
+	const classRow = "1," + loadRun + ",1,2000500000,loadgen-1,loadgen,errors_by_class,counter,,,22,,1"
+	root := loadRoot(t)
+	replaceLine(t, filepath.Join(root, loadRun, "metrics.csv"), classRow, strings.Replace(classRow, ",22,", ",other,", 1))
+	if r := runReport(t, nil, root); r.code != 0 {
+		t.Fatalf("the bounded overflow label other fails the report: exit %d\n%s", r.code, r.out)
+	}
+	bad := loadRoot(t)
+	replaceLine(t, filepath.Join(bad, loadRun, "metrics.csv"), classRow, strings.Replace(classRow, ",22,", ",2x,", 1))
+	wantFailure(t, runReport(t, nil, bad), "load-errors/report:loadgen-labels", "errors_by_class reason '2x' is not a two-character SQLSTATE class or other")
+}
+
+func TestReportEmptyArgumentBesideAGoodRunFails(t *testing.T) {
+	requireDuckDB(t)
+	t.Parallel()
+	empty := t.TempDir()
+	r := runReport(t, nil, testdata(t, "load-errors"), empty)
+	wantFailure(t, r, "structure: runs", "argument 2 (root2/): no metrics.csv, histograms.csv or run.csv at or below it")
+}
+
+func TestReportMissingWholeFlushFails(t *testing.T) {
+	requireDuckDB(t)
+	t.Parallel()
+	for _, seq := range []string{"0", "1"} {
+		root := loadRoot(t)
+		dropFlush(t, filepath.Join(root, loadRun, "metrics.csv"), seq)
+		dropFlush(t, filepath.Join(root, loadRun, "histograms.csv"), seq)
+		wantFailure(t, runReport(t, nil, root), "structure: schema guard", "run "+loadRun+": run.csv says 2 flushes, metrics.csv has 1")
+	}
+}

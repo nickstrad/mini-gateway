@@ -107,7 +107,8 @@ metrics_header='schema_version,run_id,flush_seq,t_ns,instance,component,metric,k
 hist_header='schema_version,run_id,flush_seq,t_ns,instance,component,metric,tenant,outcome,reason,mode,unit,bucket_lo,bucket_hi,count'
 run_header='schema_version,run_id,scenario,tier,seed,arm,instances,build,config_fingerprint,flushes,duration_ns'
 nroots=$#
-roots_ok=0
+roots_ok=0 with_runs=0
+: >"$tmp/no_runs"
 roots=() rlabels=()
 dirs=() disp=()
 i=0
@@ -121,12 +122,18 @@ for a in "$@"; do
   roots_ok=$((roots_ok + 1))
   abs=$(cd "$a" && pwd -P)
   roots+=("$abs"); rlabels+=("$pre")
+  before=${#dirs[@]}
   while IFS= read -r d; do
     [ -n "$d" ] || continue
     dirs+=("$d")
     if [ "$d" = "$abs" ]; then rel=.; else rel=${d#"$abs"/}; fi
     if [ -n "$pre" ]; then disp+=("$pre$rel"); else disp+=("$rel"); fi
   done < <(find "$abs" \( -name metrics.csv -o -name histograms.csv -o -name run.csv \) -type f -printf '%h\n' | sort -u)
+  if [ ${#dirs[@]} = "$before" ]; then
+    printf '%s\n' "argument $i (${pre:-.}): no metrics.csv, histograms.csv or run.csv at or below it" >>"$tmp/no_runs"
+  else
+    with_runs=$((with_runs + 1))
+  fi
 done
 R=${#dirs[@]}
 
@@ -168,12 +175,12 @@ check "structure: DuckDB" "DuckDB is installed and is the pinned family 1.5.x (i
 c="every argument is an existing directory"
 check "structure: arguments" "$c" "$roots_ok of $nroots" "$nroots of $nroots" "$(pfc [ "$roots_ok" = "$nroots" ])"
 [ "$roots_ok" = "$nroots" ] || structure_detail "structure: arguments" "$c" "$tmp/bad_roots"
-c="at least one run directory was found"
-check "structure: runs" "$c" "$R" "at least 1" "$(pfc [ "$R" -gt 0 ])"
-if [ "$R" = 0 ]; then
-  echo "no metrics.csv, histograms.csv or run.csv at or below any argument" >"$tmp/no_runs"
-  structure_detail "structure: runs" "$c" "$tmp/no_runs"
-fi
+c="at least one run directory was found at or below every directory argument"
+runs_ok=0
+[ "$R" -gt 0 ] && [ "$with_runs" = "$roots_ok" ] && runs_ok=1
+check "structure: runs" "$c" "$R runs; $with_runs of $roots_ok arguments" "at least 1 run; $roots_ok of $roots_ok arguments" "$(pf $runs_ok)"
+[ "$R" -gt 0 ] || echo "no metrics.csv, histograms.csv or run.csv at or below any argument" >"$tmp/no_runs"
+[ $runs_ok = 1 ] || structure_detail "structure: runs" "$c" "$tmp/no_runs"
 c="every run directory has run.csv (the run finished)"
 check "structure: finished" "$c" "$n_run of $R" "$R of $R" "$(pfc [ "$n_run" = "$R" ])"
 [ "$n_run" = "$R" ] || structure_detail "structure: finished" "$c" "$tmp/no_run"
@@ -185,14 +192,14 @@ check "structure: schema header" "$c" "$n_hdr of $n_hdr_total files" "$n_hdr_tot
 [ "$n_hdr" = "$n_hdr_total" ] || structure_detail "structure: schema header" "$c" "$tmp/bad_hdr"
 
 usable=0
-c="the complete runs pass test/analysis/guard.sql: schema version 1 in every row, no empty required field, one run.csv row and a distinct run id per directory, metric rows in every run"
+c="the complete runs pass test/analysis/guard.sql: schema version 1 in every row, no empty required field, one run.csv row and a distinct run id per directory, metric rows in every run, and every flush run.csv declares is in metrics.csv"
 if [ $duck_ok != 1 ]; then
   check "structure: schema guard" "$c" "not run: DuckDB is not usable" "0 violations" FAIL
 elif [ "$C" = 0 ]; then
   check "structure: schema guard" "$c" "not run: no complete run directory" "0 violations" FAIL
 else
   rc=0
-  g=$( { preamble "${complete[@]}"; cat "$sections/load.sql"; echo "SET VARIABLE expected_runs = $C;"; cat "$guard_sql"; } | ddb) || rc=$?
+  g=$( { preamble "${complete[@]}"; cat "$sections/load.sql"; echo "SET VARIABLE expected_runs = $C;"; cat "$guard_sql" "$sections/flushes.sql"; } | ddb) || rc=$?
   usable=1
   if [ $rc != 0 ]; then
     usable=0

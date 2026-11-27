@@ -9,11 +9,11 @@ independent record (the simulated clients, the fake Postgres or the load tool).
 The report's structural checks:
 - DuckDB: DuckDB is installed and is the pinned family 1.5.x (it reads the files)
 - arguments: every argument is an existing directory
-- runs: at least one run directory was found
+- runs: at least one run directory was found at or below every directory argument
 - finished: every run directory has run.csv (the run finished)
 - files: every run directory has metrics.csv and histograms.csv
 - schema header: every file starts with the schema version 1 header
-- schema guard: the complete runs pass test/analysis/guard.sql: schema version 1 in every row, no empty required field, one run.csv row and a distinct run id per directory, metric rows in every run
+- schema guard: the complete runs pass test/analysis/guard.sql: schema version 1 in every row, no empty required field, one run.csv row and a distinct run id per directory, metric rows in every run, and every flush run.csv declares is in metrics.csv
 
 Scenario claims: not available (no run could be read: see the verdict table).
 
@@ -32,7 +32,7 @@ Not available.
 5. Failed assertions, in full
 
 - structure: runs
-  claim: at least one run directory was found
+  claim: at least one run directory was found at or below every directory argument
   1 items:
     no metrics.csv, histograms.csv or run.csv at or below any argument
 
@@ -42,15 +42,15 @@ None.
 
 7. Verdict
 
-| check                    | claim                                                                                                                                                                                 | observed                           | expected     | pass |
-|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|--------------|------|
-| structure: DuckDB        | DuckDB is installed and is the pinned family 1.5.x (it reads the files)                                                                                                               | 1.5.x                              | 1.5.x        | PASS |
-| structure: arguments     | every argument is an existing directory                                                                                                                                               | 1 of 1                             | 1 of 1       | PASS |
-| structure: runs          | at least one run directory was found                                                                                                                                                  | 0                                  | at least 1   | FAIL |
-| structure: finished      | every run directory has run.csv (the run finished)                                                                                                                                    | 0 of 0                             | 0 of 0       | PASS |
-| structure: files         | every run directory has metrics.csv and histograms.csv                                                                                                                                | 0 of 0                             | 0 of 0       | PASS |
-| structure: schema header | every file starts with the schema version 1 header                                                                                                                                    | 0 of 0 files                       | 0 of 0 files | PASS |
-| structure: schema guard  | the complete runs pass test/analysis/guard.sql: schema version 1 in every row, no empty required field, one run.csv row and a distinct run id per directory, metric rows in every run | not run: no complete run directory | 0 violations | FAIL |
+| check                    | claim                                                                                                                                                                                                                                     | observed                           | expected                         | pass |
+|--------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|----------------------------------|------|
+| structure: DuckDB        | DuckDB is installed and is the pinned family 1.5.x (it reads the files)                                                                                                                                                                   | 1.5.x                              | 1.5.x                            | PASS |
+| structure: arguments     | every argument is an existing directory                                                                                                                                                                                                   | 1 of 1                             | 1 of 1                           | PASS |
+| structure: runs          | at least one run directory was found at or below every directory argument                                                                                                                                                                 | 0 runs; 0 of 1 arguments           | at least 1 run; 1 of 1 arguments | FAIL |
+| structure: finished      | every run directory has run.csv (the run finished)                                                                                                                                                                                        | 0 of 0                             | 0 of 0                           | PASS |
+| structure: files         | every run directory has metrics.csv and histograms.csv                                                                                                                                                                                    | 0 of 0                             | 0 of 0                           | PASS |
+| structure: schema header | every file starts with the schema version 1 header                                                                                                                                                                                        | 0 of 0 files                       | 0 of 0 files                     | PASS |
+| structure: schema guard  | the complete runs pass test/analysis/guard.sql: schema version 1 in every row, no empty required field, one run.csv row and a distinct run id per directory, metric rows in every run, and every flush run.csv declares is in metrics.csv | not run: no complete run directory | 0 violations                     | FAIL |
 
 Legend: one row per check. structure: the report's own checks of the files. <scenario>/<file>.sql: that scenario's
 SQL file from test/analysis/<scenario>/ (zero violating rows is a pass). <scenario>/report:<name>: a built-in check from
