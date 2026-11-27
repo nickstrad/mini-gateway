@@ -15,13 +15,14 @@ core path in `internal/proxy`, or the pool scenarios. Full record:
 - Actions: `ActDial` (the core allocates connection ids and cancel ids from one
   sequence), `ActCheck` (empty query), `ActReset` (with `Reseed` and a seed in millionths),
   `ActRollback`, `ActCancel` (`Cancel` is the id of the second connection), `ActClose`
-  (with a `pool.CloseReason`), `ActRefuseQueued` (the breaker opened with nothing usable).
+  (with a `pool.CloseReason`), `ActRefuseQueued` (the breaker opened, including a failed trial).
 - The core owns every pool deadline: check (`pool.check_timeout`), clean-up
   (`timeouts.cleanup`), reset (`timeouts.reset`), idle timeout and lifetime (jittered per
   connection at dial time), breaker `open_for`, the creation-rate slot. Deadlines fire at
   equality (`now >= deadline`), like the engine's, and time passes before the event: every
-  exported operation first expires what is due at or before its `now` (and ticks the
-  breaker), then applies the operation. A reply that arrives at its deadline is late.
+  action-returning operation first expires what is due at or before its `now` (and ticks
+  the breaker), then applies the operation. `Allow` advances only the breaker and its
+  snapshot; direct callers must use an action-returning operation to expire connections. A reply that arrives at its deadline is late.
 - Dials happen only on demand: `waiting > idle + connecting + checking + resetting`, under
   the cap (open + connecting), `max_connecting` and the creation rate. The rate is a
   one-slot GCRA: consecutive dials are at least `ceil(1s / rate)` apart (rounded up, so the
@@ -40,7 +41,9 @@ core path in `internal/proxy`, or the pool scenarios. Full record:
 - `suspect`: any connection-class failure (check failed, loss while idle except a polite
   close, loss while lent / resetting / cleaning, a zero-reply statement deadline) marks
   every idle connection suspect and every busy one suspect at its return. Only a passed
-  check clears it.
+  check clears it. A no-reply timeout marks connections present at that event; its later
+  cleanup close alone does not mark replacement connections opened since the timeout.
+  The reference model must preserve this distinction (`internal/pool/arbitration_test.go`).
 - Breaker: consecutive connection-class failures to `breaker.failures` open it: failed
   dials (including the connect deadline), bytes on an idle connection, loss of a lent /
   resetting / cleaning connection. Never SQL errors, never a zero-reply timeout alone, never
@@ -52,9 +55,9 @@ core path in `internal/proxy`, or the pool scenarios. Full record:
   or work is waiting (so an idle proxy does not dial a dead database every second). While
   half-open `Allow` admits requests (they queue behind the trial; nothing is lent until it
   passes), so the first query after a quiet outage is not refused. A failed trial re-opens
-  it. Whenever the breaker is open and nothing usable is left (it just opened,
-  a trial failed, or the last open connection went) the core emits `ActRefuseQueued` and the
-  engine answers the queue `53M03`. After `Shutdown`, `Next()` is 0.
+  it. Opening or re-opening the breaker emits `ActRefuseQueued` even if idle connections
+  remain: checkout cannot lend them while the breaker is open. The engine answers the queue
+  `53M03`. Losing a connection while already open also requests that flush. After `Shutdown`, `Next()` is 0.
 - Dirty-connection table: `Release` with an `End` kind other than clean: mid-statement →
   cancel on a second connection and drain to the end of the reply; inside a transaction →
   `ROLLBACK`; then the reset; reuse only after all of it and after the cancel connection
@@ -71,8 +74,11 @@ core path in `internal/proxy`, or the pool scenarios. Full record:
   the core). `nil` keeps chunk 6's `FixedSet`, which the chunk 6 e2e scenarios still use as
   the comparison arm. `CorePool` implements the `Pool` seam, `CoreBreaker` the `Breaker`
   seam, `CorePolicy` the `ReleasePolicy` seam.
-- `finish()` calls `core.Demand(now, queue.Len())` after every step and arms one engine
-  timer (`tPool`) at `core.Next()`.
+- `finish()` drains buffered checkout actions together with `core.Demand(now, queue.Len())`
+  once after every step and arms one engine timer (`tPool`) at `core.Next()`. It does not
+  redispatch merely because a check or reset started. An unsuccessful direct checkout
+  queues without retrying checkout in that same enqueue call. Regression tests are in
+  `internal/proxy/core_arbitration_test.go`.
 - New transport action and event: `ActDBCancel{Conn: cancel id, Data: CancelRequest}`; the
   driver dials, writes, reads to EOF or `timeouts.cleanup`, and posts `EvDBCancelDone`.
   `proxysim` and `internal/shell` implement it. Cancel connections are not counted in the
