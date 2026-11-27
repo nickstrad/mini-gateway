@@ -7,7 +7,9 @@
 #     TestShrunkQueuedVanishScenarioReplays.
 #   FuzzPoolOps (chunk 7): with MG_FUZZ_PLANT=reset-clears-suspect the pool core clears the
 #     suspect flag when a reset completes, so a connection marked suspect while it was lent is
-#     lent again without a check (pool.PlantResetClearsSuspect). The shrunk operations are
+#     lent again without a check (pool.PlantResetClearsSuspect). The reference model reports
+#     the lost flag as soon as it is lost, also while it settles the run, so ordinary inputs
+#     reach it; no committed seed fails on its own. The shrunk operations are
 #     resetClearsSuspectOps, replayed by TestShrunkResetClearsSuspectOrderingBugReplays.
 # Both switches are reachable from tests only.
 #

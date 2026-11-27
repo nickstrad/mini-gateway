@@ -244,6 +244,14 @@ func (m *model) checkAccounting() {
 	}
 }
 
+func (m *model) checkSuspect() {
+	for _, id := range m.live() {
+		if m.conns[id].suspect && m.p.State(id) != StateConnecting && !m.p.Suspect(id) {
+			m.fail("connection %d lost its suspect flag without a check (lent suspect next)", id)
+		}
+	}
+}
+
 func (m *model) lent(id ConnID, tenant work.TenantID) {
 	c := m.conns[id]
 	if c == nil || !c.open {
@@ -475,6 +483,7 @@ func (m *model) finish() {
 			m.absorb(m.p.CancelDone(m.now, id, nil))
 			progressed = true
 		}
+		m.checkSuspect()
 		if !progressed {
 			break
 		}
@@ -523,6 +532,7 @@ func run(cfg Config, ops []op, record bool) runResult {
 	m.record = record
 	for _, o := range ops {
 		m.apply(o)
+		m.checkSuspect()
 		if m.violation != "" {
 			break
 		}

@@ -138,6 +138,25 @@ func TestEveryPlantedBugIsCaughtByTheModel(t *testing.T) {
 var resetClearsSuspectOps = []op{{opDemand, 2, 0}, {opOpened, 0, 0}, {opAdvance, 6, 0}, {opDemand, 2, 0}, {opOpened, 0, 0},
 	{opCheckout, 0, 0}, {opCheckout, 0, 0}, {opLost, 1, 0}, {opReleaseClean, 0, 1}, {opStepDone, 0, 0}, {opCheckout, 0, 0}}
 
+func nearResetClearsSuspect() [][]op {
+	steps := slices.Index(resetClearsSuspectOps, op{opStepDone, 0, 0})
+	before := slices.Clone(resetClearsSuspectOps[:steps])
+	lost := slices.Index(before, op{opLost, 1, 0})
+	noLoss := slices.Clone(before)
+	noLoss[lost].kind = opStepFailed
+	return [][]op{noLoss, append(slices.Clone(noLoss), op{opStepDone, 0, 0}, op{opCheckout, 0, 0})}
+}
+
+func TestNearMissSeedsPassAndAreOneByteFromThePlantedBug(t *testing.T) {
+	cfg := modelConfig()
+	cfg.Plant = PlantResetClearsSuspect
+	for i, near := range nearResetClearsSuspect() {
+		if res := runOps(cfg, near); res.violation != "" {
+			t.Fatalf("seed %d already fails: %s", i, res.violation)
+		}
+	}
+}
+
 func TestShrunkResetClearsSuspectOrderingBugReplays(t *testing.T) {
 	cfg := modelConfig()
 	if res := runOps(cfg, resetClearsSuspectOps); res.violation != "" {
@@ -217,11 +236,7 @@ func FuzzPoolOps(f *testing.F) {
 	for i := 0; i < 8; i++ {
 		f.Add(encodeOps(randomOps(r)))
 	}
-	for _, pad := range []int{24, 32, 40} {
-		near := slices.Clone(resetClearsSuspectOps[:len(resetClearsSuspectOps)-1])
-		for range pad {
-			near = append(near, op{kind: opCancelDone})
-		}
+	for _, near := range nearResetClearsSuspect() {
 		f.Add(encodeOps(near))
 	}
 	plant := fuzzPlant()
