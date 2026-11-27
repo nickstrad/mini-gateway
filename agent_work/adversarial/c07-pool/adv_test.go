@@ -189,8 +189,11 @@ func expiry(t *testing.T, tiny bool) {
 		}
 	}
 }
-func TestAdv_3_JitterCollisions(t *testing.T)     { expiry(t, false) }
-func TestAdv_3_SubMicrosecondJitter(t *testing.T) { expiry(t, true) }
+func TestAdv_3_JitterCollisions(t *testing.T) { expiry(t, false) }
+func TestAdv_3_SubMicrosecondJitter(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: the input no longer exists: a lifetime that jitter would spread by less than 1 ms is refused at validation, naming the key. See agent_work/chunks/c07-pool/ADVERSARIAL.md.")
+	expiry(t, true)
+}
 func TestAdv_3_ExpiryRefillBound(t *testing.T) {
 	c := cfg()
 	c.NoJitter = false
@@ -359,6 +362,7 @@ func TestAdv_8_AlwaysSameTenant(t *testing.T) {
 	}
 }
 func TestAdv_8_ReseedSameTenant(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 8 narrowed: the re-seed accompanies a reset; under on-switch a same-tenant reuse runs neither. See agent_work/chunks/c07-pool/ADVERSARIAL.md.")
 	c := cfg()
 	c.Reseed = true
 	p := fresh(t, c)

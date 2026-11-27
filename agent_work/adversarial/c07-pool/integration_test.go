@@ -92,9 +92,15 @@ func death(t *testing.T, mode int) {
 		t.Fatalf("zero lent at death, client failures=%d sheds=%d reply=%v", r.Engine.Failed, r.Engine.Shed, r.Clients[1])
 	}
 }
-func TestAdv_6_RecentIdleBlackhole(t *testing.T)  { death(t, 0) }
-func TestAdv_6_OldIdleCheckRefusal(t *testing.T)  { death(t, 1) }
-func TestAdv_6_RecentIdlePeerForgot(t *testing.T) { death(t, 2) }
+func TestAdv_6_RecentIdleBlackhole(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 6 narrowed: a connection idle for less than pool.check_after_idle is lent without a check, so after a silent death the first statement on it can fail once with 08006; later work is served. See agent_work/chunks/c07-pool/ADVERSARIAL.md.")
+	death(t, 0)
+}
+func TestAdv_6_OldIdleCheckRefusal(t *testing.T) { death(t, 1) }
+func TestAdv_6_RecentIdlePeerForgot(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 6 narrowed: a connection idle for less than pool.check_after_idle is lent without a check, so after a silent death the first statement on it can fail once with 08006; later work is served. See agent_work/chunks/c07-pool/ADVERSARIAL.md.")
+	death(t, 2)
+}
 
 func startup(t *testing.T, mode int) {
 	t.Logf("seed=%d", seed)
