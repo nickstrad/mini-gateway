@@ -51,6 +51,14 @@
       "status": "live"
     },
     {
+      "number": 6,
+      "suffix": "a",
+      "chunk": 6,
+      "title": "Watching it run: a load tool, a small client, and reports that say what a run proved",
+      "file": "book/chapters/06a-operator-tools.md",
+      "status": "planned"
+    },
+    {
       "number": 7,
       "chunk": 7,
       "title": "The pool: a hard cap, a creation rate, and connections that go bad",

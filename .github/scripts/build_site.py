@@ -15,9 +15,12 @@ Pages (all links relative, so the site works under any path prefix):
   book/index.md               -> book/index.html, followed by a table of contents
                                  generated from book/manifest.json
   book/chapters/NN-<slug>.md  -> book/NN-<slug>.html, for every chapter the manifest
-                                 marks "live"
+                                 marks "live" (NN<suffix>-<slug> for a chapter with a suffix)
 The book manifest lists every chapter with its number, chunk, title, file and status
-("planned" or "live"). A live chapter is published and linked from the contents; a planned
+("planned" or "live"). A chapter may also carry a "suffix", one lowercase letter: chapter 6
+with suffix "a" is chapter "6a", its file is book/chapters/06a-<slug>.md, and it is listed
+after chapter 6 and before chapter 7. Two chapters may share a number but not a number and
+suffix. A live chapter is published and linked from the contents; a planned
 chapter is listed as plain text. The build fails if a live chapter's file is missing, if a
 planned chapter's file exists, or if book/chapters/ holds a file the manifest does not list.
 A relative link must name a file or folder git tracks (one that exists only in the working
@@ -126,7 +129,8 @@ class BuildError(Exception):
 
 def load_book():
     """Read and check book/manifest.json. Returns (title, chapters); each chapter is a dict
-    with number, chunk, title, file, status and out (the page it is published to)."""
+    with number, suffix ("" when the entry has none), chunk, title, file, status and out
+    (the page it is published to), ordered by number and then suffix, no suffix first."""
     path = ROOT / BOOK_MANIFEST
     if not path.is_file():
         raise BuildError("missing source: %s" % BOOK_MANIFEST)
@@ -150,33 +154,46 @@ def load_book():
             raise BuildError("%s: needs a \"title\"" % where)
         if status not in ("planned", "live"):
             raise BuildError("%s: \"status\" must be \"planned\" or \"live\", got %r" % (where, status))
-        m = re.fullmatch(r"book/chapters/((\d\d)-[a-z0-9]+(?:-[a-z0-9]+)*)\.md", file if isinstance(file, str) else "")
-        if not m or int(m.group(2)) != number:
+        suffix = ""
+        if "suffix" in ch:
+            suffix = ch["suffix"]
+            if not isinstance(suffix, str) or not re.fullmatch(r"[a-z]", suffix):
+                raise BuildError("%s: \"suffix\" must be one lowercase letter (a to z), got %r" % (where, suffix))
+        m = re.fullmatch(r"book/chapters/((\d\d)([a-z]?)-[a-z0-9]+(?:-[a-z0-9]+)*)\.md",
+                         file if isinstance(file, str) else "")
+        if not suffix and (not m or m.group(3) or int(m.group(2)) != number):
             raise BuildError("%s: \"file\" must be book/chapters/NN-<slug>.md with NN equal to the number, got %r"
                              % (where, file))
-        if number in seen_numbers or file in seen_files:
+        if suffix and (not m or m.group(3) != suffix or int(m.group(2)) != number):
+            raise BuildError("%s: \"file\" must be book/chapters/NN%s-<slug>.md with NN equal to the number "
+                             "and followed by the suffix, got %r" % (where, suffix, file))
+        if (number, suffix) in seen_numbers or file in seen_files:
             raise BuildError("%s: chapter number or file listed twice" % where)
-        seen_numbers.add(number)
+        seen_numbers.add((number, suffix))
         seen_files.add(file)
         exists = (ROOT / file).is_file()
         if status == "live" and not exists:
-            raise BuildError("%s: chapter %d is live but %s is missing" % (BOOK_MANIFEST, number, file))
+            raise BuildError("%s: chapter %d%s is live but %s is missing" % (BOOK_MANIFEST, number, suffix, file))
         if status == "planned" and exists:
-            raise BuildError("%s: chapter %d is planned but %s exists (set its status to live, or remove the file)"
-                             % (BOOK_MANIFEST, number, file))
-        out.append(dict(ch, out="book/%s.html" % m.group(1)))
+            raise BuildError("%s: chapter %d%s is planned but %s exists (set its status to live, or remove the file)"
+                             % (BOOK_MANIFEST, number, suffix, file))
+        out.append(dict(ch, suffix=suffix, out="book/%s.html" % m.group(1)))
     chapter_dir = ROOT / "book/chapters"
     if chapter_dir.is_dir():
         for p in sorted(chapter_dir.iterdir()):
             if "book/chapters/" + p.name not in seen_files:
                 raise BuildError("book/chapters/%s is not listed in %s" % (p.name, BOOK_MANIFEST))
-    out.sort(key=lambda ch: ch["number"])
+    out.sort(key=lambda ch: (ch["number"], ch["suffix"]))
     return title, out
 
 
 def chapter_label(ch):
+    """The chapter as the contents and the previous and next links show it: "6. Title", or
+    "6a. Title" with a suffix. Chapter 0 without a suffix, the preface, shows its title alone."""
     text = html.escape(ch["title"])
-    return text if ch["number"] == 0 else "%d. %s" % (ch["number"], text)
+    if ch["number"] == 0 and not ch["suffix"]:
+        return text
+    return "%d%s. %s" % (ch["number"], ch["suffix"], text)
 
 
 def book_contents(chapters):
