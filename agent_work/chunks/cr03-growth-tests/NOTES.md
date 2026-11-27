@@ -686,3 +686,22 @@ go test -count=1 -run Counted -v ./scripts/
 go test -count=1 ./agent_work/adversarial/cr03-growth-tests/...
 GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh cr03-growth-tests
 ```
+
+### Repair-round gate
+
+`GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh cr03-growth-tests`, as the brief asks, not the full
+gate.
+
+- First run, clean tree at `007c084`: **overall=fail**. G1 detlint was red, with `[buildtag]`
+  and `[typecheck]` findings on the tag pair then in `internal/pgwire`. Fixed in `5282710`
+  by moving the switch to `internal/pgwire/clscount`.
+- Second run, clean tree at `da7c6e1` (`dirty_tree=false`, stage build): **overall=pass**,
+  partial, so `counts_for_landing=false`.
+  - G0: tools, gofmt, build, vet, tools-vet, tools-test and tidy pass.
+  - G1: detlint (22 package patterns), importlint, boundlint and paniccheck pass.
+  - G2: comments pass (baseline `ac91a01`).
+  - G3: unit passes (373 s; includes `agent_work/adversarial/...`, so Astra's 31 attacks
+    and chunk 5's harnesses pass). **counted** passes (2 s; 5 tests under
+    `-tags clscount`). race passes (19 s).
+- `gate/result.json` was not committed, and the `gate/` directory was removed. The only
+  change after the gate run is this section.
