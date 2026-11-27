@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/admission"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
@@ -214,6 +215,123 @@ func TestScenarioFairManyTenants(t *testing.T) {
 		}
 		if fair.Adm.Fair.Active.Peak <= 32 && len(fair.Adm.PerTenant) <= 32 {
 			t.Fatalf("the scenario must exceed the Prometheus tenant label bound: %d rows", len(fair.Adm.PerTenant))
+		}
+		if err := checkOverlap(fair); err != nil {
+			t.Fatalf("%v\n%s", err, fairReplay(fair.Spec.Scenario, "fair", seed))
+		}
+	}
+}
+
+func checkOverlap(r *FairRun) error {
+	if len(r.Overlapped) != r.Spec.quietCount() {
+		return failf("overlap watched for %d quiet tenants of %d", len(r.Overlapped), r.Spec.quietCount())
+	}
+	for i, ok := range r.Overlapped {
+		if !ok {
+			return failf("%s never had a request in the proxy while the flooder did during the flood: it did not compete with the 10x flood (the first %v)", QuietTenant(i), FairFlood)
+		}
+	}
+	return nil
+}
+
+func runFairTwice(t *testing.T, spec FairSpec, seed int64) *FairRun {
+	t.Helper()
+	replay := fmt.Sprintf("REPLAY: go test ./test/e2e -run '^TestScenarioFairNarrowed' -seed=%d -count=1 (scenario %s, arm %s)", seed, spec.Scenario, spec.Arm.Name)
+	a, err := RunFair(spec, seed, "", replay)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, replay)
+	}
+	b, err := RunFair(spec, seed, "", replay)
+	if err != nil {
+		t.Fatalf("second run: %v\n%s", err, replay)
+	}
+	if a.World.S.Digests() != b.World.S.Digests() {
+		t.Fatalf("replay law: digests differ %s / %s\n%s", a.World.S.Digests(), b.World.S.Digests(), replay)
+	}
+	if err := a.World.Proxy.Engine.Quiesce(); err != nil {
+		t.Fatalf("steady state: %v\n%s", err, replay)
+	}
+	return a
+}
+
+func narrowedSeeds(t *testing.T) []int64 {
+	s := fairSeeds(t)
+	return s[:min(len(s), fairAblationSeeds)]
+}
+
+const (
+	fairLongLease      = 40 * time.Millisecond
+	fairLongQuietEvery = 100 * time.Millisecond
+	fairShedLease      = 150 * time.Millisecond
+	fairBelowShedLease = 90 * time.Millisecond
+	fairShedQuietEvery = 250 * time.Millisecond
+	fairLeaseOverhead  = FairFloodLease - FairFloodService
+	fairSyncWithin     = 16
+)
+
+func TestScenarioFairNarrowedQuietWaitIsBoundedByOneFlooderLease(t *testing.T) {
+	if testing.Short() {
+		t.Skip("fairness scenarios run in the full suite and the sweep")
+	}
+	for _, seed := range narrowedSeeds(t) {
+		fair := runFairTwice(t, LongLeaseSpec(FairArmFair, fairLongLease, fairLongQuietEvery), seed)
+		alone := runFairTwice(t, LongLeaseSpec(FairArmAlone, fairLongLease, fairLongQuietEvery), seed)
+		q, qa := TenantStats(fair.Final, QuietTenant(0)), TenantStats(alone.Final, QuietTenant(0))
+		if qa.OK == 0 || q.OK != qa.OK || q.Intended != qa.Intended || q.Errors+q.Lost+q.TimedOut+q.Dropped != 0 {
+			t.Fatalf("seed %d: flooder leases of %v: quiet %d ok of %d (errors %d) against %d ok alone", seed, fairLongLease, q.OK, q.Intended, q.Errors, qa.OK)
+		}
+		p, pa := waitQuantile(q.Latency, 99), waitQuantile(qa.Latency, 99)
+		if bound := pa + int64(fairLongLease+fairLeaseOverhead); p > bound {
+			t.Fatalf("seed %d: quiet p99 %d ns, alone %d ns: more than one flooder lease (%v) added", seed, p, pa, fairLongLease+fairLeaseOverhead)
+		}
+		if testing.Verbose() {
+			t.Logf("seed %d: flooder leases %v: quiet p99 %d ns, alone %d ns (%.2fx)", seed, fairLongLease, p, pa, float64(p)/float64(pa))
+		}
+	}
+}
+
+func TestScenarioFairNarrowedQuietIsShedOnceAFlooderLeaseReachesTheAllowedWait(t *testing.T) {
+	if testing.Short() {
+		t.Skip("fairness scenarios run in the full suite and the sweep")
+	}
+	for _, seed := range narrowedSeeds(t) {
+		below := runFairTwice(t, LongLeaseSpec(FairArmFair, fairBelowShedLease, fairShedQuietEvery), seed)
+		if qb := TenantStats(below.Final, QuietTenant(0)); qb.OK != qb.Intended || qb.Errors != 0 {
+			t.Fatalf("seed %d: flooder leases of %v, below the allowed wait %v: quiet %d ok of %d, errors %v", seed, fairBelowShedLease,
+				time.Duration(admission.DefaultInterval), qb.OK, qb.Intended, qb.ErrorsByCode)
+		}
+		fair := runFairTwice(t, LongLeaseSpec(FairArmFair, fairShedLease, fairShedQuietEvery), seed)
+		alone := runFairTwice(t, LongLeaseSpec(FairArmAlone, fairShedLease, fairShedQuietEvery), seed)
+		q, qa := TenantStats(fair.Final, QuietTenant(0)), TenantStats(alone.Final, QuietTenant(0))
+		if qa.OK != qa.Intended || qa.Errors != 0 {
+			t.Fatalf("seed %d: the quiet tenant alone must succeed in full: %d ok of %d", seed, qa.OK, qa.Intended)
+		}
+		if shedCode(q) == 0 {
+			t.Fatalf("seed %d: flooder leases of %v, above the allowed wait %v: no quiet request was shed (%d ok of %d)", seed, fairShedLease,
+				time.Duration(admission.DefaultInterval), q.OK, q.Intended)
+		}
+		if testing.Verbose() {
+			t.Logf("seed %d: flooder leases %v: quiet %d ok, %d shed of %d", seed, fairShedLease, q.OK, shedCode(q), q.Intended)
+		}
+	}
+}
+
+func TestScenarioFairNarrowedSynchronizedQuietTenantsWithinCapacity(t *testing.T) {
+	if testing.Short() {
+		t.Skip("fairness scenarios run in the full suite and the sweep")
+	}
+	for _, seed := range narrowedSeeds(t) {
+		fair := runFairTwice(t, SyncSpec(FairArmFair, fairSyncWithin), seed)
+		alone := runFairTwice(t, SyncSpec(FairArmAlone, fairSyncWithin), seed)
+		for i := range fairSyncWithin {
+			name := TenantStats(fair.Final, QuietTenant(i)).Name
+			got, ga := TenantStats(fair.Final, QuietTenant(i)), TenantStats(alone.Final, QuietTenant(i))
+			if ga.OK != 1 || got.OK != ga.OK || got.Errors+got.Lost+got.TimedOut+got.Dropped != 0 {
+				t.Fatalf("seed %d: %s with the flood %d ok (errors %v), alone %d ok", seed, name, got.OK, got.ErrorsByCode, ga.OK)
+			}
+		}
+		if err := checkOverlap(fair); err != nil {
+			t.Fatalf("seed %d: %v", seed, err)
 		}
 	}
 }

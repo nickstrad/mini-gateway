@@ -34,6 +34,8 @@ const (
 	FairQuietEvery      = 25 * time.Millisecond
 	FairManyQuiet       = 40
 	FairManyEvery       = time.Second
+	FairManyStagger     = FairFlood / FairManyQuiet
+	FairSyncAt          = 200 * time.Millisecond
 	FairFlush           = time.Second
 	FairHeldConns       = 4
 	FairHeldClients     = 8
@@ -65,27 +67,32 @@ const (
 	FairNoisy FairKind = iota + 1
 	FairMany
 	FairHeld
+	FairSync
 )
 
 type FairSpec struct {
-	Scenario string
-	Kind     FairKind
-	Arm      FairArm
+	Scenario     string
+	Kind         FairKind
+	Arm          FairArm
+	FloodService time.Duration
+	QuietEvery   time.Duration
+	SyncQuiet    int
 }
 
 type FairRun struct {
-	Spec     FairSpec
-	Seed     int64
-	World    *proxysim.World
-	Mid      workload.Snapshot
-	Phase    workload.Snapshot
-	Final    workload.Snapshot
-	Adm      admission.Snapshot
-	Engine   proxy.Snapshot
-	Flush    *simrun.Run
-	HeldPeak int
-	Watched  bool
-	HeldOpen int
+	Spec       FairSpec
+	Seed       int64
+	World      *proxysim.World
+	Mid        workload.Snapshot
+	Phase      workload.Snapshot
+	Final      workload.Snapshot
+	Adm        admission.Snapshot
+	Engine     proxy.Snapshot
+	Flush      *simrun.Run
+	HeldPeak   int
+	Watched    bool
+	HeldOpen   int
+	Overlapped []bool
 }
 
 func NoisySpec(arm FairArm) FairSpec {
@@ -100,16 +107,33 @@ func HeldSpec(arm FairArm) FairSpec {
 	return FairSpec{Scenario: "fair-held-transactions", Kind: FairHeld, Arm: arm}
 }
 
-func (s FairSpec) Fingerprint() string {
-	return fmt.Sprintf("%s-%s-r%d-f%v-p%d-x%d", s.Scenario, s.Arm.Name, s.Arm.Rule, s.Arm.Flood, s.Arm.Plant, s.Arm.ProxyPlant)
+func LongLeaseSpec(arm FairArm, flood, quietEvery time.Duration) FairSpec {
+	return FairSpec{Scenario: "fair-noisy-long-leases", Kind: FairNoisy, Arm: arm, FloodService: flood, QuietEvery: quietEvery}
 }
 
-func (s FairSpec) tenants() int {
-	if s.Kind == FairMany {
-		return 1 + FairManyQuiet
-	}
-	return 2
+func SyncSpec(arm FairArm, quiet int) FairSpec {
+	return FairSpec{Scenario: "fair-synchronized-quiet", Kind: FairSync, Arm: arm, SyncQuiet: quiet}
 }
+
+func (s FairSpec) Fingerprint() string {
+	f := fmt.Sprintf("%s-%s-r%d-f%v-p%d-x%d", s.Scenario, s.Arm.Name, s.Arm.Rule, s.Arm.Flood, s.Arm.Plant, s.Arm.ProxyPlant)
+	if s.FloodService != 0 || s.QuietEvery != 0 || s.SyncQuiet != 0 {
+		f += fmt.Sprintf("-s%d-e%d-q%d", s.FloodService, s.QuietEvery, s.SyncQuiet)
+	}
+	return f
+}
+
+func (s FairSpec) quietCount() int {
+	switch s.Kind {
+	case FairMany:
+		return FairManyQuiet
+	case FairSync:
+		return s.SyncQuiet
+	}
+	return 1
+}
+
+func (s FairSpec) tenants() int { return 1 + s.quietCount() }
 
 func (s FairSpec) conns() int {
 	if s.Kind == FairHeld {
@@ -157,14 +181,22 @@ func (s FairSpec) quietDuration() time.Duration { return FairFlood + FairRecover
 
 func (s FairSpec) quietTenants() []workload.Tenant {
 	if s.Kind == FairNoisy {
+		every := FairQuietEvery
+		if s.QuietEvery != 0 {
+			every = s.QuietEvery
+		}
 		return []workload.Tenant{{Name: QuietTenant(0), Database: proxysim.Database, Clients: 1, Arrival: workload.ArrivalConstant,
-			Interval: FairQuietEvery, Requests: int(s.quietDuration() / FairQuietEvery), ConnectFirst: true, Keys: workload.Keys{N: 64}, Mix: writeMix()}}
+			Interval: every, Requests: int(s.quietDuration() / every), ConnectFirst: true, Keys: workload.Keys{N: 64}, Mix: writeMix()}}
 	}
 	var out []workload.Tenant
-	for i := range FairManyQuiet {
-		out = append(out, workload.Tenant{Name: QuietTenant(i), Database: proxysim.Database, Clients: 1, Arrival: workload.ArrivalConstant,
-			Interval: FairManyEvery, Requests: int(s.quietDuration() / FairManyEvery), Start: time.Duration(i) * FairManyEvery / FairManyQuiet,
-			ConnectFirst: true, Keys: workload.Keys{N: 64}, Mix: writeMix()})
+	for i := range s.quietCount() {
+		q := workload.Tenant{Name: QuietTenant(i), Database: proxysim.Database, Clients: 1, Arrival: workload.ArrivalConstant,
+			Interval: FairManyEvery, Requests: int(s.quietDuration() / FairManyEvery), Start: time.Duration(i) * FairManyStagger,
+			ConnectFirst: true, Keys: workload.Keys{N: 64}, Mix: writeMix()}
+		if s.Kind == FairSync {
+			q.Start, q.Requests = FairSyncAt, 1
+		}
+		out = append(out, q)
 	}
 	return out
 }
@@ -206,8 +238,30 @@ func fairRows() []fakepg.Row {
 	return rows
 }
 
-func fairService() fakepg.Service {
-	return fakepg.Service{PerKind: []fakepg.KindTime{{Kind: fakepg.KindRead, Time: FairFloodService}, {Kind: fakepg.KindUpdate, Time: FairQuietService}}}
+func (s FairSpec) service() fakepg.Service {
+	flood := FairFloodService
+	if s.FloodService != 0 {
+		flood = s.FloodService
+	}
+	return fakepg.Service{PerKind: []fakepg.KindTime{{Kind: fakepg.KindRead, Time: flood}, {Kind: fakepg.KindUpdate, Time: FairQuietService}}}
+}
+
+func (r *FairRun) watchOverlap() error {
+	e := r.World.Proxy.Engine
+	flood := work.TenantID(FloodTenant())
+	r.Overlapped = make([]bool, r.Spec.quietCount())
+	return r.World.S.RegisterInvariant("fair-quiet-overlap", func() error {
+		if time.Duration(r.World.S.Now()) >= FairFlood || e.TenantLeases(flood)+e.TenantQueued(flood) == 0 {
+			return nil
+		}
+		for i := range r.Overlapped {
+			q := work.TenantID(QuietTenant(i))
+			if !r.Overlapped[i] && e.TenantLeases(q)+e.TenantQueued(q) > 0 {
+				r.Overlapped[i] = true
+			}
+		}
+		return nil
+	})
 }
 
 func (r *FairRun) watchHeld() error {
@@ -233,15 +287,17 @@ func (r *FairRun) watchHeld() error {
 
 func RunFair(spec FairSpec, seed int64, dir, replay string) (*FairRun, error) {
 	w, err := proxysim.BuildWorld(proxysim.WorldConfig{Seed: seed, Scenario: spec.Scenario, Replay: replay, Tenants: spec.tenants(),
-		Fake: fakepg.Config{Rows: fairRows(), Service: fairService(), MaxConnections: 64}, Engine: spec.engine()})
+		Fake: fakepg.Config{Rows: fairRows(), Service: spec.service(), MaxConnections: 64}, Engine: spec.engine()})
 	if err != nil {
 		return nil, err
 	}
 	r := &FairRun{Spec: spec, Seed: seed, World: w}
+	watch := r.watchOverlap
 	if spec.Kind == FairHeld {
-		if err := r.watchHeld(); err != nil {
-			return nil, err
-		}
+		watch = r.watchHeld
+	}
+	if err := watch(); err != nil {
+		return nil, err
 	}
 	var wl *workload.Workload
 	run := func() error {
