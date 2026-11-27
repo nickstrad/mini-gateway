@@ -206,6 +206,11 @@ points at an unpacked copy elsewhere.
 - `book/manifest.json` lists every chapter: `number`, `chunk`, `title`, `file`
   (`book/chapters/NN-<slug>.md`, `NN` equal to the number) and `status` (`planned` or
   `live`). Entry 0 is the preface that chunk 16 writes.
+- An entry may also carry `suffix`, one lowercase letter, for a chapter placed between two
+  whole numbers: number 6 with suffix `a` is chapter "6a", its file is
+  `book/chapters/06a-<slug>.md`, its page `book/06a-<slug>.html`, and it is listed after
+  chapter 6 and before chapter 7. `chunk` stays a whole number, and no two entries may share
+  both number and suffix (chunk 6a; tests in `scripts/c06a_site_suffix_test.go`).
 - To publish a chapter: add its file and set its status to `live` in the same commit. The
   site build fails if a live chapter's file is missing, if a planned chapter's file exists,
   or if `book/chapters/` holds a file the manifest does not list.
