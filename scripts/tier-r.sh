@@ -41,8 +41,8 @@ prefix="mg-tier-r-$$"
 names=()
 cleanup() {
   local n
-  for n in ${names[@]+"${names[@]}"}; do docker rm -f "$n" >/dev/null 2>&1 || true; done
-  for n in $(docker ps -aq --filter "name=^${prefix}-" 2>/dev/null); do docker rm -f "$n" >/dev/null 2>&1 || true; done
+  for n in ${names[@]+"${names[@]}"}; do docker rm -f -v "$n" >/dev/null 2>&1 || true; done
+  for n in $(docker ps -aq --filter "name=^${prefix}-" 2>/dev/null); do docker rm -f -v "$n" >/dev/null 2>&1 || true; done
 }
 trap cleanup EXIT
 trap 'exit 2' INT TERM

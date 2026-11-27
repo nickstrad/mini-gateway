@@ -47,7 +47,7 @@ fi
 if [ "${CHAOS_TIER_R:-1}" != 0 ] && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   rlog="$dir/tier-r.log"
   prefix="mg-chaos-$$"
-  trap 'for n in $(docker ps -aq --filter "name=^${prefix}-" 2>/dev/null); do docker rm -f "$n" >/dev/null 2>&1; done' EXIT
+  trap 'for n in $(docker ps -aq --filter "name=^${prefix}-" 2>/dev/null); do docker rm -f -v "$n" >/dev/null 2>&1; done' EXIT
   MG_TIER_R=1 MG_TIER_R_PREFIX="$prefix" RUN_DIR="$dir/tier-r" go test -count=1 -timeout 30m -v -run '^TestTierR' ./test/e2e >"$rlog" 2>&1
   show "$rlog"
   for t in $(grep -oE -- '--- (PASS|FAIL): TestTierR[A-Za-z]+' "$rlog" | awk '{print $3}'); do

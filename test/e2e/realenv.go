@@ -190,7 +190,7 @@ func (s *RealSetup) waitReady() error {
 func (s *RealSetup) Close() error {
 	var errs []error
 	if s.Container != "" {
-		if out, err := exec.Command("docker", "rm", "-f", s.Container).CombinedOutput(); err != nil && !strings.Contains(string(out), "No such container") {
+		if out, err := exec.Command("docker", "rm", "-f", "-v", s.Container).CombinedOutput(); err != nil && !strings.Contains(string(out), "No such container") {
 			errs = append(errs, fmt.Errorf("docker rm: %v: %s", err, out))
 		}
 	}

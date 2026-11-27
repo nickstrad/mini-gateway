@@ -41,3 +41,13 @@ at or before an event's time fire before the event.
   the ruling is that a request handed to the driver may have reached unless the driver
   reports a zero-byte refusal. The corrected form is the product test
   `TestWriteRefusedWithZeroBytesIsNotReached`.
+
+## A gate script change by the orchestrator
+
+The first final-stage gate run failed with "no space left on device". Every real-server
+run removed its Postgres containers with `docker rm -f`, which leaves each container's
+anonymous data volume behind: 279 such volumes (16 GB, all Postgres 17 data directories
+created 2026-11-24 to 26, none attached to a container) had built up on vm-1. The
+orchestrator removed exactly those, and `scripts/tier-r.sh`, `scripts/chaos.sh` and
+`test/e2e/realenv.go` now remove containers with their volumes (`docker rm -f -v`). The
+adversaries' own scripts under `agent_work/adversarial/` still use the old form.
