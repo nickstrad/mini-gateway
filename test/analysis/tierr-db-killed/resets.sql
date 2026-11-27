@@ -1,5 +1,5 @@
 -- requires: engine.leases_started engine.leases_ended engine.leases_ended_by engine.resets_started engine.resets_completed engine.resets_failed engine.connections_resetting engine.resets_not_at_release
--- claim: tierr-db-killed: tier R, with the pool core in the binary: leases ended = ended with a reset + closed at release + lent as is + ended into the dirty-connection table = leases started; resets started = resets at release + resets the pool sent elsewhere (tenant switch, after a clean-up) = completed + failed (a reset cut by the stop counts as failed, reason closed); nothing resetting in the final flush.
+-- claim: tierr-db-killed: tier R, with the pool core in the binary: leases ended = ended with a reset + closed at release + lent as is + ended into the dirty-connection table = leases started; resets started = resets at release + resets the pool sent elsewhere (tenant switch, after a clean-up) = completed + failed (a reset cut by the stop counts as failed, reason closed); nothing resetting in the final flush; nothing lent as is (every chunk 6 scenario runs lease.reset: always).
 SELECT run_id || ': schema_version ' || schema_version AS violation FROM runs WHERE schema_version <> 1
 UNION ALL
 (WITH per_run AS (
@@ -20,6 +20,6 @@ UNION ALL
 SELECT r.run_id || ': ' || 'started_leases ' || coalesce(p.started_leases, -1) || ', ' || 'ended ' || coalesce(p.ended, -1) || ', ' || 'by_reset ' || coalesce(p.by_reset, -1) || ', ' || 'by_close ' || coalesce(p.by_close, -1) || ', ' || 'as_is ' || coalesce(p.as_is, -1) || ', ' || 'started ' || coalesce(p.started, -1) || ', ' || 'completed ' || coalesce(p.completed, -1) || ', ' || 'failed ' || coalesce(p.failed, -1) || ', ' || 'resetting ' || coalesce(p.resetting, -1)
 FROM runs r LEFT JOIN per_run p USING (run_id)
 WHERE r.scenario = 'tierr-db-killed'
-  AND (p.run_id IS NULL OR p.ended <> p.by_reset + p.by_close + p.as_is + p.dirty OR p.ended <> p.started_leases OR p.started <> p.by_reset + p.elsewhere OR p.started <> p.completed + p.failed OR p.resetting <> 0))
+  AND (p.run_id IS NULL OR p.ended <> p.by_reset + p.by_close + p.as_is + p.dirty OR p.ended <> p.started_leases OR p.started <> p.by_reset + p.elsewhere OR p.started <> p.completed + p.failed OR p.resetting <> 0 OR p.as_is <> 0))
 UNION ALL
 SELECT 'no run of tierr-db-killed' WHERE NOT EXISTS (SELECT 1 FROM runs WHERE scenario = 'tierr-db-killed');
