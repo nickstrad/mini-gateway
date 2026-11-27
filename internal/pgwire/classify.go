@@ -115,13 +115,17 @@ type clsMsg struct {
 }
 
 type clsCounts struct {
-	lexReads      workTally
-	tokenSteps    workTally
-	lexOpRuns     workTally
-	lexAhead      workTally
+	lex           clsLexCounts
 	keywordChecks int
 	tokenVisits   int
 	literalBytes  int
+}
+
+type clsLexCounts struct {
+	reads  workTally
+	steps  workTally
+	opRuns workTally
+	ahead  workTally
 }
 
 func clsRun(text []byte, inTx, plant bool) work.Unit {
@@ -167,7 +171,7 @@ func (m *clsMsg) lex() {
 	l := LexerFor(m.src)
 	for {
 		if clsCounting {
-			m.counts.tokenSteps.bump()
+			m.counts.lex.steps.bump()
 		}
 		t, ok := l.Next()
 		if !ok {
@@ -184,7 +188,7 @@ func (m *clsMsg) lex() {
 	l = LexerFor(m.src)
 	for {
 		if clsCounting {
-			m.counts.tokenSteps.bump()
+			m.counts.lex.steps.bump()
 		}
 		t, ok := l.Next()
 		if !ok {
@@ -203,9 +207,9 @@ func (m *clsMsg) lex() {
 }
 
 func (m *clsMsg) countPass(l *Lexer) {
-	m.counts.lexReads.add(l.reads.value())
-	m.counts.lexOpRuns.add(l.opRunBytes)
-	m.counts.lexAhead.add(l.lookahead)
+	m.counts.lex.reads.add(l.reads.value())
+	m.counts.lex.opRuns.add(l.opRunBytes)
+	m.counts.lex.ahead.add(l.lookahead)
 }
 
 func (m *clsMsg) isPunct(i int, c byte) bool {

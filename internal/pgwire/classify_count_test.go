@@ -68,10 +68,10 @@ func clsCountedSizes(prefix, unit string) (clsCounts, clsCounts) {
 
 func clsCountedPairs(small, large clsCounts) []clsCountedWork {
 	return []clsCountedWork{
-		{"lexer reads", small.lexReads.value(), large.lexReads.value()},
-		{"token steps", small.tokenSteps.value(), large.tokenSteps.value()},
-		{"operator-run bytes", small.lexOpRuns.value(), large.lexOpRuns.value()},
-		{"lookahead bytes", small.lexAhead.value(), large.lexAhead.value()},
+		{"lexer reads", small.lex.reads.value(), large.lex.reads.value()},
+		{"token steps", small.lex.steps.value(), large.lex.steps.value()},
+		{"operator-run bytes", small.lex.opRuns.value(), large.lex.opRuns.value()},
+		{"lookahead bytes", small.lex.ahead.value(), large.lex.ahead.value()},
 		{"keyword checks", small.keywordChecks, large.keywordChecks},
 		{"token visits", small.tokenVisits, large.tokenVisits},
 		{"literal bytes", small.literalBytes, large.literalBytes},
