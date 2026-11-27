@@ -27,6 +27,9 @@ type TenantSnapshot struct {
 	Load      int64
 	Shedding  bool
 	QueueWait obs.HistogramSnapshot
+	InFlight  int64
+	Share     int64
+	AtShare   int64
 }
 
 // Snapshot is an immutable point-in-time view of all admission totals,
@@ -58,6 +61,7 @@ type Snapshot struct {
 	StepsCapped    int64
 	QueueWait      obs.HistogramSnapshot
 	PerTenant      []TenantSnapshot
+	Fair           FairSnapshot
 }
 
 // ShedTotal returns the sum of sheds across all reasons.
@@ -105,6 +109,9 @@ func (s Snapshot) Check() error {
 		for r := range shed {
 			shed[r] += t.Shed[r]
 		}
+	}
+	if err := s.Fair.check(s.PerTenant); err != nil {
+		return err
 	}
 	if depth != s.Queued.Value || pushes != s.Pushes || served != s.Served || removed != s.Removed || shed != s.Shed {
 		return fmt.Errorf("admission: per-tenant sums (depth %d pushes %d served %d removed %d shed %v) differ from the totals (%d %d %d %d %v)",
@@ -169,6 +176,7 @@ func (q *Queues) Snapshot() Snapshot {
 		}
 		s.PerTenant = append(s.PerTenant, ts)
 	}
+	q.fairSnapshot(&s)
 	slices.SortFunc(s.PerTenant, func(a, b TenantSnapshot) int { return strings.Compare(a.Tenant, b.Tenant) })
 	return s
 }
