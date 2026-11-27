@@ -81,7 +81,9 @@ func (r *coreRig) q(id proxy.ConnID, s string) []proxy.Action {
 	return r.run(r.ev(proxy.EvClientData, id, pgwire.AppendQuery(nil, []byte(s)), 0))
 }
 
-func (r *coreRig) db(id proxy.ConnID, b []byte) []proxy.Action { return r.run(r.ev(proxy.EvDBData, id, b, 0)) }
+func (r *coreRig) db(id proxy.ConnID, b []byte) []proxy.Action {
+	return r.run(r.ev(proxy.EvDBData, id, b, 0))
+}
 
 func (r *coreRig) tick(d time.Duration) []proxy.Action {
 	r.now += proxy.Instant(d)
