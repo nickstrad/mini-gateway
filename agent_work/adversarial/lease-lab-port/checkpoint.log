@@ -1,0 +1,11 @@
+[work/lease-port-adv b7e31bd] adversarial: retain timeout evidence and budget the full stability run
+ 13 files changed, 593 insertions(+), 8 deletions(-)
+ create mode 100644 agent_work/adversarial/lease-lab-port/cleanup.json
+ create mode 100644 agent_work/adversarial/lease-lab-port/evidence/TestAdv_6_TempPlansOnly.log
+ create mode 100644 agent_work/adversarial/lease-lab-port/evidence/TestAdv_7_RemoveCursor.log
+ create mode 100644 agent_work/adversarial/lease-lab-port/evidence/TestAdv_7_RemoveCustom.log
+ create mode 100644 agent_work/adversarial/lease-lab-port/evidence/TestAdv_7_RemoveRole.log
+ create mode 100644 agent_work/adversarial/lease-lab-port/evidence/TestAdv_8_RepeatAblation.log
+ create mode 100644 agent_work/adversarial/lease-lab-port/evidence/TestAdv_8_RepeatIsolation.log
+ create mode 100644 agent_work/adversarial/lease-lab-port/evidence/TestAdv_8_RepeatPolicies.log
+ create mode 100644 agent_work/adversarial/lease-lab-port/long.jsonl
