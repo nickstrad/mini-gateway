@@ -3,7 +3,7 @@
 Operational document, written by the Fable orchestrator on 2026-11-24.
 **Status: APPROVED by Nick on 2026-11-24, as amended by his rulings on the eight questions the proposal asked (section 18). Building starts on Nick's go — the Phase 2 launch. Nothing is built before it.**
 
-Four amendments are folded into the text below, so it reads as one settled plan:
+Five amendments are folded into the text below, so it reads as one settled plan:
 
 - **Observability amendment (2026-11-24):** the CSV flush, DuckDB analysis and the OTLP → Collector → Prometheus chain (sections 6.5, 7.1, 7.4, 7.6–7.9 and 11).
 - **Nick's rulings on section 18 (2026-11-24,** `/root/briefs/zgateway-section18-rulings.md`**).** Neon reviews Opus on this project; coalescing is strict by default with relaxed selectable; **the batching chunk is dropped**; tenant = the startup user name over one database role; **client-facing TLS is included** (verdict and evidence in section 3.1) with SCRAM-SHA-256 as the authentication mechanism; the *Release It!* book is mined before the pool chunk; the size is approved; the end-to-end wording is approved. **The plan is now 16 chunks after the foundation.** The proposal's chunk 12 (batching) is gone and its chunks 13–17 are now chunks 12–16; anything written before these rulings (the done marker's first part, commit messages) uses the old numbers.
@@ -11,6 +11,8 @@ Four amendments are folded into the text below, so it reads as one settled plan:
 - **Nick's ruling 9 (2026-11-26,** `/root/briefs/zgateway-c05-ruling-reset-always.md`**): reset after every lease.** A database connection gets `DISCARD ALL` after every lease; session safety never depends on reading SQL; the "known clean" conditional reset is not built. It changes decisions D7, D8 and D10, steering answer 9 (section 2), sections 9.1, 9.2 and 9.4, and chunks 5, 6, 7 and 11. The evidence is the lease experiment (`agent_work/chunks/c05-classifier/lease-exp/REPORT.md`); the record is section 18, row 9.
 
 - **Three later binding inputs from Nick (2026-11-24, folded in on 2026-11-26; section 19):** engine-level operation fuzzing with three rules for simulation-level fuzz targets, and value lowering in the shrinker (sections 6.1 and 6.6, chunks 6 and 7, change request CR-1); a load tool for watching a running gateway (chunk 6a); six developer-experience patterns from object-store, answered item by item (section 19.3). **The plan is now 16 chunks plus chunk 6a after the foundation.**
+
+- **The write-up seat rule (Nick, 2026-11-26,** `/root/briefs/zgateway-clarity-prose-pass-ruling.md`**):** Neon writes every reader-facing write-up with the Clarity skill; prose from any other seat is a draft for Neon to rewrite; published prose that reads densely gets a Neon clarity rewrite, checked against its source before it lands (sections 12.1, 12.2, 15 and 19.4).
 
 The diagrams that go with it are in [docs/c4/](docs/c4/README.md); both are published for review at
 https://nickstrad.github.io/mini-gateway/.
@@ -703,7 +705,7 @@ Apollo's post describes three gates (is the run valid, do repeats agree, did the
 | --- | --- |
 | **Fable** (orchestrator) | Writes each chunk's brief as a file, dispatches, runs the gates and the adversarial harnesses, final acceptance, lands (merge to main and push), keeps STATE.md, `agent_work/INDEX.md` and the C4 set current. Builds chunk 0 (scripts, CI, site — no product logic). |
 | **Opus** | Writes the Go product code and its tests — logic only, no comments or prose. A fresh agent in its own worktree per chunk; chunks in the same wave run concurrently. |
-| **Neon** (via Antigravity `agy`; OpenCode/OpenRouter only as a recorded fallback) | **Reviews Opus's work** — every chunk, verdict PASS / NITS / FAIL, by a fresh agent. Decided by ruling 1: on this project the seat ruling governs over the global rule that only Fable reviews Opus builds; it is a project-scoped exception and the global rule is unchanged elsewhere. Neon also writes **all** reader-facing prose — the book chapter, code comments, README, site copy, C4 explanatory text — once, late, per chunk, from the final verified evidence including every narrowed claim. The review and the prose pass are separate fresh agents. |
+| **Neon** (via Antigravity `agy`; OpenCode/OpenRouter only as a recorded fallback) | **Reviews Opus's work** — every chunk, verdict PASS / NITS / FAIL, by a fresh agent. Decided by ruling 1: on this project the seat ruling governs over the global rule that only Fable reviews Opus builds; it is a project-scoped exception and the global rule is unchanged elsewhere. Neon also writes **all** reader-facing prose — the book chapter, code comments, README, site copy, C4 explanatory text — once, late, per chunk, from the final verified evidence including every narrowed claim, **using the Clarity skill** (section 19.4). Prose from any other seat is a draft for Neon to rewrite with that skill, not a finished write-up. The review and the prose pass are separate fresh agents. |
 | **Astra** (`gpt-6-astra`) | Writes adversarial harnesses that try to break each chunk's stated claims; Fable runs them and records held / broken counts. |
 | Arbitration | A second FAIL, or a builder/reviewer standoff, goes to a top seat outside the build/review pair with the diff and both verdicts. |
 
@@ -716,7 +718,7 @@ Before each wave the orchestrator checks the usage gauges of every pool it is ab
 3. Review by a fresh Neon agent through `agy` (verdict PASS / NITS / FAIL). In parallel, a fresh Astra agent writes the adversarial harness from the brief's claims, not from the code.
 4. One repair round by a fresh Opus agent, then re-review by Neon. A second FAIL goes to arbitration.
 5. Fable runs the local landing gate and the adversarial harness; claims that broke are fixed or narrowed in writing.
-6. Neon's prose pass, once, with the final evidence.
+6. Neon's prose pass, once, late, with the final evidence, using the Clarity skill (section 19.4). Where another seat has already drafted reader-facing text for the chunk, Neon rewrites that draft in the same pass.
 7. Fable checks the C4 set against the code, lands, verifies the chapter is live on Pages, updates STATE.md.
 8. The agent that did the work records durable knowledge in `docs/knowledge/` and scripts in `agent_work/`, indexed.
 9. **Promotion (section 19.3, item 4).** Test material built under `agent_work/` that is worth keeping does not stay there: in the repair round, or in a pass before landing, the adversary's tests that held and still describe the product move into the shipped suite (beside the package they test, or under `test/`), and check scripts move under `scripts/` or `test/`. `agent_work/` keeps the records: briefs, notes, results. Chunk 5's rework is the first to do this; chunk 6a does it once for chunks 1–4.
@@ -1121,7 +1123,7 @@ The five suites the spec names (bold) are each owned by the chunk that builds th
 
 ## 15. The book
 
-The book is the learning artifact. Neon writes one chapter per chunk, once, late — after review, repair, adversarial results and the gate — from the final evidence, and it goes live on Pages at that chunk's landing, listed in the contents. A chunk is not landed until its chapter is live.
+The book is the learning artifact. Neon writes one chapter per chunk with the Clarity skill (section 19.4), once, late — after review, repair, adversarial results and the gate — from the final evidence, and it goes live on Pages at that chunk's landing, listed in the contents. A chunk is not landed until its chapter is live.
 
 | Chapter | From chunk | Working title |
 | --- | --- | --- |
@@ -1243,3 +1245,12 @@ Read in `/root/Software/object-store` at `d9dbac2` on 2026-11-26. "Found there" 
 | 5 | An exploratory CLI client | `cmd/objctl` on Cobra, logic in `internal/objctl` with no framework imports, a seeded model test that is also the oracle, run in process and against real nodes, with a transcript | **Adopted** at the surface this project has: a read-only admin surface (health, stats, metrics, per-tenant status, config), config validation, verifier derivation, and driving one proxied statement as a tenant. No mutating admin operation exists in v1, so there is none in the client | Chunk 6a (`cmd/mgctl`, `internal/mgctl`); chunk 13 adds the drain state |
 | 6 | Dependency exemption for UX clients | `go.mod` requires Cobra for `objctl`; the gate states the exemption once | **Adopted as a permission and not used.** `mgctl` and `loadgen` have about ten subcommands and flags between them; the standard `flag` package covers that, and not using the exemption keeps the "exactly one requirement" check of `go.mod` (gate G0) and the import lint as they are. If a later tool needs Cobra, the exemption is written the way object-store's gate writes it: one `only` rule naming `cmd/mgctl` and `cmd/loadgen`, nothing in the core | Section 6.3 (lints unchanged); chunk 6a |
 
+### 19.4 The write-up seat rule (`/root/briefs/zgateway-clarity-prose-pass-ruling.md`; Nick, 2026-11-26)
+
+A later ruling than the three above, folded in on 2026-11-27. It mirrors the rule the project-skeleton template states in its `docs/build-flow.md`.
+
+1. **Neon writes every reader-facing write-up, with the Clarity skill.** The skill is on vm-1 at `/root/.agents/skills/clarity`. The prose pass stays what section 12.2 step 6 says it is: one late stage of every chunk landing, written from the final verified evidence. The prose brief (`agent_work/orch/templates/prose.md`) tells the agent to read the skill and to follow it.
+2. **Prose from any other seat is a draft.** A README paragraph by the orchestrator, a builder's note that reaches a published page, a C4 introduction written at the C4 step: each is input for Neon to rewrite with the Clarity skill in rewrite mode, not a finished write-up. No other seat hand-edits published prose for style.
+3. **Published prose that reads densely gets a Neon clarity rewrite, not a hand edit.** A rewrite changes sentences, not substance. Headings, code blocks, inline code, file paths, links, numbers and claims are kept with the same force; nothing is invented or strengthened; the prose describes the software, never how it was made. Before the rewrite lands, the orchestrator checks it against the source — every number, link, heading and claim accounted for — and records the result in STATE.md. It lands by the normal rule: merge, push, and the published site checked for the new text.
+4. **What a rewrite does not touch.** The generated or test-pinned contract pages (`docs/csv-schema.md`, `error-contract.md`, `capacity-table.md`, `safe-shape.md`, `reject-list.md`, `timeout-budget.md`, `extension-seams.md`) are never hand-edited; if one reads densely the fix belongs in its generator or its source, as a separate note. `docs/knowledge/`, PLAN.md and STATE.md are working documents, not published write-ups. The C4 pages are generated from `docs/c4/gen.py`: their introductions are rewritten there, and element and relationship tables are diagram definitions, not prose. The prose pass's gate does not admit `docs/c4/` (section 12.3, `tools/lint-rules/prose-paths.txt`), so a C4 rewrite is a pass of its own.
+5. **First use.** The prose published up to chunk 6 — README, the book's front page and six chapters, the influences pages, the docs index and the C4 introductions — is rewritten once under this rule; STATE.md records the dispatch, the source check and the landing.

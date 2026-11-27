@@ -5,6 +5,18 @@ gated. You write every word a reader sees for it — and you change NO code. Wor
 worktree `@WT@` (branch `@BRANCH@`). Commit on this branch (subject `prose: <summary>` or
 `book: <summary>`). Do not push or merge. PATH needs `/usr/local/go/bin`.
 
+## How you write (Nick's ruling of 2026-11-26; PLAN.md section 19.4)
+
+You are the write-up seat, and you write with the **Clarity skill**. Before writing, read
+`/root/.agents/skills/clarity/SKILL.md` and the references it names for your mode
+(`references/edit.md`, `references/medium.md`, `references/longform.md`). New text (the
+chapter, new comments) is written to its standard; text that already exists for this chunk
+from another seat (a README paragraph, a docs page, a drafted section) is a draft, which you
+rewrite in the skill's rewrite mode: sentences change, substance does not — every fact,
+number, link, heading and caveat is kept with the same force. The prose describes the
+software, never how it was made (no agents, seats, reviews or build rounds, beyond the
+counts section B asks you to report). Do not link a file that `git ls-files` does not list.
+
 ## Evidence to read first (write only what this evidence supports)
 
 1. `PLAN.md`: this chunk's section and the sections it cites; section 15 (the book).
