@@ -88,7 +88,7 @@ func TestTierRPoolEmptyQueryCheckAndServerKeepalive(t *testing.T) {
 
 type policyResult struct {
 	crossings, sameTenant     int
-	hostileErrors             int
+	hostileErrors, unreadable int
 	residueOther, residueSame bool
 }
 
@@ -114,6 +114,20 @@ func seededValue(t *testing.T, env *RealEnv) string {
 	return randomAfter(t, d)
 }
 
+func directBaseline(t *testing.T, env *RealEnv, check string) []string {
+	t.Helper()
+	d, err := env.DialDirect(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	l := observeOneLease(d, check, "")
+	if l.broken || dataRow(l.catalog) == nil {
+		t.Fatalf("dirty-check on a direct connection: %v", l.catalog)
+	}
+	return l.catalog
+}
+
 func policyRun(t *testing.T, env *RealEnv, reset, reseed string) policyResult {
 	t.Helper()
 	scenario := "tierr-pool-session-" + reset
@@ -123,7 +137,7 @@ func policyRun(t *testing.T, env *RealEnv, reset, reseed string) policyResult {
 	g := gateway(t, env, GatewayOpts{Scenario: scenario, Conns: 1, Reset: reset, Reseed: reseed})
 	check := dirtyCheck(t)
 	var r policyResult
-	clean := ""
+	var clean []string
 	lastSecret := ""
 	for round := 0; round < 2; round++ {
 		for i, call := range hostileCalls {
@@ -135,7 +149,7 @@ func policyRun(t *testing.T, env *RealEnv, reset, reseed string) policyResult {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if HasToken(h.Query(sql), "E:") {
+			if hostileFailed(h.Query(sql)) {
 				r.hostileErrors++
 			}
 			h.Close()
@@ -147,18 +161,16 @@ func policyRun(t *testing.T, env *RealEnv, reset, reseed string) policyResult {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got := strings.Join(o.Query(check), " ")
-			seen := secretReadBack(o, lastSecret)
+			got := observeOneLease(o, check, lastSecret)
 			o.Close()
-			if clean == "" {
-				d, err := env.DialDirect(false)
-				if err != nil {
-					t.Fatal(err)
-				}
-				clean = strings.Join(d.Query(check), " ")
-				d.Close()
+			if clean == nil {
+				clean = directBaseline(t, env, check)
 			}
-			if got != clean || seen {
+			if got.broken {
+				r.unreadable++
+				continue
+			}
+			if !slices.Equal(got.catalog, clean) || got.secret {
 				if tenant == 2 {
 					r.sameTenant++
 				} else {
@@ -202,6 +214,9 @@ func TestTierRPoolSessionStateUnderEachReleasePolicy(t *testing.T) {
 		r := policyRun(t, env, arm.reset, arm.reseed)
 		if r.hostileErrors != 0 {
 			t.Errorf("%s/%s: %d hostile calls failed, so their state was never planted", arm.reset, arm.reseed, r.hostileErrors)
+		}
+		if r.unreadable != 0 {
+			t.Errorf("%s/%s: %d observer leases were unreadable, so their state was never checked", arm.reset, arm.reseed, r.unreadable)
 		}
 		if r.crossings != 0 {
 			t.Errorf("%s/%s: %d session-state crossings between tenants", arm.reset, arm.reseed, r.crossings)

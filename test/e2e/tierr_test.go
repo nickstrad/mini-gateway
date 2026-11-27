@@ -317,6 +317,32 @@ func secretReadBack(c *RealClient, secret string) bool {
 	return slices.Contains(c.Query("SELECT current_setting('"+secretSetting+"', true)"), "D:"+secret)
 }
 
+func cleanReply(got []string) bool {
+	return !HasToken(got, "E:") && !HasToken(got, "closed:") && HasToken(got, "Z")
+}
+
+func hostileFailed(got []string) bool {
+	return !cleanReply(got) || !HasToken(got, "D:")
+}
+
+type leaseObservation struct {
+	secret  bool
+	catalog []string
+	path    []string
+	broken  bool
+}
+
+func observeOneLease(c *RealClient, check, secret string) leaseObservation {
+	var l leaseObservation
+	opened := c.Query("BEGIN")
+	l.secret = secretReadBack(c, secret)
+	l.catalog = c.Query(check)
+	l.path = c.Query("SHOW search_path")
+	closed := c.Query("COMMIT")
+	l.broken = !cleanReply(opened) || !cleanReply(l.catalog) || !cleanReply(l.path) || !cleanReply(closed)
+	return l
+}
+
 func dataRow(got []string) []string {
 	for _, tk := range got {
 		if v, ok := strings.CutPrefix(tk, "D:"); ok {
@@ -327,10 +353,11 @@ func dataRow(got []string) []string {
 }
 
 type sessionResult struct {
-	dirty   int
-	secrets int
-	columns []string
-	moved   []int
+	dirty      int
+	secrets    int
+	unreadable int
+	columns    []string
+	moved      []int
 }
 
 func (r sessionResult) String() string {
@@ -338,14 +365,29 @@ func (r sessionResult) String() string {
 	for i, name := range r.columns {
 		parts = append(parts, fmt.Sprintf("%s %d", name, r.moved[i]))
 	}
-	parts = append(parts, fmt.Sprintf("secret read back %d", r.secrets))
+	parts = append(parts, fmt.Sprintf("secret read back %d", r.secrets), fmt.Sprintf("unreadable checks %d", r.unreadable))
 	return strings.Join(parts, ", ")
 }
 
-func (r *sessionResult) observe(clean, got []string) {
+func completeRow(got []string, width int) []string {
+	if !cleanReply(got) {
+		return nil
+	}
 	row := dataRow(got)
+	if len(row) != width {
+		return nil
+	}
+	return row
+}
+
+func (r *sessionResult) observe(clean, got []string) {
+	row := completeRow(got, len(r.moved))
+	if row == nil || len(clean) != len(r.moved) {
+		r.unreadable++
+		return
+	}
 	for i := range r.moved {
-		if i >= len(row) || i >= len(clean) || row[i] != clean[i] {
+		if row[i] != clean[i] {
 			r.moved[i]++
 		}
 	}
@@ -361,10 +403,10 @@ func sessionRun(t *testing.T, env *RealEnv, g *Gateway) sessionResult {
 		t.Fatal(err)
 	}
 	defer checker.Close()
-	clean := checker.Query(check)
-	cleanRow := dataRow(clean)
-	if len(cleanRow) != len(r.columns) {
-		t.Fatalf("dirty-check: %v, want %d columns %v", clean, len(r.columns), r.columns)
+	baseline := observeOneLease(checker, check, "")
+	cleanRow := completeRow(baseline.catalog, len(r.columns))
+	if baseline.broken || cleanRow == nil {
+		t.Fatalf("dirty-check: %v, want %d columns %v", baseline.catalog, len(r.columns), r.columns)
 	}
 	lastSecret := ""
 	for round := 0; round < 3; round++ {
@@ -377,24 +419,33 @@ func sessionRun(t *testing.T, env *RealEnv, g *Gateway) sessionResult {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := h.Query(sql); HasToken(got, "E:") {
+			if hostileFailed(h.Query(sql)) {
 				r.dirty++
 			}
 			h.Close()
-			if got := checker.Query(check); !slices.Equal(got, clean) {
-				r.dirty++
-				r.observe(cleanRow, got)
-			}
-			if got := checker.Query("SHOW search_path"); !slices.Contains(got, `D:"$user", public`) {
-				r.dirty++
-			}
-			if secretReadBack(checker, lastSecret) {
-				r.dirty++
-				r.secrets++
-			}
+			r.record(observeOneLease(checker, check, lastSecret), baseline.catalog, cleanRow)
 		}
 	}
 	return r
+}
+
+func (r *sessionResult) record(l leaseObservation, clean, cleanRow []string) {
+	if l.broken {
+		r.dirty++
+		r.unreadable++
+		return
+	}
+	if !slices.Equal(l.catalog, clean) {
+		r.dirty++
+		r.observe(cleanRow, l.catalog)
+	}
+	if !slices.Contains(l.path, `D:"$user", public`) {
+		r.dirty++
+	}
+	if l.secret {
+		r.dirty++
+		r.secrets++
+	}
 }
 
 // TestTierRSessionStateNeverCrossesClients proves DISCARD ALL clears hidden function-driven SET, temp table, lock, PREPARE, and LISTEN state against dirty-check.sql.
@@ -420,6 +471,9 @@ func TestTierRSessionAblationWithoutResetCrosses(t *testing.T) {
 	r := sessionRun(t, env, g)
 	if r.dirty == 0 {
 		t.Fatal("no dirty observation with the reset switched off: the scenario cannot fail")
+	}
+	if r.unreadable != 0 {
+		t.Errorf("%d dirty-check observations were unreadable with the reset switched off: an unread column proves nothing", r.unreadable)
 	}
 	for i, name := range r.columns {
 		if r.moved[i] == 0 {
