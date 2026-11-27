@@ -301,4 +301,7 @@ Full run: `scripts/gate.sh c07-pool` (build stage) at `8659484`, 2026-11-27, cle
 | G9 site | pass |
 | G10 chunk extra | pass: `FuzzEngineOps` found its planted bug after 3 s; `FuzzPoolOps` found `PlantResetClearsSuspect` after 3 s (budget 20 s each) |
 
-`result.json` is not committed. RERUN-PLACEHOLDER
+G3 re-run once on its own (`GATE_ONLY=G3 scripts/gate.sh c07-pool`) at `a530c49`, clean tree:
+**G3 unit pass (734 s), G3 race pass** — the two ratio tests passed. So every check of the
+gate has passed on this tree; the one full run in which all of them pass together is the
+orchestrator's landing gate. `result.json` is not committed.
