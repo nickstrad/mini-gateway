@@ -14,7 +14,6 @@ const (
 	checkQuery     = ""
 	rollbackQuery  = "ROLLBACK"
 	reseedTag      = "SELECT 1"
-	maxCorePumps   = 8
 	maxCancelConns = pool.MaxCancelsLimit
 	drainHeader    = headerLen + 1
 	drainMidFrame  = 0
@@ -125,15 +124,9 @@ func (e *Engine) coreRun(acts []pool.Action) {
 }
 
 func (e *Engine) corePump() {
-	for i := 0; i < maxCorePumps; i++ {
-		acts := e.core.take()
-		acts = e.core.p.Demand(e.pnow(), e.seams.Queue.Len(), acts)
-		if len(acts) == 0 {
-			break
-		}
-		e.coreRun(acts)
-		e.dispatch()
-	}
+	acts := e.core.take()
+	acts = e.core.p.Demand(e.pnow(), e.seams.Queue.Len(), acts)
+	e.coreRun(acts)
 	next := Instant(e.core.p.Next())
 	if next == 0 {
 		e.t.cancel(&e.poolT)

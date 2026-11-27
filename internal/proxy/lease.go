@@ -69,7 +69,9 @@ func (e *Engine) gates(c *client) bool {
 
 func (e *Engine) enqueue(c *client) {
 	req := c.req
+	attempted := false
 	if e.seams.Queue.Len() == 0 && e.seams.Pool.Idle() > 0 {
+		attempted = true
 		if id, ok := e.seams.Pool.Checkout(e.now, c.tenant); ok {
 			e.snap.StagePassed[StageQueue]++
 			e.queueHist.Record(0)
@@ -86,7 +88,9 @@ func (e *Engine) enqueue(c *client) {
 	e.waiting[req.id] = c
 	e.snap.Queued.Add(1)
 	e.t.arm(&c.queueT, e.after(e.cfg.Timeouts.QueueWait), tQueueWait, c, nil)
-	e.dispatch()
+	if !attempted {
+		e.dispatch()
+	}
 }
 
 func (e *Engine) shed(c *client) {
