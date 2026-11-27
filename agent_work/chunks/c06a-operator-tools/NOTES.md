@@ -55,6 +55,18 @@ git does not track: ignored-gate.out`). The orchestrator's next canary run cover
 lines of script, 4 of canary, 35 of test — a little over the brief's "about 40"; kept because
 the test is one table-like probe. Drop the commit if the orchestrator holds to 40.
 
+Repair-round checks (host load 13–16, three other builds running): `go test -count=1 ./...`
+including the adversarial packages: every package passes except
+`agent_work/adversarial/c06a-operator-tools` (`TestAdv_3_ZeroIntendedShortfall`, above) and
+`internal/pgwire` `TestLexOperatorRunsGrowLinearly` (a wall-clock growth test CR-3 replaces).
+Build-stage gate, once, on the clean tree at `118a5d7`: G0, G1 and G2 green; G3 unit red only
+for `TestAdv_3_ZeroIntendedShortfall` and the CR-3 growth tests
+(`internal/pgwire` `TestLexOperatorRunsGrowLinearly`, `TestClassifierTimeGrowsLinearly`;
+`agent_work/adversarial/c05-classifier` `TestAdv_5_WholeSpanRescanning`). Every other package
+in G3 unit passed (`scripts`, `test/analysis/report`, `test/e2e` included). As the brief says,
+the run was stopped there (during G3 race); G4–G10 were not reached in this round. No
+`result.json` was written.
+
 Adversarial tests still red after this round: `TestAdv_3_ZeroIntendedShortfall` only (see
 above). Narrowed claims: none.
 
