@@ -399,25 +399,25 @@ Tests: +2,563. Inside the brief's 2,500–3,000 estimate for product code; no sp
 
 ## Gate result
 
-Full run: `scripts/gate.sh c07-pool` (build stage) at `8659484`, 2026-11-27, clean tree, host load
-13–18 (three builds at once). **overall fail, for one reason outside this chunk's code**:
+Repair round: `scripts/gate.sh c07-pool` (build stage) once, at `4773c03`, 2026-11-27, clean
+tree, host load 10–15. **overall fail, for two reasons, neither a product test**:
 
 | Check | Result |
 | --- | --- |
 | G0 tools, gofmt, build, vet, tools-vet, tools-test, tidy | pass |
 | G1 detlint (24 package patterns), importlint, boundlint, paniccheck | pass |
 | G2 comments | pass |
-| G3 unit | **fail**: only `internal/pgwire` `TestClassifierSpanKeywordChecksGrowLinearly` and `agent_work/adversarial/c05-classifier-neon` `TestAdv_5_QuadraticSpanScanDoS` — both wall-clock ratio tests of chunk 5's classifier (16× input must take ≤ 96× time; measured 98.6× and 187×). This chunk does not change the classifier (it adds one error-table row). Each passed 3 of 3 runs alone right after (load 13.6). Every other package passed, `test/e2e` in 313 s. |
+| G3 unit (338 s; was 1,031 s in review 1) | **fail**: (a) `agent_work/adversarial/c07-pool`: the five attacks listed under "Adversarial tests that stay red" (`TestAdv_1_CloseOutstanding`, `TestAdv_3_SubMicrosecondJitter`, `TestAdv_8_ReseedSameTenant`, `TestAdv_6_RecentIdleBlackhole`, `TestAdv_6_RecentIdlePeerForgot`) — four narrowed claims and one refused configuration, awaiting the orchestrator; (b) `internal/pgwire` `TestLexOperatorRunsGrowLinearly`, one of the three wall-clock growth tests CR-3 replaces (not this chunk's). Every other package passed, including every chunk 7 package and the other adversarial packages. |
 | G3 race | pass (4 package patterns) |
-| G4 markers, sweep | pass (200 seeds per scenario, pool scenarios capped at 20 / 3; 1,095 s) |
-| G5 fuzz | pass: 17 targets, 15 fuzz, 2 seed-sweep at the 100/s floor on the loaded host |
-| G6 tier R | pass (299 s; chunk 6 and chunk 7 tier R tests) |
-| G7 CSV assertions | pass (4,632 run directories, 80 scenarios with SQL files; 2,630 s) |
+| G4 markers, sweep | pass (200 seeds per scenario, pool scenarios capped at 20 / 3; 924 s) |
+| G5 fuzz | pass: 17 targets, 15 fuzz, 2 seed-sweep |
+| G6 tier R | pass (285 s), including the restored `as_is` check of the 13 chunk 6 `resets.sql` files |
+| G7 CSV assertions | pass (4,632 run directories, 80 scenarios with SQL files; 2,215 s) |
 | G8 generated documents | pass |
 | G9 site | pass |
-| G10 chunk extra | pass: `FuzzEngineOps` found its planted bug after 3 s; `FuzzPoolOps` found `PlantResetClearsSuspect` after 3 s (budget 20 s each) |
+| G10 chunk extra | pass: `FuzzEngineOps` found its planted bug after 2 s; `FuzzPoolOps` found `PlantResetClearsSuspect` after 2 s (budget 20 s each) |
 
-G3 re-run once on its own (`GATE_ONLY=G3 scripts/gate.sh c07-pool`) at `a530c49`, clean tree:
-**G3 unit pass (734 s), G3 race pass** — the two ratio tests passed. So every check of the
-gate has passed on this tree; the one full run in which all of them pass together is the
-orchestrator's landing gate. `result.json` is not committed.
+Also run before the gate: `go test -count=1 ./...` (no `-short`), red only for the same five
+c07 adversarial attacks (`internal/obs/simrun` 430 s, `test/e2e` 300 s);
+`DST_SEEDS=5 go test -run '^TestScenarioPool$' ./test/e2e` green; `go test -short
+./internal/obs/simrun` 256 s. `result.json` is not committed.
