@@ -425,8 +425,7 @@ func fairFuzzSeeds() [][]byte {
 	return [][]byte{
 		{},
 		{0, 0, 0, 1, 1, 0, 4, 0, 0, 4, 0, 0},
-		{0, 0, 0, 0, 1, 0, 0, 2, 0, 4, 0, 0, 7, 0, 0, 4, 0, 0, 4, 0, 0},
-		{0, 0, 0, 0, 1, 0, 0, 0, 0, 7, 0, 0, 4, 0, 0},
+		{0, 0, 0, 0, 1, 0, 0, 2, 0, 4, 0, 0, 8, 0, 0, 4, 0, 0, 4, 0, 0},
 		{0, 2, 0, 4, 0, 0, 8, 0, 194, 0, 2, 0, 4, 0, 0},
 	}
 }
@@ -500,8 +499,15 @@ func TestFairFuzzExecutionCostIsBounded(t *testing.T) {
 	}
 }
 
+var unpopTurnOps = []byte{0, 0, 0, 0, 1, 0, 0, 0, 0, 7, 0, 0, 4, 0, 0}
+
 func TestPlantedUnpopTurnBugIsCaughtByTheFairnessModel(t *testing.T) {
-	ops := decodeFairOps(fairFuzzSeeds()[3])
+	for _, seed := range fairFuzzSeeds() {
+		if _, err := runFairOps(RuleFIFO, 0, FairPlantUnpopKeepsTurn, decodeFairOps(seed)); err != nil {
+			t.Fatalf("a committed seed finds the planted bug on its own, so the fuzzer is not shown finding it: %v", err)
+		}
+	}
+	ops := decodeFairOps(unpopTurnOps)
 	if _, err := runFairOps(RuleFIFO, 0, FairPlantUnpopKeepsTurn, ops); err == nil {
 		t.Fatal("the planted unpop turn bug passed on its seed")
 	}
