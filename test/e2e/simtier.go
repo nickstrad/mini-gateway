@@ -54,7 +54,7 @@ func fragmented(o simnet.Options) simnet.Options {
 
 func (spec Spec) engineConfig() proxy.Config {
 	return proxy.Config{Connections: spec.Conns, QueueCap: spec.QueueCap, Timeouts: spec.Timeouts,
-		ReplyBufferCap: spec.ReplyCap, Plant: spec.Plant, MaxClients: 1024, MaxStartup: 1024}
+		ReplyBufferCap: spec.ReplyCap, Plant: spec.Plant, MaxClients: 1024, MaxStartup: 1024, Admission: spec.Admission}
 }
 
 // BuildSim constructs a tier S world (with optional tamper relay and scheduled
@@ -129,7 +129,7 @@ func RunSim(spec Spec, seed int64, o SimOptions) (*SimRun, error) {
 }
 
 func fingerprint(spec Spec) string {
-	return fmt.Sprintf("%s-c%d-q%d-p%d", spec.Name, spec.Conns, spec.QueueCap, spec.Plant)
+	return fmt.Sprintf("%s-c%d-q%d-p%d", spec.Name, spec.Conns, spec.QueueCap, spec.Plant) + admFingerprint(spec.Admission)
 }
 
 // ErrCheck is wrapped by scenario check failures.

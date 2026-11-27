@@ -159,3 +159,25 @@ func (q *Queues) Snapshot() Snapshot {
 }
 
 func (q *Queues) shedding(t *tenantQueue) bool { return t.hasShed && q.last-t.shedAt < q.cfg.Interval }
+
+func (q *Queues) light() Snapshot {
+	s := Snapshot{Capacity: int64(q.cfg.Capacity), TenantCapacity: int64(q.cfg.TenantCapacity), MaxTenants: int64(q.cfg.MaxTenants),
+		Queued: obs.Gauge{Value: int64(q.total), Peak: q.c.queuedPeak}, Tenants: obs.Gauge{Value: int64(len(q.list)), Peak: q.c.tenantsPeak},
+		TenantsCreated: q.c.created, TenantsRemoved: q.c.removedTenants, TenantsEvicted: q.c.evicted, Pushes: q.c.pushes,
+		Served: q.c.served, Removed: q.c.removed, Shed: q.c.shed, StepsCapped: q.c.capped}
+	depth := map[*tenantStats]int64{}
+	for _, t := range q.list {
+		depth[t.stats] += int64(t.ring.len())
+	}
+	add := func(st *tenantStats) {
+		s.PerTenant = append(s.PerTenant, TenantSnapshot{Tenant: st.name, Depth: depth[st], Pushes: st.pushes, Served: st.served,
+			Removed: st.removed, Shed: st.shed})
+	}
+	for _, st := range q.statsList {
+		add(st)
+	}
+	if q.other != nil {
+		add(q.other)
+	}
+	return s
+}

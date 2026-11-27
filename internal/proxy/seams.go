@@ -289,3 +289,13 @@ func (p *FixedSet) Remove(id ConnID) {
 		}
 	}
 }
+
+type ShedQueue interface {
+	Queue
+	RemoveAt(now Instant, id RequestID) bool
+	Expire(now Instant, id RequestID) bool
+	Sweep(now Instant)
+	Next() Instant
+	TakeShed() (RequestID, bool)
+	Unpop() bool
+}
