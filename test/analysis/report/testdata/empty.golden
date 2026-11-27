@@ -1,0 +1,59 @@
+# Story report
+
+1. What the runs prove
+
+Each claim below is checked over the flushed files; the verdict table (section 7) says whether it held.
+An assertion checks one component's own numbers; an oracle check compares the proxy's numbers with an
+independent record (the simulated clients, the fake Postgres or the load tool).
+
+The report's structural checks:
+- DuckDB: DuckDB is installed and is the pinned family 1.5.x (it reads the files)
+- arguments: every argument is an existing directory
+- runs: at least one run directory was found
+- finished: every run directory has run.csv (the run finished)
+- files: every run directory has metrics.csv and histograms.csv
+- schema header: every file starts with the schema version 1 header
+- schema guard: the complete runs pass test/analysis/guard.sql: schema version 1 in every row, no empty required field, one run.csv row and a distinct run id per directory, metric rows in every run
+
+Scenario claims: not available (no run could be read: see the verdict table).
+
+2. How the data was collected
+
+Not available: no run could be read (see the verdict table). Run directories found: 0.
+
+3. Inputs
+
+Not available.
+
+4. Coverage by scenario, statement class and outcome
+
+Not available.
+
+5. Failed assertions, in full
+
+- structure: runs
+  claim: at least one run directory was found
+  1 items:
+    no metrics.csv, histograms.csv or run.csv at or below any argument
+
+6. Oracle mismatches, in full
+
+None.
+
+7. Verdict
+
+| check                    | claim                                                                                                                                                                                 | observed                           | expected     | pass |
+|--------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|--------------|------|
+| structure: DuckDB        | DuckDB is installed and is the pinned family 1.5.x (it reads the files)                                                                                                               | 1.5.x                              | 1.5.x        | PASS |
+| structure: arguments     | every argument is an existing directory                                                                                                                                               | 1 of 1                             | 1 of 1       | PASS |
+| structure: runs          | at least one run directory was found                                                                                                                                                  | 0                                  | at least 1   | FAIL |
+| structure: finished      | every run directory has run.csv (the run finished)                                                                                                                                    | 0 of 0                             | 0 of 0       | PASS |
+| structure: files         | every run directory has metrics.csv and histograms.csv                                                                                                                                | 0 of 0                             | 0 of 0       | PASS |
+| structure: schema header | every file starts with the schema version 1 header                                                                                                                                    | 0 of 0 files                       | 0 of 0 files | PASS |
+| structure: schema guard  | the complete runs pass test/analysis/guard.sql: schema version 1 in every row, no empty required field, one run.csv row and a distinct run id per directory, metric rows in every run | not run: no complete run directory | 0 violations | FAIL |
+
+Legend: one row per check. structure: the report's own checks of the files. <scenario>/<file>.sql: that scenario's
+SQL file from test/analysis/<scenario>/ (zero violating rows is a pass). <scenario>/report:<name>: a built-in check from
+test/analysis/report/sections/check-<name>.sql. "no assertions" rows are not counted.
+
+VERDICT: FAIL (2 of 7 checks failed over 0 runs)

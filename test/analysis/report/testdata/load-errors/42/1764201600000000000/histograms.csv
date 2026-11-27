@@ -1,0 +1,13 @@
+schema_version,run_id,flush_seq,t_ns,instance,component,metric,tenant,outcome,reason,mode,unit,bucket_lo,bucket_hi,count
+1,load-errors/42/1764201600000000000,0,1000000000,loadgen-1,loadgen,latency,,,,,ns,1048576,1052672,60
+1,load-errors/42/1764201600000000000,0,1000000000,loadgen-1,loadgen,latency,,,,,ns,2097152,2105344,30
+1,load-errors/42/1764201600000000000,0,1000000000,loadgen-1,loadgen,latency,,,,,ns,4194304,4210688,7
+1,load-errors/42/1764201600000000000,0,1000000000,loadgen-1,loadgen,latency_from_send,,,,,ns,1048576,1052672,70
+1,load-errors/42/1764201600000000000,0,1000000000,loadgen-1,loadgen,latency_from_send,,,,,ns,2097152,2105344,27
+1,load-errors/42/1764201600000000000,1,2000500000,loadgen-1,loadgen,latency,,,,,ns,1048576,1052672,120
+1,load-errors/42/1764201600000000000,1,2000500000,loadgen-1,loadgen,latency,,,,,ns,2097152,2105344,60
+1,load-errors/42/1764201600000000000,1,2000500000,loadgen-1,loadgen,latency,,,,,ns,4194304,4210688,15
+1,load-errors/42/1764201600000000000,1,2000500000,loadgen-1,loadgen,latency,,,,,ns,16777216,16842752,3
+1,load-errors/42/1764201600000000000,1,2000500000,loadgen-1,loadgen,latency_from_send,,,,,ns,1048576,1052672,140
+1,load-errors/42/1764201600000000000,1,2000500000,loadgen-1,loadgen,latency_from_send,,,,,ns,2097152,2105344,55
+1,load-errors/42/1764201600000000000,1,2000500000,loadgen-1,loadgen,latency_from_send,,,,,ns,4194304,4210688,3
