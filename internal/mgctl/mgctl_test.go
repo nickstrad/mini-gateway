@@ -332,18 +332,12 @@ func TestEveryProxyMadeRowIsNamedFromItsCodeAndMessage(t *testing.T) {
 		if !r.HasMessage() {
 			continue
 		}
-		m := mgctl.ContractRow(r.Code, r.Message)
-		if !m.Found {
-			t.Fatalf("row %s not found", r.ID)
-		}
-		if m.Row.ID != r.ID {
-			same := m.Row.Message == r.Message || strings.HasPrefix(r.Message, m.Row.Message)
-			if !same {
-				t.Fatalf("row %s matched as %s", r.ID, m.Row.ID)
-			}
+		m := mgctl.ContractRowFor(r.Severity(), r.Code, r.Message)
+		if !m.Found || m.Row.ID != r.ID {
+			t.Fatalf("row %s matched as %s (found %v)", r.ID, m.Row.ID, m.Found)
 		}
 		line := mgctl.ContractLine(&mgctl.ServerError{Severity: r.Severity(), Code: r.Code, Message: r.Message})
-		if !strings.Contains(line, "error-contract row: "+m.Row.ID+" ") {
+		if !strings.Contains(line, "error-contract row: "+r.ID+" ") {
 			t.Fatalf("%s: %s", r.ID, line)
 		}
 	}
@@ -441,6 +435,29 @@ func TestTheProxysOwnFatalTextsAreNamedByTheirRow(t *testing.T) {
 		}
 	}
 	if line := mgctl.ContractLine(&mgctl.ServerError{Severity: "ERROR", Code: "28000", Message: "x"}); !strings.Contains(line, "pass-through") {
+		t.Fatal(line)
+	}
+}
+
+func TestALongerRowMessageWinsOverItsPrefixAndSeverityDecides(t *testing.T) {
+	inTx := pgwire.ErrorRows[pgwire.ErrRowLostInTransaction]
+	afterRead := pgwire.ErrorRows[pgwire.ErrRowLostAfterRead]
+	for _, c := range []struct {
+		severity, message, want string
+	}{
+		{"FATAL", inTx.Message, inTx.ID},
+		{"", inTx.Message, inTx.ID},
+		{"ERROR", afterRead.Message, afterRead.ID},
+		{"FATAL", afterRead.Message, afterRead.ID},
+		{"ERROR", afterRead.Message + " (backend 7)", afterRead.ID},
+	} {
+		m := mgctl.ContractRowFor(c.severity, "08006", c.message)
+		if !m.Found || m.Row.ID != c.want {
+			t.Fatalf("%s %q: got %s, want %s", c.severity, c.message, m.Row.ID, c.want)
+		}
+	}
+	line := mgctl.ContractLine(&mgctl.ServerError{Severity: "FATAL", Code: "08006", Message: inTx.Message})
+	if !strings.Contains(line, "lost-in-transaction") || !strings.Contains(line, "client connection: closed") {
 		t.Fatal(line)
 	}
 }

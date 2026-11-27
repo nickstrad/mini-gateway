@@ -10,6 +10,8 @@ import (
 const (
 	proxyMessagePrefix = "mini-gateway:"
 	fatalSeverity      = "FATAL"
+	exactMatchBonus    = 1 << 20
+	severityMatchBonus = 1 << 21
 )
 
 type ContractMatch struct {
@@ -20,19 +22,35 @@ type ContractMatch struct {
 }
 
 func ContractRow(code, message string) ContractMatch {
+	return bestMessageRow("", code, message)
+}
+
+func bestMessageRow(severity, code, message string) ContractMatch {
+	best, bestRank := ContractMatch{}, -1
 	for _, r := range pgwire.ErrorRows {
-		if !r.HasMessage() || r.Code != code {
+		if !r.HasMessage() || r.Code != code || !matches(message, r.Message) {
 			continue
 		}
-		if matches(message, r.Message) {
-			return ContractMatch{Row: r, Found: true, Ambiguous: !strings.HasPrefix(r.Message, proxyMessagePrefix)}
+		if rank := messageRank(severity, message, r); rank > bestRank {
+			best, bestRank = ContractMatch{Row: r, Found: true, Ambiguous: !strings.HasPrefix(r.Message, proxyMessagePrefix)}, rank
 		}
 	}
-	return ContractMatch{}
+	return best
+}
+
+func messageRank(severity, message string, r pgwire.ErrorRow) int {
+	rank := len(r.Message)
+	if message == r.Message {
+		rank += exactMatchBonus
+	}
+	if severity != "" && r.Severity() == severity {
+		rank += severityMatchBonus
+	}
+	return rank
 }
 
 func ContractRowFor(severity, code, message string) ContractMatch {
-	if m := ContractRow(code, message); m.Found || severity != fatalSeverity {
+	if m := bestMessageRow(severity, code, message); m.Found || severity != fatalSeverity {
 		return m
 	}
 	best, bestScore, candidates := ContractMatch{}, -1, 0
