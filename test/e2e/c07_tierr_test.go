@@ -88,6 +88,7 @@ func TestTierRPoolEmptyQueryCheckAndServerKeepalive(t *testing.T) {
 
 type policyResult struct {
 	crossings, sameTenant     int
+	hostileErrors             int
 	residueOther, residueSame bool
 }
 
@@ -134,7 +135,9 @@ func policyRun(t *testing.T, env *RealEnv, reset, reseed string) policyResult {
 			if err != nil {
 				t.Fatal(err)
 			}
-			h.Query(sql)
+			if HasToken(h.Query(sql), "E:") {
+				r.hostileErrors++
+			}
 			h.Close()
 			tenant := 1
 			if (round+i)%2 == 1 {
@@ -197,6 +200,9 @@ func TestTierRPoolSessionStateUnderEachReleasePolicy(t *testing.T) {
 	env := tierR(t)
 	for _, arm := range []struct{ reset, reseed string }{{"always", "off"}, {"on-switch", "off"}, {"always", "on"}, {"on-switch", "on"}} {
 		r := policyRun(t, env, arm.reset, arm.reseed)
+		if r.hostileErrors != 0 {
+			t.Errorf("%s/%s: %d hostile calls failed, so their state was never planted", arm.reset, arm.reseed, r.hostileErrors)
+		}
 		if r.crossings != 0 {
 			t.Errorf("%s/%s: %d session-state crossings between tenants", arm.reset, arm.reseed, r.crossings)
 		}
