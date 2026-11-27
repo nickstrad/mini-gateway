@@ -82,6 +82,29 @@ func (m mgctlBin) run(stdin string, args ...string) (string, int) {
 
 func engineCounter(t *testing.T, admin, metric string) int64 {
 	t.Helper()
+	return adminStats(t, admin).Value(obs.ComponentEngine, metric, obs.Labels{})
+}
+
+const freshStatsDeadline = 15 * time.Second
+
+func freshEngineCounter(t *testing.T, admin, metric string) int64 {
+	t.Helper()
+	seen := adminStats(t, admin).Seq
+	deadline := time.Now().Add(freshStatsDeadline)
+	for {
+		s := adminStats(t, admin)
+		if s.Seq > seen {
+			return s.Value(obs.ComponentEngine, metric, obs.Labels{})
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("/stats did not publish a snapshot after seq %d within %v", seen, freshStatsDeadline)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func adminStats(t *testing.T, admin string) obs.InstanceSnapshot {
+	t.Helper()
 	resp, err := http.Get("http://" + admin + "/stats")
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +118,7 @@ func engineCounter(t *testing.T, admin, metric string) int64 {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return s.Value(obs.ComponentEngine, metric, obs.Labels{})
+	return s
 }
 
 func TestTierRMgctlSeededModelAgainstTheRealBinary(t *testing.T) {
@@ -196,8 +219,7 @@ func TestTierRMgctlSeededModelAgainstTheRealBinary(t *testing.T) {
 		if strings.Contains(out, password) {
 			t.Fatalf("step %d printed the password", i)
 		}
-		time.Sleep(250 * time.Millisecond)
-		after := engineCounter(t, g.Admin, "requests_received")
+		after := freshEngineCounter(t, g.Admin, "requests_received")
 		if after-before != int64(queries) {
 			t.Fatalf("step %d %v: requests_received moved by %d, the model says %d (an admin command must change nothing)", i, args, after-before, queries)
 		}
