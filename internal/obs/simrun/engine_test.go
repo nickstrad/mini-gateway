@@ -51,6 +51,11 @@ func engineJobs(dir string) []engineRun {
 			return r.Final, nil
 		})
 	}
+	if !testing.Short() {
+		for _, j := range e2e.RetryBaselineJobs(dir) {
+			jobs = append(jobs, j)
+		}
+	}
 	return jobs
 }
 
@@ -107,10 +112,5 @@ func engineRuns(dir string) error {
 	}
 	adm, err := e2e.AdmissionBaseline(dir, !testing.Short())
 	baselineFinals = append(baselineFinals, adm...)
-	if err != nil || testing.Short() {
-		return err
-	}
-	rt, err := e2e.RetryBaseline(dir)
-	baselineFinals = append(baselineFinals, rt...)
 	return err
 }

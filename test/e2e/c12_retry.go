@@ -319,27 +319,29 @@ func (r *RetryRun) Summary() string {
 
 func RetryScenarioNames() []string { return []string{RetryStormSpec().Name, RetrySweepSpec().Name} }
 
-func RetryBaseline(dir string) ([]obs.InstanceSnapshot, error) {
-	var out []obs.InstanceSnapshot
+func RetryBaselineJobs(dir string) []func() (obs.InstanceSnapshot, error) {
+	var jobs []func() (obs.InstanceSnapshot, error)
 	for _, sp := range []RetrySpec{RetryStormSpec(), RetrySweepSpec()} {
 		for arm := ArmOff; arm < NumRetryArms; arm++ {
-			r, err := RunRetry(sp, arm, 1, dir, "")
-			if err == nil && arm != ArmEverything {
-				err = r.CheckProduct()
-			}
-			if err == nil && arm == ArmEverything {
-				err = r.CheckAblation()
-			}
-			if err == nil {
-				err = r.Flush.Check()
-			}
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, r.Final)
+			jobs = append(jobs, func() (obs.InstanceSnapshot, error) {
+				r, err := RunRetry(sp, arm, 1, dir, "")
+				if err == nil && arm != ArmEverything {
+					err = r.CheckProduct()
+				}
+				if err == nil && arm == ArmEverything {
+					err = r.CheckAblation()
+				}
+				if err == nil {
+					err = r.Flush.Check()
+				}
+				if err != nil {
+					return obs.InstanceSnapshot{}, err
+				}
+				return r.Final, nil
+			})
 		}
 	}
-	return out, nil
+	return jobs
 }
 
 func (r *RetryRun) WorkloadSnapshot() workload.Snapshot {
