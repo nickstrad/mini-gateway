@@ -361,7 +361,7 @@ g3_unit() {
 }
 g3_counted() {
   no_go && return 0
-  scripts/counted-growth.sh
+  env -u COUNTED_GO scripts/counted-growth.sh
 }
 g3_race() {
   local pkgs p; pkgs=$(list_file tools/lint-rules/race-packages.txt) || return 1

@@ -706,3 +706,14 @@ gate.
 - After the gate run there are two changes, neither touching code: this section, and
   `eda307a`. That commit removes a `gate/result.json` (from the first, red run) that
   `da7c6e1` had committed by mistake.
+
+## After review 2 (NITS; closed by the orchestrator)
+
+- Finding 2 fixed by the orchestrator: `scripts/gate.sh` runs the counted check with
+  `env -u COUNTED_GO`, as G5 does with `FUZZ_GO`, so the test seam cannot leak into a gate run.
+- Finding 1 (four ways a loop can escape the AST guard: a non-looping wrapper around a
+  looping helper, a `Bump()` on a tally nobody reads, and two more) and finding 3 (no test
+  holds `internal/pgwire/clscount` to importing nothing) are open and carried in STATE.md.
+  The counted tests themselves are not affected: they fail on every planted quadratic the
+  two reviews tried on a listed shape.
+- The three skipped wall-clock attack tests of chunk 5 are ratified without condition.
