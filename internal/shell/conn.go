@@ -228,6 +228,7 @@ func (c *conn) abort() {
 	close(c.done)
 	c.mu.Unlock()
 	if nc != nil {
+		_ = nc.SetWriteDeadline(time.Now().Add(closeWriteWait))
 		_ = nc.Close()
 	}
 	if cancel != nil {

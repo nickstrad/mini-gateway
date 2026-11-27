@@ -8,8 +8,10 @@ import (
 
 	"github.com/nickstrad/mini-gateway/internal/obs"
 	"github.com/nickstrad/mini-gateway/internal/obs/clssrc"
+	"github.com/nickstrad/mini-gateway/internal/obs/poolsrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/wiresrc"
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
+	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
@@ -28,7 +30,7 @@ var none = obs.Labels{}
 
 var tlsModes = [proxy.NumTLSVersions]string{"plain", "1.2", "1.3"}
 
-var leaseOutcomes = [...]string{"reset", "close", "as-is"}
+var leaseOutcomes = [...]string{"reset", "close", "as-is", "dirty"}
 
 // Metrics returns the metric descriptors exported from proxy.Snapshot.
 func Metrics() []obs.MetricDesc {
@@ -71,7 +73,7 @@ func Metrics() []obs.MetricDesc {
 		obs.CounterDesc("parameter_status_in_turn", 0, "ParameterStatus messages relayed during a client's turn."),
 		obs.CounterDesc("leases_started", 0, "Database connections lent to a client."),
 		obs.CounterDesc("leases_ended", 0, "Leases that ended."),
-		obs.CounterDesc("leases_ended_by", lo, "Leases that ended, by what happened to the connection (outcome: reset, close, as-is)."),
+		obs.CounterDesc("leases_ended_by", lo, "Leases that ended, by what happened to the connection (outcome: reset, close, as-is, dirty)."),
 		obs.CounterDesc("resets_started", 0, "DISCARD ALL resets sent after a lease."),
 		obs.CounterDesc("resets_completed", 0, "Resets answered with the DISCARD ALL tag and status I."),
 		obs.CounterDesc("resets_failed", lr, "Resets that failed, by reason; the connection was closed."),
@@ -99,6 +101,16 @@ func Metrics() []obs.MetricDesc {
 		obs.CounterDesc("publishes", 0, "Publish ticks handled by the engine."),
 		obs.GaugeDesc("draining", 0, "1 while the draining input is set."),
 		obs.CounterDesc("events", 0, "Events handled by the engine."),
+		obs.CounterDesc("resets_not_at_release", 0, "Resets sent by the pool core other than at a clean release (tenant switch, after a clean-up)."),
+		obs.CounterDesc("reseeds", 0, "Random-seed re-seeds sent after a reset (lease.reseed on)."),
+		obs.CounterDesc("backend_no_reply", 0, "Statements whose bytes were handed over and that had received zero reply bytes at the statement deadline."),
+		obs.CounterDesc("cancels_sent", 0, "Cancel requests sent to the database on a second connection."),
+		obs.CounterDesc("cancels_done", 0, "Cancel connections finished."),
+		obs.GaugeDesc("cancel_connections", 0, "Cancel connections open now."),
+		obs.HighWaterDesc("cancel_connections_peak", 0, "Most cancel connections open at once."),
+		obs.CounterDesc("client_cancels", lo, "Client cancel requests by outcome (forwarded, queued, refused, unmatched, ignored)."),
+		obs.CounterDesc("breaker_flushed", 0, "Queued requests answered 53M03 when the breaker opened with nothing usable."),
+		obs.CounterDesc("idle_in_transaction_rolled_back", 0, "Transactions left idle past timeouts.idle_in_transaction and rolled back."),
 	}
 }
 
@@ -137,6 +149,26 @@ func Map(s proxy.Snapshot, e *obs.Emitter) {
 	e.Counter("publishes", none, s.Publishes)
 	e.Gauge("draining", none, boolInt(s.Draining))
 	e.Counter("events", none, s.Events)
+	mapPoolPath(s, e)
+}
+
+func mapPoolPath(s proxy.Snapshot, e *obs.Emitter) {
+	e.Counter("resets_not_at_release", none, s.ResetsNotAtRelease)
+	e.Counter("reseeds", none, s.Reseeds)
+	e.Counter("backend_no_reply", none, s.NoReply)
+	e.Counter("cancels_sent", none, s.CancelsSent)
+	e.Counter("cancels_done", none, s.CancelsDone)
+	e.Gauge("cancel_connections", none, s.CancelConns.Value)
+	e.Gauge("cancel_connections_peak", none, s.CancelConns.Peak)
+	for _, c := range []struct {
+		name string
+		v    int64
+	}{{"forwarded", s.CancelsForwarded}, {"queued", s.CancelsQueued}, {"refused", s.CancelsRefused},
+		{"unmatched", s.CancelsUnmatched}, {"ignored", s.CancelsIgnored}} {
+		e.Counter("client_cancels", obs.Labels{Outcome: c.name}, c.v)
+	}
+	e.Counter("breaker_flushed", none, s.BreakerFlushed)
+	e.Counter("idle_in_transaction_rolled_back", none, s.IdleInTxRolledBack)
 }
 
 func mapClients(s proxy.Snapshot, e *obs.Emitter) {
@@ -198,7 +230,7 @@ func mapRequests(s proxy.Snapshot, e *obs.Emitter) {
 func mapLeases(s proxy.Snapshot, e *obs.Emitter) {
 	e.Counter("leases_started", none, s.LeasesStarted)
 	e.Counter("leases_ended", none, s.LeasesEnded)
-	for i, v := range [...]int64{s.LeasesEndedReset, s.LeasesEndedClose, s.LeasesEndedAsIs} {
+	for i, v := range [...]int64{s.LeasesEndedReset, s.LeasesEndedClose, s.LeasesEndedAsIs, s.LeasesEndedDirty} {
 		e.Counter("leases_ended_by", obs.Labels{Outcome: leaseOutcomes[i]}, v)
 	}
 	e.Counter("resets_started", none, s.ResetsStarted)
@@ -305,6 +337,7 @@ func Source(engine func() proxy.Snapshot, shell func() proxy.ShellSnapshot) obs.
 func Sources(e *proxy.Engine, shell func() proxy.ShellSnapshot) []obs.Source {
 	return []obs.Source{
 		Source(e.Snapshot, shell),
+		poolsrc.Source(func() pool.Snapshot { s, _ := e.PoolSnapshot(); return s }),
 		wiresrc.Source(e.WireSnapshot),
 		clssrc.Source(func() clssrc.Snapshot {
 			return clssrc.Snapshot{Classifier: e.ClassifierSnapshot(), Replies: e.ReplySnapshot(), Sync: e.SyncSnapshot()}
@@ -329,5 +362,5 @@ func HealthRules() []obs.Rule {
 			return obs.StateDegraded, "database unreachable: no usable connection and dials failing"
 		}
 		return obs.StateOK, "database reachable"
-	}}}
+	}}, poolsrc.HealthRules()[0]}
 }

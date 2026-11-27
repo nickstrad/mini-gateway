@@ -8,8 +8,10 @@ One row per bounded thing in the walking skeleton (chunk 6), with its default. C
 | --- | --- | --- | --- | --- | --- | --- |
 | Client connections | proxy memory and file descriptors | 1024; zero means the default | `limits.max_clients` | FATAL 53300 (too-many-clients), connection closed | `timeouts.client_startup` | `engine.clients_connected` |
 | Clients in startup | handshake and SCRAM CPU during a reconnection storm | 128; zero means the default | `limits.max_startup` | FATAL 53300 (too-many-clients), connection closed | `timeouts.client_startup` | `engine.clients_in_startup` |
-| Database connections (the fixed set) | the database's connection slots | 4; zero means the default | `pool.connections` | Requests wait in the queue | `timeouts.database_connect` | `engine.database_open` |
-| Database connections being opened | the database's fork rate | 1 | `(fixed in chunk 6)` | The next dial waits | `timeouts.database_connect` | `engine.database_connecting` |
+| Database connections, open plus connecting (pool core; the fleet share of fleet.backend_connections) | the database's connection slots | 4; zero means the default | `pool.connections` | Requests wait in the queue; a checkout at the cap counts as exhausted | `timeouts.database_connect` | `pool.open_plus_connecting` |
+| Database connections being opened at once | the database's fork and authentication load | 4; zero means the default | `pool.max_connecting` | The next dial waits | `timeouts.database_connect` | `pool.connecting` |
+| Connection creation rate (dials per second, one per 1/rate; the fleet share of fleet.connect_rate_per_s) | the database during a cold start, a mass death and after a breaker trial | 10; zero means the default per second | `fleet.connect_rate_per_s` | The next dial waits for its slot | `-` | `pool.rate_limited` |
+| Concurrent cancel requests | the database's connection slots (each cancel is a second connection) and the reserve of fleet.backend_max_connections | 16; zero means the default | `pool.max_cancels` | A client cancel is dropped (counted); a dirty connection that needs a cancel is closed (cancel_cap) | `timeouts.cleanup` | `pool.cancels_in_flight` |
 | Queue (one FIFO, keyed by tenant in its API) | proxy memory; the wait bound | 256; zero means the default | `queue.capacity` | ERROR 53M01 (shed), connection stays usable | `timeouts.queue_wait` | `engine.requests_queued` |
 | Per-client reply buffer | proxy memory under a slow client | 262144 bytes; zero means the default | `limits.reply_buffer` | Reading that database connection is paused | `timeouts.client_write` | `engine.relay_buffer_high_water` |
 | Unprocessed client input | proxy memory under a pipelining client | 65536 bytes | `(constant)` | FATAL 08P01, connection closed | `timeouts.client_mid_message` | `-` |
@@ -20,4 +22,4 @@ One row per bounded thing in the walking skeleton (chunk 6), with its default. C
 | Write queue per connection | proxy memory if the engine's own bound were broken | 69206016 bytes, 65536 items | `(constant)` | Connection closed | `timeouts.client_write per write` | `engine.shell_write_queue_overflows` |
 | Live sockets | file descriptors | 69632 | `(constant)` | New sockets closed at once | `-` | `engine.shell_accept_refused` |
 
-Not yet built: per-tenant queues and active-tenant states (chunks 8, 9), coalescer flights, waiters and shared-reply bytes (chunk 11), concurrent cancels (chunk 7).
+Not yet built: per-tenant queues and active-tenant states (chunks 8, 9), coalescer flights, waiters and shared-reply bytes (chunk 11).

@@ -386,10 +386,15 @@ func TestValidationFailsClosedNamingTheKey(t *testing.T) {
 		{name: "tiny reply buffer", edit: func(m map[string]any) { set(m, "limits.reply_buffer", 10) }, key: "limits.reply_buffer"},
 		{name: "negative fleet instances", edit: func(m map[string]any) { set(m, "fleet.instances", -1) }, key: "fleet.instances"},
 		{name: "negative connect rate", edit: func(m map[string]any) { set(m, "fleet.connect_rate_per_s", -5) }, key: "fleet.connect_rate_per_s"},
-		{name: "fleet remainder", edit: func(m map[string]any) {
+		{name: "fleet total below instances", edit: func(m map[string]any) {
 			set(m, "fleet.instances", 3)
-			set(m, "fleet.backend_connections", 13)
+			set(m, "fleet.backend_connections", 2)
 		}, key: "fleet.backend_connections"},
+		{name: "fleet rate below instances", edit: func(m map[string]any) {
+			set(m, "fleet.instances", 3)
+			set(m, "fleet.backend_connections", 12)
+			set(m, "fleet.connect_rate_per_s", 2)
+		}, key: "fleet.connect_rate_per_s"},
 		{name: "fleet budget below one per instance", edit: func(m map[string]any) {
 			set(m, "fleet.instances", 4)
 			set(m, "fleet.backend_connections", 2)

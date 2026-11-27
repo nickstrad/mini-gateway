@@ -96,6 +96,8 @@ type File struct {
 	Lease       Lease      `json:"lease"`
 	Obs         Obs        `json:"obs"`
 	Fleet       Fleet      `json:"fleet"`
+	Backend     Backend    `json:"backend"`
+	Breaker     Breaker    `json:"breaker"`
 
 	res resolved
 }
@@ -131,7 +133,14 @@ type Tenant struct {
 
 // Pool configures the size of the backend connection set.
 type Pool struct {
-	Connections int `json:"connections"`
+	Connections    int      `json:"connections"`
+	MaxConnecting  int      `json:"max_connecting"`
+	IdleTimeout    Duration `json:"idle_timeout"`
+	MaxLifetime    Duration `json:"max_lifetime"`
+	JitterPercent  int      `json:"jitter_percent"`
+	CheckAfterIdle Duration `json:"check_after_idle"`
+	CheckTimeout   Duration `json:"check_timeout"`
+	MaxCancels     int      `json:"max_cancels"`
 }
 
 // Queue configures the bounded admission queue capacity.
@@ -157,11 +166,14 @@ type Timeouts struct {
 	Reset            Duration `json:"reset"`
 	ClientWrite      Duration `json:"client_write"`
 	RedialDelay      Duration `json:"redial_delay"`
+	IdleInTx         Duration `json:"idle_in_transaction"`
+	Cleanup          Duration `json:"cleanup"`
 }
 
 // Lease configures lease-release behaviour (only "always" is accepted in chunk 6).
 type Lease struct {
-	Reset string `json:"reset"`
+	Reset  string `json:"reset"`
+	Reseed string `json:"reseed"`
 }
 
 // Obs configures snapshot publishing and optional CSV flushing.

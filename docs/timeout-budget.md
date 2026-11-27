@@ -10,14 +10,23 @@ One rule holds for every deadline: time passes before the event. When an event a
 | --- | --- | --- | --- | --- |
 | Client startup: the TLS request exchange, the TLS handshake and authentication, together | engine, client session (armed at accept) | `timeouts.client_startup` | 5s | Connection closed (FATAL 08P01 during authentication); a TLS handshake past it is closed with no message |
 | Client mid-message read (a partial message) | engine, query phase (armed while a message is incomplete) | `timeouts.client_mid_message` | 5s | FATAL 08P01 (protocol-violation), connection closed |
-| Client idle between transactions (and, until chunk 7, inside one) | engine, client with no request in progress | `timeouts.client_idle` | 10m0s | Connection closed; a lease it held is closed with its database connection |
+| Client idle between transactions | engine, client with no request in progress | `timeouts.client_idle` | 10m0s | Connection closed |
+| Client idle inside a transaction | engine, client holding a lease between statements (pool core) | `timeouts.idle_in_transaction` | 5s | ROLLBACK on the database; FATAL 25P03 (idle-in-transaction), client closed; the connection is reset and reused |
 | Queue wait (waiting for a connection: no separate wait, D3) | engine, queue stage | `timeouts.queue_wait` | 5s | ERROR 53M01 (shed), connection stays usable |
 | Database connect: dial, TLS handshake when configured, authentication | engine, fixed set (the shell dials with the same deadline) | `timeouts.database_connect` | 2s | Connection closed, counted by class; the slot is dialled again after the redial delay |
 | Pause before dialling again after a failed connect | engine, fixed set | `timeouts.redial_delay` | 100ms | The next dial (at most one at a time) |
-| Database statement (send to end of reply) | engine, lease | `timeouts.statement` | 30s | Database connection closed; ERROR 08006 or 08007 (FATAL 08006 inside a transaction when nothing reached the database), or the client is closed if part of the reply was sent |
+| Database statement (send to end of reply) | engine, lease | `timeouts.statement` | 30s | ERROR 08006 or 08007 (FATAL 08006 inside a transaction unless the message holds COMMIT or END), or the client is closed if part of the reply was sent; with the pool core the connection goes to the dirty-connection table (cancel, then clean-up), with the fixed set it is closed |
+| Cancel and clean-up of a dirty connection (cancel on a second connection, the end of the reply, ROLLBACK) | pool core, dirty-connection table | `timeouts.cleanup` | 1s | Database connection closed (cleanup_failed, or no_reply when the statement had no reply) |
+| Check before reuse (an empty query after pool.check_after_idle idle, or on a suspect connection) | pool core, checkout (off the request path) | `pool.check_timeout` | 250ms | Database connection closed (check_failed); no client error; counts toward the breaker |
 | Reset after a lease (DISCARD ALL until its ReadyForQuery) | engine, release stage | `timeouts.reset` | 1s | Database connection closed (reset failed: deadline); a late reply is never read |
 | Client write stalled (reply bytes not taken by the client) | engine, relay (the shell sets the same per-write socket deadline) | `timeouts.client_write` | 5s | Client dropped; its lent database connection closed |
 | Socket read backstop | shell, every reader | `timeouts.client_idle + timeouts.statement` | 10m30s | Connection closed; the engine's own timers end every real wait first |
+| Idle database connection | pool core, per connection (jitter ±pool.jitter_percent) | `pool.idle_timeout` | 3m0s | Connection closed (idle); must be below backend.path_idle_limit |
+| Database connection lifetime | pool core, at release and while idle, never mid-lease (jitter ±pool.jitter_percent) | `pool.max_lifetime` | 30m0s | Connection closed (lifetime) |
+| Idle age that makes the next lend check first | pool core, checkout | `pool.check_after_idle` | 30s | The connection is checked before it is lent |
+| Breaker open before the half-open trial | pool core, breaker | `breaker.open_for` | 1s | Half-open: the next refused request starts one trial (a dial, or a check when the pool is at its cap) |
+| TCP keepalive on database sockets: idle before the first probe | shell, database dialer | `backend.tcp_keepalive.idle` | 30s | Probes every backend.tcp_keepalive.interval (10s), backend.tcp_keepalive.count (3) unanswered probes report the socket dead; validation: at most backend.path_idle_limit / 2 |
+| Shortest idle timeout of anything between proxy and database (the operator's statement) | config validation | `backend.path_idle_limit` | 4m0s | Not a timer: pool.idle_timeout must be below it and backend.tcp_keepalive.idle at most half of it |
 
 ## Nesting checked at config load
 
@@ -33,5 +42,8 @@ An inner wait must end before the outer one; `internal/config` refuses the file 
 | client startup | `timeouts.client_startup` | 5s | client idle between transactions | `timeouts.client_idle` | 10m0s | true |
 | redial delay | `timeouts.redial_delay` | 100ms | queue wait | `timeouts.queue_wait` | 5s | true |
 | client write stalled | `timeouts.client_write` | 5s | client idle between transactions | `timeouts.client_idle` | 10m0s | true |
+| client idle inside a transaction | `timeouts.idle_in_transaction` | 5s | client idle between transactions | `timeouts.client_idle` | 10m0s | true |
+| cancel and clean-up of a dirty connection | `timeouts.cleanup` | 1s | client idle between transactions | `timeouts.client_idle` | 10m0s | true |
+| check before reuse | `pool.check_timeout` | 250ms | database statement | `timeouts.statement` | 30s | true |
 
-Not yet built: client idle inside a transaction (chunk 7), cancel and clean-up of a dirty connection (chunk 7), coalesced flight (chunk 11), drain (chunk 13).
+Not yet built: coalesced flight (chunk 11), drain (chunk 13).

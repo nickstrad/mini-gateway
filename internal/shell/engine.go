@@ -76,6 +76,13 @@ func (s *Shell) deliver(env envelope) {
 		if ev.Kind == proxy.EvClientClosed {
 			delete(s.clients, ev.Conn)
 		}
+	case proxy.EvDBCancelDone:
+		if s.cancels[ev.Conn] == nil {
+			s.stats.dropped.Add(1)
+			return
+		}
+		s.cancels[ev.Conn]()
+		delete(s.cancels, ev.Conn)
 	default:
 		if s.dbs[ev.Conn] != env.conn {
 			s.stats.dropped.Add(1)
@@ -133,6 +140,12 @@ func (s *Shell) do(a proxy.Action) {
 	case proxy.ActDBClose:
 		s.closeConn(s.dbs[a.Conn])
 		delete(s.dbs, a.Conn)
+		if stop := s.cancels[a.Conn]; stop != nil {
+			stop()
+			delete(s.cancels, a.Conn)
+		}
+	case proxy.ActDBCancel:
+		s.cancelRequest(a.Conn, a.Data)
 	case proxy.ActDBStartTLS:
 		s.write(s.dbs[a.Conn], itemStartTLS, nil)
 	case proxy.ActDBPause:

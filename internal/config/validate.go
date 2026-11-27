@@ -25,6 +25,7 @@ func (f *File) applyDefaults() {
 	setString(&f.ClientTLS.Mode, DefaultClientTLS)
 	setString(&f.BackendTLS.Mode, DefaultBackendTLS)
 	setString(&f.Lease.Reset, DefaultLeaseReset)
+	f.applyPoolDefaults()
 	p := f.proxyCaps().WithDefaults()
 	f.Pool.Connections = p.Connections
 	f.Queue.Capacity = p.QueueCap
@@ -32,6 +33,7 @@ func (f *File) applyDefaults() {
 	f.Limits.MaxStartup = p.MaxStartup
 	f.Limits.ReplyBuffer = p.ReplyBufferCap
 	f.Timeouts = timeoutsFrom(p.Timeouts)
+	f.Pool.CheckTimeout = Duration(p.Timeouts.CheckTimeout)
 	if f.Obs.PublishInterval == 0 {
 		f.Obs.PublishInterval = Duration(DefaultPublishInterval)
 	}
@@ -57,22 +59,23 @@ func setString(s *string, def string) {
 
 func (f *File) proxyCaps() proxy.Config {
 	return proxy.Config{Connections: f.Pool.Connections, QueueCap: f.Queue.Capacity, MaxClients: f.Limits.MaxClients,
-		MaxStartup: f.Limits.MaxStartup, ReplyBufferCap: f.Limits.ReplyBuffer, Timeouts: f.Timeouts.Proxy(),
-		Reset: proxy.ResetAlways}
+		MaxStartup: f.Limits.MaxStartup, ReplyBufferCap: f.Limits.ReplyBuffer, Timeouts: f.poolTimeouts(),
+		Reset: f.resetPolicy(), Reseed: f.Lease.Reseed == LeaseReseedOn, Pool: f.poolCore()}
 }
 
 // Proxy converts the JSON Timeouts block into proxy.Timeouts.
 func (t Timeouts) Proxy() proxy.Timeouts {
 	return proxy.Timeouts{ClientStartup: t.ClientStartup.D(), ClientMidMessage: t.ClientMidMessage.D(),
 		ClientIdle: t.ClientIdle.D(), QueueWait: t.QueueWait.D(), DBConnect: t.DatabaseConnect.D(),
-		Statement: t.Statement.D(), Reset: t.Reset.D(), ClientWrite: t.ClientWrite.D(), RedialDelay: t.RedialDelay.D()}
+		Statement: t.Statement.D(), Reset: t.Reset.D(), ClientWrite: t.ClientWrite.D(), RedialDelay: t.RedialDelay.D(),
+		IdleInTx: t.IdleInTx.D(), Cleanup: t.Cleanup.D()}
 }
 
 func timeoutsFrom(t proxy.Timeouts) Timeouts {
 	return Timeouts{ClientStartup: Duration(t.ClientStartup), ClientMidMessage: Duration(t.ClientMidMessage),
 		ClientIdle: Duration(t.ClientIdle), QueueWait: Duration(t.QueueWait), DatabaseConnect: Duration(t.DBConnect),
 		Statement: Duration(t.Statement), Reset: Duration(t.Reset), ClientWrite: Duration(t.ClientWrite),
-		RedialDelay: Duration(t.RedialDelay)}
+		RedialDelay: Duration(t.RedialDelay), IdleInTx: Duration(t.IdleInTx), Cleanup: Duration(t.Cleanup)}
 }
 
 func (f *File) validate(base string) error {
@@ -96,6 +99,7 @@ func (f *File) validate(base string) error {
 	add(f.validateLease())
 	add(f.validateObs())
 	add(f.validateFleet())
+	add(f.validatePool())
 	return errors.Join(errs...)
 }
 
@@ -306,10 +310,14 @@ func (f *File) validateTenants() error {
 }
 
 func (f *File) validateLease() error {
-	if f.Lease.Reset != DefaultLeaseReset {
-		return bad("lease.reset", "%q: only always is supported", f.Lease.Reset)
+	var errs []error
+	if f.Lease.Reset != LeaseResetAlways && f.Lease.Reset != LeaseResetOnSwitch {
+		errs = append(errs, bad("lease.reset", "%q: must be always or on-switch", f.Lease.Reset))
 	}
-	return nil
+	if f.Lease.Reseed != LeaseReseedOff && f.Lease.Reseed != LeaseReseedOn {
+		errs = append(errs, bad("lease.reseed", "%q: must be off or on", f.Lease.Reseed))
+	}
+	return errors.Join(errs...)
 }
 
 func (f *File) validateObs() error {
@@ -342,10 +350,10 @@ func (f *File) validateFleet() error {
 		errs = append(errs, bad("fleet.backend_connections", "%d over %d instances is more than %d per instance",
 			fl.BackendConnections, fl.Instances, proxy.MaxConnections))
 	}
-	per, rem := fl.BackendConnections/fl.Instances, fl.BackendConnections%fl.Instances
-	if rem != 0 {
-		errs = append(errs, bad("fleet.backend_connections", "%d does not divide evenly over fleet.instances %d (remainder %d)",
-			fl.BackendConnections, fl.Instances, rem))
+	per := fl.BackendConnections / fl.Instances
+	if fl.ConnectRatePerS < fl.Instances {
+		errs = append(errs, bad("fleet.connect_rate_per_s", "%d over fleet.instances %d leaves less than 1 per instance",
+			fl.ConnectRatePerS, fl.Instances))
 	}
 	if per < 1 {
 		errs = append(errs, bad("fleet.backend_connections", "%d over fleet.instances %d leaves less than 1 per instance",
