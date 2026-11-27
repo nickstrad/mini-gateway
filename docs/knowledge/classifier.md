@@ -89,6 +89,17 @@ and the wide function allow-list behind them; `AllowList`/`AllowLookup`;
   the classifier reads a statement's `update`/`set`/`reset` words once (`spanWords`).
   `TestLexOperatorRunsGrowLinearly` and `TestClassifierSpanKeywordChecksGrowLinearly` hold
   this.
+- **Every lexer loop counts its steps (CR-3, 2026-11-27).** The first statement of every
+  loop in a `*Lexer` method, and in every lex.go function that takes a `workRef`, must be
+  `if clsCounting { l.reads.bump() }` (`reads.bump()` with a `workRef`). `(*Lexer).scan`
+  must also start with it. The same holds for every loop in `(*clsMsg).lex`, with
+  `m.counts.tokenSteps.bump()`. Lexer code may call only lex.go functions that either take a
+  `workRef` or have no loop. `TestLexLoopsCountTheirSteps` and
+  `TestClassifierLexLoopsCountTheirSteps` enforce these rules by parsing the source. Counting
+  is compiled in only under `-tags clscount`. `TestCountedWorkGrowsLinearly` runs there,
+  through `scripts/counted-growth.sh` in the gate's G3, and requires each shape's lexer
+  reads to grow 15 to 17 times when its input grows 16 times. In the default build the
+  compiled lexer is byte-identical to the build without the counting blocks.
 - `ReplyBuilder` counts `ByRow`/`Total` only for replies it built; a refused build
   (pass-through row, bad status, bad row) counts in `Failed` alone.
 - Postgres joins string literals continued across a newline (whitespace and `--` comments

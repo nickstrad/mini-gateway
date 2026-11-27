@@ -183,6 +183,23 @@ Facts about the lints that are easy to trip over:
 - An empty module is green: with no product Go, `gofmt`, `go build`, `go vet` and `go test`
   are recorded as passed with the note "no Go packages in the module yet".
 
+## G3 also runs the counted growth tests (2026-11-27)
+
+G3 has three checks: `unit` (`go test -count=1 ./...`), `counted` and `race`. `counted` runs
+`scripts/counted-growth.sh`, which runs
+`go test -tags clscount -count=1 -run Linearly -v ./internal/pgwire/`. The check is red when
+that run fails, and red when any of the five growth tests the script names did not pass in
+it (a renamed test or a lost build tag turns red; it cannot pass with "no tests to run").
+`scripts/ci-fast.sh` gets the check through the gate's G3. The tests in
+`scripts/counted_growth_test.go` hold all of this: they run the script against a stub `go`,
+and they check that gate.sh's G3 block calls it.
+
+Why a tag: the lexer and classifier count their work per byte and per token step only when
+`clsCounting` is true (`internal/pgwire/count_on.go`, tag `clscount`). In the default build
+the constant is false and every `if clsCounting { … }` block is removed at compile time.
+So a plain `go test ./...` cannot check per-byte work. Run the tagged run by hand with
+`scripts/counted-growth.sh`.
+
 ## Chunk extras (G10)
 
 If `agent_work/chunks/<chunk-dir>/gate/extra.sh` exists it must be a regular file (a
