@@ -398,7 +398,7 @@ func (e *Engine) statementLost(c *client, d *dbConn) {
 	// Offer the failure before recording a client failure: a granted retry keeps
 	// the request alive for its one client reply. The failed connection was
 	// already closed or moved to the dirty table before reaching statementLost.
-	if e.offerRetry(c, req, reached, row) {
+	if !e.flightGone(req) && e.offerRetry(c, req, reached, row) {
 		e.coalRetried(req)
 		e.rerun(c, req)
 		return

@@ -287,6 +287,14 @@ func (e *Engine) coalStart(c *client, f coalesce.FlightID) {
 	}
 }
 
+func (e *Engine) flightGone(req *request) bool {
+	if e.coal == nil || req.fl == 0 {
+		return false
+	}
+	_, ok := e.coal.Owner(req.fl)
+	return !ok
+}
+
 func (e *Engine) coalExpireOwner(c *client, f coalesce.FlightID) {
 	e.snap.CoalesceExpired++
 	switch c.phase {
