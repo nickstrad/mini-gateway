@@ -1,0 +1,189 @@
+{
+  "chunk": "c11-coalescer",
+  "sha": "853472a552d2ed249d19cbe4bc20eb6d5f2d258f",
+  "dirty_tree": false,
+  "stage": "final",
+  "partial": false,
+  "only": "",
+  "overall": "pass",
+  "counts_for_landing": true,
+  "go_version": "go version go1.26.8 linux/amd64",
+  "duckdb_version": "v1.5.5 (Variegata) d8cdaa33fd",
+  "started": "2026-11-28T16:37:45Z",
+  "finished": "2026-11-28T19:12:53Z",
+  "seconds": 9308,
+  "comment_baseline": "none",
+  "preprose_commit": "43fcbdc091b58576110aaf2f91d3832c5ef27d48",
+  "short": false,
+  "sweep_seeds": 200,
+  "fuzz_seconds": 20,
+  "fuzz_rate_floor": 100,
+  "fuzz_max_retries": 2,
+  "fuzz_targets": 22,
+  "fuzz_seed_sweeps": 0,
+  "fuzz_retries": 0,
+  "skip_not_built": [],
+  "checks": [
+    {
+      "gate": "G0",
+      "check": "tools",
+      "status": "pass",
+      "seconds": 2,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "gofmt",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "build",
+      "status": "pass",
+      "seconds": 2,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "vet",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tools-vet",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tools-test",
+      "status": "pass",
+      "seconds": 4,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tidy",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "detlint",
+      "status": "pass",
+      "seconds": 4,
+      "note": "32 package patterns"
+    },
+    {
+      "gate": "G1",
+      "check": "importlint",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "boundlint",
+      "status": "pass",
+      "seconds": 5,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "paniccheck",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G2",
+      "check": "astdiff",
+      "status": "pass",
+      "seconds": 1,
+      "note": "code compared with pre-prose commit 43fcbdc091b58576110aaf2f91d3832c5ef27d48"
+    },
+    {
+      "gate": "G3",
+      "check": "unit",
+      "status": "pass",
+      "seconds": 1137,
+      "note": ""
+    },
+    {
+      "gate": "G3",
+      "check": "counted",
+      "status": "pass",
+      "seconds": 2,
+      "note": "-tags clscount -run Linearly: 5 tests passed"
+    },
+    {
+      "gate": "G3",
+      "check": "race",
+      "status": "pass",
+      "seconds": 86,
+      "note": "8 package patterns under the race detector"
+    },
+    {
+      "gate": "G4",
+      "check": "markers",
+      "status": "pass",
+      "seconds": 0,
+      "note": "4 not-built markers, compared with baseline a6d042c1d2e0f1adce03544bee186d4b4c52d111 and the history of HEAD"
+    },
+    {
+      "gate": "G4",
+      "check": "sweep",
+      "status": "pass",
+      "seconds": 2524,
+      "note": "200 seeds per scenario from 1, tests matching ^TestScenario"
+    },
+    {
+      "gate": "G5",
+      "check": "fuzz",
+      "status": "pass",
+      "seconds": 506,
+      "note": "22 fuzz targets, 20s each: 22 fuzz, 0 seed-sweep (floor 100/s), 0 without a rate, 0 unclassified, 0 retried"
+    },
+    {
+      "gate": "G6",
+      "check": "tier-r",
+      "status": "pass",
+      "seconds": 388,
+      "note": "Postgres 17.11 (Debian 17.11-1.pgdg13+2) in mg-tier-r-2360527-main (127.0.0.1:47173), mg-tier-r-2360527-burst (127.0.0.1:41989) and mg-tier-r-2360527-scram (127.0.0.1:48333)"
+    },
+    {
+      "gate": "G7",
+      "check": "csv",
+      "status": "pass",
+      "seconds": 4571,
+      "note": "v1.5.5 (Variegata) d8cdaa33fd; 5748 run directories; 123 scenarios with SQL files"
+    },
+    {
+      "gate": "G8",
+      "check": "gen-docs",
+      "status": "pass",
+      "seconds": 4,
+      "note": "docs/csv-schema.md is current"
+    },
+    {
+      "gate": "G9",
+      "check": "site",
+      "status": "pass",
+      "seconds": 3,
+      "note": ""
+    },
+    {
+      "gate": "G10",
+      "check": "extra",
+      "status": "pass",
+      "seconds": 67,
+      "note": "FuzzEngineOps found the planted queue-slot bug after 3s; FuzzPoolOps found the planted reset-clears-suspect bug after 2s; FuzzAdmissionOps found the planted remove-order bug after 0s; FuzzCoalesceOps found the planted leaver-result bug after 1s; FuzzRetryOps found the planted withdraw-first bug after 1s; FuzzFairnessOps found the planted unpop-turn bug after 1s (budget 20s each)"
+    }
+  ]
+}
