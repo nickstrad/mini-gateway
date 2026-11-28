@@ -25,7 +25,7 @@ func (e *Engine) startRequest(c *client, body []byte) {
 	}
 	e.snap.StagePassed[StageReject]++
 	e.nextReq++
-	req := &request{id: e.nextReq, msg: pgwire.AppendQuery(nil, text), unit: u, inTx: inTx, enq: e.now}
+	req := &request{id: e.nextReq, msg: pgwire.AppendQuery(nil, text), unit: u, inTx: inTx, enq: e.now, tenant: c.tenant}
 	if inTx && c.db != nil {
 		e.snap.Accepted++
 		c.req = req
@@ -79,14 +79,14 @@ func (e *Engine) enqueue(c *client) {
 	// observe zero-wait requests as well as queued ones.
 	if e.shedQ == nil && e.seams.Queue.Len() == 0 && e.seams.Pool.Idle() > 0 {
 		attempted = true
-		if id, ok := e.seams.Pool.Checkout(e.now, c.tenant); ok {
+		if id, ok := e.seams.Pool.Checkout(e.now, c.req.tenant); ok {
 			e.snap.StagePassed[StageQueue]++
 			e.queueHist.Record(0)
 			e.lend(c, e.dbs[id])
 			return
 		}
 	}
-	if !e.seams.Queue.Push(e.now, c.tenant, req.id) {
+	if !e.seams.Queue.Push(e.now, req.tenant, req.id) {
 		e.snap.StageRefuse[StageQueue]++
 		e.shed(c)
 		e.queueTouched()
@@ -145,10 +145,10 @@ func (e *Engine) dispatch() {
 		if c == nil || c.phase != cpQueued || c.req == nil || c.req.id != id {
 			continue
 		}
-		dbID, ok := e.seams.Pool.Checkout(e.now, c.tenant)
+		dbID, ok := e.seams.Pool.Checkout(e.now, c.req.tenant)
 		if !ok {
 			if e.shedQ == nil || !e.shedQ.Unpop() {
-				e.seams.Queue.Push(e.now, c.tenant, id)
+				e.seams.Queue.Push(e.now, c.req.tenant, id)
 			}
 			e.waiting[id] = c
 			e.queueTouched()
@@ -168,12 +168,12 @@ func (e *Engine) lend(c *client, d *dbConn) {
 	e.snap.StagePassed[StageLease]++
 	e.snap.LeasesStarted++
 	// Track lease lifetime rather than statement lifetime so open transactions count against their tenant's share.
-	e.fairStarted(c.tenant)
+	e.fairStarted(c.req.tenant)
 	e.snap.DBIdle.Add(-1)
 	e.snap.DBLent.Add(1)
 	d.phase = dpLent
 	d.client = c
-	d.lastTenant = c.tenant
+	d.lastTenant = c.req.tenant
 	c.db = d
 	e.forward(c)
 }
@@ -329,7 +329,7 @@ func (e *Engine) release(d *dbConn, c *client, status byte) {
 	}
 	e.snap.StagePassed[StageRelease]++
 	e.snap.LeasesEnded++
-	e.fairEnded(c.tenant)
+	e.fairEnded(d.lastTenant)
 	d.client = nil
 	c.db = nil
 	in := ReleaseInput{Conn: d.id, Tenant: c.tenant, LastTenant: d.lastTenant, Status: status, Unread: len(d.hold) > 0 || d.cur.mid() || d.trailing}

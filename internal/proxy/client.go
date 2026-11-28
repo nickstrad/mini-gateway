@@ -36,6 +36,7 @@ type request struct {
 
 	attempt   int
 	retryOver bool
+	tenant    work.TenantID
 }
 
 type client struct {

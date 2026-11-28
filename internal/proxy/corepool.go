@@ -399,7 +399,7 @@ func (e *Engine) coreStepFailed(d *dbConn, why ResetFailure) {
 func (e *Engine) coreRelease(d *dbConn, c *client, status byte) {
 	e.snap.StagePassed[StageRelease]++
 	e.snap.LeasesEnded++
-	e.fairEnded(c.tenant)
+	e.fairEnded(d.lastTenant)
 	d.client = nil
 	c.db = nil
 	in := ReleaseInput{Conn: d.id, Tenant: c.tenant, LastTenant: d.lastTenant, Status: status, Unread: len(d.hold) > 0 || d.cur.mid() || d.trailing}
