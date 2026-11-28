@@ -100,3 +100,6 @@ All run in a scratch copy under `/tmp/zgw-c11-coalescer-review2/scratch` (revers
   - Re-ran Review 1 probes + 4 new default-queue-rule probes (`TestReview2Probe*`, 0.04s, all 6 pass) and 200-client default-rule tier S test (`TestReview2DefaultQueueRuleWithCoalescerSheds`, 4.05s, strict & relaxed × seeds 1–3, all pass).
   - Ran 7 repair-fix reversal mutations (M-R1, M-R2, M-R3a, M-R3b, M-R5, M-A1, M-A2 — all 7 caught).
   - Ran `MG_FUZZ_PLANT=coalesce-leaver-result` on `FuzzCoalesceOps` with empty fuzz cache — caught in 0.53s.
+
+
+NITS CLOSED by the orchestrator (2026-11-28): both findings were closed in the join with chunks 9 and 12 (NOTES.md, "Join with chunks 9 and 12"). Finding 1: an engine test runs the coalescer, strict and relaxed, under the binary's default admission rule with rule sheds and a full-queue shed firing on flights that have followers, including after a handoff and during a held flight's promotion, with the invariants checked after every event and `Quiesce` at the end; a second test covers a flight deadline and an admission deadline at one instant. Finding 2: the admission queues and the pool core are wired into the two `coalesce-results-*` scenarios, so every coalescer scenario runs the full stack. The scoped review of the join (REVIEW-3.md) checks both. Review run on the OpenRouter Neon route.
