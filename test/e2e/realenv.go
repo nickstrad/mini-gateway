@@ -217,6 +217,11 @@ func setupSQL() []string {
 		`CREATE FUNCTION take_lock() RETURNS text LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_lock(4242); RETURN 'lock'; END $$`,
 		`CREATE FUNCTION do_prepare() RETURNS text LANGUAGE plpgsql AS $$ BEGIN EXECUTE 'PREPARE hostile_plan AS SELECT 1'; RETURN 'prepare'; END $$`,
 		`CREATE FUNCTION do_listen() RETURNS text LANGUAGE plpgsql AS $$ BEGIN EXECUTE 'LISTEN hostile_channel'; RETURN 'listen'; END $$`,
+		// Held cursors, role switches, and placeholder settings require CLOSE ALL,
+		// RESET ROLE, and RESET ALL respectively. do_role uses set_config on a NOLOGIN
+		// role so current_user stays different from session_user after the function returns;
+		// do_custom writes a placeholder setting that pg_settings omits, so tests check it
+		// with an explicit current_setting read-back.
 		"CREATE ROLE " + hostileRole + " NOLOGIN",
 		"GRANT " + hostileRole + " TO " + RealBackendUser,
 		`CREATE FUNCTION do_cursor() RETURNS text LANGUAGE plpgsql AS $$ BEGIN EXECUTE 'DECLARE hostile_cursor CURSOR WITH HOLD FOR SELECT 1'; RETURN 'cursor'; END $$`,

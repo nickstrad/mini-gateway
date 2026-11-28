@@ -290,6 +290,8 @@ var hostileCalls = []string{"SELECT public.hide_set()", "SELECT public.make_temp
 
 var dirtyColumnName = regexp.MustCompile(`(?m)\bAS\s+(\w+)\s*[,;]?\s*$`)
 
+// dirtyColumns parses the AS <name> aliases from dirty-check.sql so any column
+// added to the oracle file is covered by the ablation guard without editing the test.
 func dirtyColumns(t *testing.T) []string {
 	t.Helper()
 	var names []string
@@ -310,6 +312,8 @@ func hostileLease(call string, lease int) (string, string) {
 	return strings.ReplaceAll(call, secretMarker, secret), secret
 }
 
+// secretReadBack queries mg_hostile.secret directly because Postgres omits custom
+// placeholder settings from pg_settings, making dirty-check.sql blind to them.
 func secretReadBack(c *RealClient, secret string) bool {
 	if secret == "" {
 		return false
@@ -321,6 +325,8 @@ func cleanReply(got []string) bool {
 	return !HasToken(got, "E:") && !HasToken(got, "closed:") && HasToken(got, "Z")
 }
 
+// hostileFailed treats errors, abrupt closes, missing ReadyForQuery markers, and
+// empty replies as failures so a silent drop cannot masquerade as planted state.
 func hostileFailed(got []string) bool {
 	return !cleanReply(got) || !HasToken(got, "D:")
 }
@@ -332,6 +338,9 @@ type leaseObservation struct {
 	broken  bool
 }
 
+// observeOneLease wraps the secret read-back, dirty-check.sql, and SHOW search_path
+// in a single transaction so all three run on the lease immediately after the hostile
+// call with no intervening DISCARD ALL.
 func observeOneLease(c *RealClient, check, secret string) leaseObservation {
 	var l leaseObservation
 	opened := c.Query("BEGIN")
@@ -380,6 +389,9 @@ func completeRow(got []string, width int) []string {
 	return row
 }
 
+// observe credits a column only when completeRow returns a clean, full-width row
+// differing from clean; errored, closed, or truncated replies count as unreadable
+// instead so a broken check cannot satisfy the ablation guard.
 func (r *sessionResult) observe(clean, got []string) {
 	row := completeRow(got, len(r.moved))
 	if row == nil || len(clean) != len(r.moved) {
@@ -448,7 +460,10 @@ func (r *sessionResult) record(l leaseObservation, clean, cleanRow []string) {
 	}
 }
 
-// TestTierRSessionStateNeverCrossesClients proves DISCARD ALL clears hidden function-driven SET, temp table, lock, PREPARE, and LISTEN state against dirty-check.sql.
+// TestTierRSessionStateNeverCrossesClients proves DISCARD ALL clears all eight hidden
+// function-driven session states (SET, temp table, advisory lock, PREPARE, LISTEN,
+// held cursor, role change, and custom placeholder setting) against dirty-check.sql,
+// SHOW search_path, and secret read-back.
 func TestTierRSessionStateNeverCrossesClients(t *testing.T) {
 	env := tierR(t)
 	g := gateway(t, env, GatewayOpts{Scenario: "tierr-session-state", Conns: 1})
@@ -464,7 +479,9 @@ func TestTierRSessionStateNeverCrossesClients(t *testing.T) {
 	t.Logf("tier R: 0 dirty observations over %d hostile leases", 3*len(hostileCalls))
 }
 
-// TestTierRSessionAblationWithoutResetCrosses proves disabling DISCARD ALL via PlantNoReset leaves dirty rows on real Postgres 17.
+// TestTierRSessionAblationWithoutResetCrosses proves disabling DISCARD ALL via PlantNoReset
+// moves every column of dirty-check.sql at least once, exposes the custom placeholder secret
+// on read-back, and completes with zero unreadable checks on real Postgres 17.
 func TestTierRSessionAblationWithoutResetCrosses(t *testing.T) {
 	env := tierR(t)
 	g := startInProcess(t, env, GatewayOpts{Scenario: "tierr-session-ablation", Conns: 1}, true)

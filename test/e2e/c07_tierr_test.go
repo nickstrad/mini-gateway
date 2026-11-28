@@ -114,6 +114,8 @@ func seededValue(t *testing.T, env *RealEnv) string {
 	return randomAfter(t, d)
 }
 
+// directBaseline runs dirty-check.sql inside observeOneLease so its ReadyForQuery
+// status (ZT) matches the single-transaction observer replies in policyRun.
 func directBaseline(t *testing.T, env *RealEnv, check string) []string {
 	t.Helper()
 	d, err := env.DialDirect(false)
@@ -154,6 +156,8 @@ func policyRun(t *testing.T, env *RealEnv, reset, reseed string) policyResult {
 			}
 			h.Close()
 			tenant := 1
+			// Include round in the parity check so an even number of hostile kinds still
+			// pairs every kind with both another tenant (crossing) and tenant 2 (carry-over).
 			if (round+i)%2 == 1 {
 				tenant = 2
 			}
@@ -206,8 +210,10 @@ func policyRun(t *testing.T, env *RealEnv, reset, reseed string) policyResult {
 }
 
 // TestTierRPoolSessionStateUnderEachReleasePolicy proves on Postgres 17 that all
-// four always/on-switch x reseed combinations have zero cross-tenant leaks, same-tenant
-// carry-over only under on-switch, and random-seed residue removed across tenants when reseed is on.
+// four always/on-switch x reseed combinations have zero cross-tenant leaks across all
+// eight hostile kinds (including secret read-back), zero hostile-call or observer errors,
+// same-tenant carry-over only under on-switch, and random-seed residue removed across
+// tenants when reseed is on.
 func TestTierRPoolSessionStateUnderEachReleasePolicy(t *testing.T) {
 	env := tierR(t)
 	for _, arm := range []struct{ reset, reseed string }{{"always", "off"}, {"on-switch", "off"}, {"always", "on"}, {"on-switch", "on"}} {

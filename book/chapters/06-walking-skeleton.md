@@ -148,7 +148,7 @@ The same ablation holds on real Postgres 17.11 (tier R, recorded in [`NOTES.md`]
 | Environment | Workload | With `DISCARD ALL` reset | Without reset (`PlantNoReset`) |
 | --- | --- | --- | --- |
 | Tier S (`e2e-session-state`, courtesy bypassed) | 6 hostile clients running `SET`/`RESET`, 6 observers running `SHOW`, 2 connections | **0 crossings** (`resets_completed == leases_ended`) | **138 crossings** |
-| Tier R (`TestTierRSessionStateNeverCrossesClients`, real Postgres 17.11, courtesy on) | PL/pgSQL functions hiding `SET`, `CREATE TEMP TABLE`, `pg_advisory_lock`, `PREPARE`, `LISTEN`; checked via `test/oracles/dirty-check.sql` | **0 dirty observations** over 15 hostile leases | **32 dirty observations** (in-process shell against real Postgres 17) |
+| Tier R (`TestTierRSessionStateNeverCrossesClients`, real Postgres 17.11, courtesy on) | Eight PL/pgSQL functions hiding `SET`, `CREATE TEMP TABLE`, `pg_advisory_lock`, `PREPARE`, `LISTEN`, a held cursor, a role change, and a custom setting carrying a per-lease secret; checked via all seven columns of `test/oracles/dirty-check.sql` (`prepared`, `cursors`, `listens`, `adv_locks`, `session_gucs`, `temp_rels`, `role_changed`), `SHOW search_path`, and a read-back of `mg_hostile.secret` | **0 dirty observations** over 24 hostile leases | **69 dirty observations** (in-process shell against real Postgres 17; all seven columns and the secret read-back move) |
 
 ---
 

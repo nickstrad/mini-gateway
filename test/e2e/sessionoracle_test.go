@@ -9,6 +9,9 @@ func oracleResult() sessionResult {
 	return sessionResult{columns: []string{"prepared", "cursors", "listens"}, moved: make([]int, 3)}
 }
 
+// TestSessionOracleCreditsOnlyCompleteDifferingRows proves observe credits per-column
+// movement only on clean, exact-width rows and counts errored, empty, closed, or
+// wrong-width replies as unreadable.
 func TestSessionOracleCreditsOnlyCompleteDifferingRows(t *testing.T) {
 	clean := []string{"0", "0", "f"}
 	for _, c := range []struct {
@@ -33,6 +36,9 @@ func TestSessionOracleCreditsOnlyCompleteDifferingRows(t *testing.T) {
 	}
 }
 
+// TestSessionOracleCountsABrokenLeaseAsDirtyAndUnreadable proves record counts a broken
+// observer lease as dirty and unreadable without crediting columns, and counts a leaked
+// secret as dirty.
 func TestSessionOracleCountsABrokenLeaseAsDirtyAndUnreadable(t *testing.T) {
 	clean := []string{"T", "D:0|0|f", "C:SELECT 1", "ZT"}
 	path := []string{"T", `D:"$user", public`, "C:SHOW", "ZT"}
@@ -48,6 +54,8 @@ func TestSessionOracleCountsABrokenLeaseAsDirtyAndUnreadable(t *testing.T) {
 	}
 }
 
+// TestHostileCallFailsUnlessItAnsweredCleanly proves hostileFailed rejects errors,
+// abrupt closes, empty replies, and missing data rows while accepting a clean query reply.
 func TestHostileCallFailsUnlessItAnsweredCleanly(t *testing.T) {
 	for _, c := range []struct {
 		got    []string
