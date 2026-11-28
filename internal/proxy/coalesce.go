@@ -263,6 +263,14 @@ func (e *Engine) coalNotice(n coalesce.Notice) {
 	}
 }
 
+func (e *Engine) expireQueued(id RequestID) {
+	if e.shedQ != nil {
+		e.shedQ.Expire(e.now, id)
+		return
+	}
+	e.seams.Queue.Remove(id)
+}
+
 func (e *Engine) coalStart(c *client, f coalesce.FlightID) {
 	if c.phase != cpCoalesced || c.req == nil {
 		return
@@ -290,7 +298,7 @@ func (e *Engine) coalExpireOwner(c *client, f coalesce.FlightID) {
 		e.coalUnfollow(c)
 		req := c.req
 		req.fl, req.store, req.stored = 0, false, nil
-		e.unqueue(req.id)
+		e.expireQueued(req.id)
 		delete(e.waiting, req.id)
 		e.t.cancel(&c.queueT)
 		e.snap.Queued.Add(-1)
