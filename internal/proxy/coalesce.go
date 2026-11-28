@@ -272,7 +272,7 @@ func (e *Engine) expireQueued(id RequestID) {
 }
 
 func (e *Engine) coalStart(c *client, f coalesce.FlightID) {
-	if c.phase != cpCoalesced || c.req == nil {
+	if c.phase != cpCoalesced || c.req == nil || e.stopping {
 		return
 	}
 	delete(e.followers, c.wid)
