@@ -464,6 +464,22 @@ scripts/gate.sh c09-fairness
 
 ## Gate result
 
+**Repair round:** `scripts/gate.sh c09-fairness` (build stage) at `3d480ad`, 2026-11-28, clean
+tree, run once: **overall fail, counts_for_landing false, red only in G3 unit**, on Astra's seven
+narrowed-claim tests (`TestAdv_4_ContinuousBetterGroup`, the three `TestAdv_5_*`, the three
+`TestAdv_8_*`), which stay red by the orchestrator's decision (e), as chunk 8's narrowed attack
+did. Every other package in G3 unit passes. G0, G1, G2 comments (baseline `b696186`, now green
+without an override), G3 counted, G3 race, G4 markers, G4 sweep (200 seeds, 3,136 s), G5 fuzz
+(19 targets, none unreadable), G6 tier R, G7 csv (5,326 run directories, 93 scenarios with SQL),
+G8 gen-docs, G9 site, G10 extra (`FuzzFairnessOps` found its plant after 4 s) all pass.
+`go test -count=1 ./...` before the gate (at `6d731a0`, the NOTES commit before `3d480ad`, same
+code): 56 packages pass; only `agent_work/adversarial/c09-fairness` fails, on the same seven.
+With `ADV_LONG=1` the adversarial package holds 38 and fails 11 (the seven, the three
+`TestAdv_6_*` and `TestAdv_7_TotalQueuePressure`), all narrowed claims; `TestAdv_3_RoundedRemainderIdles`
+now passes. `result.json` deleted (not committed).
+
+**Before the repair round:**
+
 `scripts/gate.sh c09-fairness` (build stage), run once on a clean committed tree at `9561cc9`,
 2026-11-27, load average 11-20: **overall fail, counts_for_landing false, red only in G2 and G5,
 neither in this chunk's code.** `result.json` deleted (not committed).
