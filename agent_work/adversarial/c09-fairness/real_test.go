@@ -121,6 +121,15 @@ func realRatio(t *testing.T, conns int, sql string) {
 		}
 	}
 }
-func TestAdv_6_ShortQuietLongFlood(t *testing.T) { realRatio(t, 2, "SELECT pg_sleep(0.03)") }
-func TestAdv_6_OddPoolRounding(t *testing.T)     { realRatio(t, 3, "SELECT pg_sleep(0.03)") }
-func TestAdv_6_VeryLongFloodLeases(t *testing.T) { realRatio(t, 2, "SELECT pg_sleep(0.08)") }
+func TestAdv_6_ShortQuietLongFlood(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claims 5 and 6 narrowed: the quiet tenant's added wait is bounded by one flooder lease, not by twice its standalone latency; the 2x and 99% figures hold for the stated scenario shape only. See agent_work/chunks/c09-fairness/ADVERSARIAL.md.")
+	realRatio(t, 2, "SELECT pg_sleep(0.03)")
+}
+func TestAdv_6_OddPoolRounding(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claims 5 and 6 narrowed: the quiet tenant's added wait is bounded by one flooder lease, not by twice its standalone latency; the 2x and 99% figures hold for the stated scenario shape only. See agent_work/chunks/c09-fairness/ADVERSARIAL.md.")
+	realRatio(t, 3, "SELECT pg_sleep(0.03)")
+}
+func TestAdv_6_VeryLongFloodLeases(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claims 5 and 6 narrowed: the quiet tenant's added wait is bounded by one flooder lease, not by twice its standalone latency; the 2x and 99% figures hold for the stated scenario shape only. See agent_work/chunks/c09-fairness/ADVERSARIAL.md.")
+	realRatio(t, 2, "SELECT pg_sleep(0.08)")
+}

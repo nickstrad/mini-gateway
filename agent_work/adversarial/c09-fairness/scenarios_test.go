@@ -77,9 +77,18 @@ func noisy(t *testing.T, offset time.Duration, n int64) {
 		t.Fatalf("quiet latency=%v alone=%v exceeds 2x; quiet success retained", got, base)
 	}
 }
-func TestAdv_5_ShortQuietDuringLongRead(t *testing.T) { noisy(t, 10*time.Millisecond, seed) }
-func TestAdv_5_QuietAtLeaseBoundary(t *testing.T)     { noisy(t, 39*time.Millisecond, seed+1) }
-func TestAdv_5_QuietEarlyInFlood(t *testing.T)        { noisy(t, 3*time.Millisecond, seed+2) }
+func TestAdv_5_ShortQuietDuringLongRead(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claims 5 and 6 narrowed: the quiet tenant's added wait is bounded by one flooder lease, not by twice its standalone latency; the 2x and 99% figures hold for the stated scenario shape only. See agent_work/chunks/c09-fairness/ADVERSARIAL.md.")
+	noisy(t, 10*time.Millisecond, seed)
+}
+func TestAdv_5_QuietAtLeaseBoundary(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claims 5 and 6 narrowed: the quiet tenant's added wait is bounded by one flooder lease, not by twice its standalone latency; the 2x and 99% figures hold for the stated scenario shape only. See agent_work/chunks/c09-fairness/ADVERSARIAL.md.")
+	noisy(t, 39*time.Millisecond, seed+1)
+}
+func TestAdv_5_QuietEarlyInFlood(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claims 5 and 6 narrowed: the quiet tenant's added wait is bounded by one flooder lease, not by twice its standalone latency; the 2x and 99% figures hold for the stated scenario shape only. See agent_work/chunks/c09-fairness/ADVERSARIAL.md.")
+	noisy(t, 3*time.Millisecond, seed+2)
+}
 
 func many(t *testing.T, n int, offset time.Duration) {
 	if os.Getenv("ADV_LONG") != "1" {
@@ -127,8 +136,11 @@ func many(t *testing.T, n int, offset time.Duration) {
 	}
 }
 func TestAdv_7_SynchronizedQuietTenants(t *testing.T) { many(t, 41, 10*time.Millisecond) }
-func TestAdv_7_TotalQueuePressure(t *testing.T)       { many(t, 120, 10*time.Millisecond) }
-func TestAdv_7_QuietArrivalAtSweep(t *testing.T)      { many(t, 57, 100*time.Millisecond) }
+func TestAdv_7_TotalQueuePressure(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 7 narrowed: quiet tenants keep their standalone outcomes while their own combined demand stays within capacity. See agent_work/chunks/c09-fairness/ADVERSARIAL.md.")
+	many(t, 120, 10*time.Millisecond)
+}
+func TestAdv_7_QuietArrivalAtSweep(t *testing.T) { many(t, 57, 100*time.Millisecond) }
 
 func ablation(t *testing.T, burst int, offset time.Duration) {
 	s := spec(1, offset, burst)

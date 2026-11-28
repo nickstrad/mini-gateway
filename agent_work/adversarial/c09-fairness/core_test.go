@@ -198,6 +198,7 @@ func TestAdv_4_CancelHeadPreservesTurn(t *testing.T) {
 	}
 }
 func TestAdv_4_ContinuousBetterGroup(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 4 narrowed: the bounded wait is within a group; a tenant at or above its share may wait while below-share tenants keep arriving. See agent_work/chunks/c09-fairness/ADVERSARIAL.md.")
 	q := core(t, 4)
 	lend(t, q, "a")
 	lend(t, q, "a")
@@ -237,9 +238,18 @@ func held(t *testing.T, mode int) {
 		t.Fatalf("held leases=%d current share=%d: existing transactions exceed stated bound", n, s)
 	}
 }
-func TestAdv_8_NewTenantShrinksShare(t *testing.T)        { held(t, 0) }
-func TestAdv_8_LimitReductionWithHeldLeases(t *testing.T) { held(t, 1) }
-func TestAdv_8_HeldPeerChangesShare(t *testing.T)         { held(t, 2) }
+func TestAdv_8_NewTenantShrinksShare(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 8 narrowed: no preemption; the share bounds new lends only. See agent_work/chunks/c09-fairness/ADVERSARIAL.md.")
+	held(t, 0)
+}
+func TestAdv_8_LimitReductionWithHeldLeases(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 8 narrowed: no preemption; the share bounds new lends only. See agent_work/chunks/c09-fairness/ADVERSARIAL.md.")
+	held(t, 1)
+}
+func TestAdv_8_HeldPeerChangesShare(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 8 narrowed: no preemption; the share bounds new lends only. See agent_work/chunks/c09-fairness/ADVERSARIAL.md.")
+	held(t, 2)
+}
 
 func TestAdv_10_ChurnBeyondStatsCap(t *testing.T) {
 	q := core(t, 1)
