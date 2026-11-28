@@ -558,6 +558,9 @@ func (e *Engine) coalCheck() error {
 	if err := e.coal.Check(); err != nil {
 		return err
 	}
+	if next := e.coal.Next(); next != 0 && (e.coalT == nil || e.coalT.at != next) {
+		return fmt.Errorf("coalescer: next deadline %d is not armed", next)
+	}
 	followers, members := 0, 0
 	for _, c := range e.clientList {
 		if c.phase == cpCoalesced {

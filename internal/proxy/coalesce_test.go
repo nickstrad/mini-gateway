@@ -128,6 +128,7 @@ func TestInvariantsCoverFlightsAndWaiters(t *testing.T) {
 	}{
 		{"follower entry", (*proxy.Engine).DropFollowerEntryForTest, "follower entry"},
 		{"owner request", (*proxy.Engine).MisplaceOwnerForTest, "without carrying its request"},
+		{"timer", (*proxy.Engine).DisarmCoalesceTimerForTest, "not armed"},
 	} {
 		r := coalRig(t, coalesce.JoinRelaxed)
 		r.client(11)

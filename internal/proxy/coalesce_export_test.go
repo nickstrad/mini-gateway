@@ -19,3 +19,11 @@ func (e *Engine) MisplaceOwnerForTest() bool {
 	}
 	return false
 }
+
+func (e *Engine) DisarmCoalesceTimerForTest() bool {
+	if e.coalT == nil {
+		return false
+	}
+	e.t.cancel(&e.coalT)
+	return true
+}
