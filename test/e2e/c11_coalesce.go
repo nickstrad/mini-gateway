@@ -684,6 +684,11 @@ func checkHinted(r *SimRun) error {
 
 func CoalesceResultsSpec(join coalesce.JoinMode) Spec {
 	sp := ResultsSpec("coalesce-results-"+joinName(join), false)
+	sp.Timeouts = poolTimeouts()
+	sp.Timeouts.QueueWait = 20 * time.Second
+	sp.QueueCap = 1024
+	sp.Admission = coalAdmission()
+	sp = withCore(sp, sp.Name, func(c *pool.Config) { c.RatePerSec = 1000; c.MaxConnecting = 4 })
 	sp.Rows = append(sp.Rows, fakepg.Row{Key: hotRow, Value: hotValue})
 	sp.Service = readService(5 * time.Millisecond)
 	sp.Coalesce = coalesceAuto(join)
