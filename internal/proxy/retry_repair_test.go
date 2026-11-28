@@ -2,6 +2,7 @@ package proxy_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/nickstrad/mini-gateway/internal/pool"
@@ -133,3 +134,15 @@ func TestRetryInFlightWhenTheClientCloses(t *testing.T) {
 	}
 }
 
+func TestTheCapacityTableStatesTheCapAsTheLargestRetryBurst(t *testing.T) {
+	for _, row := range proxy.CapacityRows(proxy.Config{}) {
+		if row.Key != "retry.bucket_cap, retry.floor" {
+			continue
+		}
+		if !strings.Contains(row.Capacity, "the largest burst of retries") || !strings.Contains(row.Capacity, "does not expire with time") {
+			t.Fatalf("retry row capacity %q", row.Capacity)
+		}
+		return
+	}
+	t.Fatal("no retry row in the capacity table")
+}

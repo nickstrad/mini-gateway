@@ -79,12 +79,34 @@ func TestEveryFaultMatrixRowStatesRetryAndATestThatExists(t *testing.T) {
 			t.Errorf("%s: retried by the proxy, but reached %v in a transaction %v row %s", m.Fault, m.Reached, m.InTx, m.Row.Row().ID)
 		}
 	}
-	if retried == 0 {
-		t.Fatal("no row is retried by the proxy")
+	if retried != 1 {
+		t.Fatalf("%d rows retried by the proxy, want exactly the zero-byte refusal of a lent connection", retried)
 	}
 	for _, m := range proxy.FaultMatrixRows() {
 		if m.InTx && m.Retried() {
 			t.Errorf("%s: an in-transaction row is retried", m.Fault)
 		}
+	}
+}
+
+func TestOnlyTheZeroByteRefusalOfALentConnectionIsRetried(t *testing.T) {
+	var retried []string
+	for _, m := range proxy.FaultMatrixRows() {
+		if m.Retried() {
+			retried = append(retried, m.Fault)
+		}
+		if m.NotRetried != "" && m.Retried() {
+			t.Errorf("%s: names a reason it is not retried and says it is", m.Fault)
+		}
+		if strings.Contains(m.Client, "no retry") && m.NotRetried == "" {
+			t.Errorf("%s: the client cell says no retry but the row names no reason", m.Fault)
+		}
+		if m.Retried() != strings.HasPrefix(m.RetriedCell(), "yes") {
+			t.Errorf("%s: Retried() %v, cell %q", m.Fault, m.Retried(), m.RetriedCell())
+		}
+	}
+	want := "First write of the request refused with zero bytes accepted (a lent connection found dead)"
+	if len(retried) != 1 || retried[0] != want {
+		t.Fatalf("retried rows %q, want only %q", retried, want)
 	}
 }

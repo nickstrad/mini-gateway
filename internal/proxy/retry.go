@@ -228,7 +228,8 @@ func retryTimeoutRows(t Timeouts) []TimeoutRow {
 func retryCapacityRow(c Config) CapacityRow {
 	r := c.Retry.WithDefaults()
 	return CapacityRow{"Retry budget (pre-forward-once): a tenth of a token per first attempt, one token per retry",
-		"the database from retries the proxy makes itself", configured(itoa(int(r.CapTokens))) + " tokens; starts at retry.floor (" +
-			itoa(int(r.FloorTokens)) + ") divided by fleet.instances", "retry.bucket_cap, retry.floor",
+		"the database from retries the proxy makes itself", itoa(int(r.CapTokens)) + " tokens per instance (zero means the default): the largest burst of retries, " +
+			"even after a quiet period (stored credit does not expire with time); starts at retry.floor (" + itoa(int(r.FloorTokens)) +
+			") divided by fleet.instances", "retry.bucket_cap, retry.floor",
 		"Credit past the cap is lost (expired); with less than one token the failure is answered with its row (exhaustion)", "-", "retry.budget_level"}
 }
