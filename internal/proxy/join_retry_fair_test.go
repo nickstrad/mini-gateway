@@ -321,6 +321,7 @@ func TestJoinARetryTakesANewTurnBehindItsTenantsQueueAndNoTenantGainsService(t *
 }
 
 func TestJoinEveryRetryEngineTestHoldsBehindTheFairDispatcher(t *testing.T) {
+	defer func() { coreAdmission = admission.Config{} }()
 	for _, rule := range []admission.RuleKind{admission.RuleTimeout, admission.RuleControlLaw} {
 		a := quietRule
 		a.Rule = rule
@@ -362,5 +363,4 @@ func TestJoinEveryRetryEngineTestHoldsBehindTheFairDispatcher(t *testing.T) {
 			t.Run(rule.String()+"/"+tc.name, tc.run)
 		}
 	}
-	coreAdmission = admission.Config{}
 }
