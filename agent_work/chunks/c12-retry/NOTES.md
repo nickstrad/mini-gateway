@@ -3,6 +3,213 @@
 Builder: Opus (`claude-opus-5-5`), 2026-11-27, branch `work/c12-retry`, worktree
 `/root/Software/mini-gateway-work/c12`, on top of `f93f0f2` (chunk 7 + 8 landed on main).
 
+## Join with chunk 9
+
+Join builder: Opus (`claude-opus-5-5`), 2026-11-28, branch `work/c12-retry`, worktree
+`/root/Software/mini-gateway-work/c12`. `git merge --no-ff main` (main at `d5dc685`: chunk 9 landed,
+with the lab-branch port `91fc9b3`) on top of `54385bc` (review 2 NITS, closed): one conflict
+resolution in merge commit `1d15364`, then join tests only (`17f36af`, `5009cbf`, `8544f8b`,
+`fec17ad`, `6f9a0bb`). **No product code changed beyond the conflict resolution**: every place the two
+chunks meet already composed in the stage order of D1 (classify, gate, coalesce, queue, lease,
+forward, release); chunk 9 owns the choice inside the queue stage, chunk 12 re-enters a granted
+retry at the queue stage. No behaviour of either chunk was dropped or weakened, and no conflict
+between them was found.
+
+### Conflicts and how each was resolved
+
+| File | Resolution |
+| --- | --- |
+| `internal/config/config.go` | `File` carries both sections, `Retry` and `Fairness`. |
+| `internal/config/validate.go` | `applyDefaults` applies both (`applyRetryDefaults`, `applyFairnessDefaults`); `proxyCaps` passes both `Fairness: f.fairness()` and `Retry: f.retryCore()`. |
+| `internal/proxy/config.go` | `Config` carries `Retry retry.Config` and `Fairness admission.FairConfig`; `Validate` (auto-merged) validates both. |
+| `internal/proxy/contracts.go` | Capacity rows: every earlier row, then chunk 12's `retryCapacityRow`, then chunk 9's `fairnessCapacityRows`. |
+| `internal/proxy/engine.go` | `Invariants` runs `admissionCheck`, then chunk 9's `fairnessCheck`, then chunk 12's `retryCheck`, then the pool core checks (decision (d)). `Quiesce` (auto-merged) has both blocks. |
+| `internal/obs/simrun/engine_test.go` | Under `-short` both chunks' scenario names are skipped (`RetryScenarioNames()` and `FairScenarios()`); the baseline runs both (auto-merged). |
+| `scripts/fuzz-plant.sh` | Both plants: `FuzzRetryOps` / `retry-withdraw-first` and `FuzzFairnessOps` / `fairness-unpop-turn`, with both header paragraphs. |
+| `test/e2e/realtier.go` | `TierRScenarios` lists `tierr-fair-noisy` and `tierr-retry-storm`. |
+| `docs/capacity-table.md`, `docs/csv-schema.md` (generated) | Regenerated with `scripts/gen-docs.sh`, never hand-merged. `docs/fault-matrix.md`, `docs/error-contract.md`, `docs/timeout-budget.md` came out byte-identical to chunk 12's. |
+| `docs/c4/`, `book/`, `README.md` | Main's side entirely (`git checkout main -- docs/c4 book README.md`). |
+| `agent_work/INDEX.md` | Both sides' rows (auto-merged). |
+
+`internal/proxy/lease.go`, `corepool.go`, `client.go` auto-merged: chunk 9's lease start in
+`lend`, lease ends beside every `LeasesEnded++` (`release`, `leaseLost`, `coreRelease`,
+`coreDirty`), `fairRedispatch` at the top of `finish`, the releasable demand in `corePump` and
+`CorePool.Checkout`; chunk 12's offer and re-run in `statementLost`, the clamps in `enqueue` and
+`forward`, the breaker re-check at the top of every `dispatch` pass, `retryEnded` on every end path.
+
+### Where the chunks assumed different things, and what holds now
+
+**(a) A granted retry holds no lease while it waits; its lease starts once when it is lent
+again.** Chunk 12 assumed "the failed connection was closed or sent to the dirty table before the
+retry waits"; chunk 9 reports a lease end exactly there. The two orders compose: a zero-byte
+refusal ends in `leaseFailed` → `leaseLost` (`LeasesEnded++`, `fairEnded(d.lastTenant)`) →
+`coreLost` → `statementLost` → `offerRetry` → `rerun` → `enqueue` (push into the tenant queue). A
+statement deadline ends in `coreDirty` (`LeasesEnded++`, `fairEnded`) before `statementLost`. So
+the tenant's in flight falls by one before the retry is pushed. When it is lent again, `lend` is
+the only place a lease starts (`LeasesStarted++`, `fairStarted`), once. No path counts a retried
+request as two leases at once or as none: chunk 9's `fairnessCheck` (per tenant in flight = the
+connections the engine lends it; total = `LeasesStarted - LeasesEnded`) runs after every event in
+every simulator run with an admission queue, including the retry scenarios, which have always run
+behind the admission queue (`RetrySpec.engineConfig`, rule `timeout`) and therefore now run behind
+the fair dispatcher. Held by `TestJoinARetryHeldBackAtItsShareOpensNoConnection` and the shared
+premise `retryHeldAtShare` (tenant 0 in flight 3 → 2 at the refusal, total 3, `LeaseEnds` +1, the
+retry queued in tenant 0's queue, `Invariants` hold), `TestJoinARetryHeldBackAtItsShareIsLentWhenItsOwnLeaseEnds`
+(`LeaseStarts` +1 exactly when it is lent), and
+`TestJoinARetriedTenantAtItsShareLetsTheTenantBelowItsShareGoFirst` (fair lease starts and ends
+equal the engine's at the end). Mutation: dropping `fairEnded` from `leaseLost` fails all eight
+join tests.
+
+**(b) A retry held back by the dispatcher still ends at the request's deadline, and the breaker
+is re-read wherever a connection could be lent.** The deadline clamp is on the retry's queue timer
+(`enqueue`, `retryClamp`) and on its statement timer (`forward`); neither depends on why the retry
+waits, so a retry held at its tenant's share (or by the limit) is shed `53M01` (retry end `shed`)
+at the request deadline exactly and never forwarded past it:
+`TestJoinARetryHeldBackByTheDispatcherEndsAtTheRequestDeadline` (still pending one nanosecond
+before, `53M01` at the deadline, not forwarded; the other tenants' leases are open transactions so
+no other timer intervenes). Mutation: dropping the queue-wait clamp fails it. Every lend goes
+through `dispatch` (the only `lend` callers are `dispatch` and chunk 6's direct lend in `enqueue`,
+which the admission queue never takes), and `refuseRetriesBehindOpenBreaker` runs at the top of
+every `dispatch` pass. Chunk 9 added two ways to reach `dispatch`: `fairRedispatch` at the end of
+every event while the dispatcher holds a request back, and the dispatches that follow a lease end
+of another tenant (reset done, as-is release); both reach the same loop. Held by
+`TestJoinTheBreakerReCheckRunsWhenAnotherTenantsLeaseEndsWhileARetryIsHeldBack` (two arms: the
+other tenant commits and its connection frees; with the breaker seam closed the freed connection
+goes to the retry, with it open the retry is answered `53M03`, retry end `breaker`, nothing
+forwarded) and `TestJoinThePoolBreakerOpeningFlushesARetryHeldBackByTheDispatcher` (the real pool
+core: the replacement dial fails, the breaker opens and its flush answers the held-back retry and
+the other tenant's queued request `53M03`; retry end `shed`, `BreakerFlushed` 2, fairness in flight
+unchanged). Mutation: removing the re-check from `dispatch` fails the first.
+
+**(c) The pool's demand.** Chunk 9 tells the pool only what the dispatcher would release
+(`Queues.Releasable` in `corePump`, the checkout refresh below the pool size). A waiting retry is
+an ordinary entry of its tenant queue, so it is demand exactly when the dispatcher would release
+it; nothing in chunk 12 reports demand of its own. Held by
+`TestJoinARetryHeldBackAtItsShareOpensNoConnection` (limit 4, weights equal: tenant 0 at its share
+of 2, tenant 1 active below its share with nothing waiting, one lease free: no dial at the refusal
+and none over five 100 ms events, the retry stays queued) and
+`TestJoinARetriedTenantAtItsShareLetsTheTenantBelowItsShareGoFirst` (when tenant 1 sends a request
+exactly one dial is made, for it). Mutation: passing `Queue.Len()` to `pool.Demand` again fails
+four join tests.
+
+**(d) `Invariants`, `Quiesce`, `Shutdown`.** Every check of both runs. `Invariants`: snapshot
+conservation (`Snapshot.Check`, including chunk 12's `retryConserved`), lease pairing, queue and
+wire checks, `admissionCheck`, chunk 9's `fairnessCheck`, chunk 12's `retryCheck`, the pool core.
+Each block returns early only when it fails, so all run on a passing engine. `Quiesce`: chunk 12's
+`RetryPending == 0` and chunk 8's `admissionQuiet`, which ends in chunk 9's `fairQuiesce` (no fair
+state, nothing in flight). `Shutdown` is unchanged by both: queued requests (a waiting retry
+included) end as client-gone (retry end `gone`), lent ones through the dirty-table / release paths
+that report the lease end. Tests that fail when a block is removed (mutations in a scratch copy):
+fairness block of `Invariants` — `TestFairEngineInvariantsCatchInFlightThatSkipsHeldTransactions`;
+retry block of `Invariants` — `TestInvariantsCatchAPendingRetryNoRequestHolds`,
+`...TheEngineAndThePolicyDisagreeing`, `...ABrokenBudget`; retry block of `Quiesce` —
+`TestQuiesceRefusesAPendingRetry`; fairness block of `Quiesce` — **no test failed** when
+`fairQuiesce` was removed (the engine's own lent-connection checks catch every reachable engine
+state first), so the join adds `internal/admission` `TestQuiesceRefusesALeaseStillInFlightAndPassesOnceItEnds`,
+which fails with it removed. Shutdown with both: `TestJoinShutdownWithAHeldBackRetryAndLeasesOfTwoTenants`
+(retry queued, tenant 0 holding two transactions, tenant 1 a transaction and a statement; after
+`Shutdown`: `Invariants` and `Quiesce` pass, admission `Check` passes, retry end `gone` 1, pending
+0, fair in flight 0, no fair state, fair lease starts = ends = engine lease starts = ends).
+
+**(e) Defaults, keys, tests that changed, generated documents.** The binary's default runs the
+pool core behind the timeout rule with the fair dispatcher installed (limit `pool.connections`)
+and the retry policy `off`; `retry.policy: pre-forward-once` runs both mechanisms:
+`TestBinaryDefaultRunsTheFairDispatcherWithTheRetryPolicyOff`. Keys of both are validated in one
+pass and the joined error names each: `TestRetryAndFairnessKeysAreValidatedTogether`
+(`retry.policy`, `retry.bucket_cap`, `fairness.default_weight`, `queue.rule`). Neither chunk's key
+constrains the other's. **One test datum of chunk 12 had to change, no test of chunks 6 to 9**:
+the storm's pinned budget-exhaustion seeds (`RetryStormSpec().Exhausts`) moved from 1, 2, 3 to
+1, 3, 5 (`6f9a0bb`; see "The one place the join moved a test" below). Every other package passed
+unchanged after the merge at seed 1 (`internal/...`, `cmd/...`, `test/...`),
+including chunk 12's engine tests, now also re-run behind the fair dispatcher under both product
+rules by `TestJoinEveryRetryEngineTestHoldsBehindTheFairDispatcher` (26 tests × 2 rules; it first
+asserts the rig runs the fair dispatcher), and chunk 12's scenarios `retry-storm` and
+`retry-no-double-apply`, which now run behind the fair dispatcher with 4 and 2 tenants. The
+generated documents: `docs/fault-matrix.md` and `docs/error-contract.md` are unchanged by the join
+— **fairness adds and changes no row**: a request the dispatcher holds back stays in its tenant
+queue and leaves by an exit chunk 8 and 12 already list (`53M01` rule, overflow or deadline,
+`53M03` breaker, `57014`, gone); it makes no new error and no new way for a statement to be lost.
+`docs/capacity-table.md` has both chunks' rows; `docs/csv-schema.md` both chunks' metrics;
+`docs/timeout-budget.md` is chunk 12's (chunk 9 adds no timeout).
+
+**(f) The round-robin turn of a retried tenant.** A turn is spent when a pop is served, and a
+granted retry is pushed again (`enqueue` → `Queue.Push`), so it is a new entry at the tail of its
+tenant's queue and needs a new turn: the turn its first attempt spent is not refunded and the
+retry does not keep it. The tenant therefore **cannot gain** service through retries (one pop per
+turn, whether a first attempt or a retry) and **pays one extra turn per retried request** (at most
+one retry per request, within the budget); other tenants keep their turns. Within the tenant the
+retry waits behind the tenant's requests already queued (with adaptive LIFO on, a standing tenant
+queue serves its newest entry first, so the retry may go first within its own tenant; that does
+not change the order across tenants). Chunk 9's per-tenant `served` and chunk 8's `pushes` count
+a retried request twice (two pops), and conservation (`pushes = served + shed + removed`) still
+holds. Held by `TestJoinARetryTakesANewTurnBehindItsTenantsQueueAndNoTenantGainsService` (one
+connection, tenant 0's write lent, then tenant 1, tenant 0, tenant 1 queued: without the refusal
+the order is `SELECT 11` (t1), `SELECT 12` (t0), `SELECT 13` (t1); with the zero-byte refusal it is
+the same three and then the retried write).
+
+### The one place the join moved a test
+
+`retry-storm/on` requires a budget refusal on pinned seeds (Deviation 1: exhaustion was never by
+construction). Behind the fair dispatcher the storm's four tenants are served round robin instead
+of oldest first, which changes the schedule: on seed 2 the policy granted 12 retries and refused
+none for budget (`Refused[budget] 0`, level back at the one-token cap), so the 5-seed sweep failed
+`checkBudget` ("seed 2: the budget was never exhausted"). Cause shown in a scratch copy: with the
+dispatcher not installed, seeds 1–8 all exhaust (seed 2: 1 refusal); with it, over seeds 1–30, 27
+exhaust (1–4 refusals each) and seeds 2, 4 and 8 do not. Nothing about the budget changed (the
+bound checks, `budget.sql` and the engine's exhaustion tests pass); only which seeds happen to
+reach two eligible losses within ten first attempts. Decision: keep three required seeds and pin
+them to 1, 3, 5 (all in the unit run's seed 1 and the gate's 10-seed sweep), rather than make the
+claim weaker or rebuild the scenario for exhaustion by construction. Deviation 1 and stated limit
+8 are updated. A later change to the schedule can move these seeds again; the probe is a
+throw-away loop over `RunRetry(RetryStormSpec(), ArmOn, seed, "", "")` printing
+`Policy.Refused[retry.RefusedBudget]`.
+
+### Join tests
+
+| Test | Package | What it holds |
+| --- | --- | --- |
+| `TestJoinARetryHeldBackAtItsShareOpensNoConnection` | `internal/proxy` | (a), (c) |
+| `TestJoinARetriedTenantAtItsShareLetsTheTenantBelowItsShareGoFirst` | `internal/proxy` | brief item 4 first case: the other tenant (below its share) is served first, the retry then completes; counters of both agree |
+| `TestJoinARetryHeldBackAtItsShareIsLentWhenItsOwnLeaseEnds` | `internal/proxy` | brief item 4 second case; lease started once |
+| `TestJoinARetryHeldBackByTheDispatcherEndsAtTheRequestDeadline` | `internal/proxy` | (b) deadline |
+| `TestJoinTheBreakerReCheckRunsWhenAnotherTenantsLeaseEndsWhileARetryIsHeldBack` | `internal/proxy` | (b) breaker, brief item 4 third case (breaker seam) |
+| `TestJoinThePoolBreakerOpeningFlushesARetryHeldBackByTheDispatcher` | `internal/proxy` | (b) breaker, real pool core |
+| `TestJoinShutdownWithAHeldBackRetryAndLeasesOfTwoTenants` | `internal/proxy` | (d), brief item 4 fourth case |
+| `TestJoinARetryTakesANewTurnBehindItsTenantsQueueAndNoTenantGainsService` | `internal/proxy` | (f) |
+| `TestJoinEveryRetryEngineTestHoldsBehindTheFairDispatcher` | `internal/proxy` | chunk 12's engine tests behind the fair dispatcher, rules `timeout` and `control-law` |
+| `TestQuiesceRefusesALeaseStillInFlightAndPassesOnceItEnds` | `internal/admission` | (d) fairness block of `Quiesce` |
+| `TestRetryAndFairnessKeysAreValidatedTogether`, `TestBinaryDefaultRunsTheFairDispatcherWithTheRetryPolicyOff` | `internal/config` | (e) |
+| `TestScenarioRetryStormTwoTenantsOfUnequalWeight` | `test/e2e` | brief item 4 fifth case: the storm (`on` arm, one-token budget) with two tenants of weights 3 and 1; `CheckProduct` (no double apply, budget, fast refusals, recovery), `fairnessCheck` and `retryCheck` after every step, fair lease starts and ends equal the engine's, nothing in flight at the end, at least one completed retry, both tenants served, the share held a request back at least once (16–18 times on seeds 1–3), replay law. Seeds 1–3 (at most 3 per call), no flushed files (so G7 has no new scenario directory), about 5 s |
+
+The join's mutations (scratch copy `/tmp/zgw-c12/mut`, from `git archive HEAD`, deleted after):
+
+| Mutation | Killed by |
+| --- | --- |
+| J1 the fairness block removed from `Invariants` | `TestFairEngineInvariantsCatchInFlightThatSkipsHeldTransactions` |
+| J2 the retry block removed from `Invariants` | `TestInvariantsCatchABrokenBudget`, `...APendingRetryNoRequestHolds`, `...TheEngineAndThePolicyDisagreeing` |
+| J3 `leaseLost` does not report the lease end | all eight `TestJoinA…`/`TestJoinThe…`/`TestJoinShutdownWithAHeld…` tests |
+| J4 the breaker re-check removed from `dispatch` | `TestJoinTheBreakerReCheckRunsWhenAnotherTenantsLeaseEndsWhileARetryIsHeldBack` |
+| J5 the pool's demand is every queued request (`Queue.Len()`) | `TestJoinARetryHeldBackAtItsShareOpensNoConnection` and three more join tests |
+| J6 the retry's queue-wait clamp removed | `TestJoinARetryHeldBackByTheDispatcherEndsAtTheRequestDeadline` |
+| J7 the pending-retry block removed from `Quiesce` | `TestQuiesceRefusesAPendingRetry` |
+| J8 `fairQuiesce` removed from `Queues.Quiesce` | `TestQuiesceRefusesALeaseStillInFlightAndPassesOnceItEnds` (nothing failed before it was added) |
+
+### Results
+
+All on 2026-11-28 at `6f9a0bb` (code as committed; NOTES only after it), load average 5–9 on 4
+cores (other sessions' runs beside these):
+
+| Check | Result |
+| --- | --- |
+| `go build ./... && go vet ./...`, `gofmt -l` | pass, nothing listed |
+| `go test -count=1 -p 2 ./internal/... ./scripts/ ./cmd/...` | all packages pass (`internal/obs/simrun` 386 s) |
+| `go test -count=1 ./test/...` (seed 1) | pass (`test/e2e` 364 s), before the weighted scenario and the re-pin; both run since |
+| `./agent_work/adversarial/c09-fairness/...`, `./agent_work/adversarial/c12-retry/...` | both pass unchanged (no file under `agent_work/adversarial/` edited) |
+| `scripts/gen-docs.sh --check` | pass (all four generators current) |
+| `agent_work/chunks/c09-fairness/gate/extra.sh`, `agent_work/chunks/c12-retry/gate/extra.sh` | both pass (planted fuzz bugs found, canaries green) |
+| 5-seed sweep, `DST_SEEDS=5 RUN_DIR=… go test -run '^(TestScenarioFair\|TestScenarioRetry)' ./test/e2e/` | every fairness scenario, `retry-no-double-apply` and the weighted storm pass; `retry-storm/on` seed 2 failed (above); after `6f9a0bb` `retry-storm` all arms seeds 1–5 pass (15 runs) |
+| `scripts/csv-assert.sh` over the sweep's flushed files | 0 failures: `fair-held-transactions`, `fair-many-tenants`, `fair-noisy-neighbour`, `fair-results`, `retry-no-double-apply` (15 runs), `retry-storm` (15 runs, after the re-pin) |
+| `GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh c12-retry` | GATE-PLACEHOLDER |
+
 ## Repair round
 
 Repair builder: Opus (`claude-opus-5-5`), 2026-11-28, same branch and worktree, on `cad0787`
@@ -148,7 +355,7 @@ connection (`test/e2e/c12_relay.go`, a test-side relay in the manner of chunk 7'
 | 6 | Never when the breaker is open (at the decision and again before the forward) | `TestRetryNeverWhenTheLossOpensTheBreaker`, `TestRetryDecidedWithoutConsultingTheBreakersAllow` (no trial, no state change), `TestRetryGrantedWhileClosedIsRefusedWhenTheBreakerOpensBeforeItIsForwarded`, `TestRetryStillForwardedWhenTheBreakerStaysClosed`, `TestRetryQueuedWhenThePoolCoreBreakerOpensIsFlushedBeforeAnyForward`; canary `.../breaker_check` |
 | 7 | A waiting retry holds no connection and one place in its tenant's admission queue (**narrowed**); never past the deadline (equality) | `TestRetryAZeroByteRefusal...` (lent 0, queued 1 while waiting), `TestRetryWaitsInTheTenantQueueWithTheAdmissionRule`, `TestRetryRefusedAtTheRequestDeadlineExactly`, `TestRetryGrantedJustBeforeTheRequestDeadlineAndBoundedByIt` (queued retry shed at the deadline exactly), `TestRetryForwardedStatementEndsAtTheRequestDeadline`, core `TestDeadlineAtEqualityRefusesAndJustBeforeGrants` |
 | 8 | Storm bounded (off and on), refusals fast, goodput returns | `TestScenarioRetry/retry-storm/{off,on}` (`checkFast`, `checkRecovery`: every operation started after the recovery point succeeds on its first attempt, `checkBudget`: forwards = attempts + retries − retry ends `breaker`), SQL `load.sql`; tier R `TestTierRRetryStorm` |
-| 9 | Exhaustion visible; decisions counted by reason; conservation on every exit path incl. `Shutdown`; one reply per retried request | `TestRetryBudgetExhaustionIsVisibleAndCounted`, `TestEveryRefusalReasonIsReachedAndCounted`, `TestRetryShutdownWithAPendingRetryEndsItAndConserves`, `TestRetryClientGoneWhileTheRetryIsQueued`, `TestRetryQueuedAndCancelledByTheClientEndsFailed`, `TestRetryQueuedWhenTheBreakerFlushesEndsShed`, `TestRetryInFlightWhenTheClientCloses`; exhaustion in tier S: `retry-storm/on` (one-token budget) must refuse for budget on seeds 1–3 (`checkBudget`), `conservation.sql` (`refused budget = exhaustions`, now non-zero); `Snapshot.Check` (`retryConserved`) run by every engine step's invariants, SQL `conservation.sql`; `internal/obs/retrysrc` `TestRetryCountersMoveAndConserve` |
+| 9 | Exhaustion visible; decisions counted by reason; conservation on every exit path incl. `Shutdown`; one reply per retried request | `TestRetryBudgetExhaustionIsVisibleAndCounted`, `TestEveryRefusalReasonIsReachedAndCounted`, `TestRetryShutdownWithAPendingRetryEndsItAndConserves`, `TestRetryClientGoneWhileTheRetryIsQueued`, `TestRetryQueuedAndCancelledByTheClientEndsFailed`, `TestRetryQueuedWhenTheBreakerFlushesEndsShed`, `TestRetryInFlightWhenTheClientCloses`; exhaustion in tier S: `retry-storm/on` (one-token budget) must refuse for budget on seeds 1, 3, 5 (`checkBudget`; seeds 1–3 before the join with chunk 9, see there), `conservation.sql` (`refused budget = exhaustions`, now non-zero); `Snapshot.Check` (`retryConserved`) run by every engine step's invariants, SQL `conservation.sql`; `internal/obs/retrysrc` `TestRetryCountersMoveAndConserve` |
 | 10 | The matrix is complete; retries only on rows that allow them | `TestEveryErrorRowStatesWhetherTheProxyRetriesIt`, `TestEveryFaultMatrixRowStatesRetryAndATestThatExists` (each named test exists, each scenario has an analysis folder, retried rows are `lost-after-read`, reached no, outside a transaction, exactly one row retried), `TestOnlyTheZeroByteRefusalOfALentConnectionIsRetried` (only that row; a row naming a reason is never retried; a "no retry" client cell names its reason; the cell agrees with `Retried()`), `TestFaultMatrixDocumentIsGeneratedFromTheCode`; engine counter `RetryRows` checked by `CheckProduct` and `conservation.sql` |
 | 11 | The ablation fails; the binary cannot select it | arm `everything`: `CheckAblation` (retries on forbidden rows > 0, a statement applied twice, forwards > first attempts, and the product checks fail), `load.sql` (forwards > attempts and applied > distinct sent); seed 1: 49 (storm) and 52 (sweep) statements applied twice; `TestRetryEverythingAblationRerunsAWriteThatMayHaveReached`; `TestRetryEverythingIsUnreachableFromTheBinary` (no kind name, `go list -deps ./cmd/...` has no `retrytest`), `TestConfigNeverSetsARetryPlant` |
 | 12 | Fleet: floor ÷ N, ratio not; validation names the key | `TestRetryFloorIsDividedByInstancesAndTheRatioAndCapAreNot`, `TestRetryKeysFailClosedNamingTheKey`, `TestFloorShareDividesByInstancesAndRefusesBelowOne` |
@@ -283,7 +490,8 @@ every row (only `lost-after-read` says yes, with its conditions).
    `stormCapTokens`), which costs no extra simulated work. With it the budget is refused 1–3 times
    on seeds 1–6 and on most of seeds 7–60, but on at least two of seeds 7–60 not at all (a probe,
    `CheckProduct` passed on all 54), so exhaustion is not guaranteed by construction. The run
-   therefore requires a budget refusal only on the pinned seeds 1, 2, 3 (`RetrySpec.Exhausts`,
+   therefore requires a budget refusal only on pinned seeds (`RetrySpec.Exhausts`; 1, 2, 3 until the
+   join with chunk 9, 1, 3, 5 since; see "Join with chunk 9"),
    deterministic by the replay law); `conservation.sql`'s `refused_budget = exhaustions` now
    compares non-zero values. The engine-level proofs (`TestRetryBudgetExhaustionIsVisibleAndCounted`
    and the core tests) stand.
@@ -349,7 +557,8 @@ exactly, which the orchestrator has narrowed. No adversarial test asserts someth
    closed for the retry decision and for the re-check before the forward.
 7. A retry refused at the forward because the breaker opened keeps its withdrawn token (decision
    10); the budget is not refunded.
-8. Budget exhaustion in tier S is required only on the storm's pinned seeds 1–3 (Deviation 1).
+8. Budget exhaustion in tier S is required only on the storm's pinned seeds 1, 3, 5 (Deviation 1;
+   seed 2 stopped exhausting behind the fair dispatcher, "Join with chunk 9").
 4. The cap is per instance and is not divided by N: the fleet's banked credit is N × cap.
 5. `retry.floor` is the bucket's starting level (in tokens), not a time-based reserve: a fresh
    instance can retry `floor` times before deposits; after that only the 10% ratio refills it.
