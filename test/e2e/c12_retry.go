@@ -65,6 +65,7 @@ type RetrySpec struct {
 	Cap      int64
 	Floor    int64
 	Exhausts []int64
+	Weights  []admission.TenantWeight
 }
 
 type RetryRun struct {
@@ -116,7 +117,8 @@ func RetrySweepSpec() RetrySpec {
 func (sp RetrySpec) engineConfig(arm RetryArm) proxy.Config {
 	c := proxy.Config{Connections: sp.Conns, QueueCap: 256, Timeouts: poolTimeouts(), MaxClients: 1024, MaxStartup: 1024,
 		Pool:      corePool(func(p *pool.Config) { p.BreakerFailures = sp.Breaker; p.RatePerSec = 500; p.MaxConnecting = sp.Conns }),
-		Admission: admission.Config{Rule: admission.RuleTimeout, LIFO: admission.LIFOAdaptive}}
+		Admission: admission.Config{Rule: admission.RuleTimeout, LIFO: admission.LIFOAdaptive},
+		Fairness:  admission.FairConfig{Weights: sp.Weights}}
 	switch arm {
 	case ArmOn:
 		c.Retry = retry.Config{Kind: retry.KindPreForwardOnce, CapTokens: cmp.Or(sp.Cap, retryCapTokens), FloorTokens: cmp.Or(sp.Floor, retryFloor), Plant: sp.Plant}
