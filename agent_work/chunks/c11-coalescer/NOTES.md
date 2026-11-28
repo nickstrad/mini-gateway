@@ -241,7 +241,7 @@ All on 2026-11-28, load average 3–8 on 4 cores (other sessions' runs beside th
 | Check | Result |
 | --- | --- |
 | `gofmt -l`, `go build ./... && go vet ./...` | pass, nothing listed |
-| `go test -count=1 -timeout 40m ./internal/...` (at `5e6a99f`'s parent, `b71e24a`) | all pass |
+| `go test -count=1 -timeout 40m ./internal/...` (at `76d1ada`; the gate's G3 at `2bae3ba` re-ran every package) | all pass |
 | `go test -count=1 -timeout 60m ./test/... ./scripts/ ./cmd/...` | all pass except `cmd/loadgen` `TestTheSeedIsPrintedFirstAndAServedRunExitsZero` once: exit 3, `SHORTFALL: achieved 48.0/s of target 50/s: 5 late` (a wall-clock rate test of an earlier chunk at load average 8; it passed three times out of three alone directly after, and in the gate's G3 below). `test/e2e` 443 s |
 | `./agent_work/adversarial/c09-fairness/...`, `.../c11-coalescer/...`, `.../c12-retry/...` | all three pass unchanged (no file under `agent_work/adversarial/` edited) |
 | `scripts/gen-docs.sh --check` | pass (all generators current; `docs/fault-matrix.md` changed by the join's two matrix edits) |
