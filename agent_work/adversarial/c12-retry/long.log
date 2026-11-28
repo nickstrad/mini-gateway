@@ -1,0 +1,87 @@
+ADV_LONG=1 GOMAXPROCS=2 /usr/local/go/bin/go test -count=1 -timeout=150s -json ./agent_work/adversarial/c12-retry/...
+Exit status: 1 (five retained claim failures); package elapsed: 2.000s
+
+PASS TestAdv_10_ErrorRowsRejectUnsafeCombinations
+FAIL TestAdv_10_MatrixExplicitNeverPaths
+=== RUN   TestAdv_10_MatrixExplicitNeverPaths
+    contracts_test.go:55: seed=12012026; REPLAY: /usr/local/go/bin/go test -count=1 -run '^TestAdv_10_MatrixExplicitNeverPaths$' ./agent_work/adversarial/c12-retry/...
+    contracts_test.go:61: fault "Zero-byte refusal at the request's deadline" says client="no retry at equality" but Retried()=true
+    contracts_test.go:61: fault "Zero-byte refusal whose loss opens the breaker" says client="no retry" but Retried()=true
+--- FAIL: TestAdv_10_MatrixExplicitNeverPaths (0.00s)
+PASS TestAdv_10_ActualRetryRowsMatchContract
+PASS TestAdv_11_BinaryRejectsPolicyAliases
+PASS TestAdv_11_BinaryRejectsPlantInjection
+PASS TestAdv_14_FlushExhaustionAndFractionalLevels
+PASS TestAdv_14_ReplayActionsAndCSVBytes
+PASS TestAdv_14_CrossProcessReplay
+PASS TestAdv_1_ZeroCoreHostileOffers
+PASS TestAdv_1_EngineDefaultAcrossRequests
+PASS TestAdv_1_BinaryDefaultAndExplicitZero
+PASS TestAdv_2_LargeAttemptIndices
+PASS TestAdv_2_RepeatedRefusalAndStaleEvents
+PASS TestAdv_2_OnceStateDoesNotLeakToNextRequest
+FAIL TestAdv_5_CarriedCreditExceedsWindowFloor
+=== RUN   TestAdv_5_CarriedCreditExceedsWindowFloor
+    core_test.go:97: seed=12012026; REPLAY: /usr/local/go/bin/go test -count=1 -run '^TestAdv_5_CarriedCreditExceedsWindowFloor$' ./agent_work/adversarial/c12-retry/...
+    core_test.go:110: window first_attempts=20 retries=20 floor_tenths=10: 200 > 30
+--- FAIL: TestAdv_5_CarriedCreditExceedsWindowFloor (0.00s)
+FAIL TestAdv_5_QuietHourRetainsBurstCredit
+=== RUN   TestAdv_5_QuietHourRetainsBurstCredit
+    core_test.go:114: seed=12012026; REPLAY: /usr/local/go/bin/go test -count=1 -run '^TestAdv_5_QuietHourRetainsBurstCredit$' ./agent_work/adversarial/c12-retry/...
+    core_test.go:126: after quiet hour retries=15 new attempts=15 floor=1 tokens; old credit still usable
+--- FAIL: TestAdv_5_QuietHourRetainsBurstCredit (0.00s)
+PASS TestAdv_5_CapAtMaximumAndFractionalDeposits
+PASS TestAdv_9_AllVetoCombinationsConserve
+PASS TestAdv_9_ExhaustionThenExactReplenishment
+PASS TestAdv_9_ShutdownAndLateDriverReports
+PASS TestAdv_12_RemainderFleetPreservesRatio
+PASS TestAdv_12_ExtremeInvalidKeys
+PASS TestAdv_12_ConfigFloorDivisionAtBoundary
+PASS TestAdv_3_AcceptedOffsetsAcrossMessage
+PASS TestAdv_3_RefusalAfterPartialReply
+PASS TestAdv_3_SilenceAndCloseWithoutReport
+PASS TestAdv_4_OffEveryResponseByteCut
+PASS TestAdv_4_OnEveryResponseByteCut
+PASS TestAdv_4_TransactionRefusalAfterPriorWrite
+PASS TestAdv_6_BreakerChangesWhileStatementActive
+FAIL TestAdv_6_BreakerReopensBeforeQueuedRetryRuns
+=== RUN   TestAdv_6_BreakerReopensBeforeQueuedRetryRuns
+    engine_test.go:118: seed=12012026; REPLAY: /usr/local/go/bin/go test -count=1 -run '^TestAdv_6_BreakerReopensBeforeQueuedRetryRuns$' ./agent_work/adversarial/c12-retry/...
+    engine_test.go:124: granted while closed, but 1 retry Query emitted after breaker opened
+--- FAIL: TestAdv_6_BreakerReopensBeforeQueuedRetryRuns (0.00s)
+PASS TestAdv_6_ClosedOpenClosedBudgetPreserved
+FAIL TestAdv_7_WaitingRetryConsumesQueueSlot
+=== RUN   TestAdv_7_WaitingRetryConsumesQueueSlot
+    engine_test.go:146: seed=12012026; REPLAY: /usr/local/go/bin/go test -count=1 -run '^TestAdv_7_WaitingRetryConsumesQueueSlot$' ./agent_work/adversarial/c12-retry/...
+    engine_test.go:155: waiting retry queued=1 lent=0; literal claim requires neither
+--- FAIL: TestAdv_7_WaitingRetryConsumesQueueSlot (0.00s)
+PASS TestAdv_7_DeadlineTiedWithNewConnection
+PASS TestAdv_7_ClientLeavesBeforeReplacementReady
+PASS TestAdv_8_OffBurstAgainstAblation
+PASS TestAdv_8_OnBurstAgainstAblation
+PASS TestAdv_8_ZeroByteOutageBudgetAndRecovery
+PASS TestAdv_11_AblationDuplicatesAnAcknowledgedWrite
+PASS TestAdv_13_ShutdownAtEachRetryPhase
+PASS TestAdv_13_EngineRejectsOfferMismatch
+PASS TestAdv_13_EngineRejectsBrokenWithdrawal
+PASS TestAdv_4_LongSeededCuts
+PASS TestAdv_7_ReplacementEventExactlyAtDeadline
+PASS TestAdv_15_DecoderHostilePrefixesAndHugeSuffix
+PASS TestAdv_15_FuzzInputCannotChooseAHashedSeed
+PASS TestAdv_15_WithdrawalPlantCaughtOnVetoSequences
+PASS TestAdv_15_LongActualFuzzTargetFindsPlant
+=== RUN   TestAdv_15_LongActualFuzzTargetFindsPlant
+    fuzz_test.go:98: seed=12012026; REPLAY: /usr/local/go/bin/go test -count=1 -run '^TestAdv_15_LongActualFuzzTargetFindsPlant$' ./agent_work/adversarial/c12-retry/...
+    fuzz_test.go:117: actual fuzz target detected plant: warning: the test binary was not built with coverage instrumentation, so fuzzing will run without coverage guidance and may be inefficient
+        fuzz: elapsed: 0s, testing seed corpus: 0/4 completed
+        failure while testing seed corpus entry: FuzzRetryOps/seed#2
+        fuzz: elapsed: 0s, testing seed corpus: 2/4 completed
+        --- FAIL: FuzzRetryOps (0.01s)
+            --- FAIL: FuzzRetryOps (0.00s)
+                retry_test.go:322: kind pre-forward-once: op 2: retry: 10 tenths withdrawn for 0 retries
+                    +0 attempt
+                    +0 attempt
+                    +0 fail reached=yes intx=false attempt=0 breaker=false draining=false ttl=500000
+
+        FAIL
+--- PASS: TestAdv_15_LongActualFuzzTargetFindsPlant (1.17s)
