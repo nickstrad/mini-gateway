@@ -184,8 +184,32 @@ func (t *Table) eligible(u *work.Unit) bool {
 	return false
 }
 
+const keyLenBytes = 8
+
 func keyOf(k work.ShareKey) string {
-	return string(k.Tenant) + "\x00" + string(k.Text)
+	n := len(k.Tenant)
+	b := make([]byte, keyLenBytes, keyLenBytes+n+len(k.Text))
+	for i := range keyLenBytes {
+		b[keyLenBytes-1-i] = byte(n >> (8 * i))
+	}
+	b = append(b, k.Tenant...)
+	b = append(b, k.Text...)
+	return string(b)
+}
+
+func splitKey(key string) (string, string) {
+	if len(key) < keyLenBytes {
+		return "", ""
+	}
+	n := 0
+	for i := range keyLenBytes {
+		n = n<<8 | int(key[i])
+	}
+	rest := key[keyLenBytes:]
+	if n < 0 || n > len(rest) {
+		return "", rest
+	}
+	return rest[:n], rest[n:]
 }
 
 func (t *Table) Join(now Instant, id RequestID, u *work.Unit) Joined {

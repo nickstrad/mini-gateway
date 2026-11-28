@@ -120,7 +120,7 @@ func (h *hotKeys) touch(key string) {
 func (h *hotKeys) snapshot() []HotKey {
 	out := make([]HotKey, len(h.keys))
 	for i, k := range h.keys {
-		tenant, text, _ := strings.Cut(k.key, "\x00")
+		tenant, text := splitKey(k.key)
 		out[i] = HotKey{Tenant: work.TenantID(tenant), Text: text, Count: k.count}
 	}
 	slices.SortFunc(out, func(a, b HotKey) int {
