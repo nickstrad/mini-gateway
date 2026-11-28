@@ -1,30 +1,39 @@
 flowchart TB
   N_ENGINE["Engine"]:::planned
   N_WORK["Work vocabulary"]:::built
+  N_OBS["Observability"]:::planned
   subgraph SCOPE["Coalescer"]
-    F_JOIN["Join rule"]:::planned
-    F_TABLE["Flight table"]:::planned
-    F_WAITERS["Waiter set"]:::planned
-    F_DEADLINE["Flight deadline"]:::planned
-    F_REPLY["Shared reply buffer"]:::planned
-    F_NEG["Do-not-share list"]:::planned
-    F_SNAP["Coalescer snapshot"]:::planned
+    F_JOIN["Join rule"]:::built
+    F_TABLE["Flight table"]:::built
+    F_WAITERS["Waiter set"]:::built
+    F_DEADLINE["Flight deadline"]:::built
+    F_REPLY["Shared reply accounting"]:::built
+    F_NEG["Do-not-share list"]:::built
+    F_NOTICE["Notice queue"]:::built
+    F_SNAP["Coalescer snapshot"]:::built
   end
-  N_ENGINE -.->|1| F_JOIN
-  N_ENGINE -.->|2| F_WAITERS
-  N_ENGINE -.->|3| F_REPLY
-  N_ENGINE -.->|4| F_SNAP
-  F_JOIN -.->|5| F_TABLE
-  F_JOIN -.->|6| F_NEG
-  F_TABLE -.->|7| F_WAITERS
-  F_WAITERS -.->|8| F_DEADLINE
-  F_REPLY -.->|9| F_WAITERS
-  F_REPLY -.->|10| F_NEG
-  F_JOIN -.->|11| N_WORK
+  N_ENGINE -->|1| F_JOIN
+  N_ENGINE -->|2| F_WAITERS
+  N_ENGINE -->|3| F_REPLY
+  N_ENGINE -->|4| F_SNAP
+  N_ENGINE -->|5| F_TABLE
+  N_ENGINE -->|6| F_DEADLINE
+  N_ENGINE -->|7| F_NOTICE
+  F_JOIN -->|8| F_TABLE
+  F_JOIN -->|9| F_NEG
+  F_JOIN -->|10| F_WAITERS
+  F_TABLE -->|11| F_DEADLINE
+  F_WAITERS -->|12| F_TABLE
+  F_DEADLINE -->|13| F_WAITERS
+  F_REPLY -->|14| F_WAITERS
+  F_REPLY -->|15| F_NEG
+  F_WAITERS -->|16| F_NOTICE
+  F_TABLE -->|17| F_NOTICE
+  F_JOIN -->|18| N_WORK
+  F_SNAP -->|19| N_OBS
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned
   end
   classDef built fill:#d9ecd9,stroke:#2e6b34,stroke-width:2px,color:#1c1e21
   classDef planned stroke-width:1px,stroke-dasharray:6 4
-  style SCOPE stroke-dasharray:6 4

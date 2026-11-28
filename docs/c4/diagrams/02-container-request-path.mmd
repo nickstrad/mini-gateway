@@ -8,7 +8,7 @@ flowchart TB
     C_ENGINE["Engine<br/>internal/proxy"]:::planned
     C_PGWIRE["Wire layer<br/>internal/pgwire"]:::planned
     C_ADM["Admission<br/>internal/admission"]:::planned
-    C_COAL["Coalescer<br/>internal/coalesce"]:::planned
+    C_COAL["Coalescer<br/>internal/coalesce"]:::built
     C_POOL["Pool<br/>internal/pool"]:::built
     C_RETRY["Retry policy<br/>internal/retry"]:::built
     C_OBS["Observability<br/>internal/obs"]:::planned
@@ -19,7 +19,7 @@ flowchart TB
   C_SHELL -->|3| C_ENGINE
   C_ENGINE -->|4| C_PGWIRE
   C_ENGINE -.->|5| C_ADM
-  C_ENGINE -.->|6| C_COAL
+  C_ENGINE -->|6| C_COAL
   C_ENGINE -->|7| C_POOL
   C_ENGINE -->|8| C_RETRY
   C_SHELL -->|9| PG
@@ -31,6 +31,7 @@ flowchart TB
   C_ADM -->|15| C_OBS
   C_POOL -->|16| C_OBS
   C_RETRY -->|17| C_OBS
+  C_COAL -->|18| C_OBS
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned
