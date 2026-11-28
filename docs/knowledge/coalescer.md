@@ -62,11 +62,33 @@ coalesce stage or the coalescer scenarios. Full record: `agent_work/chunks/c11-c
   flight past its deadline answers `53M01` if never sent, else the statement-deadline row; a
   waiter's own cancel is `57014` (`ErrRowCancelledQueued`); caps answer `53M04`.
 
+## Joined with the fair dispatcher (chunk 9) and the retry policy (chunk 12)
+
+- A flight's owner is one request in one tenant queue and holds one lease; followers take neither,
+  so followers of other tenants (key scope `all-tenants`) ride without spending their tenant's
+  share and without making their tenant active.
+- A request carries the tenant it was queued under (`request.tenant`); push, checkout and the
+  lease start use it, and every lease end uses `dbConn.lastTenant` (the tenant the connection was
+  lent to), never the client's tenant. An owner handoff to a waiter of another tenant therefore
+  keeps the queue place and the lease on the first owner's tenant until they end. Using
+  `c.tenant` at a lease end reports an end without a start to the fair dispatcher.
+- A lost flight statement is offered to the retry policy before the shared error. A granted
+  retry keeps the flight: the owner re-enters its tenant queue (`rerun`), the waiters stay on the
+  flight and get the retry's outcome once. The table keeps the flight `running`, so in strict mode
+  a read arriving meanwhile is held behind it. Refused (budget, breaker, deadline, second loss,
+  policy off): every waiter gets the owner's row once. The budget sees one first attempt per
+  flight (followers are never forwarded).
+- A retried owner waiting in the queue ends at the earlier of the flight deadline and the
+  request deadline (`retryClamp` on the queue timer); both paths answer the waiters through
+  `shed` → `coalRefused`. The breaker re-check at every `dispatch` refuses it through
+  `refuseWaiting` → `coalRefused` (`53M03` to every waiter).
+
 ## Scenarios
 
-- `test/e2e/c11_coalesce.go`: `CoalesceScenarios()` (both join modes), each with replay, and an
-  ablation that must fail the check (coalescer off, or a core plant). Every scenario runs with
-  the admission queues (timeout rule sized for the 1,000-read ablation arm: target 15 s,
+- `test/e2e/c11_coalesce.go`: `CoalesceScenarios()` (both join modes; the join scenarios of
+  `c11_join.go` appended), each with replay, and an ablation that must fail the check (coalescer
+  off, a core plant, or the retry policy off). Every scenario, `coalesce-results-*` included,
+  runs with the admission queues (timeout rule sized for the 1,000-read ablation arm: target 15 s,
   interval 20 s; the binary's 5 ms target sheds these bursts) and the pool core, as the binary
   does; `coalAdmissionOK` holds core sheds = engine sheds. `TestScenarioCoalesce` caps seeds at
   10 (3 for the 1,000-client hot key) unless `MG_C11_FULL_SWEEP=1`; the 1,000-client hot key
@@ -80,3 +102,7 @@ coalesce stage or the coalescer scenarios. Full record: `agent_work/chunks/c11-c
   `pg_stat_statements.calls` deltas for the exact normalised text (cancelled statements are not
   counted). The tier R harness sets `coalesce.mode: off` for gateways with `lease.reset:
   on-switch` (the all-tenants key is refused with it).
+- `Spec.Fairness` sets tenant weights and `Spec.Relay` puts chunk 12's dooming relay in front of
+  the fake (set `Path` to nil: both use `BeforeProxy`). Doom every idle connection (`DoomAllAt`)
+  a little before a burst and the first write of the burst is refused with zero bytes by
+  construction (connections idle under `pool.check_after_idle` are lent without a check).
