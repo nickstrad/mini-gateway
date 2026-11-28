@@ -7,6 +7,7 @@ import (
 
 	"github.com/nickstrad/mini-gateway/internal/admission"
 	"github.com/nickstrad/mini-gateway/internal/coalesce"
+	"github.com/nickstrad/mini-gateway/internal/pgwire"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
 	"github.com/nickstrad/mini-gateway/internal/proxy/proxysim"
 )
@@ -14,6 +15,7 @@ import (
 const (
 	joinStatement   = 400 * time.Millisecond
 	commitAndFlight = 2
+	retryForwards   = 1
 )
 
 var joinModes = []coalesce.JoinMode{coalesce.JoinStrict, coalesce.JoinRelaxed}
@@ -329,6 +331,10 @@ func TestJoinALeaderRefusedWithNothingReachedIsRetriedOnceForTheWholeFlight(t *t
 		h.finishReset(again)
 		s, _ = h.agree()
 		cs := h.e.CoalesceSnapshot()
+		if forwards := s.StagePassed[proxy.StageForward]; h.retrySnap().Attempts != forwards-retryForwards {
+			t.Fatalf("%v: the budget saw %d first attempts for %d forwards, %d of them retries: followers are not attempts", join,
+				h.retrySnap().Attempts, forwards, retryForwards)
+		}
 		if s.RetryEnds[proxy.RetryEndCompleted] != 1 || s.RetryPending.Value != 0 || s.CoalesceReplies != 2 || s.CoalesceErrors != 0 || cs.Sent-sent != 1 {
 			t.Fatalf("%v: ends %v pending %d replies %d errors %d sent %d", join, s.RetryEnds, s.RetryPending.Value, s.CoalesceReplies, s.CoalesceErrors, cs.Sent-sent)
 		}
@@ -505,5 +511,79 @@ func TestJoinShutdownWithARetryPendingAndFlightsHeldSendsNothingNewToTheDatabase
 		if err := h.e.Quiesce(); err != nil {
 			t.Fatalf("%v: %v", join, err)
 		}
+	}
+}
+
+func fixedSetFlightRig(t *testing.T) *rig {
+	t.Helper()
+	w, err := proxysim.BuildWorld(proxysim.WorldConfig{Seed: 1, Tenants: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := w.Proxy.Engine.Config()
+	c.Connections = 1
+	c.QueueCap = 4
+	c.ReplyBufferCap = proxy.MinReplyBufferCap
+	c.Admission = quietRule
+	c.Coalesce = coalesce.Config{Mode: coalesce.ModeAuto, Join: coalesce.JoinRelaxed}
+	e, err := proxy.New(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &rig{t: t, e: e, now: 1}
+	for _, a := range e.Start(r.now, nil) {
+		if a.Kind == proxy.ActDBOpen {
+			r.db = a.Conn
+		}
+	}
+	r.ack(r.ev(proxy.EvDBOpened, r.db, nil, 0))
+	r.ev(proxy.EvDBData, r.db, pgwire.AppendReadyForQuery(pgwire.AppendAuthentication(nil, 0, nil), 'I'), 0)
+	return r
+}
+
+func (r *rig) clientOf(id proxy.ConnID, tenant int) {
+	r.t.Helper()
+	r.ev(proxy.EvClientAccepted, id, nil, 0)
+	b := pgwire.AppendStartupMessage(nil, []pgwire.Param{{Name: "user", Value: proxysim.TenantName(tenant)}, {Name: "database", Value: proxysim.Database}})
+	r.ack(r.ev(proxy.EvClientData, id, b[:proxy.FirstClientRead], 0))
+	r.ack(r.ev(proxy.EvClientData, id, b[proxy.FirstClientRead:], 0))
+}
+
+func TestJoinARunningOwnerHandoffAcrossTenantsOnTheFixedSetEndsTheLeaseOnTheTenantItWasLentTo(t *testing.T) {
+	r := fixedSetFlightRig(t)
+	r.clientOf(11, 0)
+	r.clientOf(12, 1)
+	r.ack(r.query(11, sharedRead))
+	r.query(12, sharedRead)
+	r.ev(proxy.EvClientClosed, 11, nil, 0)
+	if lent, ok := r.e.LentTo(r.db); !ok || lent != 12 {
+		t.Fatalf("lent to %d, want the waiter of tenant 1", lent)
+	}
+	a := r.ack(r.ev(proxy.EvDBData, r.db, readReply("x"), 0))
+	if !bytes.Equal(written(a, proxy.ActClientWrite, 12), readReply("x")) {
+		t.Fatalf("the waiter that took over got %q", written(a, proxy.ActClientWrite, 12))
+	}
+	r.ack(r.ev(proxy.EvDBData, r.db, complete("DISCARD ALL", 'I'), 0))
+	s, as := r.e.Snapshot(), r.e.AdmissionSnapshot()
+	if as.Fair.InFlight.Value != 0 || as.Fair.LeaseStarts != s.LeasesStarted || as.Fair.LeaseEnds != s.LeasesEnded || s.CoalesceHandoffs != 1 {
+		t.Fatalf("fixed set: fair in flight %d, starts %d/%d, ends %d/%d, handoffs %d", as.Fair.InFlight.Value, as.Fair.LeaseStarts,
+			s.LeasesStarted, as.Fair.LeaseEnds, s.LeasesEnded, s.CoalesceHandoffs)
+	}
+	if err := as.Check(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestJoinShutdownEmptiesTheFlightTableEvenOfAFlightNoClientHolds(t *testing.T) {
+	r := coalRig(t, coalesce.JoinStrict)
+	if !r.e.StrandFlightForTest(999) {
+		t.Fatal("premise: no flight started")
+	}
+	if err := r.e.Quiesce(); err == nil {
+		t.Fatal("premise: a stranded flight is not quiet")
+	}
+	r.e.Shutdown(r.now, nil)
+	if err := r.e.Quiesce(); err != nil {
+		t.Fatalf("after shutdown: %v", err)
 	}
 }

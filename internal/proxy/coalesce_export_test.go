@@ -1,5 +1,10 @@
 package proxy
 
+import (
+	"github.com/nickstrad/mini-gateway/internal/coalesce"
+	"github.com/nickstrad/mini-gateway/internal/work"
+)
+
 func (e *Engine) DropFollowerEntryForTest() bool {
 	for _, c := range e.clientList {
 		if c.phase == cpCoalesced && e.followers[c.wid] == c {
@@ -26,4 +31,12 @@ func (e *Engine) DisarmCoalesceTimerForTest() bool {
 	}
 	e.t.cancel(&e.coalT)
 	return true
+}
+
+func (e *Engine) StrandFlightForTest(id RequestID) bool {
+	if e.coal == nil {
+		return false
+	}
+	u := work.Unit{Shareable: true, HasKey: true, Key: work.ShareKey{Text: []byte("stranded")}}
+	return e.coal.Admit(e.now, id, &u).Verdict == coalesce.VerdictLead
 }
