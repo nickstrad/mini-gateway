@@ -1,0 +1,350 @@
+{
+  "base_commit": "27970a5b8f69248ee4131e6d9bb7b2bc17376b0f",
+  "default_command": "PATH=/usr/local/go/bin:$PATH go test -count=1 ./agent_work/adversarial/c09-fairness/...",
+  "checks": [
+    {
+      "test": "TestAdv_1_LimitShrinksBelowOutstanding",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_1_LimitShrinksBelowOutstanding\n    core_test.go:67: seed=909271\n--- PASS: TestAdv_1_LimitShrinksBelowOutstanding (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_1_MaximumWeightedArithmetic",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_1_MaximumWeightedArithmetic\n    core_test.go:84: seed=909271\n--- PASS: TestAdv_1_MaximumWeightedArithmetic (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_1_WeightedLastSlot",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_1_WeightedLastSlot\n    core_test.go:55: seed=909271\n--- PASS: TestAdv_1_WeightedLastSlot (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_2_AccountAtLimitChange",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_2_AccountAtLimitChange\n    core_test.go:121: seed=909271\n--- PASS: TestAdv_2_AccountAtLimitChange (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_2_EngineEndsMixedTransactions",
+      "result": "held",
+      "elapsed_seconds": 0.01,
+      "output": "=== RUN   TestAdv_2_EngineEndsMixedTransactions\n    scenarios_test.go:214: seed=909271\n--- PASS: TestAdv_2_EngineEndsMixedTransactions (0.01s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_2_ShuffledLeaseEnds",
+      "result": "held",
+      "elapsed_seconds": 0.11,
+      "output": "=== RUN   TestAdv_2_ShuffledLeaseEnds\n    core_test.go:107: seed=909271\n--- PASS: TestAdv_2_ShuffledLeaseEnds (0.11s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_2_StatsOverflowConserves",
+      "result": "held",
+      "elapsed_seconds": 1.4,
+      "output": "=== RUN   TestAdv_2_StatsOverflowConserves\n    core_test.go:93: seed=909271\n--- PASS: TestAdv_2_StatsOverflowConserves (1.40s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_3_CancelChangesEligibility",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_3_CancelChangesEligibility\n    core_test.go:154: seed=909271\n--- PASS: TestAdv_3_CancelChangesEligibility (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_3_OnlyOverShareWaitingBelowLast",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_3_OnlyOverShareWaitingBelowLast\n    core_test.go:143: seed=909271\n--- PASS: TestAdv_3_OnlyOverShareWaitingBelowLast (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_3_RoundedRemainderIdles",
+      "result": "BROKEN",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_3_RoundedRemainderIdles\n    core_test.go:133: seed=909271\n    core_test.go:139: inflight=2 limit=3, two waiting, one idle below limit (original claim)\n--- FAIL: TestAdv_3_RoundedRemainderIdles (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_4_CancelHeadPreservesTurn",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_4_CancelHeadPreservesTurn\n    core_test.go:189: seed=909271\n--- PASS: TestAdv_4_CancelHeadPreservesTurn (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_4_ContinuousBetterGroup",
+      "result": "BROKEN",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_4_ContinuousBetterGroup\n    core_test.go:201: seed=909271\n    core_test.go:215: a still waiting after 12 choices with 2 active tenants (original unqualified claim)\n--- FAIL: TestAdv_4_ContinuousBetterGroup (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_4_MoreTenantsThanSlots",
+      "result": "held",
+      "elapsed_seconds": 0.02,
+      "output": "=== RUN   TestAdv_4_MoreTenantsThanSlots\n    core_test.go:166: seed=909271\n--- PASS: TestAdv_4_MoreTenantsThanSlots (0.02s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_5_QuietAtLeaseBoundary",
+      "result": "BROKEN",
+      "elapsed_seconds": 0.02,
+      "output": "=== RUN   TestAdv_5_QuietAtLeaseBoundary\n    scenarios_test.go:72: seed=909272\n    scenarios_test.go:74: seed=909272\n    scenarios_test.go:77: quiet latency=3.033408ms alone=1.484784ms exceeds 2x; quiet success retained\n--- FAIL: TestAdv_5_QuietAtLeaseBoundary (0.02s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_5_QuietEarlyInFlood",
+      "result": "BROKEN",
+      "elapsed_seconds": 0.02,
+      "output": "=== RUN   TestAdv_5_QuietEarlyInFlood\n    scenarios_test.go:72: seed=909273\n    scenarios_test.go:74: seed=909273\n    scenarios_test.go:77: quiet latency=38.898293ms alone=1.549816ms exceeds 2x; quiet success retained\n--- FAIL: TestAdv_5_QuietEarlyInFlood (0.02s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_5_ShortQuietDuringLongRead",
+      "result": "BROKEN",
+      "elapsed_seconds": 0.03,
+      "output": "=== RUN   TestAdv_5_ShortQuietDuringLongRead\n    scenarios_test.go:72: seed=909271\n    scenarios_test.go:74: seed=909271\n    scenarios_test.go:77: quiet latency=31.942934ms alone=1.490498ms exceeds 2x; quiet success retained\n--- FAIL: TestAdv_5_ShortQuietDuringLongRead (0.03s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_6_OddPoolRounding",
+      "result": "BROKEN",
+      "elapsed_seconds": 20.2,
+      "output": "=== RUN   TestAdv_6_OddPoolRounding\n    real_test.go:22: seed=909271 (launch order fixed; tier R uses wall-clock thresholds)\n    real_test.go:107: quiet success=29/30, need >99%\n--- FAIL: TestAdv_6_OddPoolRounding (20.20s)\n",
+      "source_execution": "long-final"
+    },
+    {
+      "test": "TestAdv_6_ShortQuietLongFlood",
+      "result": "BROKEN",
+      "elapsed_seconds": 15.76,
+      "output": "=== RUN   TestAdv_6_ShortQuietLongFlood\n    real_test.go:22: seed=909271 (launch order fixed; tier R uses wall-clock thresholds)\n    real_test.go:107: quiet success=29/30, need >99%\n    real_test.go:120: quiet p99=140.272966ms alone=41.873259ms exceeds 2x\n--- FAIL: TestAdv_6_ShortQuietLongFlood (15.76s)\n",
+      "source_execution": "long-final"
+    },
+    {
+      "test": "TestAdv_6_VeryLongFloodLeases",
+      "result": "BROKEN",
+      "elapsed_seconds": 22.17,
+      "output": "=== RUN   TestAdv_6_VeryLongFloodLeases\n    real_test.go:22: seed=909271 (launch order fixed; tier R uses wall-clock thresholds)\n    real_test.go:107: quiet success=25/30, need >99%\n--- FAIL: TestAdv_6_VeryLongFloodLeases (22.17s)\n",
+      "source_execution": "long-final"
+    },
+    {
+      "test": "TestAdv_7_QuietArrivalAtSweep",
+      "result": "held",
+      "elapsed_seconds": 14.39,
+      "output": "=== RUN   TestAdv_7_QuietArrivalAtSweep\n    scenarios_test.go:90: seed=909271\n    scenarios_test.go:92: seed=909271\n--- PASS: TestAdv_7_QuietArrivalAtSweep (14.39s)\n",
+      "source_execution": "tenant-final"
+    },
+    {
+      "test": "TestAdv_7_SynchronizedQuietTenants",
+      "result": "held",
+      "elapsed_seconds": 5.93,
+      "output": "=== RUN   TestAdv_7_SynchronizedQuietTenants\n    scenarios_test.go:90: seed=909271\n    scenarios_test.go:92: seed=909271\n--- PASS: TestAdv_7_SynchronizedQuietTenants (5.93s)\n",
+      "source_execution": "tenant-final"
+    },
+    {
+      "test": "TestAdv_7_TotalQueuePressure",
+      "result": "BROKEN",
+      "elapsed_seconds": 42.94,
+      "output": "=== RUN   TestAdv_7_TotalQueuePressure\n    scenarios_test.go:90: seed=909271\n    scenarios_test.go:92: seed=909271\n    scenarios_test.go:95: tenant=1 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=2 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=4 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=5 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=10 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=19 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=32 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=34 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=35 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=37 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=39 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=44 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=51 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=56 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=58 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=72 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=79 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=80 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=82 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=90 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=93 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=95 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=100 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=102 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=111 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=115 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n    scenarios_test.go:95: tenant=117 alone success, mixed=startup[] 0[E:ERROR:53M01 ZI]\n--- FAIL: TestAdv_7_TotalQueuePressure (42.94s)\n",
+      "source_execution": "tenant-final"
+    },
+    {
+      "test": "TestAdv_8_HeldPeerChangesShare",
+      "result": "BROKEN",
+      "elapsed_seconds": 0.01,
+      "output": "=== RUN   TestAdv_8_HeldPeerChangesShare\n    core_test.go:219: seed=909271\n    core_test.go:237: held leases=6 current share=4: existing transactions exceed stated bound\n--- FAIL: TestAdv_8_HeldPeerChangesShare (0.01s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_8_LimitReductionWithHeldLeases",
+      "result": "BROKEN",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_8_LimitReductionWithHeldLeases\n    core_test.go:219: seed=909271\n    core_test.go:237: held leases=6 current share=2: existing transactions exceed stated bound\n--- FAIL: TestAdv_8_LimitReductionWithHeldLeases (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_8_NewTenantShrinksShare",
+      "result": "BROKEN",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_8_NewTenantShrinksShare\n    core_test.go:219: seed=909271\n    core_test.go:237: held leases=6 current share=4: existing transactions exceed stated bound\n--- FAIL: TestAdv_8_NewTenantShrinksShare (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_9_SingleQueueBurst",
+      "result": "held",
+      "elapsed_seconds": 0.08,
+      "output": "=== RUN   TestAdv_9_SingleQueueBurst\n    scenarios_test.go:135: seed=909271\n    scenarios_test.go:137: seed=909271\n    scenarios_test.go:140: seed=909271\n--- PASS: TestAdv_9_SingleQueueBurst (0.08s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_9_SingleQueueHeldTransactions",
+      "result": "held",
+      "elapsed_seconds": 0.09,
+      "output": "=== RUN   TestAdv_9_SingleQueueHeldTransactions\n    scenarios_test.go:152: seed=909271\n    scenarios_test.go:154: seed=909271\n    scenarios_test.go:157: seed=909271\n--- PASS: TestAdv_9_SingleQueueHeldTransactions (0.09s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_9_SingleQueueLateQuiet",
+      "result": "held",
+      "elapsed_seconds": 0.13,
+      "output": "=== RUN   TestAdv_9_SingleQueueLateQuiet\n    scenarios_test.go:135: seed=909271\n    scenarios_test.go:137: seed=909271\n    scenarios_test.go:140: seed=909271\n--- PASS: TestAdv_9_SingleQueueLateQuiet (0.13s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_10_ChurnBeyondStatsCap",
+      "result": "held",
+      "elapsed_seconds": 0.93,
+      "output": "=== RUN   TestAdv_10_ChurnBeyondStatsCap\n    core_test.go:245: seed=909271\n--- PASS: TestAdv_10_ChurnBeyondStatsCap (0.93s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_10_FullLimitRepeatedPicks",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_10_FullLimitRepeatedPicks\n    core_test.go:257: seed=909271\n--- PASS: TestAdv_10_FullLimitRepeatedPicks (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_10_ReuseAfterClose",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_10_ReuseAfterClose\n    core_test.go:272: seed=909271\n--- PASS: TestAdv_10_ReuseAfterClose (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_11_DuplicateEscapedNames",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_11_DuplicateEscapedNames\n    core_test.go:297: seed=909271\n--- PASS: TestAdv_11_DuplicateEscapedNames (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_11_IntegerOverflowAtLoad",
+      "result": "held",
+      "elapsed_seconds": 0.01,
+      "output": "=== RUN   TestAdv_11_IntegerOverflowAtLoad\n    core_test.go:294: seed=909271\n--- PASS: TestAdv_11_IntegerOverflowAtLoad (0.01s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_11_UnknownShareKey",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_11_UnknownShareKey\n    core_test.go:299: seed=909271\n--- PASS: TestAdv_11_UnknownShareKey (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_12_BreakerRefusalWhileHeld",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_12_BreakerRefusalWhileHeld\n    core_test.go:337: seed=909271\n--- PASS: TestAdv_12_BreakerRefusalWhileHeld (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_12_ExpiryWhileHeld",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_12_ExpiryWhileHeld\n    core_test.go:323: seed=909271\n--- PASS: TestAdv_12_ExpiryWhileHeld (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_12_UnpopAfterHeldSelection",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_12_UnpopAfterHeldSelection\n    core_test.go:302: seed=909271\n--- PASS: TestAdv_12_UnpopAfterHeldSelection (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_13_CorruptionAfterBalancedHistory",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_13_CorruptionAfterBalancedHistory\n    core_test.go:392: seed=909271\n    core_test.go:396: seed=909271\n--- PASS: TestAdv_13_CorruptionAfterBalancedHistory (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_13_ExtraFairLeaseDetected",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_13_ExtraFairLeaseDetected\n    core_test.go:389: seed=909271\n--- PASS: TestAdv_13_ExtraFairLeaseDetected (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_13_MultipleGhostTenantsDetected",
+      "result": "held",
+      "elapsed_seconds": 0,
+      "output": "=== RUN   TestAdv_13_MultipleGhostTenantsDetected\n    core_test.go:390: seed=909271\n--- PASS: TestAdv_13_MultipleGhostTenantsDetected (0.00s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_13_RemovingInvariantMakesProbeFail",
+      "result": "held",
+      "elapsed_seconds": 5.51,
+      "output": "=== RUN   TestAdv_13_RemovingInvariantMakesProbeFail\n--- PASS: TestAdv_13_RemovingInvariantMakesProbeFail (5.51s)\n",
+      "source_execution": "long-final"
+    },
+    {
+      "test": "TestAdv_14_ByteFragmentReplay",
+      "result": "held",
+      "elapsed_seconds": 6.95,
+      "output": "=== RUN   TestAdv_14_ByteFragmentReplay\n    scenarios_test.go:129: seed=909271\n    scenarios_test.go:130: seed=909271\n--- PASS: TestAdv_14_ByteFragmentReplay (6.95s)\n",
+      "source_execution": "csv-final"
+    },
+    {
+      "test": "TestAdv_14_CancellationReplay",
+      "result": "held",
+      "elapsed_seconds": 6.72,
+      "output": "=== RUN   TestAdv_14_CancellationReplay\n    scenarios_test.go:129: seed=909271\n    scenarios_test.go:130: seed=909271\n--- PASS: TestAdv_14_CancellationReplay (6.72s)\n",
+      "source_execution": "csv-final"
+    },
+    {
+      "test": "TestAdv_14_FreshProcessesReplay",
+      "result": "held",
+      "elapsed_seconds": 0.37,
+      "output": "=== RUN   TestAdv_14_FreshProcessesReplay\n    process_test.go:35: seed=909271\n--- PASS: TestAdv_14_FreshProcessesReplay (0.37s)\n",
+      "source_execution": "csv-final"
+    },
+    {
+      "test": "TestAdv_14_SeedCampaign",
+      "result": "held",
+      "elapsed_seconds": 3.84,
+      "output": "=== RUN   TestAdv_14_SeedCampaign\n    scenarios_test.go:180: seed=909271\n    scenarios_test.go:181: seed=909271\n    scenarios_test.go:180: seed=909272\n    scenarios_test.go:181: seed=909272\n    scenarios_test.go:180: seed=909273\n    scenarios_test.go:181: seed=909273\n    scenarios_test.go:180: seed=909274\n    scenarios_test.go:181: seed=909274\n    scenarios_test.go:180: seed=909275\n    scenarios_test.go:181: seed=909275\n    scenarios_test.go:180: seed=909276\n    scenarios_test.go:181: seed=909276\n    scenarios_test.go:180: seed=909277\n    scenarios_test.go:181: seed=909277\n    scenarios_test.go:180: seed=909278\n    scenarios_test.go:181: seed=909278\n    scenarios_test.go:180: seed=909279\n    scenarios_test.go:181: seed=909279\n    scenarios_test.go:180: seed=909280\n    scenarios_test.go:181: seed=909280\n    scenarios_test.go:180: seed=909281\n    scenarios_test.go:181: seed=909281\n    scenarios_test.go:180: seed=909282\n    scenarios_test.go:181: seed=909282\n    scenarios_test.go:180: seed=909283\n    scenarios_test.go:181: seed=909283\n    scenarios_test.go:180: seed=909284\n    scenarios_test.go:181: seed=909284\n    scenarios_test.go:180: seed=909285\n    scenarios_test.go:181: seed=909285\n    scenarios_test.go:180: seed=909286\n    scenarios_test.go:181: seed=909286\n    scenarios_test.go:180: seed=909287\n    scenarios_test.go:181: seed=909287\n    scenarios_test.go:180: seed=909288\n    scenarios_test.go:181: seed=909288\n    scenarios_test.go:180: seed=909289\n    scenarios_test.go:181: seed=909289\n    scenarios_test.go:180: seed=909290\n    scenarios_test.go:181: seed=909290\n    scenarios_test.go:180: seed=909291\n    scenarios_test.go:181: seed=909291\n    scenarios_test.go:180: seed=909292\n    scenarios_test.go:181: seed=909292\n    scenarios_test.go:180: seed=909293\n    scenarios_test.go:181: seed=909293\n    scenarios_test.go:180: seed=909294\n    scenarios_test.go:181: seed=909294\n    scenarios_test.go:180: seed=909295\n    scenarios_test.go:181: seed=909295\n    scenarios_test.go:180: seed=909296\n    scenarios_test.go:181: seed=909296\n    scenarios_test.go:180: seed=909297\n    scenarios_test.go:181: seed=909297\n    scenarios_test.go:180: seed=909298\n    scenarios_test.go:181: seed=909298\n    scenarios_test.go:180: seed=909299\n    scenarios_test.go:181: seed=909299\n    scenarios_test.go:180: seed=909300\n    scenarios_test.go:181: seed=909300\n    scenarios_test.go:180: seed=909301\n    scenarios_test.go:181: seed=909301\n    scenarios_test.go:180: seed=909302\n    scenarios_test.go:181: seed=909302\n--- PASS: TestAdv_14_SeedCampaign (3.84s)\n",
+      "source_execution": "csv-final"
+    },
+    {
+      "test": "TestAdv_14_TiedArrivalsAndFlush",
+      "result": "held",
+      "elapsed_seconds": 6.99,
+      "output": "=== RUN   TestAdv_14_TiedArrivalsAndFlush\n    scenarios_test.go:129: seed=909271\n    scenarios_test.go:130: seed=909271\n--- PASS: TestAdv_14_TiedArrivalsAndFlush (6.99s)\n",
+      "source_execution": "csv-final"
+    },
+    {
+      "test": "TestAdv_15_EveryByteAndTailLength",
+      "result": "held",
+      "elapsed_seconds": 2.09,
+      "output": "=== RUN   TestAdv_15_EveryByteAndTailLength\n    fuzz_contract_test.go:45: seed=909271\n--- PASS: TestAdv_15_EveryByteAndTailLength (2.09s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_15_HugeSuffixCannotChangePrefix",
+      "result": "held",
+      "elapsed_seconds": 1.75,
+      "output": "=== RUN   TestAdv_15_HugeSuffixCannotChangePrefix\n    fuzz_contract_test.go:50: seed=909271\n--- PASS: TestAdv_15_HugeSuffixCannotChangePrefix (1.75s)\n",
+      "source_execution": "default-final"
+    },
+    {
+      "test": "TestAdv_15_IndependentSeedsFindTurnPlant",
+      "result": "held",
+      "elapsed_seconds": 1.45,
+      "output": "=== RUN   TestAdv_15_IndependentSeedsFindTurnPlant\n    fuzz_contract_test.go:55: seed=909271\n--- PASS: TestAdv_15_IndependentSeedsFindTurnPlant (1.45s)\n",
+      "source_execution": "default-final"
+    }
+  ],
+  "default_elapsed_seconds": 8.291
+}

@@ -72,6 +72,11 @@ func engineJobs(dir string) []engineRun {
 			return r.Final, nil
 		})
 	}
+	if !testing.Short() {
+		for _, j := range e2e.RetryBaselineJobs(dir) {
+			jobs = append(jobs, j)
+		}
+	}
 	return jobs
 }
 
@@ -94,7 +99,8 @@ func shortSkipped() []string {
 			out = append(out, sc.Spec.Name)
 		}
 	}
-	return out
+	out = append(out, e2e.RetryScenarioNames()...)
+	return append(out, e2e.FairScenarios()...)
 }
 
 func inParallel[T any](n int, work func(int) T) []T {
@@ -137,5 +143,10 @@ func engineRuns(dir string) error {
 	}
 	adm, err := e2e.AdmissionBaseline(dir, !testing.Short())
 	baselineFinals = append(baselineFinals, adm...)
+	if err != nil {
+		return err
+	}
+	fair, err := e2e.FairBaseline(dir, !testing.Short())
+	baselineFinals = append(baselineFinals, fair...)
 	return err
 }

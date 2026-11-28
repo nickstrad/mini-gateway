@@ -34,6 +34,7 @@ One rule holds for every deadline: time passes before the event. When an event a
 | Quiet tenant queue removal (16 intervals empty) | admission | `16 x queue.interval` | 1.6s | The tenant queue and its rule state are removed |
 | Coalesced flight, from the request that starts it (independent of every waiter) | coalescer, flight table (swept at the deadline) | `timeouts.statement` | 30s | Every waiter gets one shared error: ERROR 53M01 if the flight never reached the database, else the statement's 08006 or 08007 (the connection goes to the dirty-connection table); a reply at the deadline is late |
 | No-share list: a key whose reply passed coalesce.max_reply_bytes is not shared again for this long | coalescer, no-share list (swept at the expiry) | `coalesce.no_share_for` | 10s | The key is shared again |
+| A request's deadline for a retry by the proxy (from the request's arrival) | engine, retry at the loss of a statement | `timeouts.statement` | 30s | No retry at or after it; a retry's queue wait and statement deadline end at it (ERROR 53M01, or 08006/08007) |
 
 ## Nesting checked at config load
 

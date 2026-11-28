@@ -1,0 +1,397 @@
+{
+  "builder": "9f0378ff69640a9ca0042c85ea6f2e833771fd60",
+  "seed": 271828,
+  "held": 33,
+  "broken": 3,
+  "campaigns": [
+    {
+      "file": "default.jsonl",
+      "result": "fail",
+      "seconds": 146.129
+    },
+    {
+      "file": "long.jsonl",
+      "result": "fail",
+      "seconds": 1593.868
+    },
+    {
+      "file": "retry.jsonl",
+      "result": "pass",
+      "seconds": 192.058
+    }
+  ],
+  "superseded_attempts": [
+    {
+      "claim": 8,
+      "test": "TestAdv_8_RepeatPolicies",
+      "result": "BROKEN",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 511.33,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_8_RepeatPolicies$'",
+      "output": "=== RUN   TestAdv_8_RepeatPolicies\n    adv_test.go:254: seed=271828\n    adv_test.go:256: harness/infrastructure failure: exit status 1\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (37.33s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (59.90s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (31.54s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (31.64s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (20.89s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (20.04s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (17.42s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (14.37s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (21.22s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (16.27s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (17.53s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (19.01s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (18.67s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (15.98s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (19.66s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (21.19s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (32.45s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (27.79s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45\n            c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18\n        --- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (19.64s)\n        === RUN   TestTierRPoolSessionStateUnderEachReleasePolicy\n            c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0\n            c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0\n        panic: test timed out after 8m0s\n        \trunning tests:\n        \t\tTestTierRPoolSessionStateUnderEachReleasePolicy (17s)\n        \n        goroutine 292 [running]:\n        testing.(*M).startAlarm.func1()\n        \t/usr/local/go/src/testing/testing.go:2802 +0x354\n        created by time.goFunc\n        \t/usr/local/go/src/time/sleep.go:215 +0x2d\n        \n        goroutine 1 [chan receive]:\n        testing.(*T).Run(0x13a8bf86e008, {0xa89bbb?, 0x0?}, 0xaa1ce0)\n        \t/usr/local/go/src/testing/testing.go:2109 +0x4e5\n        testing.runTests.func1(0x13a8bf86e008)\n        \t/usr/local/go/src/testing/testing.go:2585 +0x3e\n        testing.tRunner(0x13a8bf86e008, 0x13a8bf0ffbc0)\n        \t/usr/local/go/src/testing/testing.go:2036 +0xea\n        testing.runTests({0xa7d5be, 0x21}, {0xa85d63, 0x2a}, 0x13a8bf0258a8, {0xefc280, 0x35, 0x35}, {0xc2ba9e38defd0b09, 0x748dc1ef68, ...})\n        \t/usr/local/go/src/testing/testing.go:2583 +0x505\n        testing.(*M).Run(0x13a8bf0ac820)\n        \t/usr/local/go/src/testing/testing.go:2443 +0x6ac\n        github.com/nickstrad/mini-gateway/test/e2e.TestMain(0x13a8bf0ac820)\n        \t/root/Software/mini-gateway-work/lease-port-adv/test/e2e/tierr_test.go:43 +0x156\n        main.main()\n        \t_testmain.go:154 +0xa5\n        \n        goroutine 274 [runnable]:\n        encoding/csv.(*Reader).readRecord(0x13a8bf394d50, {0x0, 0x0?, 0x0})\n        \t/usr/local/go/src/encoding/csv/reader.go:449 +0x14ee\n        encoding/csv.(*Reader).ReadAll(0x13a8bf394d50)\n        \t/usr/local/go/src/encoding/csv/reader.go:240 +0x58\n        github.com/nickstrad/mini-gateway/internal/obs/csvflush.readCSV({0x13a8bf4d8480, 0xc0}, {0x13a8bf8f05b0, 0xd, 0x4?})\n        \t/root/Software/mini-gateway-work/lease-port-adv/internal/obs/csvflush/reader.go:60 +0x277\n        github.com/nickstrad/mini-gateway/internal/obs/csvflush.Read({0x13a8bf4d9680, 0xb4})\n        \t/root/Software/mini-gateway-work/lease-port-adv/internal/obs/csvflush/reader.go:126 +0x405\n        github.com/nickstrad/mini-gateway/internal/obs/csvflush.RoundTrip({0x13a8bf4d9680?, 0x9?}, {0x13a8bf395840, 0x1, 0x0?})\n        \t/root/Software/mini-gateway-work/lease-port-adv/internal/obs/csvflush/reader.go:199 +0x3a\n        github.com/nickstrad/mini-gateway/test/e2e.stopAndRead(0x13a8bf86e6c8, 0x13a8bf1c2000, 0x13a8bf2d81e0, {0x13a8bf03a440, 0x20})\n        \t/root/Software/mini-gateway-work/lease-port-adv/test/e2e/tierr_test.go:97 +0x490\n        github.com/nickstrad/mini-gateway/test/e2e.policyRun(0x13a8bf86e6c8, 0x13a8bf1c2000, {0xa67566, 0x6}, {0xa66811, 0x2})\n        \t/root/Software/mini-gateway-work/lease-port-adv/test/e2e/c07_tierr_test.go:190 +0x97f\n        github.com/nickstrad/mini-gateway/test/e2e.TestTierRPoolSessionStateUnderEachReleasePolicy(0x13a8bf86e6c8)\n        \t/root/Software/mini-gateway-work/lease-port-adv/test/e2e/c07_tierr_test.go:202 +0x173\n        testing.tRunner(0x13a8bf86e6c8, 0xaa1ce0)\n        \t/usr/local/go/src/testing/testing.go:2036 +0xea\n        created by testing.(*T).Run in goroutine 1\n        \t/usr/local/go/src/testing/testing.go:2101 +0x4c5\n        FAIL\tgithub.com/nickstrad/mini-gateway/test/e2e\t500.739s\n        FAIL\n--- FAIL: TestAdv_8_RepeatPolicies (511.33s)\n"
+    }
+  ],
+  "attacks": [
+    {
+      "claim": 1,
+      "test": "TestAdv_1_CommitMixed",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 36.9,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_1_CommitMixed$'",
+      "output": "=== RUN   TestAdv_1_CommitMixed\n    adv_test.go:141: seed=271828\n--- PASS: TestAdv_1_CommitMixed (36.90s)\n"
+    },
+    {
+      "claim": 1,
+      "test": "TestAdv_1_RollbackMixed",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_1_RollbackMixed$'",
+      "output": "=== RUN   TestAdv_1_RollbackMixed\n    adv_test.go:141: seed=271828\n--- PASS: TestAdv_1_RollbackMixed (0.00s)\n"
+    },
+    {
+      "claim": 1,
+      "test": "TestAdv_1_SavepointMixed",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_1_SavepointMixed$'",
+      "output": "=== RUN   TestAdv_1_SavepointMixed\n    adv_test.go:141: seed=271828\n--- PASS: TestAdv_1_SavepointMixed (0.00s)\n"
+    },
+    {
+      "claim": 2,
+      "test": "TestAdv_2_AlwaysLargeSecret",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_2_AlwaysLargeSecret$'",
+      "output": "=== RUN   TestAdv_2_AlwaysLargeSecret\n    adv_test.go:141: seed=271828\n--- PASS: TestAdv_2_AlwaysLargeSecret (0.00s)\n"
+    },
+    {
+      "claim": 2,
+      "test": "TestAdv_2_OnSwitchImmediate",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_2_OnSwitchImmediate$'",
+      "output": "=== RUN   TestAdv_2_OnSwitchImmediate\n    adv_test.go:141: seed=271828\n--- PASS: TestAdv_2_OnSwitchImmediate (0.00s)\n"
+    },
+    {
+      "claim": 2,
+      "test": "TestAdv_2_OnSwitchReseed",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_2_OnSwitchReseed$'",
+      "output": "=== RUN   TestAdv_2_OnSwitchReseed\n    adv_test.go:141: seed=271828\n--- PASS: TestAdv_2_OnSwitchReseed (0.00s)\n"
+    },
+    {
+      "claim": 3,
+      "test": "TestAdv_3_EmptyIsNotMovement",
+      "result": "BROKEN",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_3_EmptyIsNotMovement$'",
+      "output": "=== RUN   TestAdv_3_EmptyIsNotMovement\n    adv_test.go:159: seed=271828\n    adv_test.go:168: invalid observation was counted as movement (exit status 1):\n        === RUN   TestProbeBlindError\n            tierr_test.go:887: column prepared falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column cursors falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column listens falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column adv_locks falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column session_gucs falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column temp_rels falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column role_changed falsely counted as exercised (1) by invalid observation\n        --- FAIL: TestProbeBlindError (0.00s)\n        === RUN   TestProbeBlindEmpty\n            tierr_test.go:887: column prepared falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column cursors falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column listens falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column adv_locks falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column session_gucs falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column temp_rels falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column role_changed falsely counted as exercised (1) by invalid observation\n        --- FAIL: TestProbeBlindEmpty (0.00s)\n        === RUN   TestProbeBlindTruncated\n            tierr_test.go:887: column adv_locks falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column session_gucs falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column temp_rels falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column role_changed falsely counted as exercised (1) by invalid observation\n        --- FAIL: TestProbeBlindTruncated (0.00s)\n        FAIL\n        FAIL\tgithub.com/nickstrad/mini-gateway/test/e2e\t0.025s\n        FAIL\n--- FAIL: TestAdv_3_EmptyIsNotMovement (0.00s)\n"
+    },
+    {
+      "claim": 3,
+      "test": "TestAdv_3_ErrorIsNotMovement",
+      "result": "BROKEN",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 17.17,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_3_ErrorIsNotMovement$'",
+      "output": "=== RUN   TestAdv_3_ErrorIsNotMovement\n    adv_test.go:159: seed=271828\n    adv_test.go:168: invalid observation was counted as movement (exit status 1):\n        === RUN   TestProbeBlindError\n            tierr_test.go:887: column prepared falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column cursors falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column listens falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column adv_locks falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column session_gucs falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column temp_rels falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column role_changed falsely counted as exercised (1) by invalid observation\n        --- FAIL: TestProbeBlindError (0.00s)\n        === RUN   TestProbeBlindEmpty\n            tierr_test.go:887: column prepared falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column cursors falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column listens falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column adv_locks falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column session_gucs falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column temp_rels falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column role_changed falsely counted as exercised (1) by invalid observation\n        --- FAIL: TestProbeBlindEmpty (0.00s)\n        === RUN   TestProbeBlindTruncated\n            tierr_test.go:887: column adv_locks falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column session_gucs falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column temp_rels falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column role_changed falsely counted as exercised (1) by invalid observation\n        --- FAIL: TestProbeBlindTruncated (0.00s)\n        FAIL\n        FAIL\tgithub.com/nickstrad/mini-gateway/test/e2e\t0.025s\n        FAIL\n--- FAIL: TestAdv_3_ErrorIsNotMovement (17.17s)\n"
+    },
+    {
+      "claim": 3,
+      "test": "TestAdv_3_TruncatedIsNotMovement",
+      "result": "BROKEN",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_3_TruncatedIsNotMovement$'",
+      "output": "=== RUN   TestAdv_3_TruncatedIsNotMovement\n    adv_test.go:159: seed=271828\n    adv_test.go:168: invalid observation was counted as movement (exit status 1):\n        === RUN   TestProbeBlindError\n            tierr_test.go:887: column prepared falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column cursors falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column listens falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column adv_locks falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column session_gucs falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column temp_rels falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column role_changed falsely counted as exercised (1) by invalid observation\n        --- FAIL: TestProbeBlindError (0.00s)\n        === RUN   TestProbeBlindEmpty\n            tierr_test.go:887: column prepared falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column cursors falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column listens falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column adv_locks falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column session_gucs falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column temp_rels falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column role_changed falsely counted as exercised (1) by invalid observation\n        --- FAIL: TestProbeBlindEmpty (0.00s)\n        === RUN   TestProbeBlindTruncated\n            tierr_test.go:887: column adv_locks falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column session_gucs falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column temp_rels falsely counted as exercised (1) by invalid observation\n            tierr_test.go:887: column role_changed falsely counted as exercised (1) by invalid observation\n        --- FAIL: TestProbeBlindTruncated (0.00s)\n        FAIL\n        FAIL\tgithub.com/nickstrad/mini-gateway/test/e2e\t0.025s\n        FAIL\n--- FAIL: TestAdv_3_TruncatedIsNotMovement (0.00s)\n"
+    },
+    {
+      "claim": 4,
+      "test": "TestAdv_4_InertCursor",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 46.39,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_4_InertCursor$'",
+      "output": "=== RUN   TestAdv_4_InertCursor\n    adv_test.go:176: seed=271828\n--- PASS: TestAdv_4_InertCursor (46.39s)\n"
+    },
+    {
+      "claim": 4,
+      "test": "TestAdv_4_InertCustom",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 49.49,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_4_InertCustom$'",
+      "output": "=== RUN   TestAdv_4_InertCustom\n    adv_test.go:176: seed=271828\n--- PASS: TestAdv_4_InertCustom (49.49s)\n"
+    },
+    {
+      "claim": 4,
+      "test": "TestAdv_4_InertRole",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 46.38,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_4_InertRole$'",
+      "output": "=== RUN   TestAdv_4_InertRole\n    adv_test.go:176: seed=271828\n--- PASS: TestAdv_4_InertRole (46.38s)\n"
+    },
+    {
+      "claim": 5,
+      "test": "TestAdv_5_ResetReordered",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 103.54,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_5_ResetReordered$'",
+      "output": "=== RUN   TestAdv_5_ResetReordered\n    adv_test.go:209: seed=271828\n--- PASS: TestAdv_5_ResetReordered (103.54s)\n"
+    },
+    {
+      "claim": 5,
+      "test": "TestAdv_5_ResetRepeated",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 93.88,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_5_ResetRepeated$'",
+      "output": "=== RUN   TestAdv_5_ResetRepeated\n    adv_test.go:209: seed=271828\n--- PASS: TestAdv_5_ResetRepeated (93.88s)\n"
+    },
+    {
+      "claim": 5,
+      "test": "TestAdv_5_ResetSequences",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 97.08,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_5_ResetSequences$'",
+      "output": "=== RUN   TestAdv_5_ResetSequences\n    adv_test.go:209: seed=271828\n--- PASS: TestAdv_5_ResetSequences (97.08s)\n"
+    },
+    {
+      "claim": 6,
+      "test": "TestAdv_6_NamedResetRepeated",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 119.73,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_6_NamedResetRepeated$'",
+      "output": "=== RUN   TestAdv_6_NamedResetRepeated\n    adv_test.go:209: seed=271828\n--- PASS: TestAdv_6_NamedResetRepeated (119.73s)\n"
+    },
+    {
+      "claim": 6,
+      "test": "TestAdv_6_NamedSettingReset",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 132.14,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_6_NamedSettingReset$'",
+      "output": "=== RUN   TestAdv_6_NamedSettingReset\n    adv_test.go:209: seed=271828\n--- PASS: TestAdv_6_NamedSettingReset (132.14s)\n"
+    },
+    {
+      "claim": 6,
+      "test": "TestAdv_6_TempPlansOnly",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 38.64,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_6_TempPlansOnly$'",
+      "output": "=== RUN   TestAdv_6_TempPlansOnly\n    adv_test.go:209: seed=271828\n--- PASS: TestAdv_6_TempPlansOnly (38.64s)\n"
+    },
+    {
+      "claim": 7,
+      "test": "TestAdv_7_RemoveCursor",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 29.61,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_7_RemoveCursor$'",
+      "output": "=== RUN   TestAdv_7_RemoveCursor\n    adv_test.go:245: seed=271828\n--- PASS: TestAdv_7_RemoveCursor (29.61s)\n"
+    },
+    {
+      "claim": 7,
+      "test": "TestAdv_7_RemoveCustom",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 27.26,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_7_RemoveCustom$'",
+      "output": "=== RUN   TestAdv_7_RemoveCustom\n    adv_test.go:245: seed=271828\n--- PASS: TestAdv_7_RemoveCustom (27.26s)\n"
+    },
+    {
+      "claim": 7,
+      "test": "TestAdv_7_RemoveRole",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 28.53,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_7_RemoveRole$'",
+      "output": "=== RUN   TestAdv_7_RemoveRole\n    adv_test.go:245: seed=271828\n--- PASS: TestAdv_7_RemoveRole (28.53s)\n"
+    },
+    {
+      "claim": 8,
+      "test": "TestAdv_8_RepeatAblation",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 140.26,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_8_RepeatAblation$'",
+      "output": "=== RUN   TestAdv_8_RepeatAblation\n    adv_test.go:254: seed=271828\n--- PASS: TestAdv_8_RepeatAblation (140.26s)\n"
+    },
+    {
+      "claim": 8,
+      "test": "TestAdv_8_RepeatIsolation",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "long.jsonl",
+      "seconds": 129.45,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_8_RepeatIsolation$'",
+      "output": "=== RUN   TestAdv_8_RepeatIsolation\n    adv_test.go:254: seed=271828\n--- PASS: TestAdv_8_RepeatIsolation (129.45s)\n"
+    },
+    {
+      "claim": 8,
+      "test": "TestAdv_8_RepeatPolicies",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "retry.jsonl",
+      "seconds": 192.02,
+      "command": "PATH=/usr/local/go/bin:$PATH ADV_LONG=1 go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_8_RepeatPolicies$'",
+      "output": "=== RUN   TestAdv_8_RepeatPolicies\n    adv_test.go:261: seed=271828\n--- PASS: TestAdv_8_RepeatPolicies (192.02s)\n"
+    },
+    {
+      "claim": 9,
+      "test": "TestAdv_9_IsolationOracleHash",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0.01,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_9_IsolationOracleHash$'",
+      "output": "=== RUN   TestAdv_9_IsolationOracleHash\n    adv_test.go:282: seed=271828\n--- PASS: TestAdv_9_IsolationOracleHash (0.01s)\n"
+    },
+    {
+      "claim": 9,
+      "test": "TestAdv_9_NoteReviewHashes",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0.02,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_9_NoteReviewHashes$'",
+      "output": "=== RUN   TestAdv_9_NoteReviewHashes\n    adv_test.go:282: seed=271828\n--- PASS: TestAdv_9_NoteReviewHashes (0.02s)\n"
+    },
+    {
+      "claim": 9,
+      "test": "TestAdv_9_SQLAndScriptHashes",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0.04,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_9_SQLAndScriptHashes$'",
+      "output": "=== RUN   TestAdv_9_SQLAndScriptHashes\n    adv_test.go:282: seed=271828\n--- PASS: TestAdv_9_SQLAndScriptHashes (0.04s)\n"
+    },
+    {
+      "claim": 10,
+      "test": "TestAdv_10_CalibrationByteEquality",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_10_CalibrationByteEquality$'",
+      "output": "=== RUN   TestAdv_10_CalibrationByteEquality\n    adv_test.go:320: seed=271828\n--- PASS: TestAdv_10_CalibrationByteEquality (0.00s)\n"
+    },
+    {
+      "claim": 10,
+      "test": "TestAdv_10_MissingInputsFailClosed",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_10_MissingInputsFailClosed$'",
+      "output": "=== RUN   TestAdv_10_MissingInputsFailClosed\n    adv_test.go:320: seed=271828\n--- PASS: TestAdv_10_MissingInputsFailClosed (0.00s)\n"
+    },
+    {
+      "claim": 10,
+      "test": "TestAdv_10_RelocatedQuotedWorkingDirectory",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 19.15,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_10_RelocatedQuotedWorkingDirectory$'",
+      "output": "=== RUN   TestAdv_10_RelocatedQuotedWorkingDirectory\n    adv_test.go:320: seed=271828\n--- PASS: TestAdv_10_RelocatedQuotedWorkingDirectory (19.15s)\n"
+    },
+    {
+      "claim": 11,
+      "test": "TestAdv_11_EmptyInputs",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 2.47,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_11_EmptyInputs$'",
+      "output": "=== RUN   TestAdv_11_EmptyInputs\n    adv_test.go:370: seed=271828\n--- PASS: TestAdv_11_EmptyInputs (2.47s)\n"
+    },
+    {
+      "claim": 11,
+      "test": "TestAdv_11_ExactOutput",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 38.88,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_11_ExactOutput$'",
+      "output": "=== RUN   TestAdv_11_ExactOutput\n    adv_test.go:370: seed=271828\n--- PASS: TestAdv_11_ExactOutput (38.88s)\n"
+    },
+    {
+      "claim": 11,
+      "test": "TestAdv_11_UncheckedCatalog",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 11.91,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_11_UncheckedCatalog$'",
+      "output": "=== RUN   TestAdv_11_UncheckedCatalog\n    adv_test.go:370: seed=271828\n--- PASS: TestAdv_11_UncheckedCatalog (11.91s)\n"
+    },
+    {
+      "claim": 12,
+      "test": "TestAdv_12_CSVDiscoveryScope",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_12_CSVDiscoveryScope$'",
+      "output": "=== RUN   TestAdv_12_CSVDiscoveryScope\n    adv_test.go:435: seed=271828\n--- PASS: TestAdv_12_CSVDiscoveryScope (0.00s)\n"
+    },
+    {
+      "claim": 12,
+      "test": "TestAdv_12_SQLDiscoveryScope",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 0.02,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_12_SQLDiscoveryScope$'",
+      "output": "=== RUN   TestAdv_12_SQLDiscoveryScope\n    adv_test.go:426: seed=271828\n--- PASS: TestAdv_12_SQLDiscoveryScope (0.02s)\n"
+    },
+    {
+      "claim": 12,
+      "test": "TestAdv_12_SiteExcludesRecords",
+      "result": "held",
+      "seed": 271828,
+      "campaign": "default.jsonl",
+      "seconds": 18.71,
+      "command": "PATH=/usr/local/go/bin:$PATH go test -count=1 -v ./agent_work/adversarial/lease-lab-port/... -run '^TestAdv_12_SiteExcludesRecords$'",
+      "output": "=== RUN   TestAdv_12_SiteExcludesRecords\n    adv_test.go:445: seed=271828\n--- PASS: TestAdv_12_SiteExcludesRecords (18.71s)\n"
+    }
+  ]
+}

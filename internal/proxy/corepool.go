@@ -22,8 +22,9 @@ const (
 // CorePool adapts *pool.Pool to the engine's Pool seam, buffering pool actions
 // emitted during Checkout until finish drains them in corePump.
 type CorePool struct {
-	p    *pool.Pool
-	acts []pool.Action
+	p      *pool.Pool
+	acts   []pool.Action
+	demand func() (int, bool)
 }
 
 // NewCorePool constructs a CorePool wrapping a validated pool.Pool.
@@ -44,6 +45,13 @@ func (cp *CorePool) Snapshot() pool.Snapshot { return cp.p.Snapshot() }
 // Checkout asks the pool core for a lendable connection for tenant, buffering
 // any off-path check or switch-reset actions for corePump.
 func (cp *CorePool) Checkout(now Instant, tenant work.TenantID) (ConnID, bool) {
+	// Refresh demand before Checkout when the fair limit sits below pool.connections
+	// so the pool's own dial check does not open connections past the fair limit.
+	if cp.demand != nil {
+		if n, ok := cp.demand(); ok {
+			cp.acts = cp.p.Demand(pool.Instant(now), n, cp.acts)
+		}
+	}
 	id, ok, acts := cp.p.Checkout(pool.Instant(now), tenant, cp.acts)
 	cp.acts = acts
 	return ConnID(id), ok
@@ -122,6 +130,7 @@ func (e *Engine) initCore() error {
 		e.core = cp
 		e.seams.Pool = cp
 	}
+	e.core.demand = e.checkoutDemand
 	if e.seams.Breaker == nil {
 		e.seams.Breaker = CoreBreaker{cp: e.core}
 	}
@@ -142,7 +151,9 @@ func (e *Engine) coreRun(acts []pool.Action) {
 
 func (e *Engine) corePump() {
 	acts := e.core.take()
-	acts = e.core.p.Demand(e.pnow(), e.seams.Queue.Len(), acts)
+	// Report only releasable demand so held-back requests neither dial past the
+	// fair limit nor trigger dial/idle-close cycles while waiting.
+	acts = e.core.p.Demand(e.pnow(), e.releasable(), acts)
 	e.coreRun(acts)
 	next := Instant(e.core.p.Next())
 	if next == 0 {
@@ -388,6 +399,7 @@ func (e *Engine) coreStepFailed(d *dbConn, why ResetFailure) {
 func (e *Engine) coreRelease(d *dbConn, c *client, status byte) {
 	e.snap.StagePassed[StageRelease]++
 	e.snap.LeasesEnded++
+	e.fairEnded(c.tenant)
 	d.client = nil
 	c.db = nil
 	in := ReleaseInput{Conn: d.id, Tenant: c.tenant, LastTenant: d.lastTenant, Status: status, Unread: len(d.hold) > 0 || d.cur.mid() || d.trailing}
@@ -428,6 +440,7 @@ func (e *Engine) coreDirty(d *dbConn, kind pool.EndKind, mid, inTx bool) {
 	tenant := d.lastTenant
 	d.client = nil
 	e.snap.LeasesEnded++
+	e.fairEnded(tenant)
 	e.snap.LeasesEndedDirty++
 	zero := kind == pool.EndStatementDeadline && d.got == 0
 	if zero {
@@ -559,6 +572,7 @@ func (e *Engine) clientCancel(key pgwire.BackendKey) {
 		e.snap.Failed++
 		e.reached(work.No)
 		e.snap.CancelsQueued++
+		e.retryEnded(t.req, RetryEndFailed)
 		t.req = nil
 		t.phase = cpIdle
 		e.reply(t, pgwire.ErrRowCancelledQueued)
@@ -586,7 +600,7 @@ func (e *Engine) refuseQueued() {
 		if c == nil || c.phase != cpQueued || c.req == nil || c.req.id != id {
 			continue
 		}
-		e.refuseWaiting(c)
+		e.refuseWaiting(c, RetryEndShed)
 	}
 }
 
@@ -605,17 +619,18 @@ func (e *Engine) refuseAdmitted() {
 			continue
 		}
 		delete(e.waiting, id)
-		e.refuseWaiting(c)
+		e.refuseWaiting(c, RetryEndShed)
 	}
 	e.queueTouched()
 }
 
-func (e *Engine) refuseWaiting(c *client) {
+func (e *Engine) refuseWaiting(c *client, end RetryEnd) {
 	e.coalRefused(c, pgwire.ErrRowBreakerOpen)
 	e.t.cancel(&c.queueT)
 	e.snap.Queued.Add(-1)
 	e.snap.Shed++
 	e.snap.BreakerFlushed++
+	e.retryEnded(c.req, end)
 	c.req = nil
 	c.phase = cpIdle
 	e.reply(c, pgwire.ErrRowBreakerOpen)

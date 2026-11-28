@@ -56,7 +56,7 @@ func fragmented(o simnet.Options) simnet.Options {
 func (spec Spec) engineConfig() proxy.Config {
 	c := proxy.Config{Connections: spec.Conns, QueueCap: spec.QueueCap, Timeouts: spec.Timeouts,
 		ReplyBufferCap: spec.ReplyCap, Plant: spec.Plant, MaxClients: 1024, MaxStartup: 1024, Admission: spec.Admission,
-		Coalesce: spec.Coalesce, KeyScope: spec.KeyScope}
+		Coalesce: spec.Coalesce, KeyScope: spec.KeyScope, Retry: spec.Retry}
 	if spec.Pool != nil {
 		pc := *spec.Pool
 		c.Pool = &pc

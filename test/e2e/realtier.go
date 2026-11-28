@@ -92,6 +92,7 @@ type GatewayOpts struct {
 	MaxClients int
 	Queue      map[string]any
 	Coalesce   map[string]any
+	Retry      map[string]any
 }
 
 // Gateway represents a running mini-gateway process (or in-process shell for ablations).
@@ -171,6 +172,9 @@ func (env *RealEnv) gatewayConfig(o GatewayOpts, dir string) map[string]any {
 		cfg["coalesce"] = o.Coalesce
 	case o.Reset == "on-switch":
 		cfg["coalesce"] = map[string]any{"mode": "off"}
+	}
+	if o.Retry != nil {
+		cfg["retry"] = o.Retry
 	}
 	return cfg
 }
@@ -377,7 +381,7 @@ const TierRPrefix = "tierr-"
 func TierRScenarios() []string {
 	return []string{"tierr-results", "tierr-fragment", "tierr-tx-integrity", "tierr-reject-list", "tierr-session-state",
 		"tierr-client-vanish", "tierr-db-killed", "tierr-slow-reader", "tierr-queue-full", "tierr-silent-db", "tierr-tls",
-		"tierr-backend-tls", "tierr-smoke", "tierr-admission-overload"}
+		"tierr-backend-tls", "tierr-smoke", "tierr-admission-overload", "tierr-fair-noisy", "tierr-retry-storm"}
 }
 
 func (env *RealEnv) poolConfig(o GatewayOpts, cfg map[string]any) {

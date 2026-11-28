@@ -1,0 +1,9 @@
+{"Time":"2026-11-27T22:18:36.192503676Z","Action":"start","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/lease-lab-port"}
+{"Time":"2026-11-27T22:18:36.223591247Z","Action":"run","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/lease-lab-port","Test":"TestAdv_8_RepeatPolicies"}
+{"Time":"2026-11-27T22:18:36.223671764Z","Action":"output","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/lease-lab-port","Test":"TestAdv_8_RepeatPolicies","Output":"=== RUN   TestAdv_8_RepeatPolicies\n"}
+{"Time":"2026-11-27T22:18:36.239684576Z","Action":"output","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/lease-lab-port","Test":"TestAdv_8_RepeatPolicies","Output":"    adv_test.go:261: seed=271828\n"}
+{"Time":"2026-11-27T22:21:48.241589455Z","Action":"output","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/lease-lab-port","Test":"TestAdv_8_RepeatPolicies","Output":"--- PASS: TestAdv_8_RepeatPolicies (192.02s)\n"}
+{"Time":"2026-11-27T22:21:48.241794756Z","Action":"pass","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/lease-lab-port","Test":"TestAdv_8_RepeatPolicies","Elapsed":192.02}
+{"Time":"2026-11-27T22:21:48.241822041Z","Action":"output","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/lease-lab-port","Output":"PASS\n"}
+{"Time":"2026-11-27T22:21:48.250461352Z","Action":"output","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/lease-lab-port","Output":"ok  \tgithub.com/nickstrad/mini-gateway/agent_work/adversarial/lease-lab-port\t192.043s\n"}
+{"Time":"2026-11-27T22:21:48.250523021Z","Action":"pass","Package":"github.com/nickstrad/mini-gateway/agent_work/adversarial/lease-lab-port","Elapsed":192.058}

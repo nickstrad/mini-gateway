@@ -33,6 +33,9 @@ type request struct {
 	store   bool
 	stored  []byte
 	sawErr  bool
+
+	attempt   int
+	retryOver bool
 }
 
 type client struct {
@@ -488,6 +491,7 @@ func (e *Engine) dequeueGone(c *client) {
 		e.queueTouched()
 	}
 	e.snap.Queued.Add(-1)
+	e.retryEnded(c.req, RetryEndGone)
 	e.failNoReply(c.req, work.No)
 	c.req = nil
 }
@@ -499,6 +503,7 @@ func (e *Engine) activeGone(c *client) {
 		return
 	}
 	e.snap.InFlight.Add(-1)
+	e.retryEnded(req, RetryEndGone)
 	e.failNoReply(req, reachedFor(d, req))
 	c.req = nil
 }

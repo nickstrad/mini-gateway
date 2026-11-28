@@ -1,6 +1,6 @@
 # C4 Level 3: Components: coalescer
 
-**Built so far: chunks 0–8. Dashed parts are planned.** In this diagram 1 of 9 elements and 0 of 11 relationships are built. Model: diagram `component-coalescer` in [model.json](model.json). Source of this page: [gen.py](gen.py).
+**Built so far: chunks 0–9 and chunk 12 (chunks 10 and 11 have not landed yet). Dashed parts are planned.** In this diagram 1 of 9 elements and 0 of 11 relationships are built. Model: diagram `component-coalescer` in [model.json](model.json). Source of this page: [gen.py](gen.py).
 
 Followers take no queue slot and no connection. The leader passes through admission like any request.
 
@@ -50,7 +50,7 @@ flowchart TB
 | Shared reply buffer | component | planned | The reply's message bytes, stored once and capped; each recipient gets them with its own end marker. Errors are shared too. |
 | Do-not-share list | component | planned | Keys whose reply was too large to share. Bounded and expiring. |
 | Coalescer snapshot | component | planned | Snapshot(): flights, hits, waiters per flight, cancellations, overflows by cap, shared errors, table size. |
-| Engine | neighbouring container | planned | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code; its test package proxysim is the simulator's driver. **So far:** Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). Chunk 7 put the pool core behind the pool, breaker and release seams (corepool.go) and chunk 8 the admission queues behind the queue seam (admission.go). The stages that belong to cores not built yet run their stand-ins: a rate gate that always allows, no coalescing, retry off. |
+| Engine | neighbouring container | planned | internal/proxy. One single-threaded, sans-I/O state machine per instance: events in, actions out. Holds the client and database connection tables and the request pipeline with its stage seams. The simulator and the shell drive this same code; its test package proxysim is the simulator's driver. **So far:** Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). Chunk 7 put the pool core behind the pool, breaker and release seams (corepool.go) and chunk 8 the admission queues behind the queue seam (admission.go). Chunk 9 installed the fair dispatcher on those queues and reports every lease start and end to it (fairness.go). Chunk 12 put the retry policy behind the retry seam (retry.go); a granted retry re-enters at the queue stage. The stages that belong to cores not built yet run their stand-ins: a rate gate that always allows, no coalescing. |
 | Work vocabulary | neighbouring container | built (chunk 5) | internal/work. Small plain types the cores are written against: tenant, unit of work with its class, reject reason and sharing flags, share key and its scope, outcome, refusal. Carries no Postgres type and imports only the standard library. This is the extension seam for a second protocol. |
 
 ## Relationships

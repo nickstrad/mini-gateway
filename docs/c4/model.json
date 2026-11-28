@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "id": "mini-gateway",
  "title": "mini-gateway — target architecture",
- "revision": "target-approved-2026-11-24-rulings+built-through-chunk-8",
+ "revision": "target-approved-2026-11-24-rulings+built-through-chunk-9+12",
  "defaultDiagramId": "context",
  "model": {
   "elements": [
@@ -53,7 +53,7 @@
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunk 6: a working proxy, the walking skeleton — cmd/mini-gateway terminates client TLS, logs clients in with SCRAM-SHA-256, lends a database connection per transaction, resets it after every lease, queues waiting requests, and serves health, stats and metrics from snapshots. Chunk 6a built the operator tools around it: the client mgctl, the load generator, the dev stack with its run targets, and the story report. Chunk 8 built the admission queues: one bounded queue per tenant with the two CoDel modes (the config file selects one), adaptive LIFO, and every shed request answered at once with 53M01. Chunk 7 built the pool: connections opened on demand under a hard cap and a creation limit, checked before reuse, cleaned up or closed when a lease ends badly, reset by one of two release policies, client cancels forwarded, one breaker that answers 53M03 while the database is down, TCP keepalive on the database sockets, and the connection and creation-rate budgets taken from the fleet block. Not built: fairness between tenants, the adaptive limit and the rate gate, read coalescing, the retry policy, the OTLP push, and the rest of the fleet configuration and the drain of N instances."
+     "Built in chunk 6: a working proxy, the walking skeleton — cmd/mini-gateway terminates client TLS, logs clients in with SCRAM-SHA-256, lends a database connection per transaction, resets it after every lease, queues waiting requests, and serves health, stats and metrics from snapshots. Chunk 6a built the operator tools around it: the client mgctl, the load generator, the dev stack with its run targets, and the story report. Chunk 8 built the admission queues: one bounded queue per tenant with the two CoDel modes (the config file selects one), adaptive LIFO, and every shed request answered at once with 53M01. Chunk 7 built the pool: connections opened on demand under a hard cap and a creation limit, checked before reuse, cleaned up or closed when a lease ends badly, reset by one of two release policies, client cancels forwarded, one breaker that answers 53M03 while the database is down, TCP keepalive on the database sockets, and the connection and creation-rate budgets taken from the fleet block. Chunk 9 built fairness between tenants: each active tenant has a share of the database connections by its weight, a tenant below its share is served first, and a transaction held open counts against its tenant. The limit the shares divide is the pool size, fixed. Chunk 12 built the retry policy: off by default; switched on, the proxy runs a request again at most once, only when nothing of it reached the database, outside a transaction, within a token budget, and the client still gets one reply. Not built: the adaptive limit and the rate gate, read coalescing, the OTLP push, and the rest of the fleet configuration and the drain of N instances."
     ],
     "docIds": [],
     "sourceIds": [
@@ -217,7 +217,7 @@
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). Chunk 7 put the pool core behind the pool, breaker and release seams (corepool.go) and chunk 8 the admission queues behind the queue seam (admission.go). The stages that belong to cores not built yet run their stand-ins: a rate gate that always allows, no coalescing, retry off."
+     "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). Chunk 7 put the pool core behind the pool, breaker and release seams (corepool.go) and chunk 8 the admission queues behind the queue seam (admission.go). Chunk 9 installed the fair dispatcher on those queues and reports every lease start and end to it (fairness.go). Chunk 12 put the retry policy behind the retry seam (retry.go); a granted retry re-enters at the queue stage. The stages that belong to cores not built yet run their stand-ins: a rate gate that always allows, no coalescing."
     ],
     "docIds": [],
     "sourceIds": [
@@ -238,7 +238,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). Chunk 7 put the pool core behind the pool, breaker and release seams (corepool.go) and chunk 8 the admission queues behind the queue seam (admission.go). The stages that belong to cores not built yet run their stand-ins: a rate gate that always allows, no coalescing, retry off."
+     "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). Chunk 7 put the pool core behind the pool, breaker and release seams (corepool.go) and chunk 8 the admission queues behind the queue seam (admission.go). Chunk 9 installed the fair dispatcher on those queues and reports every lease start and end to it (fairness.go). Chunk 12 put the retry policy behind the retry seam (retry.go); a granted retry re-enters at the queue stage. The stages that belong to cores not built yet run their stand-ins: a rate gate that always allows, no coalescing."
     ],
     "docIds": [],
     "sourceIds": [
@@ -326,11 +326,11 @@
     "id": "c-adm",
     "kind": "container",
     "name": "Admission",
-    "description": "internal/admission. Rate gate, per-tenant queues with two selectable queue rules, adaptive LIFO, a load gauge, round-robin dispatcher with shares that bind under saturation, adaptive concurrency limit.",
+    "description": "internal/admission. Rate gate, per-tenant queues with two selectable queue rules, adaptive LIFO, a load gauge, a fair dispatcher (a share of the limit per tenant by weight, a tenant below its share served first, round robin), adaptive concurrency limit.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunk 8 (internal/admission): the per-tenant queues, the QueueRule interface, the timeout rule, the control-law rule and the two comparison arms, all of what is said of them here; the Dispatcher interface with one default (oldest head first); and Snapshot() for the queues. The engine runs them behind its queue seam, and the config file always selects one of the two rules. The core does not import internal/work so far: it takes a tenant as a string and a request as an integer id, and the engine converts. Chunk 7's join added Refuse and the shed reason breaker, for the queued requests an opening breaker refuses. Not built: round robin with shares (chunk 9), the adaptive limit and the rate gate (chunk 10), and the tenant table's in-flight counts, shares and gate state."
+     "Built in chunk 8 (internal/admission): the per-tenant queues, the QueueRule interface, the timeout rule, the control-law rule and the two comparison arms, all of what is said of them here; the Dispatcher interface; and Snapshot() for the queues. Built in chunk 9 (fair.go): the fair dispatcher, all of what is said of it here — shares by weight, a tenant below its share first, round robin, the last-lease rule, leases counted per tenant — with the limit it enforces held as a settable integer, fixed at the pool size so far. The engine runs the queues behind its queue seam with the fair dispatcher installed, and the config file always selects one of the two rules. The core does not import internal/work so far: it takes a tenant as a string and a request as an integer id, and the engine converts. Chunk 7's join added Refuse and the shed reason breaker, for the queued requests an opening breaker refuses. Not built: the adaptive limit and the rate gate (chunk 10), with the tenant table's gate state and the snapshot's limit changes and gate refusals."
     ],
     "docIds": [],
     "sourceIds": [
@@ -351,7 +351,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunk 8 (internal/admission): the per-tenant queues, the QueueRule interface, the timeout rule, the control-law rule and the two comparison arms, all of what is said of them here; the Dispatcher interface with one default (oldest head first); and Snapshot() for the queues. The engine runs them behind its queue seam, and the config file always selects one of the two rules. The core does not import internal/work so far: it takes a tenant as a string and a request as an integer id, and the engine converts. Chunk 7's join added Refuse and the shed reason breaker, for the queued requests an opening breaker refuses. Not built: round robin with shares (chunk 9), the adaptive limit and the rate gate (chunk 10), and the tenant table's in-flight counts, shares and gate state."
+     "Built in chunk 8 (internal/admission): the per-tenant queues, the QueueRule interface, the timeout rule, the control-law rule and the two comparison arms, all of what is said of them here; the Dispatcher interface; and Snapshot() for the queues. Built in chunk 9 (fair.go): the fair dispatcher, all of what is said of it here — shares by weight, a tenant below its share first, round robin, the last-lease rule, leases counted per tenant — with the limit it enforces held as a settable integer, fixed at the pool size so far. The engine runs the queues behind its queue seam with the fair dispatcher installed, and the config file always selects one of the two rules. The core does not import internal/work so far: it takes a tenant as a string and a request as an integer id, and the engine converts. Chunk 7's join added Refuse and the shed reason breaker, for the queued requests an opening breaker refuses. Not built: the adaptive limit and the rate gate (chunk 10), with the tenant table's gate state and the snapshot's limit changes and gate refusals."
     ],
     "docIds": [],
     "sourceIds": [
@@ -435,8 +435,8 @@
     "id": "c-retry",
     "kind": "container",
     "name": "Retry policy",
-    "description": "internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached the database, within a 10% budget.",
-    "status": "planned",
+    "description": "internal/retry. A policy interface with two policies. Off is the default. PreForwardOnce grants a request at most one retry, only when nothing of it reached the database, outside a transaction, within an integer token budget: a tenth of a token per first attempt, one token per retry, a cap and a starting floor. A deterministic core with no Postgres types and no I/O: every call takes the time. Its tests check it against a reference model and with the fuzz target FuzzRetryOps. The test-only retry-everything policy is in its test package retrytest, which the binary does not link.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -452,7 +452,7 @@
     "kind": "container",
     "name": "Retry policy",
     "description": "Neighbour in a component view: stands for the container `c-retry`.",
-    "status": "planned",
+    "status": "existing",
     "tags": [
      "external",
      "neighbour"
@@ -474,7 +474,7 @@
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunks 1, 3, 4, 5, 6, 7 and 8: everything except the OTLP push adapter (chunk 15) and the health rules for the limit's floor and draining. Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness. Chunk 6a: the story report, and the load generator's metrics in the catalog. Chunk 7: the pool source with the health rule for the breaker. Chunk 8: the admission source with the health rule for shedding, and the head-to-head table."
+     "Built in chunks 1, 3, 4, 5, 6, 7, 8, 9 and 12: everything except the OTLP push adapter (chunk 15) and the health rules for the limit's floor and draining. Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness. Chunk 6a: the story report, and the load generator's metrics in the catalog. Chunk 7: the pool source with the health rule for the breaker. Chunk 8: the admission source with the health rule for shedding, and the head-to-head table. Chunk 9: the fairness metrics in the admission source, totals and per tenant, with no new health rule. Chunk 12: the retry source and the engine's retry metrics, with no new health rule."
     ],
     "docIds": [],
     "sourceIds": [
@@ -495,7 +495,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunks 1, 3, 4, 5, 6, 7 and 8: everything except the OTLP push adapter (chunk 15) and the health rules for the limit's floor and draining. Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness. Chunk 6a: the story report, and the load generator's metrics in the catalog. Chunk 7: the pool source with the health rule for the breaker. Chunk 8: the admission source with the health rule for shedding, and the head-to-head table."
+     "Built in chunks 1, 3, 4, 5, 6, 7, 8, 9 and 12: everything except the OTLP push adapter (chunk 15) and the health rules for the limit's floor and draining. Since chunk 6 the shell creates a collector in the real process, with the engine, wire and classifier sources, and serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line adapter is attached only by the scenario flush harness. Chunk 6a: the story report, and the load generator's metrics in the catalog. Chunk 7: the pool source with the health rule for the breaker. Chunk 8: the admission source with the health rule for shedding, and the head-to-head table. Chunk 9: the fairness metrics in the admission source, totals and per tenant, with no new health rule. Chunk 12: the retry source and the engine's retry metrics, with no new health rule."
     ],
     "docIds": [],
     "sourceIds": [
@@ -509,11 +509,11 @@
     "id": "c-config",
     "kind": "container",
     "name": "Configuration",
-    "description": "internal/config. The config file (JSON), the client_tls and backend_tls blocks, the queue block (the rule and its times, the capacities, adaptive LIFO), the pool keys (connect cap, idle timeout, lifetime, jitter, the check, the cancel cap), the lease keys (reset: always or on-switch; reseed), the breaker keys, the backend keys (TCP keepalive, server keepalive, the path's idle limit), the static fleet block (instance count N; fleet budgets divided by N), load-time validation that fails closed and names the key, warnings for risky settings, and the config fingerprint.",
+    "description": "internal/config. The config file (JSON), the client_tls and backend_tls blocks, the queue block (the rule and its times, the capacities, adaptive LIFO), the pool keys (connect cap, idle timeout, lifetime, jitter, the check, the cancel cap), the lease keys (reset: always or on-switch; reseed), the breaker keys, the backend keys (TCP keepalive, server keepalive, the path's idle limit), the fairness block (a default weight and a weight per tenant), the retry block (the policy, the budget's cap and its floor), the static fleet block (instance count N; fleet budgets divided by N), load-time validation that fails closed and names the key, warnings for risky settings, and the config fingerprint.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunk 6 (internal/config): the JSON config file with its defaults, validation that fails closed and names the key (the timeout nesting too), the client_tls and backend_tls blocks, the config fingerprint, and the fleet block parsed and checked (pool.connections must fit fleet.backend_connections / fleet.instances, and the fleet total must fit the database's limit with a reserve). Built in chunk 7 (pool.go): the pool, lease, breaker, backend and timeout keys, all of what is said of them here; an omitted pool.connections takes the fleet's connections divided by the instance count and the creation rate is the fleet's rate divided the same way, both rounded down and never zero (a total below the instance count is refused, a remainder is a warning). Built in chunk 8 (queue.go): the queue keys rule, target, interval, tenant_capacity, max_tenants, lifo and lifo_hold, with their defaults; queue.rule accepts only timeout and control-law. Not built: the division of budgets whose cores are not built (the rate gate's rates, chunk 10) and the full fleet block (chunk 13)."
+     "Built in chunk 6 (internal/config): the JSON config file with its defaults, validation that fails closed and names the key (the timeout nesting too), the client_tls and backend_tls blocks, the config fingerprint, and the fleet block parsed and checked (pool.connections must fit fleet.backend_connections / fleet.instances, and the fleet total must fit the database's limit with a reserve). Built in chunk 7 (pool.go): the pool, lease, breaker, backend and timeout keys, all of what is said of them here; an omitted pool.connections takes the fleet's connections divided by the instance count and the creation rate is the fleet's rate divided the same way, both rounded down and never zero (a total below the instance count is refused, a remainder is a warning). Built in chunk 8 (queue.go): the queue keys rule, target, interval, tenant_capacity, max_tenants, lifo and lifo_hold, with their defaults; queue.rule accepts only timeout and control-law. Built in chunk 9 (fairness.go): the fairness keys default_weight and weights (a tenant and a weight each): 1 to 1,000, zero or omitted meaning the default, at most 4,096 entries, a tenant named twice refused. Built in chunk 12 (retry.go): the retry keys policy (off or pre-forward-once; default off), bucket_cap (tokens per instance, default 100) and floor (tokens for the fleet, default 10, divided by fleet.instances): zero or omitted means the default; with the policy on, a floor below one token per instance or above the cap is refused and a remainder is a warning. Not built: the division of budgets whose cores are not built (the rate gate's rates, chunk 10) and the full fleet block (chunk 13)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -534,7 +534,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunk 6 (internal/config): the JSON config file with its defaults, validation that fails closed and names the key (the timeout nesting too), the client_tls and backend_tls blocks, the config fingerprint, and the fleet block parsed and checked (pool.connections must fit fleet.backend_connections / fleet.instances, and the fleet total must fit the database's limit with a reserve). Built in chunk 7 (pool.go): the pool, lease, breaker, backend and timeout keys, all of what is said of them here; an omitted pool.connections takes the fleet's connections divided by the instance count and the creation rate is the fleet's rate divided the same way, both rounded down and never zero (a total below the instance count is refused, a remainder is a warning). Built in chunk 8 (queue.go): the queue keys rule, target, interval, tenant_capacity, max_tenants, lifo and lifo_hold, with their defaults; queue.rule accepts only timeout and control-law. Not built: the division of budgets whose cores are not built (the rate gate's rates, chunk 10) and the full fleet block (chunk 13)."
+     "Built in chunk 6 (internal/config): the JSON config file with its defaults, validation that fails closed and names the key (the timeout nesting too), the client_tls and backend_tls blocks, the config fingerprint, and the fleet block parsed and checked (pool.connections must fit fleet.backend_connections / fleet.instances, and the fleet total must fit the database's limit with a reserve). Built in chunk 7 (pool.go): the pool, lease, breaker, backend and timeout keys, all of what is said of them here; an omitted pool.connections takes the fleet's connections divided by the instance count and the creation rate is the fleet's rate divided the same way, both rounded down and never zero (a total below the instance count is refused, a remainder is a warning). Built in chunk 8 (queue.go): the queue keys rule, target, interval, tenant_capacity, max_tenants, lifo and lifo_hold, with their defaults; queue.rule accepts only timeout and control-law. Built in chunk 9 (fairness.go): the fairness keys default_weight and weights (a tenant and a weight each): 1 to 1,000, zero or omitted meaning the default, at most 4,096 entries, a tenant named twice refused. Built in chunk 12 (retry.go): the retry keys policy (off or pre-forward-once; default off), bucket_cap (tokens per instance, default 100) and floor (tokens for the fleet, default 10, divided by fleet.instances): zero or omitted means the default; with the policy on, a floor below one token per instance or above the cap is refused and a remainder is a warning. Not built: the division of budgets whose cores are not built (the rate gate's rates, chunk 10) and the full fleet block (chunk 13)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -554,7 +554,7 @@
      "test"
     ],
     "plannedNotes": [
-     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Since chunk 6 the engine runs on it, through the engine's own test package internal/proxy/proxysim. Not built: no synthetic workload drives the cores (the two cores built so far, the pool and admission, are driven by their own reference-model tests and through the engine)."
+     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Since chunk 6 the engine runs on it, through the engine's own test package internal/proxy/proxysim. Not built: no synthetic workload drives the cores (the three cores built so far, the pool, admission and the retry policy, are driven by their own reference-model tests and through the engine)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -575,7 +575,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Since chunk 6 the engine runs on it, through the engine's own test package internal/proxy/proxysim. Not built: no synthetic workload drives the cores (the two cores built so far, the pool and admission, are driven by their own reference-model tests and through the engine)."
+     "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no proxy) and the fidelity runner, and scripts/tier-r.sh. Since chunk 6 the engine runs on it, through the engine's own test package internal/proxy/proxysim. Not built: no synthetic workload drives the cores (the three cores built so far, the pool, admission and the retry policy, are driven by their own reference-model tests and through the engine)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -595,7 +595,7 @@
      "test"
     ],
     "plannedNotes": [
-     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Built in chunk 6a: the load generator (cmd/loadgen, internal/loadgen with its runner live and its test fake loadgentest), all of what is said of it here; the seeded mgctl model test in both tiers; and a tier R test of the run targets (16 tier R tests). Built in chunk 8: the admission world (open-loop clients through the engine on the simulator, one connection, a fixed read time) with the head-to-head scenarios (four arms at 1.2×, 2× and 10× load), anti-bufferbloat with recovery for both rules against a first-come control, the first burst after idle, two canaries, and a tier R overload test against Postgres with pg_sleep (17 tier R tests). Built in chunk 7: the pool scenarios (22, among them the hard cap under 1,000 clients at once, the reconnection storm, cold start, lifetimes, the database restart alone and behind the admission queues, silent mass death, the night trickle, cancel, idle in a transaction, and session state under each release policy), run with the pool core where the chunk 6 scenarios keep the fixed set; a relay between the proxy and the fake Postgres that injects the path faults (blackhole, a peer that forgot the connection, idle drop, polite close, slots held); their canaries and ablations; and five tier R pool tests (22 tier R tests now), among them 500 clients on 16 database connections. Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14)."
+     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in both tiers; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Built in chunk 6a: the load generator (cmd/loadgen, internal/loadgen), all of what is said of it here; the seeded mgctl model test in both tiers; and a tier R test of the run targets. Built in chunk 8: the admission world (open-loop clients through the engine on the simulator, one connection, a fixed read time) with the head-to-head scenarios (four arms at 1.2×, 2× and 10× load), anti-bufferbloat with recovery for both rules against a first-come control, the first burst after idle, two canaries, and a tier R overload test with pg_sleep. Built in chunk 7: the pool scenarios (22, among them the hard cap under 1,000 clients, the reconnection storm, cold start, lifetimes, the database restart alone and behind the admission queues, silent mass death, the night trickle, cancel, idle in a transaction, and session state under each release policy); a relay that injects the path faults; their canaries and ablations; and five tier R pool tests, among them 500 clients on 16 database connections. Built in chunk 9: the fairness scenarios — a noisy neighbour at 10× capacity beside a quiet tenant, 41 tenants with one flooder, a tenant holding transactions open, their canaries, and a tier R noisy-neighbour test. Built in chunk 12: the retry scenarios — the retry storm and a sweep with kills at every point of the conversation, each with the policy off, on, and the test-only retry-everything policy (the ablation: it applies writes twice); a relay that refuses a first write with zero bytes accepted; the storm with two tenants of unequal weight; and a tier R retry-storm test, which shows no duplicate write and the recovery but no retry (24 tier R tests). Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -616,7 +616,7 @@
      "neighbour"
     ],
     "plannedNotes": [
-     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Built in chunk 6a: the load generator (cmd/loadgen, internal/loadgen with its runner live and its test fake loadgentest), all of what is said of it here; the seeded mgctl model test in both tiers; and a tier R test of the run targets (16 tier R tests). Built in chunk 8: the admission world (open-loop clients through the engine on the simulator, one connection, a fixed read time) with the head-to-head scenarios (four arms at 1.2×, 2× and 10× load), anti-bufferbloat with recovery for both rules against a first-come control, the first burst after idle, two canaries, and a tier R overload test against Postgres with pg_sleep (17 tier R tests). Built in chunk 7: the pool scenarios (22, among them the hard cap under 1,000 clients at once, the reconnection storm, cold start, lifetimes, the database restart alone and behind the admission queues, silent mass death, the night trickle, cancel, idle in a transaction, and session state under each release policy), run with the pool core where the chunk 6 scenarios keep the fixed set; a relay between the proxy and the fake Postgres that injects the path faults (blackhole, a peer that forgot the connection, idle drop, polite close, slots held); their canaries and ablations; and five tier R pool tests (22 tier R tests now), among them 500 clients on 16 database connections. Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14)."
+     "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in both tiers; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz target FuzzEngineOps, and make chaos (scripts/chaos.sh). Built in chunk 6a: the load generator (cmd/loadgen, internal/loadgen), all of what is said of it here; the seeded mgctl model test in both tiers; and a tier R test of the run targets. Built in chunk 8: the admission world (open-loop clients through the engine on the simulator, one connection, a fixed read time) with the head-to-head scenarios (four arms at 1.2×, 2× and 10× load), anti-bufferbloat with recovery for both rules against a first-come control, the first burst after idle, two canaries, and a tier R overload test with pg_sleep. Built in chunk 7: the pool scenarios (22, among them the hard cap under 1,000 clients, the reconnection storm, cold start, lifetimes, the database restart alone and behind the admission queues, silent mass death, the night trickle, cancel, idle in a transaction, and session state under each release policy); a relay that injects the path faults; their canaries and ablations; and five tier R pool tests, among them 500 clients on 16 database connections. Built in chunk 9: the fairness scenarios — a noisy neighbour at 10× capacity beside a quiet tenant, 41 tenants with one flooder, a tenant holding transactions open, their canaries, and a tier R noisy-neighbour test. Built in chunk 12: the retry scenarios — the retry storm and a sweep with kills at every point of the conversation, each with the policy off, on, and the test-only retry-everything policy (the ablation: it applies writes twice); a relay that refuses a first write with zero bytes accepted; the storm with two tenants of unequal weight; and a tier R retry-storm test, which shows no duplicate write and the recovery but no retry (24 tier R tests). Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -745,7 +745,7 @@
     "id": "e-pipeline",
     "kind": "component",
     "name": "Request pipeline",
-    "description": "The fixed order every request takes: classify, reject list, draining, breaker, rate gate, coalesce, queue, lease, forward, release. Each stage is counted as passed or refused, and each refusal is answered with its error-contract row: while the breaker is open, 53M03 at once and no dial. A queued request has a wait deadline, the outer bound whatever the queue rule; a request the queue sheds is answered at once with 53M01. A request waits only in the queue: a checkout that cannot lend leaves it there. Statements inside an open transaction skip from the reject list straight to forward on the connection the client already holds.",
+    "description": "The fixed order every request takes: classify, reject list, draining, breaker, rate gate, coalesce, queue, lease, forward, release. Each stage is counted as passed or refused, and each refusal is answered with its error-contract row: while the breaker is open, 53M03 at once and no dial. A queued request has a wait deadline, the outer bound whatever the queue rule; a request the queue sheds is answered at once with 53M01. A request waits only in the queue: a checkout that cannot lend leaves it there, and so does a request the fair dispatcher holds back; while one is held back the dispatch is tried once more at the end of every event. Statements inside an open transaction skip from the reject list straight to forward on the connection the client already holds. A request the retry policy grants a retry re-enters at the queue stage: the stages before it are not run again.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -760,7 +760,7 @@
     "id": "e-seams",
     "kind": "component",
     "name": "Stage seams and stand-ins",
-    "description": "The small interfaces the pipeline calls: classifier, breaker, rate gate, coalescer, queue, pool, release policy, retry policy. The queue seam has an extension for a queue that sheds: remove, expire or refuse at an instant, sweep, next deadline, take the shed requests, put back a popped one, close. Also the stand-ins: a rate gate that always allows, no coalescing and retry off, used until their cores are built; and a breaker that is always closed, a fixed set of connections, reset after every lease and one bounded first-come queue, which an engine configured without the pool core or without a queue rule still uses (tests only: the config file always gives both). The engine's config can replace any of them.",
+    "description": "The small interfaces the pipeline calls: classifier, breaker, rate gate, coalescer, queue, pool, release policy, retry policy. The queue seam has an extension for a queue that sheds: remove, expire or refuse at an instant, sweep, next deadline, take the shed requests, put back a popped one, close. The retry seam is handed each failure with its facts: reached, in a transaction, the attempt, breaker open, draining, the request's deadline. Also the stand-ins: a rate gate that always allows and no coalescing, used until their cores are built; a retry policy that never retries, which no engine uses by default any more (the engine builds the retry core from its config, and that core's default is Off); and a breaker that is always closed, a fixed set of connections, reset after every lease and one bounded first-come queue, which an engine configured without the pool core or without a queue rule still uses (tests only: the config file always gives both). The engine's config can replace any of them.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -807,7 +807,7 @@
     "id": "e-fail",
     "kind": "component",
     "name": "Failure classifier",
-    "description": "For every failure records whether the request may have reached the database (no only when the driver reports that its first write was refused with zero bytes accepted) and picks the error-contract row: 08006 for a safe read or when nothing reached, 08007 otherwise, FATAL 08006 when a transaction lost its connection (between statements, or mid-statement unless the message could have ended the transaction: then 08007), and a close with no message once part of the reply was sent. Hands the fact to the retry seam.",
+    "description": "For every failure records whether the request may have reached the database (no only when the driver reports that its first write was refused with zero bytes accepted) and picks the error-contract row: 08006 for a safe read or when nothing reached, 08007 otherwise, FATAL 08006 when a transaction lost its connection (between statements, or mid-statement unless the message could have ended the transaction: then 08007), and a close with no message once part of the reply was sent. Offers every lost statement, with the fact, to the retry seam before it is counted failed: when a retry is granted the request runs again and this failure sends the client nothing. The fault × path table (matrix.go) lists every fault and place with its row, its deadline, the reached fact and whether the proxy retries it; docs/fault-matrix.md is generated from it.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -854,7 +854,7 @@
     "id": "e-publish",
     "kind": "component",
     "name": "Snapshot publisher",
-    "description": "Snapshot(): the engine's counters as one plain struct — clients, requests by stage and outcome, replies by row, leases, resets, relay, connections, cancels, three histograms — with its conservation check, beside the wire, classifier, reply, pool and admission snapshots the engine holds. On a publish event the engine returns a publish action; its driver then has the collector read the snapshots, between events.",
+    "description": "Snapshot(): the engine's counters as one plain struct — clients, requests by stage and outcome, replies by row, leases, resets, relay, connections, cancels, retries, three histograms — with its conservation check, beside the wire, classifier, reply, pool, admission and retry snapshots the engine holds. On a publish event the engine returns a publish action; its driver then has the collector read the snapshots, between events.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -886,7 +886,7 @@
     "id": "e-admq",
     "kind": "component",
     "name": "Admission queue adapter",
-    "description": "internal/proxy/admission.go. Puts the admission queues behind the queue seam and its shedding extension. After every queue operation the engine takes the sheds the core decided, answers each at once with 53M01 and an end marker, and arms its one admission timer at the core's next deadline. With it no connection is lent directly: every request is pushed and popped, so the rule sees zero-wait requests too. At a stop it sweeps first and answers what was due, then removes the rest as client-gone. When the breaker opens it sweeps, then refuses every queued request in arrival order: each is a shed with reason breaker, answered 53M03. The engine's invariants require the core's shed count to equal the sheds answered.",
+    "description": "internal/proxy/admission.go. Puts the admission queues behind the queue seam and its shedding extension. After every queue operation the engine takes the sheds the core decided, answers each at once with 53M01 and an end marker, and arms its one admission timer at the core's next deadline. With it no connection is lent directly: every request is pushed and popped, so the rule sees zero-wait requests too. At a stop it sweeps first and answers what was due, then removes the rest as client-gone. When the breaker opens it sweeps, then refuses every queued request in arrival order: each is a shed with reason breaker, answered 53M03. The engine's invariants require the core's shed count to equal the sheds answered. It installs the fair dispatcher on the queues it builds (fairness.go), with the limit at the pool size, and the engine reports to it every lease start (at the lend) and every lease end (a release on either pool, the dirty-connection table, a lost lease), so a transaction held open stays in flight until its lease ends. The invariants require the dispatcher's leases in flight, in total and per tenant, to equal the connections the engine has lent.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -901,7 +901,22 @@
     "id": "e-corepool",
     "kind": "component",
     "name": "Pool core adapter",
-    "description": "internal/proxy/corepool.go. Puts the pool core behind the pool, breaker and release-policy seams and performs the actions the core returns: dial, the empty-query check, a cancel request, ROLLBACK, the reset with its re-seed, close, and refusing the queued requests with 53M03. It reports back every result, loss and lease end, drains a cancelled statement's reply, tells the core how many requests wait, and arms one timer at the core's next deadline. A client's cancel request goes to the connection that client holds; for a request still queued the client gets 57014 at once. A client idle inside a transaction past its deadline gets FATAL 25P03 and its connection is rolled back, reset and reused. The engine's invariants require every connection's phase to agree with the core after every event.",
+    "description": "internal/proxy/corepool.go. Puts the pool core behind the pool, breaker and release-policy seams and performs the actions the core returns: dial, the empty-query check, a cancel request, ROLLBACK, the reset with its re-seed, close, and refusing the queued requests with 53M03. It reports back every result, loss and lease end, drains a cancelled statement's reply, tells the core how many waiting requests the fair dispatcher would release now (a request held back opens no connection), and arms one timer at the core's next deadline. A client's cancel request goes to the connection that client holds; for a request still queued the client gets 57014 at once. A client idle inside a transaction past its deadline gets FATAL 25P03 and its connection is rolled back, reset and reused. The engine's invariants require every connection's phase to agree with the core after every event.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-engine",
+    "technology": "Go"
+   },
+   {
+    "id": "e-retry",
+    "kind": "component",
+    "name": "Retry adapter",
+    "description": "internal/proxy/retry.go. Puts the retry policy behind the retry seam. Reports each first attempt to it at the forward. When a statement is lost it offers the failure with its facts: whether anything reached the database, whether the request is inside a transaction, the attempt, whether the breaker is not closed (read without side effect; half-open counts as open), draining, and the request's deadline (its arrival plus timeouts.statement). A granted retry re-enters at the queue stage in the same step and waits in its tenant's admission queue like any request, with a new turn from the fair dispatcher. It holds one place in that queue and no connection: the failed one was already closed or sent to the dirty-connection table. Its queue wait and its statement deadline end at the request's deadline at the latest. Before every lend the breaker is read again, and a waiting retry behind a breaker that is not closed is answered 53M03; its token is not returned. The client gets one reply: the retry's outcome, or the failure's own row when the policy declines. Every retried request ends counted once (completed, failed, shed, gone, breaker). The engine's invariants require its counts to equal the policy's, and its quiesce check refuses a retry still pending.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -1126,7 +1141,7 @@
     "id": "w-errors",
     "kind": "component",
     "name": "Error contract and reply builders",
-    "description": "One table of 24 rows: each refusal and failure, its reply form, its SQLSTATE, whether anything reached the database, whether a write may have applied, and what happens to the client connection. The reply builder appends the ErrorResponse and the correct end marker for a row and counts replies by row. The discard-until-Sync rule refuses extended-protocol messages. docs/error-contract.md is generated from the table. The engine sends the rows of the walking skeleton, the admission shed row and the pool's rows (breaker open, cancelled while queued, idle in a transaction), and the client session machine the startup rows; the rows of cores not built yet (rate gate and others) are not sent so far.",
+    "description": "One table of 24 rows: each refusal and failure, its reply form, its SQLSTATE, whether anything reached the database, whether a write may have applied, whether the proxy itself may retry it (one row may: lost-after-read, and only for a failure where nothing reached the database), and what happens to the client connection. The reply builder appends the ErrorResponse and the correct end marker for a row and counts replies by row. The discard-until-Sync rule refuses extended-protocol messages. docs/error-contract.md is generated from the table. The engine sends the rows of the walking skeleton, the admission shed row and the pool's rows (breaker open, cancelled while queued, idle in a transaction), and the client session machine the startup rows; the rows of cores not built yet (rate gate and others) are not sent so far.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -1207,11 +1222,11 @@
     "id": "a-tenants",
     "kind": "component",
     "name": "Tenant table",
-    "description": "State for tenants that are active now: queue, in-flight count, share, gate state. Created on first use, removed when all-zero, so memory follows active tenants.",
+    "description": "State for tenants that are active now: the queue with its round-robin turn, and gate state. Created on first use, removed when quiet, so memory follows active tenants. A tenant's counters are kept apart and outlive its entry, up to a cap. The in-flight count is not here: the dispatcher keeps it, for tenants with a lease only.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunk 8 (internal/admission: tenantFor, dropQuiet, evictEmpty and statsFor in queues.go; tenant.go): one entry per tenant with a queue (its ring, rule state, LIFO state and load gauge), created on first use and removed after 16 quiet intervals, its ring reused. At most queue.max_tenants entries: at the cap an empty queue is evicted for a new tenant, and if none is empty the arrival is shed. A tenant's counters outlive its entry, for at most 4,096 tenants; later ones are counted as other. Not built: in-flight count and share (chunk 9), gate state (chunk 10)."
+     "Built in chunk 8 (internal/admission: tenantFor, dropQuiet, evictEmpty and statsFor in queues.go; tenant.go): one entry per tenant with a queue (its ring, rule state, LIFO state and load gauge), created on first use and removed after 16 quiet intervals, its ring reused. At most queue.max_tenants entries: at the cap an empty queue is evicted for a new tenant, and if none is empty the arrival is shed. A tenant's counters outlive its entry, for at most 4,096 tenants; later ones are counted as other. Built in chunk 9 (the turn field in tenant.go, set in queues.go and fair.go): the entry's round-robin turn; a new entry joins behind every waiting tenant. Not built: gate state (chunk 10)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -1301,12 +1316,10 @@
     "id": "a-dispatch",
     "kind": "component",
     "name": "Dispatcher",
-    "description": "Chooses whose request runs next: round robin across tenants with waiting work; a tenant's share binds only when the limit is reached; otherwise work-conserving.",
-    "status": "planned",
+    "description": "The interface the queues ask at each pop, and the fair dispatcher the engine installs behind it. It enforces one limit on leases in flight, set from outside, and lends nothing at the limit. Each active tenant (a request waiting or a lease in flight) has a share: the limit times its weight over the active tenants' weights, rounded down, at least 1. A waiting tenant below its share is chosen before any tenant at or above it; within each group the choice is round robin. The last free lease is held back only while an active tenant with nothing waiting is below its share; otherwise no lease idles while a request waits. It counts leases in flight per tenant from the lease starts and ends reported to it, so a transaction held open counts; keeps state only for tenants with a lease; and never takes a lease back. It also says how many waiting requests it would release now. Weights are checked at load. A second implementation, oldest head first, is what a core without it uses (tests only).",
+    "status": "existing",
     "tags": [],
-    "plannedNotes": [
-     "Built in chunk 8 (internal/admission: Dispatcher, OldestFirst and SetDispatcher in queues.go): the interface the queues ask at each pop, and one default that picks the tenant whose head is oldest. Not built: round robin and shares (chunk 9), the limit they bind under (chunk 10)."
-    ],
+    "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -1321,7 +1334,9 @@
     "description": "One integer limit on concurrent leases. Cut by a tenth on a slow statement, a timeout or a connection failure; raised by one when busy. Bounded by a floor, the pool size, a maximum step and a minimum interval. Reads database round-trip time, never queue wait.",
     "status": "planned",
     "tags": [],
-    "plannedNotes": [],
+    "plannedNotes": [
+     "Built in chunk 9 (internal/admission: SetLimit and Limit in fair.go): the limit as one integer the fair dispatcher enforces, settable at any instant; the engine sets it once, to pool.connections. Not built: everything that changes it — the cuts, the raises and their bounds (chunk 10)."
+    ],
     "docIds": [],
     "sourceIds": [
      "plan"
@@ -1333,11 +1348,11 @@
     "id": "a-snap",
     "kind": "component",
     "name": "Admission snapshot",
-    "description": "Snapshot(): per tenant and total — depth, capacity, oldest-item age, queue-wait histogram, rule state, LIFO switches, sheds by reason, the load gauge, in flight, share, limit and its changes, gate refusals.",
+    "description": "Snapshot(): per tenant and total — depth, capacity, oldest-item age, queue-wait histogram, rule state, LIFO switches, sheds by reason, the load gauge, in flight, share, time at share, the dispatcher's totals (limit, active tenants, rounds, selections held back, lease starts and ends, saturated time), the limit's changes, gate refusals.",
     "status": "planned",
     "tags": [],
     "plannedNotes": [
-     "Built in chunk 8 (internal/admission: snapshot.go): per tenant and total — depth, capacity, oldest-item age, queue-wait histogram, rule state, LIFO state and switches, sheds by reason, the load gauge, shedding — with a conservation check (pushes = served + shed + removed + queued). Not built: in flight and share (chunk 9), the limit and its changes, gate refusals (chunk 10)."
+     "Built in chunk 8 (internal/admission: snapshot.go): per tenant and total — depth, capacity, oldest-item age, queue-wait histogram, rule state, LIFO state and switches, sheds by reason, the load gauge, shedding — with a conservation check (pushes = served + shed + removed + queued). Built in chunk 9 (FairSnapshot and fairSnapshot in fair.go; three fields in snapshot.go): per tenant in flight, share and time at share; in total the limit, in flight, active tenants, tenants with a lease, rounds, selections held back by reason, lease starts and ends, and saturated time; with its check (lease starts - ends = in flight = the sum over tenants). Not built: the limit's changes and gate refusals (chunk 10)."
     ],
     "docIds": [],
     "sourceIds": [
@@ -1590,8 +1605,8 @@
     "id": "r-policy",
     "kind": "component",
     "name": "Policy",
-    "description": "The interface the engine asks: given this failure — did anything reach the database, is the breaker open, how much of the deadline is left — may it be retried.",
-    "status": "planned",
+    "description": "The interface the engine calls: Attempt for each first attempt it forwards, Decide for each failed statement, Snapshot. A failure carries the facts a decision reads: did anything reach the database, is the request inside a transaction, which attempt this was, is the breaker open, is the instance draining, and the request's deadline. The answer is retry, or one refusal reason.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1605,8 +1620,8 @@
     "id": "r-off",
     "kind": "component",
     "name": "Off",
-    "description": "The default. Never retries.",
-    "status": "planned",
+    "description": "The default. Never retries: every failure offered is refused with the reason off. It still counts first attempts and offers.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1620,8 +1635,8 @@
     "id": "r-once",
     "kind": "component",
     "name": "PreForwardOnce",
-    "description": "Retries at most once, only when nothing reached the database, only within budget, never while the breaker is open, never holding a queue slot or a connection while it waits.",
-    "status": "planned",
+    "description": "Grants a retry only when all of these hold, checked in this order: the request has not been retried before, it is outside a transaction, nothing of it reached the database, the breaker is not open, the instance is not draining, the time is before the request's deadline (at the deadline is late), and the budget holds a whole token. Each refusal is counted under the first reason that applies.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1635,8 +1650,8 @@
     "id": "r-budget",
     "kind": "component",
     "name": "Retry budget",
-    "description": "An integer bucket: each first attempt deposits a tenth of a token, each retry takes one; capped, so credit expires. Retries stay at or below 10% of requests.",
-    "status": "planned",
+    "description": "An integer bucket counted in tenths of a token. It starts at the floor (from the config file: retry.floor, 10 tokens by default, divided by fleet.instances). Each first attempt deposits one tenth; a retry withdraws ten, and only when ten are held. Deposits above the cap (retry.bucket_cap, 100 tokens per instance by default) are lost and counted as expired; stored credit does not expire with time. So from the start of a run ten times the retries is at most the first attempts plus the floor, and the largest burst of retries after a quiet period is the cap.",
+    "status": "existing",
     "tags": [],
     "plannedNotes": [],
     "docIds": [],
@@ -1650,9 +1665,26 @@
     "id": "r-snap",
     "kind": "component",
     "name": "Retry snapshot",
-    "description": "Snapshot(): attempts, retries, budget level, deposits, withdrawals, exhaustions, refusals by reason.",
-    "status": "planned",
+    "description": "Snapshot(): the policy in force, first attempts, failures offered, retries granted, refusals by reason (a refusal for budget is an exhaustion), the budget's level with its peak, its cap and floor, and the tenths deposited, withdrawn and expired. Its check holds the conservation laws (offered = retries + refusals; deposits = withdrawals + expired + level), the level within the cap, and the budget bound.",
+    "status": "existing",
     "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-retry",
+    "technology": "Go"
+   },
+   {
+    "id": "r-everything",
+    "kind": "component",
+    "name": "Retry-everything policy and plants",
+    "description": "internal/retry/retrytest. A deliberately wrong policy for the ablation runs: it retries every failure, up to three times, whatever reached the database. The binary does not link it. Beside it the core has test-only plant bits (ignore the reached fact, no once bound, no withdrawal, no cap, ignore the breaker, withdraw first) that the config file can never set.",
+    "status": "existing",
+    "tags": [
+     "test"
+    ],
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2196,7 +2228,7 @@
     "id": "o-enginesrc",
     "kind": "component",
     "name": "Engine source mapping",
-    "description": "internal/obs/enginesrc. The metric declarations of component engine and the mapping to points from two snapshots: the engine's, and the shell's (mailbox depth and peak, goroutines, readers and writers, deadlines; names shell_...). Labels are outcome, reason and mode; no tenant label so far. Registers the engine's wire, classifier, pool and admission sources beside its own. Holds the health rule database: degraded while no database connection is usable and the last connect failed or the breaker is not closed; hands on the breaker rule and the admission rule with it.",
+    "description": "internal/obs/enginesrc. The metric declarations of component engine and the mapping to points from two snapshots: the engine's, and the shell's (mailbox depth and peak, goroutines, readers and writers, deadlines; names shell_...). Labels are outcome, reason and mode; no tenant label so far. Registers the engine's wire, classifier, pool, admission and retry sources beside its own. Its retry metrics: failures offered and granted, requests run again, those still pending with their peak, retries by error-contract row, and retried requests by how they ended. Holds the health rule database: degraded while no database connection is usable and the last connect failed or the breaker is not closed; hands on the breaker rule and the admission rule with it.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -2223,10 +2255,25 @@
     "technology": "Go"
    },
    {
+    "id": "o-retrysrc",
+    "kind": "component",
+    "name": "Retry source mapping",
+    "description": "internal/obs/retrysrc. The metric declarations of component retry and the mapping from the retry snapshot to points: the policy in force, first attempts, offers, retries, refusals by reason, exhaustions, the budget's level with its peak, cap and floor, and the tenths deposited, withdrawn and expired. The one label is reason; no tenant label. Holds no health rule.",
+    "status": "existing",
+    "tags": [],
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "parentId": "c-obs",
+    "technology": "Go"
+   },
+   {
     "id": "o-admsrc",
     "kind": "component",
     "name": "Admission source mapping",
-    "description": "internal/obs/admsrc. The metric declarations of component admission and the mapping from the admission snapshot to points. Totals always: the rule, capacities, queued, tenant queues, pushes, served, removed, sheds by reason, LIFO switches, queues by rule state, the load gauge, shedding. With obs.detail on: the queue-wait histogram and a row set per tenant, the gateway's first metrics with a tenant label. Holds the health rule admission: degraded while a tenant queue shed within the last interval.",
+    "description": "internal/obs/admsrc. The metric declarations of component admission and the mapping from the admission snapshot to points. Totals always: the rule, capacities, queued, tenant queues, pushes, served, removed, sheds by reason, LIFO switches, queues by rule state, the load gauge, shedding. With obs.detail on: the queue-wait histogram and a row set per tenant, the gateway's first metrics with a tenant label. Since chunk 9 also the fair dispatcher's totals (limit, in flight, active tenants, tenants with a lease, rounds, selections held back by reason, lease starts and ends, saturated time) and, per tenant, in flight, share and time at share. Holds the health rule admission: degraded while a tenant queue shed within the last interval.",
     "status": "existing",
     "tags": [],
     "plannedNotes": [],
@@ -2290,7 +2337,7 @@
     "id": "o-assert",
     "kind": "component",
     "name": "SQL assertions and their runner",
-    "description": "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The assertion files check the direct baselines' counts and, for each wire scenario, that startup failures by reason, TLS requests by answer and handshake failures equal what was injected and sent, and for the classifier scenarios that rejects equal the statements sent and the fake Postgres started only what was forwarded (nothing in the reject-only scenario). For the end-to-end scenarios of both tiers: conservation per instance, the resets against the leases ended and, where the scenario has a fault, error-contract replies by row = faults injected; in tier S also proxy completed = workload completed and replies by row = what the clients saw. For the admission scenarios: conservation (the engine's sheds = the queues' sheds too), served-wait bounds from the histogram buckets, depth, and 53M01 replies = sheds. For the pool scenarios: in every flush open + connecting is at most the cap, every dial and checkout has one outcome, nothing is lent at the end, and each scenario's own claim (the dial rate, the breaker's recovery, the fake's connection peak, no statement left without a reply).",
+    "description": "scripts/csv-assert.sh and test/analysis. The runner finds run directories, checks them with guard.sql (schema version, no empty required field, one run id per directory, no empty run), loads views.sql and runs each assertion file; a returned row is a violation. Fails closed and never skips. The assertion files check the direct baselines' counts and, for each wire scenario, that startup failures by reason, TLS requests by answer and handshake failures equal what was injected and sent, and for the classifier scenarios that rejects equal the statements sent and the fake Postgres started only what was forwarded (nothing in the reject-only scenario). For the end-to-end scenarios of both tiers: conservation per instance, the resets against the leases ended and, where the scenario has a fault, error-contract replies by row = faults injected; in tier S also proxy completed = workload completed and replies by row = what the clients saw. For the admission scenarios: conservation (the engine's sheds = the queues' sheds too), served-wait bounds from the histogram buckets, depth, and 53M01 replies = sheds. For the fairness scenarios: in every flush lease starts - ends = in flight = the sum over tenants, at most the limit; the quiet tenant against its run alone; the flooder's part of the shedding; every one of 40 quiet tenants on its own rows; and time at share for a tenant holding transactions. For the retry scenarios: per flush window ten times the retries is at most the first attempts plus the credit carried in; a retried request ends in exactly one way; retries only on the row lost-after-read; writes applied never exceed the distinct writes sent, except in the retry-everything arm. For the pool scenarios: in every flush open + connecting is at most the cap, every dial and checkout has one outcome, nothing is lent at the end, and each scenario's own claim (the dial rate, the breaker's recovery, the fake's connection peak, no statement left without a reply).",
     "status": "existing",
     "tags": [
      "test"
@@ -2661,8 +2708,8 @@
     "id": "c9",
     "sourceId": "c-engine",
     "targetId": "c-retry",
-    "label": "Ask whether a failure may be retried",
-    "status": "planned",
+    "label": "Reports each first attempt it forwards; asks whether a failed statement may be retried",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -2753,6 +2800,19 @@
     "sourceId": "c-adm",
     "targetId": "c-obs",
     "label": "Keeps its counters as one plain snapshot (gauges with peaks, queue-wait histograms, a conservation check); the admission source mapping reads it",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, plain structs"
+   },
+   {
+    "id": "c18",
+    "sourceId": "c-retry",
+    "targetId": "c-obs",
+    "label": "Keeps its counters as one plain snapshot (a gauge with its peak, two conservation checks); the retry source mapping reads it",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -2856,8 +2916,8 @@
     "id": "s8",
     "sourceId": "c-retry",
     "targetId": "c-work",
-    "label": "Written against these types only",
-    "status": "planned",
+    "label": "Written against these types only: so far it uses the three-valued reached-the-database fact",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3324,7 +3384,7 @@
     "id": "e30",
     "sourceId": "e-admq",
     "targetId": "n-adm",
-    "label": "Push, pop, remove, expire, sweep; takes the sheds and the next deadline",
+    "label": "Push, pop, remove, expire, sweep; takes the sheds and the next deadline; installs the fair dispatcher; lease starts and ends; the demand it would release",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -3454,7 +3514,33 @@
     "id": "e39",
     "sourceId": "e-corepool",
     "targetId": "e-admq",
-    "label": "When the breaker opens: sweep, then refuse every queued request",
+    "label": "When the breaker opens: sweep, then refuse every queued request. Reports the lease ends of the core's paths; asks how many waiting requests the dispatcher would release",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e41",
+    "sourceId": "e-pipeline",
+    "targetId": "e-admq",
+    "label": "Reports each lease start at the lend; while a request is held back, dispatches again at the end of every event",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e42",
+    "sourceId": "e-reset",
+    "targetId": "e-admq",
+    "label": "Reports the lease end at a release",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -3480,8 +3566,86 @@
     "id": "e12",
     "sourceId": "e-pipeline",
     "targetId": "n-retry",
-    "label": "May this failure be retried",
-    "status": "planned",
+    "label": "Through the retry adapter: each first attempt at the forward, each lost statement",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e43",
+    "sourceId": "e-retry",
+    "targetId": "e-seams",
+    "label": "Implements the retry seam",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, interface implementation"
+   },
+   {
+    "id": "e44",
+    "sourceId": "e-retry",
+    "targetId": "n-retry",
+    "label": "Attempt, Decide, Snapshot",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e45",
+    "sourceId": "e-fail",
+    "targetId": "e-retry",
+    "label": "Each lost statement, before it is counted failed; a granted one is run again instead of answered",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e46",
+    "sourceId": "e-retry",
+    "targetId": "e-pipeline",
+    "label": "Re-enters a granted retry at the queue stage; ends its queue wait and statement deadline at the request's deadline; counts first attempts at the forward",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e47",
+    "sourceId": "e-retry",
+    "targetId": "e-corepool",
+    "label": "Reads the breaker's state without side effect, at the offer and before every lend",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "e48",
+    "sourceId": "e-retry",
+    "targetId": "e-admq",
+    "label": "Takes a waiting retry out of its tenant queue when the breaker is not closed; it is answered 53M03",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -3610,7 +3774,7 @@
     "id": "e28",
     "sourceId": "e-fail",
     "targetId": "e-seams",
-    "label": "Hands each failure, with its reached fact, to the retry policy",
+    "label": "Hands each lost statement, with its reached fact, to the retry seam",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -4377,8 +4541,8 @@
     "id": "a3",
     "sourceId": "n-engine",
     "targetId": "a-dispatch",
-    "label": "Capacity freed: who runs next",
-    "status": "planned",
+    "label": "Installs it with the limit and the weights; reports every lease start and end; asks how many waiting requests it would release",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4468,7 +4632,7 @@
     "id": "a10",
     "sourceId": "a-queues",
     "targetId": "a-dispatch",
-    "label": "At each pop: which tenant's queue is served next",
+    "label": "At each pop: which tenant's queue is served next, or none; a pop put back is undone there too",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -4494,8 +4658,8 @@
     "id": "a12",
     "sourceId": "a-dispatch",
     "targetId": "a-tenants",
-    "label": "In-flight counts and shares",
-    "status": "planned",
+    "label": "Which tenants wait, and each one's turn; adds time at share to a tenant's counters",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4533,7 +4697,7 @@
     "id": "a15",
     "sourceId": "a-dispatch",
     "targetId": "n-work",
-    "label": "Work units and outcomes",
+    "label": "Tenants as work-vocabulary types (so far a tenant is a string and the engine converts)",
     "status": "planned",
     "plannedNotes": [],
     "docIds": [],
@@ -4962,8 +5126,8 @@
     "id": "t1",
     "sourceId": "n-engine",
     "targetId": "r-policy",
-    "label": "May this failure be retried",
-    "status": "planned",
+    "label": "Offers each failed statement with its facts: may it be retried",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4975,8 +5139,8 @@
     "id": "t2",
     "sourceId": "n-engine",
     "targetId": "r-budget",
-    "label": "Deposit on each first attempt",
-    "status": "planned",
+    "label": "Reports each first attempt it forwards, which deposits a tenth of a token",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -4989,7 +5153,7 @@
     "sourceId": "n-engine",
     "targetId": "r-snap",
     "label": "Snapshot()",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -5002,7 +5166,7 @@
     "sourceId": "r-off",
     "targetId": "r-policy",
     "label": "Implements",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -5015,7 +5179,7 @@
     "sourceId": "r-once",
     "targetId": "r-policy",
     "label": "Implements",
-    "status": "planned",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -5027,8 +5191,8 @@
     "id": "t6",
     "sourceId": "r-once",
     "targetId": "r-budget",
-    "label": "Withdraw one token per retry",
-    "status": "planned",
+    "label": "Withdraws one token per retry; refuses when less than one is held",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
@@ -5040,14 +5204,53 @@
     "id": "t7",
     "sourceId": "r-policy",
     "targetId": "n-work",
-    "label": "Reads the outcome's reached-the-database fact",
-    "status": "planned",
+    "label": "The reached-the-database fact of a failure is the work vocabulary's three-valued type",
+    "status": "existing",
     "plannedNotes": [],
     "docIds": [],
     "sourceIds": [
      "plan"
     ],
     "technology": "Go types"
+   },
+   {
+    "id": "t8",
+    "sourceId": "r-snap",
+    "targetId": "n-obs",
+    "label": "Uses the gauge and the conservation check; the retry source mapping reads the snapshot",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, plain structs"
+   },
+   {
+    "id": "t9",
+    "sourceId": "r-everything",
+    "targetId": "r-policy",
+    "label": "Implements",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go, test code, interface implementation"
+   },
+   {
+    "id": "t10",
+    "sourceId": "n-e2e",
+    "targetId": "r-everything",
+    "label": "The ablation arm of each retry scenario runs the engine with it; the canaries set the plant bits",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go test"
    },
    {
     "id": "m1",
@@ -6418,7 +6621,7 @@
     "id": "o61",
     "sourceId": "o-enginesrc",
     "targetId": "n-engine",
-    "label": "Reads the engine snapshot and the wire, classifier, reply, pool and admission snapshots the engine holds",
+    "label": "Reads the engine snapshot and the wire, classifier, reply, pool, admission and retry snapshots the engine holds",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -6444,7 +6647,7 @@
     "id": "o63",
     "sourceId": "o-enginesrc",
     "targetId": "o-collector",
-    "label": "Registers the engine source (shell metrics included) and the engine's wire, classifier, pool and admission sources",
+    "label": "Registers the engine source (shell metrics included) and the engine's wire, classifier, pool, admission and retry sources",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -6705,6 +6908,45 @@
     "sourceId": "o-poolsrc",
     "targetId": "o-health",
     "label": "Supplies the rule breaker",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o87",
+    "sourceId": "o-retrysrc",
+    "targetId": "n-retry",
+    "label": "Reads the retry snapshot",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o88",
+    "sourceId": "o-enginesrc",
+    "targetId": "o-retrysrc",
+    "label": "Takes the retry source for the engine's retry snapshot",
+    "status": "existing",
+    "plannedNotes": [],
+    "docIds": [],
+    "sourceIds": [
+     "plan"
+    ],
+    "technology": "Go"
+   },
+   {
+    "id": "o89",
+    "sourceId": "o-catalog",
+    "targetId": "o-retrysrc",
+    "label": "Lists every metric it declares",
     "status": "existing",
     "plannedNotes": [],
     "docIds": [],
@@ -7154,6 +7396,9 @@
     },
     {
      "relationshipId": "c17"
+    },
+    {
+     "relationshipId": "c18"
     }
    ],
    "legend": {
@@ -7672,6 +7917,9 @@
      "elementId": "e-corepool"
     },
     {
+     "elementId": "e-retry"
+    },
+    {
      "elementId": "n-shell"
     },
     {
@@ -7746,6 +7994,12 @@
      "relationshipId": "e33"
     },
     {
+     "relationshipId": "e41"
+    },
+    {
+     "relationshipId": "e42"
+    },
+    {
      "relationshipId": "e9"
     },
     {
@@ -7774,6 +8028,24 @@
     },
     {
      "relationshipId": "e12"
+    },
+    {
+     "relationshipId": "e43"
+    },
+    {
+     "relationshipId": "e44"
+    },
+    {
+     "relationshipId": "e45"
+    },
+    {
+     "relationshipId": "e46"
+    },
+    {
+     "relationshipId": "e47"
+    },
+    {
+     "relationshipId": "e48"
     },
     {
      "relationshipId": "e13"
@@ -8694,10 +8966,19 @@
      "elementId": "r-snap"
     },
     {
+     "elementId": "r-everything"
+    },
+    {
      "elementId": "n-engine"
     },
     {
      "elementId": "n-work"
+    },
+    {
+     "elementId": "n-obs"
+    },
+    {
+     "elementId": "n-e2e"
     }
    ],
    "edges": [
@@ -8721,6 +9002,15 @@
     },
     {
      "relationshipId": "t7"
+    },
+    {
+     "relationshipId": "t8"
+    },
+    {
+     "relationshipId": "t9"
+    },
+    {
+     "relationshipId": "t10"
     }
    ],
    "legend": {
@@ -9168,6 +9458,9 @@
      "elementId": "o-poolsrc"
     },
     {
+     "elementId": "o-retrysrc"
+    },
+    {
      "elementId": "o-admsrc"
     },
     {
@@ -9208,6 +9501,9 @@
     },
     {
      "elementId": "n-pool"
+    },
+    {
+     "elementId": "n-retry"
     },
     {
      "elementId": "csvfiles"
@@ -9464,6 +9760,15 @@
      "relationshipId": "o86"
     },
     {
+     "relationshipId": "o87"
+    },
+    {
+     "relationshipId": "o88"
+    },
+    {
+     "relationshipId": "o89"
+    },
+    {
      "relationshipId": "o80"
     },
     {
@@ -9550,7 +9855,7 @@
    "id": "plan",
    "title": "mini-gateway PLAN.md (approved 2026-11-24)",
    "url": "https://github.com/nickstrad/mini-gateway/blob/main/PLAN.md",
-   "notes": "Target architecture. Built so far: chunks 0–8. Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
+   "notes": "Target architecture. Built so far: chunks 0–9 and chunk 12 (chunks 10 and 11 have not landed yet). Dashed parts are planned. Status existing means the element is in the code; status planned means it is not, or not all of it (see its plannedNotes)."
   }
  ]
 }

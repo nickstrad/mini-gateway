@@ -1,0 +1,62 @@
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (4.85s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (6.37s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (9.47s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (7.13s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (2.35s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (1.57s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (1.53s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (1.57s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (1.73s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (2.14s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (2.75s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (3.67s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (5.21s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (4.33s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (3.61s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (3.49s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (2.82s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (3.17s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (3.52s)
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:413: tier R: 0 dirty observations over 24 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (3.21s)
+PASS
+ok  	github.com/nickstrad/mini-gateway/test/e2e	100.800s

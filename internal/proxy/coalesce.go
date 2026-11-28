@@ -427,6 +427,12 @@ func (e *Engine) coalFailed(c *client, req *request, row pgwire.ErrRowID, reache
 	e.coalNotices()
 }
 
+func (e *Engine) coalRetried(req *request) {
+	if req.fl != 0 {
+		req.stored, req.sawErr = nil, false
+	}
+}
+
 func (e *Engine) coalRefused(c *client, row pgwire.ErrRowID) {
 	if c.req != nil {
 		e.coalFailed(c, c.req, row, work.No)

@@ -99,6 +99,8 @@ type File struct {
 	Backend     Backend    `json:"backend"`
 	Breaker     Breaker    `json:"breaker"`
 	Coalesce    Coalesce   `json:"coalesce"`
+	Retry       Retry      `json:"retry"`
+	Fairness    Fairness   `json:"fairness"`
 
 	res resolved
 }

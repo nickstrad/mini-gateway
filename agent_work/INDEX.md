@@ -212,3 +212,32 @@ Record: `chunks/c11-coalescer/` (brief, notes, gate extra).
 | `../test/e2e/c11_coalesce.go` | Tier S coalescer scenarios (`CoalesceScenarios()`); full 200-seed sweep with `MG_C11_FULL_SWEEP=1 DST_SEEDS=200 go test -run '^TestScenarioCoalesce$' ./test/e2e` | Opus | See NOTES.md, "200-seed sweeps" |
 | `../test/e2e/c11_tierr_test.go` | Tier R coalescer tests and headline 2 (`MG_TIER_R=1 go test -run '^TestTierRCoalesce' ./test/e2e`) | Opus | Green on Postgres 17; numbers in NOTES.md |
 | `../docs/knowledge/coalescer.md` | Facts for chunks 12–14: the core API, the engine wiring, scenarios and tier R technique | Opus | — |
+
+## Phase 2, chunk 12 — retry policy (Opus, 2026-11-27)
+
+Record: `chunks/c12-retry/` (brief, notes, gate extra).
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../scripts/fuzz-plant.sh` (changed) | Also plants `retry.PlantWithdrawFirst` (`MG_FUZZ_PLANT=retry-withdraw-first`) and requires `FuzzRetryOps` to find it within `FUZZ_SECONDS` | Opus | Found at once (a committed seed reaches it) |
+| `../scripts/gen-docs.d/c12-fault-matrix.sh` | Generates `docs/fault-matrix.md` from `internal/proxy/matrix.go` (`--check` diffs) | Opus | Current |
+| `chunks/c12-retry/gate/extra.sh` | G10: `fuzz-plant.sh`, the retry scenario canaries, the retry-everything arm of both retry scenarios | Opus | — |
+| `../docs/knowledge/retry-policy.md` | Facts for chunks 13 and 14: the core, the engine wiring, config keys, the suspect rule and the half-open trick for zero-byte refusals | Opus | — |
+## Phase 2, chunk 9 — fairness (Opus, 2026-11-27)
+
+Record: `chunks/c09-fairness/` (brief, notes, gate extra).
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../scripts/fuzz-plant.sh` (changed) | Also plants `admission.FairPlantUnpopKeepsTurn` (`MG_FUZZ_PLANT=fairness-unpop-turn`) and requires `FuzzFairnessOps` to find it within `FUZZ_SECONDS`; no committed seed finds it on its own | Opus | Found after 2 s of 20 s (empty cache) |
+| `chunks/c09-fairness/gate/extra.sh` | G10: `fuzz-plant.sh`, then the fairness canaries in `internal/admission`, `internal/proxy` and `test/e2e` on their own | Opus | — |
+| `../docs/knowledge/fairness.md` | Facts for chunks 10, 13, 14: the fair rule as built, where chunk 10 sets the limit (`Queues.SetLimit`, `AdmissionQueue.SetLimit`), the metrics, scenario cost | Opus | — |
+## Lease-lab port — the keepers of `exp/lease-lab` (Opus, 2026-11-27)
+
+Notes: `chunks/lease-lab-port/NOTES.md`; evaluation: `chunks/lease-lab-port/EVALUATION.md`.
+
+| Path | Purpose | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `chunks/c05-classifier/lease-exp/report-sql/` | The lease lab's report SQL kept as a record (tables 00–10, `views.sql`, `params.sql`, `empty/` sentinels, `conservation.sql`) and its runner `lease-report.sh` (defaults: SQL in its own folder, `../calibration.json`). Run: `PATH=$PATH:/root/.local/bin agent_work/chunks/c05-classifier/lease-exp/report-sql/lease-report.sh <campaign-dir> <out-dir> [name=value ...]`; needs DuckDB 1.5.x. No test or gate stage reads it | Opus (copied from the lab branch) | 2026-11-27 over main's r6 runs (`e7/tier-r-per-run.tar.gz`, `1-r6/`): exit 1, table 01 byte-identical to `e7/r6/tables/01-calibration.csv`, table 00's 8 runner rows equal main's; the other tables need `metrics.csv` and `histograms.csv`, which main does not hold |
+| `chunks/c05-classifier/lease-exp/e7/isolation/e4.sql` | The E4 isolation oracle check. Run: `duckdb -bail -c "SET VARIABLE e4_root='<dir>';" -f e4.sql` over the unpacked `per-run.tar.gz` | Opus (copied from the lab branch) | 2026-11-27: output identical to `e4-oracle-check.txt` |
+| `../docs/knowledge/lease-experiment-method.md` | Method facts from the lease experiment for chunk 14: bridge address against the published port, the CPU-bound connect ceiling, reset cost by backend history, `pg_sleep` overshoot, the A/A floor, the corrected capacity formula | Opus | — |

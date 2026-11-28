@@ -77,7 +77,7 @@
       "chunk": 9,
       "title": "Fairness that binds only when it must",
       "file": "book/chapters/09-fairness.md",
-      "status": "planned"
+      "status": "live"
     },
     {
       "number": 10,
@@ -98,7 +98,7 @@
       "chunk": 12,
       "title": "Retries, off by default",
       "file": "book/chapters/12-retry-policy.md",
-      "status": "planned"
+      "status": "live"
     },
     {
       "number": 13,

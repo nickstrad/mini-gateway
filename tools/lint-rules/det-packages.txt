@@ -48,3 +48,8 @@ internal/obs/admsrc
 # Chunk 11: the coalescer core (flight table, join modes, caps, no-share list).
 internal/coalesce
 internal/obs/coalsrc
+# Chunk 12: the retry core (policies, the budget) and its test-only ablation policy.
+internal/retry
+internal/retry/retrytest
+# Chunk 12: the retry snapshot mapping.
+internal/obs/retrysrc

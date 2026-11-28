@@ -11,6 +11,7 @@ type tenantStats struct {
 	lifoOn  int64
 	lifoOff int64
 	hist    *obs.Histogram
+	atShare Time
 }
 
 // loadGauge tracks the minimum served queue wait per interval for folly's
@@ -62,6 +63,7 @@ type tenantQueue struct {
 	shedAt       Time
 	hasShed      bool
 	stats        *tenantStats
+	turn         int64
 }
 
 func (t *tenantQueue) empty() bool { return t.ring.len() == 0 }

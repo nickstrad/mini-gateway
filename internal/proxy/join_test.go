@@ -177,8 +177,8 @@ func TestJoinHalfOpenTrialWithQueuedRequestsFromTwoTenants(t *testing.T) {
 	t.Run("trial-passes", func(t *testing.T) {
 		r, trial := open(t)
 		a := r.open(trial)
-		if !bytes.HasSuffix(written(a, proxy.ActDBWrite, trial), query("SELECT 11")) || r.pool().Breaker != int64(pool.BreakerClosed) {
-			t.Fatalf("the trial connection was not lent to the oldest request: %q", written(a, proxy.ActDBWrite, trial))
+		if !bytes.HasSuffix(written(a, proxy.ActDBWrite, trial), query("SELECT 12")) || r.pool().Breaker != int64(pool.BreakerClosed) {
+			t.Fatalf("the trial connection was not lent to the tenant whose turn it is (tenant 0 had the last lease): %q", written(a, proxy.ActDBWrite, trial))
 		}
 		r.tick(time.Millisecond)
 		if len(r.dbs) < 3 {
@@ -186,7 +186,7 @@ func TestJoinHalfOpenTrialWithQueuedRequestsFromTwoTenants(t *testing.T) {
 		}
 		second := r.dbs[len(r.dbs)-1]
 		a = r.open(second)
-		if !bytes.HasSuffix(written(a, proxy.ActDBWrite, second), query("SELECT 12")) {
+		if !bytes.HasSuffix(written(a, proxy.ActDBWrite, second), query("SELECT 11")) {
 			t.Fatalf("the second tenant was not served: %q", written(a, proxy.ActDBWrite, second))
 		}
 		s, as := r.agree()

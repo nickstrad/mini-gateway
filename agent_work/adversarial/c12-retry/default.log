@@ -1,0 +1,19 @@
+--- FAIL: TestAdv_10_MatrixExplicitNeverPaths (0.00s)
+    contracts_test.go:55: seed=12012026; REPLAY: /usr/local/go/bin/go test -count=1 -run '^TestAdv_10_MatrixExplicitNeverPaths$' ./agent_work/adversarial/c12-retry/...
+    contracts_test.go:61: fault "Zero-byte refusal at the request's deadline" says client="no retry at equality" but Retried()=true
+    contracts_test.go:61: fault "Zero-byte refusal whose loss opens the breaker" says client="no retry" but Retried()=true
+--- FAIL: TestAdv_5_CarriedCreditExceedsWindowFloor (0.00s)
+    core_test.go:97: seed=12012026; REPLAY: /usr/local/go/bin/go test -count=1 -run '^TestAdv_5_CarriedCreditExceedsWindowFloor$' ./agent_work/adversarial/c12-retry/...
+    core_test.go:110: window first_attempts=20 retries=20 floor_tenths=10: 200 > 30
+--- FAIL: TestAdv_5_QuietHourRetainsBurstCredit (0.00s)
+    core_test.go:114: seed=12012026; REPLAY: /usr/local/go/bin/go test -count=1 -run '^TestAdv_5_QuietHourRetainsBurstCredit$' ./agent_work/adversarial/c12-retry/...
+    core_test.go:126: after quiet hour retries=15 new attempts=15 floor=1 tokens; old credit still usable
+--- FAIL: TestAdv_6_BreakerReopensBeforeQueuedRetryRuns (0.00s)
+    engine_test.go:118: seed=12012026; REPLAY: /usr/local/go/bin/go test -count=1 -run '^TestAdv_6_BreakerReopensBeforeQueuedRetryRuns$' ./agent_work/adversarial/c12-retry/...
+    engine_test.go:124: granted while closed, but 1 retry Query emitted after breaker opened
+--- FAIL: TestAdv_7_WaitingRetryConsumesQueueSlot (0.00s)
+    engine_test.go:146: seed=12012026; REPLAY: /usr/local/go/bin/go test -count=1 -run '^TestAdv_7_WaitingRetryConsumesQueueSlot$' ./agent_work/adversarial/c12-retry/...
+    engine_test.go:155: waiting retry queued=1 lent=0; literal claim requires neither
+FAIL
+FAIL	github.com/nickstrad/mini-gateway/agent_work/adversarial/c12-retry	0.940s
+FAIL

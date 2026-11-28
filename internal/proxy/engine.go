@@ -110,6 +110,10 @@ func New(cfg Config) (*Engine, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrConfig, err)
 		}
+		// Install the fair dispatcher on every engine-constructed admission queue.
+		if err := aq.installFair(cfg.fairConfig()); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrConfig, err)
+		}
 		e.seams.Queue = aq
 	}
 	if e.seams.Queue == nil {
@@ -124,8 +128,8 @@ func New(cfg Config) (*Engine, error) {
 	if e.seams.Release == nil {
 		e.seams.Release = ResetAlwaysPolicy{}
 	}
-	if e.seams.Retry == nil {
-		e.seams.Retry = RetryOff{}
+	if err := e.initRetry(); err != nil {
+		return nil, err
 	}
 	e.stmtHist = obs.NewDurationHistogram()
 	e.queueHist = obs.NewDurationHistogram()
@@ -252,6 +256,7 @@ func (e *Engine) begin(now Instant, out []Action) {
 }
 
 func (e *Engine) finish() []Action {
+	e.fairRedispatch()
 	e.fireTimers()
 	if e.core != nil && !e.stopping {
 		e.corePump()
@@ -383,6 +388,9 @@ func (e *Engine) Quiesce() error {
 	if e.snap.DBLent.Value != 0 || e.snap.Resetting.Value != 0 {
 		errs = append(errs, fmt.Errorf("%d lent, %d resetting", e.snap.DBLent.Value, e.snap.Resetting.Value))
 	}
+	if n := e.snap.RetryPending.Value; n != 0 {
+		errs = append(errs, fmt.Errorf("%d retries pending", n))
+	}
 	errs = append(errs, e.admissionQuiet())
 	errs = append(errs, e.coalQuiet())
 	return errors.Join(errs...)
@@ -429,6 +437,12 @@ func (e *Engine) Invariants() error {
 		return e.wire.Snapshot().Check()
 	}
 	if err := e.admissionCheck(); err != nil {
+		return err
+	}
+	if err := e.fairnessCheck(); err != nil {
+		return err
+	}
+	if err := e.retryCheck(); err != nil {
 		return err
 	}
 	if err := e.coalCheck(); err != nil {

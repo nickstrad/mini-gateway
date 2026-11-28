@@ -1,0 +1,12 @@
+=== RUN   TestProbeBlind
+    tierr_test.go:887: column prepared falsely counted as exercised (1) by invalid observation
+    tierr_test.go:887: column cursors falsely counted as exercised (1) by invalid observation
+    tierr_test.go:887: column listens falsely counted as exercised (1) by invalid observation
+    tierr_test.go:887: column adv_locks falsely counted as exercised (1) by invalid observation
+    tierr_test.go:887: column session_gucs falsely counted as exercised (1) by invalid observation
+    tierr_test.go:887: column temp_rels falsely counted as exercised (1) by invalid observation
+    tierr_test.go:887: column role_changed falsely counted as exercised (1) by invalid observation
+--- FAIL: TestProbeBlind (0.00s)
+FAIL
+FAIL	github.com/nickstrad/mini-gateway/test/e2e	0.064s
+FAIL
