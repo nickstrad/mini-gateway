@@ -65,7 +65,7 @@ fail=0
 plant FuzzEngineOps test/e2e queued-vanish 'queue holds' queue-slot || fail=1
 plant FuzzPoolOps internal/pool reset-clears-suspect 'lent suspect' reset-clears-suspect || fail=1
 plant FuzzAdmissionOps internal/admission admission-remove-order 'position [0-9]+: core|reference' remove-order || fail=1
-plant FuzzRetryOps internal/retry retry-withdraw-first 'reference' withdraw-first || fail=1
+plant FuzzRetryOps internal/retry retry-withdraw-first 'reference|withdrawn for' withdraw-first || fail=1
 [ "$fail" = 0 ] || exit 1
 note=$(printf '%s; ' "${notes[@]}")
 echo "NOTE: ${note%; } (budget ${secs}s each)"

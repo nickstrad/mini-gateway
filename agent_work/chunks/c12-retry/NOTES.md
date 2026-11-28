@@ -147,7 +147,22 @@ health rule gives the same state with and without exhausted retries) and
 
 ## Sweeps (200 seeds)
 
-SWEEP-RESULTS-PLACEHOLDER
+Both tier S scenarios, all three arms (`off`, `on`, `everything`), **207 distinct seeds**
+(1–207), every seed run twice for the replay law: 1,242 distinct (scenario, arm, seed) runs, all
+passed, 0 failed. The runner takes at most 20 seeds per call (as chunk 7's) and the three pinned
+seeds (1, 2, 3, `test/e2e/testdata/seeds.txt`) come first, so the sweep was twelve calls with
+`DST_SEEDS=20` and `DST_SEED_BASE` 4, 21, 38, …, 191 (`/tmp/zgw-c12/sweep.sh`, one `RUN_DIR`
+per call, logs `/tmp/zgw-c12/sweep-<base>.log`; each call: 120 passed, 0 failed). Distinct seeds
+counted from the `--- PASS` lines of all twelve logs.
+
+`scripts/csv-assert.sh <run-dir>/<scenario> test/analysis/<scenario>/*.sql` over every call's
+runs: all 24 (12 calls × 2 scenarios) green: "3 SQL files run, 0 failures"
+each (`budget.sql`, `conservation.sql`, `load.sql`; DuckDB v1.5.5). Logs
+`/tmp/zgw-c12/csv-sweep.out`, `/tmp/zgw-c12/csv-rest.out`.
+
+Without `DST_SEEDS` (the unit run, `go test ./...`) `TestScenarioRetry` runs seed 1 only, so the
+package stays inside the gate's 30-minute `go test` limit; the gate's own sweep (G4) sets
+`DST_SEEDS` and runs 20 seeds per scenario and arm.
 
 ## The completed matrix
 
@@ -296,4 +311,26 @@ scenario code in `test/e2e/c12_*.go` (relay, client, runner); test files 1,909 l
 
 ## Gate result
 
-GATE-PLACEHOLDER
+**Not green.** Three build-stage runs of `scripts/gate.sh c12-retry`, all on clean committed
+trees; the last on `7a27166` (2026-11-27 23:50 to 2026-11-28 ~02:10), `overall=fail`. The machine's
+load average was 15–40 on 4 cores for the whole period (other chunks' gates and builds running
+beside it). The two earlier runs (`2342158`, `f6fc153`) overlapped for a while, which I caused by
+starting the second before the first had stopped; both were then killed.
+
+| Stage | Last run | Cause |
+| --- | --- | --- |
+| G0, G1, G2, G3 counted, G4 markers, G5 fuzz (19 targets), G8 gen-docs, G9 site | pass | — |
+| G3 unit | fail | `internal/obs/simrun` and `test/e2e` hit the gate's 30-minute `go test -timeout`. At the timeout `test/e2e` had spent ~29.5 min on earlier chunks' tests; `TestScenarioRetry` had run 29 s. On the landed chunks the whole G3 unit run took 425 s (c07) and 847 s (c08); here G3 unit took 2,474 s. In gate run 1 `test/e2e` passed in 1,729 s (with three retry seeds; now one); `simrun` passed alone in 561 s. |
+| G3 race | fail | chunk 7's wall-clock test `TestFuzzPoolOpsCostIsBounded` (one execution 6.7 ms / 9.6 ms / 12.2 ms in the three runs, limit 5 ms); `internal/retry` and the other race packages passed |
+| G4 sweep | fail | `test/e2e` hit `sweep.sh`'s 60-minute limit with no scenario failure reported; every other package's scenarios passed. Landed chunks' whole sweep: 670 s (c07), 394 s (c08). The retry scenarios add 20 seeds × 6 arm-scenarios × 2 runs to this package (about 5.5 min per 20-seed call on the loaded machine). |
+| G6 tier-r | fail | `TestTierRSlowReader` (chunk 6, wall-clock slow-client drop: "dropped 0 pauses 34"); it passed in my full `scripts/tier-r.sh` run earlier the same day. `TestTierRRetryStorm` passed in both runs. |
+| G7 csv | fail | two sweep runs (`e2e-reset-late` seed 25, `e2e-reset-wrong-tag` seed 36) have no `run.csv`: they were cut by the G4 timeout |
+| G10 extra | fail, **fixed after the run** | my defect: `scripts/fuzz-plant.sh` grepped `FuzzRetryOps`'s failure for `reference`, but the planted bug is reported by the snapshot check ("10 tenths withdrawn for 0 retries"). The pattern is now `reference\|withdrawn for`; `gate/extra.sh` re-run alone after the fix: exit 0 (all four plants found, `FuzzRetryOps` after 2 s; retry canaries and both ablation arms pass). |
+
+Apart from the G10 pattern, no failure was in a chunk 12 test or caused by chunk 12 logic, as far
+as the logs show. What chunk 12 adds to the two time budgets that ran out: about 40 s of
+`test/e2e` unit time and about 1 min of `simrun` baseline time (six retry runs, now in its parallel
+job pool), and the retry sweep in G4. **The gate has to be re-run on a quiet machine** (the
+orchestrator's landing gate). If G4 still runs out of time there, lower `retrySweepCap` in
+`test/e2e/c12_retry_test.go` (20 now, the same cap as the pool scenarios). The 200-seed evidence
+above does not depend on it. `gate/result.json` was not committed.
