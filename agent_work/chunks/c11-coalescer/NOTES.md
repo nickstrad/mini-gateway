@@ -9,11 +9,250 @@ files (core 900, proxy wiring 560, `coalsrc` 170, config 90, the tier S scenario
 `test/e2e/c11_coalesce.go` 660 which is test plumbing in a non-test file, small edits) and about
 2,150 lines in `_test.go` files. Inside the brief's estimate plus the 2,000-line split margin.
 
+## Join with chunks 9 and 12
+
+Join builder: Opus (`claude-opus-5-5`), 2026-11-28, branch `work/c11-coalescer`, worktree
+`/root/Software/mini-gateway-work/c11`. `git merge --no-ff main` (main at `2e725b1`: chunk 9
+landed `d5dc685`, chunk 12 landed `d547256`, each with its own join, prose and C4 work) on top of
+`078b7b3` (review 2 NITS): one conflict resolution in merge commit `2862074`, then one product
+fix (`2ed49d6`) and tests, scenarios and records (`f438247` to `5e6a99f`). No helper agents.
+
+The three chunks compose in D1's stage order (classify, gate, coalesce, queue, lease, forward,
+release) with D3's one waiting place: the coalesce stage decides lead, follow, hold, pass or
+refuse before the queue; only a flight's owner (or an unshared request) enters its tenant queue;
+chunk 9 chooses inside the queue stage; chunk 12 re-enters a granted retry at the queue stage.
+**One defect was found and fixed** (decision (a): the lease end of a flight handed off to a
+waiter of another tenant was reported for the wrong tenant). **No behaviour of any chunk was
+dropped or weakened, and no two behaviours conflict.**
+
+### Conflicts and how each was resolved
+
+| File | Resolution |
+| --- | --- |
+| `internal/config/config.go` | `File` carries `Coalesce`, `Retry` and `Fairness`. |
+| `internal/config/validate.go` | `proxyCaps` passes `Coalesce`, `KeyScope`, `Fairness`, `Retry`; `validate` runs `validateCoalesce` and `validateRetry` (fairness and its defaults auto-merged). |
+| `internal/proxy/config.go` | `Config` carries `Coalesce`, `Retry`, `Fairness`; `Validate` appends `coalesceErrors()` and the retry config's error. |
+| `internal/proxy/contracts.go` | Timeout rows: earlier rows, admission rows, coalescer rows, then chunk 12's retry row. Capacity rows: earlier rows, `retryCapacityRow`, chunk 9's fairness rows, then the coalescer rows. |
+| `internal/proxy/engine.go` | `Invariants`: snapshot conservation, lease pairing, queue and wire checks, `admissionCheck`, `fairnessCheck`, `retryCheck`, `coalCheck`, the pool core. `Quiesce` and `Shutdown` auto-merged with every block of the three chunks (decision (e)). |
+| `internal/proxy/lease.go` | `forward`: chunk 12's clamped statement timer, then `coalSent`. `statementLost`: the retry offer first; granted → `coalRetried` (drops anything stored, keeps the flight) and `rerun`; declined → `coalFailed` (shared error), then the client failure (decision (c)). |
+| `internal/proxy/corepool.go` | `refuseWaiting(c, end)`: chunk 12's signature with chunk 11's `coalRefused` first, so every breaker refusal of a flight's owner (pool flush, or chunk 12's re-check of a queued retry) answers its waiters `53M03`. |
+| `internal/proxy/client.go` | `request` carries chunk 11's flight fields and chunk 12's `attempt`, `retryOver`. |
+| `internal/proxy/snapshot.go` | Both counter groups. |
+| `internal/obs/catalog/catalog.go`, `internal/obs/enginesrc/enginesrc.go` | Both components declared (`coalescer`, `retry`); both metric groups; both sources. |
+| `internal/obs/simrun/engine_test.go` | The coalescer baseline jobs and chunk 12's retry baseline jobs (outside `-short`); `shortSkipped` auto-merged with all three chunks' names. |
+| `scripts/fuzz-plant.sh` | All three plants (`FuzzCoalesceOps`, `FuzzRetryOps`, `FuzzFairnessOps`) and their header paragraphs. |
+| `test/e2e/spec.go`, `simtier.go`, `realtier.go` | `Spec` carries `Coalesce`, `KeyScope`, `Retry`; `engineConfig` passes all; tier R `GatewayOpts` carries `Coalesce` and `Retry`, with chunk 11's `on-switch` → `coalesce.mode off` default kept. |
+| `docs/capacity-table.md`, `docs/timeout-budget.md`, `docs/csv-schema.md`, `docs/fault-matrix.md`, `docs/safe-shape.md` (generated) | Regenerated with `scripts/gen-docs.sh`, never hand-merged. |
+| `docs/c4/`, `book/`, `README.md` | Main's side entirely (`git checkout main -- docs/c4 book README.md`). |
+| `agent_work/INDEX.md` | Both sides' rows (auto-merged). |
+
+`internal/proxy/fairness.go`, `retry.go`, `coalesce.go` and the rest of `internal/proxy`
+auto-merged. Directly after the merge commit, before any join change, the packages of the
+three chunks passed unchanged (`go test -short` over `internal/proxy/...`, `internal/config/...`,
+`internal/coalesce/...`, `internal/admission/...`, `internal/retry/...`, `internal/obs/...`,
+`cmd/...`: 26 packages).
+
+### Where the chunks assumed different things, and what holds now
+
+**(a) Fairness and flights.** A flight's owner is an ordinary request: it waits in its own
+tenant's queue (one entry) and, when lent, holds one lease counted for that tenant. Followers
+take no queue place and no lease; they are not pushed, so a tenant whose only requests are
+followers is not active for the dispatcher. With key scope `all-tenants`, followers of other
+tenants therefore ride the owner's tenant's lease for free: they spend none of their tenant's
+share, and the owner's tenant pays one lease for everyone (one database read is one unit of
+database concurrency, which is what the share divides). Held by
+`TestJoinFollowersOfOtherTenantsRideAFlightWithNoQueuePlaceAndNoLease` (both join modes: tenant 0
+at its share, its flight queued with followers of tenants 1 and 2: queued 1/0/0, in flight
+2/1/0, releasable 0, no dial over five events; after the release in flight 3/0/0; every waiter
+gets the bytes; tenant 2 pushed nothing).
+*Owner handoff across tenants.* Chunk 11 assumed the client holding a request is the tenant to
+charge; chunk 9 charged `c.tenant` at the lease start (`lend`) and at the clean lease ends
+(`release`, `coreRelease`), `d.lastTenant` at the others (`leaseLost`, `coreDirty`). After a
+handoff to a waiter of another tenant these disagree: a running handoff reported the lease end
+for the new tenant (the fair core: "1 lease ends without a start"), a queued handoff popped from
+the first owner's tenant queue but started the lease for the new one. **Fixed (`2ed49d6`):** a
+request carries the tenant it was queued under (`request.tenant`, set at acceptance); queue push,
+checkout and the lease start use it, and `lend` records it as `d.lastTenant`; every lease end uses
+`d.lastTenant`. So the queue place and the lease stay on the tenant whose queue the flight left
+(the first owner's) before and after the handoff, until the lease ends; no path counts the lease
+twice or not at all. For any request that is not a handed-off flight `request.tenant ==
+c.tenant`, so chunk 9's behaviour is unchanged. Held by
+`TestJoinAQueuedOwnerHandoffAcrossTenantsUnderABindingShareKeepsTheChargeOnTheQueuedTenant`
+(binding share, the owner of tenant 0 leaves, the waiter of tenant 2 takes over; it stays in
+tenant 0's queue and, when lent, tenant 0 holds 3 and tenant 2 none),
+`TestJoinARunningOwnerHandoffAcrossTenantsEndsTheLeaseOnTheTenantItWasLentTo` (pool core) and
+`TestJoinARunningOwnerHandoffAcrossTenantsOnTheFixedSetEndsTheLeaseOnTheTenantItWasLentTo`
+(fixed set). The on-switch reset still sees the real user (`ReleaseInput.Tenant` is the client's
+tenant), and on-switch is refused with `all-tenants` while coalescing is on anyway.
+
+**(b) A flight held back by the dispatcher.** The flight deadline (from the flight's creation)
+is independent of why the owner waits: at the deadline `coalExpireOwner` removes the queued owner
+with `Expire` (a deadline shed, so the core's and the engine's shed counts agree) and every
+waiter gets `53M01` once. The dispatcher's `Releasable` and the pool's demand count the flight as
+the one queue entry it is, exactly when the dispatcher would release it; followers add nothing.
+Held by `TestJoinAFlightHeldBackByTheDispatcherEndsAtItsDeadlineWithOneSharedError` (still
+queued one nanosecond before, three `53M01` at the deadline, one deadline shed in the admission
+queue, nothing sent, no dial, even after the share frees) and by the first test of (a)
+(releasable 0 and no dial while held; one send when released).
+
+**(c) Retries and flights — decision: a flight whose statement is lost with nothing reached is
+retried once, for the whole flight.** The plan's words decide it. Chunk 12: a retry is "once per
+request, only when nothing reached, never past the request's deadline" — the flight is one
+request on the database (its owner's), so it gets at most one retry, under the same budget,
+breaker, deadline and in-transaction rules; followers are not requests on the database and are
+never offered to the policy. Chunk 11: "shared errors ... no re-drive stampede" — the stampede it
+forbids is each waiter re-driving its own read; one retry by the owner is one read, not a
+stampede, and when the policy declines (or the retry is lost again) the error is still shared:
+every waiter gets the owner's row once. The other reading (each follower gets the error, the
+owner retries alone) would answer the followers with an error the proxy itself was about to
+repair, and gives them nothing in exchange. So: `statementLost` offers the loss to the policy
+before the shared error; granted → the owner re-enters its tenant queue, the waiters stay on the
+flight and get the retry's outcome once; declined → shared error at once. The budget counts the
+flight's first attempt once (the owner is forwarded; followers never are). The fault matrix's
+retried row says it (generated: "for the statement of a coalesced flight the one retry is the
+flight's, and every waiter on it gets the retry's outcome once"), with a new non-retried row for
+a flight not yet sent at its flight deadline. Held, in both join modes, by
+`TestJoinALeaderRefusedWithNothingReachedIsRetriedOnceForTheWholeFlight` (zero-byte refusal,
+nobody answered, offered 1 granted 1, two waiters still on the flight; the retry is sent once and
+everyone gets its bytes; the core counts one flight sent; the policy's first attempts equal the
+engine's forwards minus the one retry forward, and the COMMIT plus the flight added exactly 2),
+`TestJoinARetriedFlightLostAgainIsAnsweredOnceWithOneSharedError` (the retry is refused again:
+offered 2, granted 1, three identical replies with one end marker each, retry end `failed`),
+`TestJoinWithTheRetryPolicyOffALeaderRefusedSharesItsErrorAtOnce`, and the tier S scenarios
+`coalesce-hot-key-retry-strict` / `-relaxed` (below).
+
+**(d) A granted retry of a flight's owner re-enters the queue.** It ends at the earlier of the
+flight deadline and the request deadline: the flight deadline through `coalExpireOwner`
+(`Expire`), the request deadline through chunk 12's clamp on the queue timer (`queueExpired` →
+`shed` → `coalRefused`); each answers every waiter `53M01` once, retry end `shed`. The breaker
+re-check at the top of every `dispatch` pass refuses it through `refuseWaiting` →
+`coalRefused`: every waiter `53M03` once, retry end `breaker`, nothing sent. Followers are
+answered exactly once on every exit (reply, shared error, deadline, request deadline, breaker,
+shutdown). Held by `TestJoinARetriedFlightOwnerHeldInTheQueueEndsAtTheEarlierOfTheFlightAndRequestDeadlines`
+(two arms: `coalesce.Config.Deadline` half the statement timeout, so the flight deadline comes
+first, and twice it, so the request deadline comes first; still waiting one nanosecond before,
+three `53M01` at it, one deadline shed, nothing sent after),
+`TestJoinTheBreakerReCheckRunsForARetriedFlightOwnerAtTheLendThatWouldTakeIt` (closed: the retry
+is lent the connection the other tenant frees and everyone gets the bytes; open: three `53M03`,
+retry end `breaker`, nothing sent).
+
+**(e) `Invariants`, `Quiesce`, `Shutdown`.** Every check of all three chunks runs: each block
+returns early only when it fails, so on a passing engine all run. A test fails when any block is
+removed (mutations in a scratch copy, table below). `Shutdown` still sends no statement to the
+database (review 1 finding 2) with a retry pending and flights held:
+`TestJoinShutdownWithARetryPendingAndFlightsHeldSendsNothingNewToTheDatabase` (a retried owner
+waiting at its share with two waiters, a third read held behind it in strict mode or following
+it in relaxed, open transactions of two tenants: the only database writes are the pool core's
+`ROLLBACK`s of the open transactions; retry end `gone`, fair in flight 0 with starts = ends =
+the engine's, `Invariants`, the admission `Check` and `Quiesce` pass). Chunk 11's
+`TestShutdownSendsNothingNewToTheDatabase` still holds the `coalStart` guard. `coalShutdown`
+had no test that failed without it (closing every client empties the table first), so the join
+adds `TestJoinShutdownEmptiesTheFlightTableEvenOfAFlightNoClientHolds` (a flight stranded in the
+table with no client, `StrandFlightForTest`: `Quiesce` fails before `Shutdown`, passes after).
+
+**(f) Defaults, keys, tests that changed.** The binary's default: `coalesce.mode auto`,
+`join strict`, `key_scope all-tenants`; the fair dispatcher on (limit `pool.connections`); the
+retry policy `off`; the pool core behind the timeout rule. `retry.policy: pre-forward-once`
+with `coalesce.join: relaxed` runs all three:
+`TestBinaryDefaultRunsTheCoalescerTheFairDispatcherAndTheRetryPolicyOff`. Keys of all three
+are validated in one pass and the joined error names each:
+`TestCoalesceRetryAndFairnessKeysAreValidatedTogether` (`coalesce.mode`,
+`coalesce.max_waiters`, `retry.policy`, `fairness.default_weight`, `queue.rule`). The `on-switch`
+refusal applies only when coalescing is on (`auto`, `hinted`), with the retry and fairness keys
+set or not: `TestTheOnSwitchRefusalAppliesOnlyWhenCoalescingIsOnWhateverTheRetryAndFairnessKeys`.
+**No test of chunks 6 to 12 had to change because of another chunk**: every package passed
+unchanged after the merge. Chunk 11's own scenario `coalesce-results-*` changed for review 2
+finding 2 (below), not because of another chunk.
+
+### Review 2's two findings
+
+- **Finding 1 (no test under the binary's default admission rule) — closed by a test.**
+  `TestJoinUnderTheDefaultAdmissionRuleRuleAndFullQueueShedsEndFlightsWithFollowers` (strict and
+  relaxed; the pool core with one connection; `Admission{Rule: timeout, LIFO: adaptive}` and
+  `QueueCap` default, checked equal to the defaults: target 5 ms, interval 100 ms, capacity 256,
+  tenant capacity 256; the engine's `Invariants` after every event through the rig, the admission
+  `Check` and engine sheds = admission sheds after every phase). Phases: a queued flight with
+  followers of two other tenants waits past the interval → rule shed, all three `53M01`; the same
+  after the owner leaves (handoff) → rule shed, both remaining `53M01`; a flight with a follower
+  is the oldest entry when the queue fills → full-queue shed (`overflow` or `total`: with the
+  default tenant capacity equal to the capacity both bounds are reached together), both
+  `53M01`; strict only: a running read, a read held behind it with a follower, a second flight
+  with a follower as the oldest entry of a full queue; the reply promotes the held flight, whose
+  push sheds the second flight's owner inside the notice loop (`noticeBusy`): its waiters get
+  `53M01`, the promoted flight's waiters are not answered; then drain and `Quiesce`. Rule sheds
+  are 2 by construction. `TestJoinAFlightDeadlineAndAnAdmissionDeadlineAtTheSameInstantAnswerEachWaiterOnce`
+  covers the reviewer's fourth probe (flight deadline = interval: one shed, each waiter answered
+  once). The reviewer's 200-client probe is covered in tier S by the two join hot-key scenarios'
+  burst of 200 readers (below), behind the timeout rule and the pool core.
+- **Finding 2 (`coalesce-results-*` without the admission queues) — closed by wiring
+  (`0a5b61b`).** `CoalesceResultsSpec` now takes `poolTimeouts()`, `QueueCap` 1,024,
+  `coalAdmission()` and `withCore`, like `coalBase`; `coalAdmissionOK` therefore applies. Both
+  scenarios pass on seeds 1–3 with replay. The sentence "every tier S coalescer scenario runs
+  with the admission queues and the pool core" is now true for all 27.
+
+### Join scenarios (tier S, `test/e2e/c11_join.go`, appended to `CoalesceScenarios()`)
+
+`Spec` gains `Fairness` (tenant weights) and `Relay` (chunk 12's dooming relay in front of the
+fake; `Path` must be nil since both use `BeforeProxy`). Each scenario runs in both join modes
+with replay and an ablation that must fail its check; each has `coalescer.sql` under
+`test/analysis/`.
+
+| Scenario | What it does | Check (by construction) | Ablation |
+| --- | --- | --- | --- |
+| `coalesce-hot-key-weighted-{strict,relaxed}` | 2 tenants, weights 3 and 1; 16 writers (8 per tenant, 30 writes of 20 ms each) keep 4 connections busy so the shares bind; 200 readers of both tenants read the hot key at 100 ms, 3 µs apart | 1 or 2 database reads, never two at once; every reader gets the value; both tenants have shared hits; the fair dispatcher held a tenant at its share; fair lease starts = engine lease starts; coalescer and admission conservation | coalescer off (200 reads) |
+| `coalesce-hot-key-retry-{strict,relaxed}` | retry policy on; 4 warm-up writes open 4 connections; the relay dooms every idle connection at 500 ms; 200 readers at 600 ms | the first write of the burst is the leader's and every connection is doomed, so it is refused with zero bytes: dooms > 0, a retry granted with row `lost-after-read` and ended `completed`; every reader gets the value, no shared error, 1 or 2 reads; the policy's first attempts = 4 warm-ups + flights sent (one per flight, not per follower) | retry policy off (every waiter gets the shared error) |
+
+Seeds 1–10 of both, both modes: pass with replay and ablation (102 s).
+
+### Join tests and the mutations that fail them
+
+Scratch copy `/tmp/zgw-c11-join/mut` (deleted after), one source edit at a time,
+`go test ./internal/proxy/ ./internal/admission/`:
+
+| Mutation | Killed by |
+| --- | --- |
+| M1 `release` (fixed set) ends the lease on `c.tenant` | `TestJoinARunningOwnerHandoffAcrossTenantsOnTheFixedSetEndsTheLeaseOnTheTenantItWasLentTo` |
+| M1b `coreRelease` ends the lease on `c.tenant` | `TestJoinAQueuedOwnerHandoff…`, `TestJoinARunningOwnerHandoffAcrossTenantsEndsTheLeaseOnTheTenantItWasLentTo` |
+| M2 `lend` charges `c.tenant` | `TestJoinAQueuedOwnerHandoffAcrossTenantsUnderABindingShareKeepsTheChargeOnTheQueuedTenant` |
+| M3 shared error before the retry offer (chunk 11's old order) | the five retried-flight tests of (c), (d), (e) |
+| M4 a flight is never offered to the policy | the same five and `TestJoinWithTheRetryPolicyOffALeaderRefusedSharesItsErrorAtOnce` |
+| M5 `refuseWaiting` without `coalRefused` | `TestJoinTheBreakerReCheckRunsForARetriedFlightOwnerAtTheLendThatWouldTakeIt` |
+| M6 `shed` without `coalRefused` | both default-rule tests (finding 1), the retried-flight deadline test |
+| M7 queued flight at its deadline removed as client-gone (review 1's M-R1) | `TestAQueuedFlightAtItsDeadlineIsShedThroughTheAdmissionQueue`, `TestJoinAFlightHeldBackByTheDispatcherEndsAtItsDeadlineWithOneSharedError`, the retried-flight deadline test |
+| M8 `Invariants` without `coalCheck` | `TestInvariantsCoverFlightsAndWaiters` |
+| M9 `Invariants` without `fairnessCheck` | `TestFairEngineInvariantsCatchInFlightThatSkipsHeldTransactions` |
+| M10 `Invariants` without `retryCheck` | `TestInvariantsCatchABrokenBudget`, `…APendingRetryNoRequestHolds`, `…TheEngineAndThePolicyDisagreeing` |
+| M11 `Invariants` without `admissionCheck` | `TestJoinInvariantsRunTheAdmissionChecksOnAnEngineWithThePoolCore` |
+| M12 `Quiesce` without `coalQuiet` | `TestEngineQuiescesWithAnEmptyFlightTableAndNoTimer` |
+| M13 `Quiesce` without the pending-retry check | `TestQuiesceRefusesAPendingRetry` |
+| M14 `Quiesce` without `admissionQuiet` (chunk 9's `fairQuiesce` inside) | `TestJoinQuiesceWaitsForTheQuietTenantQueueThenPasses` |
+| M15 `Shutdown` without `coalShutdown` | `TestJoinShutdownEmptiesTheFlightTableEvenOfAFlightNoClientHolds` (added: nothing failed before) |
+| M16 `Shutdown` without `closeAdmission` | seven tests, among them `TestJoinShutdownWithARetryPendingAndFlightsHeldSendsNothingNewToTheDatabase` |
+| M17 `coalStart` promotes during shutdown (review 1's M-R2) | `TestShutdownSendsNothingNewToTheDatabase` |
+| M18 followers count as first attempts | `TestJoinALeaderRefusedWithNothingReachedIsRetriedOnceForTheWholeFlight` (added the forwards check: nothing failed before); tier S `coalesce-hot-key-retry-*` checks the same |
+
+The first run left M1, M15 and M18 alive; the three tests named "added" were written for them
+(`5e6a99f`) and the three re-run mutations were killed.
+
+### Results
+
+RESULTS-PENDING
+
+### Stated limits added by the join
+
+- A handed-off flight stays charged to the tenant whose queue it left until its lease ends; the
+  new owner's tenant pays nothing for it. With key scope `all-tenants` a tenant can therefore be
+  served through another tenant's lease (as every follower is); the fair dispatcher bounds leases,
+  not answers.
+- While a flight's retry waits, the coalescer still treats the flight as running, so in strict
+  mode a read arriving then is held behind it (a second read later), never joined to the retry.
+  Conservative: no waiter gets a read started before it arrived.
+
 ## Repair round (2026-11-28, Opus, after Neon review 1 and Astra's attacks)
 
 | Item | Outcome |
 | --- | --- |
-| Review 1 (MAJOR): queued flight at its deadline shed as client-gone | Fixed `a54f609`: `coalExpireOwner` removes the queued owner with `Expire` (counted as a shed) like `queueExpired`. Regression test `internal/proxy` `TestAQueuedFlightAtItsDeadlineIsShedThroughTheAdmissionQueue` (failed before: `admission: the core shed 0, the engine answered 1`). Root cause addressed in `2c48541` (simrun: `d85d44c`): every tier S coalescer scenario now runs with the admission queues (timeout rule) and the pool core beside the coalescer, the engine's invariants checked at every step, plus `coalAdmissionOK` (pushes > 0, core sheds = engine sheds, queue empty). With the fix reverted in a scratch copy the scenarios fail: `coalesce-shared-error-strict` seed 2, `sim: invariant proxy.engine: admission: the core shed 0, the engine answered 1` |
+| Review 1 (MAJOR): queued flight at its deadline shed as client-gone | Fixed `a54f609`: `coalExpireOwner` removes the queued owner with `Expire` (counted as a shed) like `queueExpired`. Regression test `internal/proxy` `TestAQueuedFlightAtItsDeadlineIsShedThroughTheAdmissionQueue` (failed before: `admission: the core shed 0, the engine answered 1`). Root cause addressed in `2c48541` (simrun: `d85d44c`): every tier S coalescer scenario but `coalesce-results-*` now runs with the admission queues (timeout rule) and the pool core beside the coalescer (those two since the join, review 2 finding 2), the engine's invariants checked at every step, plus `coalAdmissionOK` (pushes > 0, core sheds = engine sheds, queue empty). With the fix reverted in a scratch copy the scenarios fail: `coalesce-shared-error-strict` seed 2, `sim: invariant proxy.engine: admission: the core shed 0, the engine answered 1` |
 | Review 1 (MAJOR): Shutdown promotes a held flight and writes to the database | Fixed `d889df4`: `coalStart` does nothing once shutdown has begun; the held owner stays a waiter and is closed like any other. Regression test `TestShutdownSendsNothingNewToTheDatabase` (no `ActDBWrite` during `Shutdown`; conservation, `Quiesce` and `Invariants` green; failed before with the write on the second connection) |
 | Review 1 (MINOR 3): bounds unchecked under `off`; reply cap not written back | Fixed `60c82f1`: under `off` the same bounds are checked (naming the key) as under `auto`; `applyDefaults` writes the resolved `max_reply_bytes` back. Tests `TestCoalesceBoundsAreCheckedWhenModeIsOff`, `TestOmittedReplyCapResolvesToTheSameConfigAsTheDefault` (both failed before) |
 | Review 1 (MINOR 4): the trust limit and the default not in the documents | Fixed `1d93564` (generator of `docs/safe-shape.md`: section "Limits"), `c9a68be` (`coalesce` section in `internal/config/testdata/example.json`), `1416c92` (`docs/knowledge/coalescer.md`) |
@@ -50,7 +289,7 @@ write logs.
 | `internal/proxy/{engine,client,lease,corepool,config,snapshot,timers,contracts}.go` | One-line hooks (listed under "Shared files"); `Snapshot` gains `Coalesced` and the `Coalesce*` counters; conservation gains the `coalesced` term. |
 | `internal/config/coalesce.go` (+ one line each in `config.go`, `validate.go`) | `coalesce.mode` (`off`/`auto`/`hinted`, default `auto`), `coalesce.key_scope` (`all-tenants`/`tenant`), `coalesce.join` (`strict` default/`relaxed`), `max_flights`, `max_waiters`, `max_reply_bytes`, `no_share_for`, `no_share_max`, `hot_keys`; zero = default, negative refused naming the key; the `on-switch` × `all-tenants` refusal. |
 | `internal/obs/coalsrc` | Component `coalescer`: every snapshot field, `tenant_hits` and the histogram with `obs.detail`, `hot_key_hits{mode=rank}`, health rule `coalescer` (always `ok`, states the waiting count). Registered in `enginesrc.Sources` and `catalog.Registry`; the engine's new fields mapped in `enginesrc`. |
-| `test/e2e/c11_coalesce.go`, `c11_coalesce_test.go` | 23 tier S scenarios (`CoalesceScenarios()`; 21 light, 2 with 1,000 clients), replay, ablation arms, the hot-key numbers test. Since the repair round every scenario runs with the admission queues (timeout rule) and the pool core beside the coalescer. |
+| `test/e2e/c11_coalesce.go`, `c11_coalesce_test.go`, `c11_join.go` | 27 tier S scenarios (`CoalesceScenarios()`; 23 of the build, 21 light and 2 with 1,000 clients, plus the 4 join scenarios of `c11_join.go`), replay, ablation arms, the hot-key numbers test. Since the repair round every scenario runs with the admission queues (timeout rule) and the pool core beside the coalescer; `coalesce-results-*` since the join (review 2 finding 2). |
 | `test/e2e/c11_tierr_test.go` | Tier R: hot key (strict, relaxed, off, direct), cancel 99 of 100, all 100 cancel, read-your-own-write, results equal direct with `auto`, headline 2 (Zipf). |
 | `test/analysis/coalesce-*` | DuckDB assertions per tier S scenario (conservation per scenario; the hot-key two-arm join). |
 | `scripts/fuzz-plant.sh` | Also requires `FuzzCoalesceOps` to find `PlantLeaverGetsResult`. |
