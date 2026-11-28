@@ -368,6 +368,9 @@ func (e *Engine) Quiesce() error {
 	if e.snap.DBLent.Value != 0 || e.snap.Resetting.Value != 0 {
 		errs = append(errs, fmt.Errorf("%d lent, %d resetting", e.snap.DBLent.Value, e.snap.Resetting.Value))
 	}
+	if n := e.snap.RetryPending.Value; n != 0 {
+		errs = append(errs, fmt.Errorf("%d retries pending", n))
+	}
 	errs = append(errs, e.admissionQuiet())
 	return errors.Join(errs...)
 }

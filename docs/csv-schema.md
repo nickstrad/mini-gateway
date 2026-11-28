@@ -203,7 +203,7 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `engine` | `retries_pending` | gauge | — | count | sum | Requests run again whose outcome is not known yet. |
 | `engine` | `retries_pending_peak` | gauge | — | count | max | Most requests run again with no outcome yet at once. |
 | `engine` | `retry_asked` | counter | — | count | sum | Failures the retry policy granted a retry (policy off: always 0). |
-| `engine` | `retry_ends` | counter | outcome | count | sum | Requests run again, by how they ended (outcome: completed, failed, shed, gone). |
+| `engine` | `retry_ends` | counter | outcome | count | sum | Requests run again, by how they ended (outcome: completed, failed, shed, gone, breaker: refused at the forward because the breaker opened after the grant). |
 | `engine` | `retry_offered` | counter | — | count | sum | Failed statements offered to the retry policy. |
 | `engine` | `retry_rows` | counter | reason | count | sum | Retries granted, by the error-contract row the failure would have been answered with (reason). |
 | `engine` | `shell_accept_errors` | counter | — | count | sum | Errors returned by the client listener's Accept. |

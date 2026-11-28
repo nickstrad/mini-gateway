@@ -584,7 +584,7 @@ func (e *Engine) refuseQueued() {
 		if c == nil || c.phase != cpQueued || c.req == nil || c.req.id != id {
 			continue
 		}
-		e.refuseWaiting(c)
+		e.refuseWaiting(c, RetryEndShed)
 	}
 }
 
@@ -603,17 +603,17 @@ func (e *Engine) refuseAdmitted() {
 			continue
 		}
 		delete(e.waiting, id)
-		e.refuseWaiting(c)
+		e.refuseWaiting(c, RetryEndShed)
 	}
 	e.queueTouched()
 }
 
-func (e *Engine) refuseWaiting(c *client) {
+func (e *Engine) refuseWaiting(c *client, end RetryEnd) {
 	e.t.cancel(&c.queueT)
 	e.snap.Queued.Add(-1)
 	e.snap.Shed++
 	e.snap.BreakerFlushed++
-	e.retryEnded(c.req, RetryEndShed)
+	e.retryEnded(c.req, end)
 	c.req = nil
 	c.phase = cpIdle
 	e.reply(c, pgwire.ErrRowBreakerOpen)

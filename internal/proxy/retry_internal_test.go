@@ -76,3 +76,14 @@ func (b brokenPolicy) Snapshot() retry.Snapshot {
 	s.Deposits++
 	return s
 }
+
+func TestQuiesceRefusesAPendingRetry(t *testing.T) {
+	e := retryEngine(t)
+	if err := e.Quiesce(); err != nil {
+		t.Fatalf("a fresh engine does not quiesce: %v", err)
+	}
+	e.snap.RetryPending.Add(1)
+	if err := e.Quiesce(); err == nil || !strings.Contains(err.Error(), "retries pending") {
+		t.Fatalf("Quiesce with a pending retry: %v", err)
+	}
+}

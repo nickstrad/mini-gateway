@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
@@ -19,10 +20,11 @@ const (
 	RetryEndFailed
 	RetryEndShed
 	RetryEndGone
+	RetryEndBreaker
 	NumRetryEnds
 )
 
-var retryEndNames = [NumRetryEnds]string{"completed", "failed", "shed", "gone"}
+var retryEndNames = [NumRetryEnds]string{"completed", "failed", "shed", "gone", "breaker"}
 
 func (r RetryEnd) String() string {
 	if r < NumRetryEnds {
@@ -99,6 +101,40 @@ func (e *Engine) breakerOpen() bool {
 		return b.Open()
 	}
 	return false
+}
+
+func (e *Engine) refuseRetriesBehindOpenBreaker() bool {
+	if !e.breakerOpen() {
+		return false
+	}
+	var ids []RequestID
+	for id, c := range e.waiting {
+		if c != nil && c.phase == cpQueued && c.req != nil && c.req.id == id && c.req.attempt > 0 && !c.req.retryOver {
+			ids = append(ids, id)
+		}
+	}
+	slices.Sort(ids)
+	refused := false
+	for _, id := range ids {
+		c := e.waiting[id]
+		if !e.takeQueued(id) {
+			continue
+		}
+		delete(e.waiting, id)
+		e.refuseWaiting(c, RetryEndBreaker)
+		refused = true
+	}
+	if refused {
+		e.queueTouched()
+	}
+	return refused
+}
+
+func (e *Engine) takeQueued(id RequestID) bool {
+	if e.shedQ != nil {
+		return e.shedQ.Refuse(e.now, id)
+	}
+	return e.seams.Queue.Remove(id)
 }
 
 func (e *Engine) offerRetry(c *client, req *request, reached work.Tri, row pgwire.ErrRowID) bool {

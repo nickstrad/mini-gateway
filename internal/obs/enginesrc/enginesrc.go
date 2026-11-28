@@ -119,7 +119,7 @@ func Metrics() []obs.MetricDesc {
 		obs.GaugeDesc("retries_pending", 0, "Requests run again whose outcome is not known yet."),
 		obs.HighWaterDesc("retries_pending_peak", 0, "Most requests run again with no outcome yet at once."),
 		obs.CounterDesc("retry_rows", lr, "Retries granted, by the error-contract row the failure would have been answered with (reason)."),
-		obs.CounterDesc("retry_ends", lo, "Requests run again, by how they ended (outcome: completed, failed, shed, gone)."),
+		obs.CounterDesc("retry_ends", lo, "Requests run again, by how they ended (outcome: completed, failed, shed, gone, breaker: refused at the forward because the breaker opened after the grant)."),
 	}
 }
 

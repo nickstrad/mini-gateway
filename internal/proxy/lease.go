@@ -124,6 +124,9 @@ func (e *Engine) queueExpired(c *client) {
 
 func (e *Engine) dispatch() {
 	for e.seams.Queue.Len() > 0 && e.seams.Pool.Idle() > 0 {
+		if e.refuseRetriesBehindOpenBreaker() {
+			continue
+		}
 		id, ok := e.seams.Queue.Pop(e.now)
 		if !ok {
 			e.queueTouched()
