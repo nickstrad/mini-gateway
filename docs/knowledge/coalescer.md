@@ -14,11 +14,14 @@ coalesce stage or the coalescer scenarios. Full record: `agent_work/chunks/c11-c
   queue yourself), `Follow` (wait; no queue slot, no connection), `Hold` (strict: start the flight
   that runs after the running one; wait like a follower until `NoticeStart`), `Refuse` (53M04).
 - Eligibility reads only the unit's flags: `auto` = `Unit.Shareable`, `hinted` = `Unit.Hinted`,
-  both with `HasKey`. The key is `Unit.Key` (tenant + exact text). Nothing reads SQL.
+  both with `HasKey`. The key is `Unit.Key`: inside the table an 8-byte tenant length, the
+  tenant, then the exact text (`keyOf`; `splitKey` decodes it for the hot-key list), so no two
+  different (tenant, text) pairs share a flight. Nothing reads SQL.
 - Per key at most two flights: the current one (queued or running) and, in strict mode, one held
   behind a running one. Relaxed joins the running one. The flight deadline is `Config.Deadline`
   (the statement deadline) from creation; flights are kept in creation order, so the head of
-  the list is the next deadline (O(1) `Next`).
+  the list is the next deadline (O(1) `Next`). Deadlines and no-share expiries saturate at the
+  largest instant (`after`).
 - `Leave` of the owner with followers hands the flight to the newest follower (`LeftHandoff`);
   the last leaver ends it (`LeftLast`) and the engine cancels the work. A leaver is removed at
   once, so a result at the same instant never reaches it.
@@ -33,6 +36,17 @@ coalesce stage or the coalescer scenarios. Full record: `agent_work/chunks/c11-c
 - Built when `proxy.Config.Coalesce.Mode != off` (or `Seams.Coalescer` is a `FlightTable`);
   `NoCoalesce` is still the default for a zero config, so every earlier tier S spec is unchanged.
   The binary defaults to `coalesce.mode: auto`, `join: strict`, `key_scope: all-tenants`.
+  Limit of that default: the safe shape trusts the objects it names, so a view, a user-defined
+  operator, a function shadowing an allow-listed name or a row-level security policy that hides
+  a side effect or a per-call result is shared like any read unless the operator sets
+  `coalesce.mode` to `off` or `hinted` (also stated in `docs/safe-shape.md`, "Limits").
+- One claim is narrow: at most one read per key is in flight among the flights the table owns. A
+  cancelled read still finishing on the database (`flight_ends{cancelled}`), a key on the no-share
+  list (`passed{no-share}`) and a request at a full table (`passed{full}`) pass unshared.
+- A flight's owner can sit in the admission queue (`cpQueued`). Remove it the way the queue's
+  own exits do: at the flight deadline `Expire` (a shed), never `RemoveAt` (client gone), or the
+  core's and the engine's shed counts diverge. `coalStart` does nothing once `stopping` is set,
+  so `Shutdown` sends nothing new to the database.
 - The owner of a flight is an ordinary request (queued, then lent). Its reply is stored, not
   streamed (`req.store`); at `ReadyForQuery` the owner gets the stored bytes and the database's
   end marker, each follower gets the same stored slice and its own `ReadyForQuery` 'I'. Nothing
@@ -43,6 +57,7 @@ coalesce stage or the coalescer scenarios. Full record: `agent_work/chunks/c11-c
 - Hooks in shared files are one line each: `startRequest` (join), `forward` (`coalSent`),
   `relayed` (store), `relayEvents` (error seen, ready), `statementLost`, `shed`,
   `refuseWaiting`, `clientCancel`, `closeClient`, plus `Invariants`, `Quiesce`, `Shutdown`.
+  `Invariants` also requires the coalescer timer armed at `Table.Next()`.
 - Errors: a flight that fails shares the owner's row (`08006`/`08007`, `53M01`, `53M03`); a
   flight past its deadline answers `53M01` if never sent, else the statement-deadline row; a
   waiter's own cancel is `57014` (`ErrRowCancelledQueued`); caps answer `53M04`.
@@ -50,9 +65,13 @@ coalesce stage or the coalescer scenarios. Full record: `agent_work/chunks/c11-c
 ## Scenarios
 
 - `test/e2e/c11_coalesce.go`: `CoalesceScenarios()` (both join modes), each with replay, and an
-  ablation that must fail the check (coalescer off, or a core plant). `TestScenarioCoalesce`
-  caps seeds at 10 (1 for the 1,000-client hot key; the gate extra runs it on the 3 pinned seeds) unless `MG_C11_FULL_SWEEP=1`; the 1,000-client hot key runs only with `RUN_DIR` set (the
-  sweep) or `MG_C11_HEAVY=1`.
+  ablation that must fail the check (coalescer off, or a core plant). Every scenario runs with
+  the admission queues (timeout rule sized for the 1,000-read ablation arm: target 15 s,
+  interval 20 s; the binary's 5 ms target sheds these bursts) and the pool core, as the binary
+  does; `coalAdmissionOK` holds core sheds = engine sheds. `TestScenarioCoalesce` caps seeds at
+  10 (3 for the 1,000-client hot key) unless `MG_C11_FULL_SWEEP=1`; the 1,000-client hot key
+  runs only with `RUN_DIR` set (the sweep) or `MG_C11_HEAVY=1`, and `internal/obs/simrun` runs
+  `coalesce-hot-key-strict` plus its ablation arm once outside `-short` (its `reads.sql` in G3).
 - Count database reads from `Fake.StatementLog()` (`KindRead`, exact `Text`); overlap of
   `[Start, End)` gives reads running at once. The fake reads a row's value when service starts,
   so the relaxed read-your-write window is visible in tier S.
