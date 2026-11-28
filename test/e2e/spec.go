@@ -75,6 +75,8 @@ type Spec struct {
 	Coalesce  coalesce.Config
 	KeyScope  work.KeyScope
 	Retry     retry.Config
+	Fairness  admission.FairConfig
+	Relay     *RelayPlan
 }
 
 // ClientResult records the tokenized startup messages, per-step replies, elapsed

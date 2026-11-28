@@ -45,6 +45,7 @@ type SimRun struct {
 	Tamper  *tamperer
 	Final   obs.InstanceSnapshot
 	Path    *pathRelay
+	Relay   *retryRelay
 }
 
 func fragmented(o simnet.Options) simnet.Options {
@@ -56,7 +57,7 @@ func fragmented(o simnet.Options) simnet.Options {
 func (spec Spec) engineConfig() proxy.Config {
 	c := proxy.Config{Connections: spec.Conns, QueueCap: spec.QueueCap, Timeouts: spec.Timeouts,
 		ReplyBufferCap: spec.ReplyCap, Plant: spec.Plant, MaxClients: 1024, MaxStartup: 1024, Admission: spec.Admission,
-		Coalesce: spec.Coalesce, KeyScope: spec.KeyScope, Retry: spec.Retry}
+		Coalesce: spec.Coalesce, KeyScope: spec.KeyScope, Retry: spec.Retry, Fairness: spec.Fairness}
 	if spec.Pool != nil {
 		pc := *spec.Pool
 		c.Pool = &pc
@@ -88,6 +89,11 @@ func BuildSim(spec Spec, seed int64, o SimOptions) (*SimRun, error) {
 		r.Path = newPathRelay(*spec.Path)
 		cfg.DBAddr = faultAddr
 		cfg.BeforeProxy = r.Path.listen
+	}
+	if spec.Relay != nil && !o.Direct {
+		r.Relay = newRetryRelay(*spec.Relay)
+		cfg.DBAddr = retryAddr
+		cfg.BeforeProxy = r.Relay.listen
 	}
 	if o.Tamper != TamperNone {
 		r.Tamper = &tamperer{mode: o.Tamper}

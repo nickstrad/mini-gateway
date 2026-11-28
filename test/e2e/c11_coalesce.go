@@ -766,7 +766,7 @@ func CoalesceScenarios() []CoalesceScenario {
 		CoalesceScenario{Spec: HintedSpec(), Check: checkHinted, Ablate: func(sp Spec) Spec { sp.Coalesce.Mode = coalesce.ModeAuto; return sp }, Ablated: "auto instead of hinted"},
 		CoalesceScenario{Spec: TenantScopeSpec(), Check: checkTenantScope},
 	)
-	return out
+	return append(out, JoinCoalesceScenarios()...)
 }
 
 func (sc CoalesceScenario) String() string { return fmt.Sprintf("%s (%s)", sc.Spec.Name, sc.Ablated) }
