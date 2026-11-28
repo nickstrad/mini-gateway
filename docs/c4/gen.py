@@ -34,7 +34,7 @@ from pathlib import Path
 # LANDED_LETTER  a lettered chunk that landed after chunk LANDED: "a" while chunk 6a is the last
 #           landing, so the pages say "chunks 0–6a". A chunk number in BUILT and REL_BUILT is then
 #           a whole number or such a name in quotes ("6a"). Set it back to "" when LANDED moves on.
-LANDED = 8
+LANDED = 9
 LANDED_LETTER = ""
 
 BUILT = {
@@ -76,9 +76,9 @@ BUILT = {
     "o-csv": 3,       # internal/obs/csvflush (schema.go, writer.go, reader.go)
     "o-log": 3,       # internal/obs/logline
     "o-simsrc": 3,    # internal/obs/simsrc (chunk 4 added the fake's authentication counters and the clients' startup counters)
-    "o-catalog": 3,   # internal/obs/catalog; scripts/gen-docs.sh, scripts/gen-docs.d/c03-csv-schema.sh; docs/csv-schema.md (chunk 5 added the classifier source, chunk 6 the engine and shell metrics, chunk 6a the load generator's metrics, chunk 7 the pool metrics, chunk 8 the admission metrics)
-    "o-simrun": 6,    # internal/obs/simrun (chunk 3); chunk 4 added wire.go (the wire scenarios), chunk 5 classifier.go (the classifier scenarios), chunk 6 custom.go (a run handed its sources); chunk 7: its tests run the scenarios and their SQL on 4 workers and skip the four heavy pool scenarios under -short; chunk 8: its baseline test also runs the admission scenarios (e2e.AdmissionBaseline in engine_test.go)
-    "o-assert": 6,    # scripts/csv-assert.sh, test/analysis (views.sql, guard.sql, 237 assertion files: 5 of chunk 3, 57 of chunk 4, 3 of chunk 5, 130 of chunk 6, 27 of chunk 7, 15 of chunk 8); make csv-assert; scripts/chaos.sh (chunk 6a: one line per scenario, a failure's rows and REPLAY line under it)
+    "o-catalog": 3,   # internal/obs/catalog; scripts/gen-docs.sh, scripts/gen-docs.d/c03-csv-schema.sh; docs/csv-schema.md (chunk 5 added the classifier source, chunk 6 the engine and shell metrics, chunk 6a the load generator's metrics, chunk 7 the pool metrics, chunk 8 the admission metrics, chunk 9 the fairness metrics of component admission)
+    "o-simrun": 6,    # internal/obs/simrun (chunk 3); chunk 4 added wire.go (the wire scenarios), chunk 5 classifier.go (the classifier scenarios), chunk 6 custom.go (a run handed its sources); chunk 7: its tests run the scenarios and their SQL on 4 workers and skip the four heavy pool scenarios under -short; chunk 8: its baseline test also runs the admission scenarios (e2e.AdmissionBaseline in engine_test.go); chunk 9: and the fairness scenarios (e2e.FairBaseline), skipped under -short
+    "o-assert": 6,    # scripts/csv-assert.sh, test/analysis (views.sql, guard.sql, 245 assertion files: 5 of chunk 3, 57 of chunk 4, 3 of chunk 5, 130 of chunk 6, 27 of chunk 7, 15 of chunk 8, 8 of chunk 9); make csv-assert; scripts/chaos.sh (chunk 6a: one line per scenario, a failure's rows and REPLAY line under it)
     "o-wiresrc": 4,   # internal/obs/wiresrc
     "o-clssrc": 5,    # internal/obs/clssrc
     "csvfiles": 3,    # written by internal/obs/csvflush; described in docs/csv-schema.md
@@ -111,9 +111,9 @@ BUILT = {
     "e-transport": 6, # internal/proxy: api.go (events, actions, the read constants; chunk 7 added ActDBCancel and EvDBCancelDone)
     "e-sessions": 6,  # internal/proxy: client.go (chunk 7: the key map e.keys, the timer tClientIdleTx)
     "e-backends": 6,  # internal/proxy: dbconn.go (chunk 7: the phases dpChecking and dpCleaning, the core path)
-    "e-pipeline": 6,  # internal/proxy: startRequest, gates, enqueue, dispatch, lend, forward in lease.go (chunk 7: the breaker seam now refuses with 53M03, one checkout per enqueue; chunk 8: the queueTouched calls, Expire and Unpop)
+    "e-pipeline": 6,  # internal/proxy: startRequest, gates, enqueue, dispatch, lend, forward in lease.go (chunk 7: the breaker seam now refuses with 53M03, one checkout per enqueue; chunk 8: the queueTouched calls, Expire and Unpop; chunk 9: lend reports the lease start, fairRedispatch at the top of finish in engine.go)
     "e-seams": 6,     # internal/proxy: seams.go (chunk 8 added ShedQueue, chunk 7's join its Refuse)
-    "e-reset": 6,     # internal/proxy: replyDone, release, startReset, resetJudge, judgeReset in lease.go (chunk 7: coreRelease in corepool.go, the re-seed in the judge)
+    "e-reset": 6,     # internal/proxy: replyDone, release, startReset, resetJudge, judgeReset in lease.go (chunk 7: coreRelease in corepool.go, the re-seed in the judge; chunk 9: release reports the lease end)
     "e-fail": 6,      # internal/proxy: leaseFailed, statementLost, reachedFor, lostRow in lease.go; reply in client.go (chunk 7: the row for a loss mid-statement inside a transaction)
     "e-clock": 6,     # internal/proxy: timers.go; fireTimers in engine.go (chunk 7 added the timer kinds tPool and tClientIdleTx, chunk 8 tAdmission)
     "e-publish": 6,   # internal/proxy: snapshot.go; Snapshot and the EvPublish case in engine.go; chunk 7: PoolSnapshot in corepool.go; chunk 8: AdmissionSnapshot in admission.go
@@ -134,7 +134,7 @@ BUILT = {
     "p-reaper": 7,    # internal/pool: expire, expireOne and jitter in pool.go
     "p-cancel": 7,    # internal/pool: cancel, ClientCancel, CancelDone and cancelCleared in pool.go
     "p-snap": 7,      # internal/pool: snapshot.go
-    "e-corepool": 7,  # internal/proxy: corepool.go; the Pool field in config.go; the tPool case in engine.go
+    "e-corepool": 7,  # internal/proxy: corepool.go; the Pool field in config.go; the tPool case in engine.go (chunk 9: corePump passes the releasable demand, Checkout refreshes it below the pool size, coreRelease and coreDirty report the lease end)
     "o-poolsrc": 7,   # internal/obs/poolsrc
     # chunk 8 — admission queues (diagrams 5, 7 and 12)
     "a-queues": 8,    # internal/admission: queues.go, ring.go; observeLIFO and loadGauge in tenant.go (chunk 7's join: Refuse and the shed reason breaker)
@@ -142,9 +142,11 @@ BUILT = {
     "a-rule-timeout": 8,  # internal/admission: TimeoutRule in rule.go
     "a-rule-law": 8,  # internal/admission: ControlLaw, Law and IntervalOverSqrt in rule.go
     "a-arms": 8,      # internal/admission: fifoRule and FollyRule in rule.go; RuleKind.ComparisonArm in config.go
-    "e-admq": 8,      # internal/proxy: admission.go; the Admission field in config.go; the tAdmission case and Shutdown in engine.go (chunk 7's join: Refuse)
-    "o-admsrc": 8,    # internal/obs/admsrc
+    "e-admq": 9,      # internal/proxy: admission.go; the Admission field in config.go; the tAdmission case and Shutdown in engine.go (chunk 7's join: Refuse); chunk 9: fairness.go (installFair, fairStarted, fairEnded, fairRedispatch, releasable, checkoutDemand, fairnessCheck), the Fairness field in config.go
+    "o-admsrc": 9,    # internal/obs/admsrc (chunk 8: admsrc.go); chunk 9 added fair.go: the fairness totals and the per-tenant in flight, share and time at share
     "o-h2h": 8,       # scripts/admission-head-to-head.sh; test/analysis/admission-head-to-head (head-to-head.query, head-to-head.md)
+    # chunk 9 — fairness between tenants (diagrams 5, 7 and 12)
+    "a-dispatch": 9,  # internal/admission: Fair, FairConfig, Pick, LeaseStart, LeaseEnd, SetLimit and Releasable in fair.go; takeTurn and untakeTurn there, the turn in queues.go; Dispatcher, OldestFirst and SetDispatcher in queues.go (chunk 8); the reference model and FuzzFairnessOps in its tests
 }
 
 PARTIAL = {
@@ -158,13 +160,17 @@ PARTIAL = {
           "demand under a hard cap and a creation limit, checked before reuse, cleaned up or closed when a lease "
           "ends badly, reset by one of two release policies, client cancels forwarded, one breaker that answers "
           "53M03 while the database is down, TCP keepalive on the database sockets, and the connection and "
-          "creation-rate budgets taken from the fleet block. Not built: fairness between tenants, the adaptive "
+          "creation-rate budgets taken from the fleet block. Chunk 9 built fairness between tenants: each active "
+          "tenant has a share of the database connections by its weight, a tenant below its share is served "
+          "first, and a transaction held open counts against its tenant. The limit the shares divide is the "
+          "pool size, fixed. Not built: the adaptive "
           "limit and the rate gate, read coalescing, the retry policy, the OTLP push, and the rest of the fleet "
           "configuration and the drain of N instances.",
     "c-engine": "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two "
                 "parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). "
                 "Chunk 7 put the pool core behind the pool, breaker and release seams (corepool.go) and chunk 8 the "
-                "admission queues behind the queue seam (admission.go). The stages that belong to "
+                "admission queues behind the queue seam (admission.go). Chunk 9 installed the fair dispatcher on those "
+                "queues and reports every lease start and end to it (fairness.go). The stages that belong to "
                 "cores not built yet run their stand-ins: a rate gate that always allows, no coalescing, retry off.",
     "e-relay": "Built in chunk 6 (internal/proxy: relay, relayEvents and relayed in lease.go; writeClient and the "
                "pauses in client.go): all of it for the one client of a reply. Not built: the fan-out to every waiter "
@@ -184,7 +190,9 @@ PARTIAL = {
                 "both rounded down and never zero (a total below the instance count is refused, a remainder is a "
                 "warning). Built in chunk 8 (queue.go): the queue keys rule, target, interval, "
                 "tenant_capacity, max_tenants, lifo and lifo_hold, with their defaults; queue.rule accepts only "
-                "timeout and control-law. Not built: the division of budgets whose cores are not built (the rate "
+                "timeout and control-law. Built in chunk 9 (fairness.go): the fairness keys default_weight and weights "
+                "(a tenant and a weight each): 1 to 1,000, zero or omitted meaning the default, at most 4,096 "
+                "entries, a tenant named twice refused. Not built: the division of budgets whose cores are not built (the rate "
                 "gate's rates, chunk 10) and the full fleet block (chunk 13).",
     "c-e2e": "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in "
              "tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz "
@@ -201,8 +209,11 @@ PARTIAL = {
              "session state under each release policy), run with the pool core where the chunk 6 scenarios keep "
              "the fixed set; a relay between the proxy and the fake Postgres that injects the path faults "
              "(blackhole, a peer that forgot the connection, idle drop, polite close, slots held); their canaries "
-             "and ablations; and five tier R pool tests (22 tier R tests now), among them 500 clients on 16 "
-             "database connections. Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14).",
+             "and ablations; and five tier R pool tests (22 tier R tests), among them 500 clients on 16 "
+             "database connections. Built in chunk 9: the fairness scenarios — a noisy neighbour at 10× capacity "
+             "beside a quiet tenant (compared with the quiet tenant alone; with one shared queue it starves), "
+             "41 tenants with one flooder, a tenant holding transactions open, their canaries, and a tier R "
+             "noisy-neighbour test (23 tier R tests now). Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14).",
     "c-sim": "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy "
              "protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS "
              "handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no "
@@ -219,13 +230,14 @@ PARTIAL = {
                 "(three startup rows added). Not built: the "
                 "codec boundary (no file in the package imports pgproto3; the reply builders code their messages by "
                 "hand). Nothing produces outcomes yet.",
-    "c-obs": "Built in chunks 1, 3, 4, 5, 6, 7 and 8: everything except the OTLP push adapter (chunk 15) and the health "
+    "c-obs": "Built in chunks 1, 3, 4, 5, 6, 7, 8 and 9: everything except the OTLP push adapter (chunk 15) and the health "
              "rules for the limit's floor and draining. Since chunk 6 the "
              "shell creates a collector in the real process, with the engine, wire and classifier sources, and "
              "serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line "
              "adapter is attached only by the scenario flush harness. Chunk 6a: the story report, and the load "
              "generator's metrics in the catalog. Chunk 7: the pool source with the health rule for the breaker. "
-             "Chunk 8: the admission source with the health rule for shedding, and the head-to-head table.",
+             "Chunk 8: the admission source with the health rule for shedding, and the head-to-head table. "
+             "Chunk 9: the fairness metrics in the admission source, totals and per tenant, with no new health rule.",
     "prom": "Built in chunk 6a (deploy/dev): the dev stack starts a Prometheus v3.9.1 that scrapes the gateway's "
             "/metrics directly, every second. Not built: the production path through the Collector (chunk 15).",
     "o-health": "Built in chunks 3, 6, 7 and 8. Chunk 3 (internal/obs: health.go): the three states, the rule table "
@@ -237,26 +249,36 @@ PARTIAL = {
                 "interval). Not built: the rules for the limit's floor and draining.",
     "c-adm": "Built in chunk 8 (internal/admission): the per-tenant queues, the QueueRule interface, the timeout "
              "rule, the control-law rule and the two comparison arms, all of what is said of them here; the "
-             "Dispatcher interface with one default (oldest head first); and Snapshot() for the queues. The engine "
-             "runs them behind its queue seam, and the config file always selects one of the two rules. The core "
+             "Dispatcher interface; and Snapshot() for the queues. Built in chunk 9 (fair.go): the fair dispatcher, "
+             "all of what is said of it here — shares by weight, a tenant below its share first, round robin, the "
+             "last-lease rule, leases counted per tenant — with the limit it enforces held as a settable integer, "
+             "fixed at the pool size so far. The engine runs the queues behind its queue seam with the fair "
+             "dispatcher installed, and the config file always selects one of the two rules. The core "
              "does not import internal/work so far: it takes a tenant as a string and a request as an integer id, "
              "and the engine converts. Chunk 7's join added Refuse and the shed reason breaker, for the queued "
-             "requests an opening breaker refuses. Not built: round robin with shares (chunk 9), the adaptive limit and the "
-             "rate gate (chunk 10), and the tenant table's in-flight counts, shares and gate state.",
+             "requests an opening breaker refuses. Not built: the adaptive limit and the "
+             "rate gate (chunk 10), with the tenant table's gate state and the snapshot's limit changes and gate "
+             "refusals.",
     "a-tenants": "Built in chunk 8 (internal/admission: tenantFor, dropQuiet, evictEmpty and statsFor in "
                  "queues.go; tenant.go): one entry per tenant with a queue (its ring, rule state, LIFO state and "
                  "load gauge), created on first use and removed after 16 quiet intervals, its ring reused. At most "
                  "queue.max_tenants entries: at the cap an empty queue is evicted for a new tenant, and if none is "
                  "empty the arrival is shed. A tenant's counters outlive its entry, for at most 4,096 tenants; "
-                 "later ones are counted as other. Not built: in-flight count and share (chunk 9), gate state "
-                 "(chunk 10).",
-    "a-dispatch": "Built in chunk 8 (internal/admission: Dispatcher, OldestFirst and SetDispatcher in queues.go): "
-                  "the interface the queues ask at each pop, and one default that picks the tenant whose head is "
-                  "oldest. Not built: round robin and shares (chunk 9), the limit they bind under (chunk 10).",
+                 "later ones are counted as other. Built in chunk 9 (the turn field in tenant.go, set in "
+                 "queues.go and fair.go): the entry's round-robin turn; a new entry joins behind every waiting "
+                 "tenant. Not built: gate state (chunk 10).",
+    "a-limit": "Built in chunk 9 (internal/admission: SetLimit and Limit in fair.go): the limit as one integer "
+               "the fair dispatcher enforces, settable at any instant; the engine sets it once, to "
+               "pool.connections. Not built: everything that changes it — the cuts, the raises and their bounds "
+               "(chunk 10).",
     "a-snap": "Built in chunk 8 (internal/admission: snapshot.go): per tenant and total — depth, capacity, "
               "oldest-item age, queue-wait histogram, rule state, LIFO state and switches, sheds by reason, the "
-              "load gauge, shedding — with a conservation check (pushes = served + shed + removed + queued). Not "
-              "built: in flight and share (chunk 9), the limit and its changes, gate refusals (chunk 10).",
+              "load gauge, shedding — with a conservation check (pushes = served + shed + removed + queued). "
+              "Built in chunk 9 (FairSnapshot and fairSnapshot in fair.go; three fields in snapshot.go): per "
+              "tenant in flight, share and time at share; in total the limit, in flight, active tenants, "
+              "tenants with a lease, rounds, selections held back by reason, lease starts and ends, and "
+              "saturated time; with its check (lease starts - ends = in flight = the sum over tenants). Not "
+              "built: the limit's changes and gate refusals (chunk 10).",
 }
 
 REL_BUILT = {
@@ -357,6 +379,11 @@ REL_BUILT = {
     "a10": 8,   # admission/queues.go: pick calls Dispatcher.Pick over the tenants with waiting work
     "a14": 8,   # admission/queues.go: tenantFor; a tenantQueue holds the ring
     "a16": 8,   # admission/snapshot.go: obs.Gauge, obs.HistogramSnapshot, obs.Conserve
+    # Chunk 9. Arrows of the fair dispatcher that are wholly true although one end is only partly built:
+    "a3": 9,    # proxy/fairness.go: installFair (NewFair, SetDispatcher), fairStarted, fairEnded, releasable, checkoutDemand
+    "a12": 9,   # admission/fair.go: before compares TenantView.Turn; waiting and activeWeight read the tenant queues
+    # The fair dispatcher (chunk 9) does not import internal/work: it takes a tenant as a string.
+    "a15": None,
     "o76": 8,   # admsrc/admsrc.go: Map(admission.Snapshot)
     "o79": 8,   # admsrc/admsrc.go: HealthRules; appended in enginesrc.HealthRules
     "o82": 8,   # scripts/admission-head-to-head.sh: run() calls go test -run TestScenarioAdmissionHeadToHead ./test/e2e
@@ -506,7 +533,8 @@ container("c-work", "Work vocabulary",
           tech="Go types")
 container("c-adm", "Admission",
           "internal/admission. Rate gate, per-tenant queues with two selectable queue rules, adaptive LIFO, a load "
-          "gauge, round-robin dispatcher with shares that bind under saturation, adaptive concurrency limit.",
+          "gauge, a fair dispatcher (a share of the limit per tenant by weight, a tenant below its share served "
+          "first, round robin), adaptive concurrency limit.",
           tech="Go, pure core")
 container("c-pool", "Pool",
           "internal/pool. Hard-capped database connections opened on demand, a creation limiter, leases with two "
@@ -533,7 +561,8 @@ container("c-config", "Configuration",
           "internal/config. The config file (JSON), the client_tls and backend_tls blocks, the queue block (the "
           "rule and its times, the capacities, adaptive LIFO), the pool keys (connect cap, idle timeout, "
           "lifetime, jitter, the check, the cancel cap), the lease keys (reset: always or on-switch; reseed), the "
-          "breaker keys, the backend keys (TCP keepalive, server keepalive, the path's idle limit), the static "
+          "breaker keys, the backend keys (TCP keepalive, server keepalive, the path's idle limit), the fairness "
+          "block (a default weight and a weight per tenant), the static "
           "fleet block (instance count N; fleet budgets divided by N), load-time validation that fails closed "
           "and names the key, warnings for risky settings, and the config fingerprint.", tech="Go")
 container("c-sim", "Simulator harness",
@@ -658,7 +687,9 @@ comp(P, "e-pipeline", "Request pipeline",
      "lease, forward, release. Each stage is counted as passed or refused, and each refusal is answered with its "
      "error-contract row: while the breaker is open, 53M03 at once and no dial. A queued request has a wait "
      "deadline, the outer bound whatever the queue rule; a request the queue sheds is answered at once with "
-     "53M01. A request waits only in the queue: a checkout that cannot lend leaves it there. Statements inside an open transaction skip from "
+     "53M01. A request waits only in the queue: a checkout that cannot lend leaves it there, and so does a "
+     "request the fair dispatcher holds back; while one is held back the dispatch is tried once more at the "
+     "end of every event. Statements inside an open transaction skip from "
      "the reject list straight to forward on the connection the client already holds.")
 comp(P, "e-seams", "Stage seams and stand-ins",
      "The small interfaces the pipeline calls: classifier, breaker, rate gate, coalescer, queue, pool, release "
@@ -713,12 +744,18 @@ comp(P, "e-admq", "Admission queue adapter",
      "lent directly: every request is pushed and popped, so the rule sees zero-wait requests too. At a stop it "
      "sweeps first and answers what was due, then removes the rest as client-gone. When the breaker opens it "
      "sweeps, then refuses every queued request in arrival order: each is a shed with reason breaker, answered "
-     "53M03. The engine's invariants require the core's shed count to equal the sheds answered.")
+     "53M03. The engine's invariants require the core's shed count to equal the sheds answered. It installs the "
+     "fair dispatcher on the queues it builds (fairness.go), with the limit at the pool size, and the engine "
+     "reports to it every lease start (at the lend) and every lease end (a release on either pool, the "
+     "dirty-connection table, a lost lease), so a transaction held open stays in flight until its lease ends. "
+     "The invariants require the dispatcher's leases in flight, in total and per tenant, to equal the "
+     "connections the engine has lent.")
 comp(P, "e-corepool", "Pool core adapter",
      "internal/proxy/corepool.go. Puts the pool core behind the pool, breaker and release-policy seams and "
      "performs the actions the core returns: dial, the empty-query check, a cancel request, ROLLBACK, the reset "
      "with its re-seed, close, and refusing the queued requests with 53M03. It reports back every result, loss "
-     "and lease end, drains a cancelled statement's reply, tells the core how many requests wait, and arms one "
+     "and lease end, drains a cancelled statement's reply, tells the core how many waiting requests the fair "
+     "dispatcher would release now (a request held back opens no connection), and arms one "
      "timer at the core's next deadline. A client's cancel request goes to the connection that client holds; "
      "for a request still queued the client gets 57014 at once. A client idle inside a transaction past its "
      "deadline gets FATAL 25P03 and its connection is rolled back, reset and reused. The engine's invariants "
@@ -735,7 +772,7 @@ rel("e27", "e-pipeline", "n-pgwire", "Statement classifier: Query text in, work 
 rel("e23", "e-pipeline", "e-seams", "Calls each stage through its interface", "Go")
 rel("e8", "e-pipeline", "n-adm", "Gate, queue, dispatch, limit", "Go")
 rel("e31", "e-admq", "e-seams", "Implements the queue seam and its shedding extension", "Go", "implementation")
-rel("e30", "e-admq", "n-adm", "Push, pop, remove, expire, sweep; takes the sheds and the next deadline", "Go")
+rel("e30", "e-admq", "n-adm", "Push, pop, remove, expire, sweep; takes the sheds and the next deadline; installs the fair dispatcher; lease starts and ends; the demand it would release", "Go")
 rel("e32", "e-admq", "e-fail", "Each shed request, answered at once with 53M01", "Go")
 rel("e33", "e-clock", "e-admq", "The admission deadline was reached: sweep", "Go")
 rel("e9", "e-pipeline", "n-coal", "Join or lead a shared read", "Go")
@@ -745,7 +782,9 @@ rel("e35", "e-corepool", "n-pool", "Checkout, release, results, losses, cancels,
 rel("e36", "e-corepool", "e-backends", "Opens, checks, cleans up, resets and closes connections as the core says; keeps each phase equal to the core's state", "Go")
 rel("e37", "e-clock", "e-corepool", "The pool deadline was reached: tick", "Go")
 rel("e38", "e-corepool", "e-fail", "Each queued request the breaker refuses, answered 53M03; 57014 for a cancelled queued request; 25P03 for a client idle in a transaction", "Go")
-rel("e39", "e-corepool", "e-admq", "When the breaker opens: sweep, then refuse every queued request", "Go")
+rel("e39", "e-corepool", "e-admq", "When the breaker opens: sweep, then refuse every queued request. Reports the lease ends of the core's paths; asks how many waiting requests the dispatcher would release", "Go")
+rel("e41", "e-pipeline", "e-admq", "Reports each lease start at the lend; while a request is held back, dispatches again at the end of every event", "Go")
+rel("e42", "e-reset", "e-admq", "Reports the lease end at a release", "Go")
 rel("e40", "e-sessions", "e-corepool", "A client's cancel request, found by its key; a client idle inside a transaction past its deadline", "Go")
 rel("e12", "e-pipeline", "n-retry", "May this failure be retried", "Go")
 rel("e13", "e-pipeline", "e-backends", "Forwards the statement on the lent connection", "Go")
@@ -921,8 +960,10 @@ comp(P, "a-gate", "Rate gate (GCRA)",
      "Optional outer gate, off by default: a per-tenant rate and burst in integer nanoseconds. Refuses before anything "
      "is queued. Rates are divided by the instance count.")
 comp(P, "a-tenants", "Tenant table",
-     "State for tenants that are active now: queue, in-flight count, share, gate state. Created on first use, removed "
-     "when all-zero, so memory follows active tenants.")
+     "State for tenants that are active now: the queue with its round-robin turn, and gate state. Created on "
+     "first use, removed when quiet, so memory follows active tenants. A tenant's counters are kept apart and "
+     "outlive its entry, up to a cap. The in-flight count is not here: the dispatcher keeps it, for tenants with "
+     "a lease only.")
 comp(P, "a-queues", "Per-tenant queues",
      "A fixed-capacity ring per tenant, under one total capacity. Age is measured on the oldest item; expired "
      "items are swept from the head, at every operation and at the core's own next deadline, and answered at once. "
@@ -946,30 +987,40 @@ comp(P, "a-arms", "Comparison arms",
      "Plain FIFO and folly's minimum-delay detector, for the head-to-head table. Only tests and the simulator "
      "can select them: the config file's parser accepts neither.", tags=("test",))
 comp(P, "a-dispatch", "Dispatcher",
-     "Chooses whose request runs next: round robin across tenants with waiting work; a tenant's share binds only when "
-     "the limit is reached; otherwise work-conserving.")
+     "The interface the queues ask at each pop, and the fair dispatcher the engine installs behind it. It "
+     "enforces one limit on leases in flight, set from outside, and lends nothing at the limit. Each active "
+     "tenant (a request waiting or a lease in flight) has a share: the limit times its weight over the active "
+     "tenants' weights, rounded down, at least 1. A waiting tenant below its share is chosen before any tenant "
+     "at or above it; within each group the choice is round robin. The last free lease is held back only "
+     "while an active tenant with nothing waiting is below its share; otherwise no lease idles while a request "
+     "waits. It counts leases in flight per tenant from the lease starts and ends reported to it, so a "
+     "transaction held open counts; keeps state only for tenants with a lease; and never takes a lease back. "
+     "It also says how many waiting requests it would release now. Weights are checked at load. A second "
+     "implementation, oldest head first, is what a core without it uses (tests only).")
 comp(P, "a-limit", "Adaptive limit (AIMD)",
      "One integer limit on concurrent leases. Cut by a tenth on a slow statement, a timeout or a connection failure; "
      "raised by one when busy. Bounded by a floor, the pool size, a maximum step and a minimum interval. Reads "
      "database round-trip time, never queue wait.")
 comp(P, "a-snap", "Admission snapshot",
      "Snapshot(): per tenant and total — depth, capacity, oldest-item age, queue-wait histogram, rule state, LIFO "
-     "switches, sheds by reason, the load gauge, in flight, share, limit and its changes, gate refusals.")
+     "switches, sheds by reason, the load gauge, in flight, share, time at share, the dispatcher's totals "
+     "(limit, active tenants, rounds, selections held back, lease starts and ends, saturated time), the limit's "
+     "changes, gate refusals.")
 rel("a1", "n-engine", "a-gate", "May this request enter", "Go")
 rel("a2", "n-engine", "a-queues", "Enqueue, pop, remove, refuse; sweep expired; take the shed requests and the next deadline", "Go")
-rel("a3", "n-engine", "a-dispatch", "Capacity freed: who runs next", "Go")
+rel("a3", "n-engine", "a-dispatch", "Installs it with the limit and the weights; reports every lease start and end; asks how many waiting requests it would release", "Go")
 rel("a4", "n-engine", "a-limit", "Statement time and outcome of each completion", "Go")
 rel("a5", "n-engine", "a-snap", "Snapshot()", "Go")
 rel("a6", "a-queues", "a-rule", "Allowed wait; overloaded or not", "Go")
 rel("a7", "a-rule-timeout", "a-rule", "Implements", "Go", "implementation")
 rel("a8", "a-rule-law", "a-rule", "Implements", "Go", "implementation")
 rel("a9", "a-arms", "a-rule", "Implement (simulator only)", "Go", "implementation")
-rel("a10", "a-queues", "a-dispatch", "At each pop: which tenant's queue is served next", "Go")
+rel("a10", "a-queues", "a-dispatch", "At each pop: which tenant's queue is served next, or none; a pop put back is undone there too", "Go")
 rel("a11", "a-dispatch", "a-limit", "Reads the current limit", "Go")
-rel("a12", "a-dispatch", "a-tenants", "In-flight counts and shares", "Go")
+rel("a12", "a-dispatch", "a-tenants", "Which tenants wait, and each one's turn; adds time at share to a tenant's counters", "Go")
 rel("a13", "a-gate", "a-tenants", "Per-tenant gate state", "Go")
 rel("a14", "a-queues", "a-tenants", "Per-tenant queue", "Go")
-rel("a15", "a-dispatch", "n-work", "Work units and outcomes", "Go types")
+rel("a15", "a-dispatch", "n-work", "Tenants as work-vocabulary types (so far a tenant is a string and the engine converts)", "Go types")
 rel("a16", "a-snap", "n-obs", "Uses the gauge, the histogram and the conservation check; the admission source mapping reads the snapshot", "Go, plain structs")
 
 # --------------------------------------------------------------------------- pool components
@@ -1323,7 +1374,10 @@ comp(P, "o-admsrc", "Admission source mapping",
      "internal/obs/admsrc. The metric declarations of component admission and the mapping from the admission "
      "snapshot to points. Totals always: the rule, capacities, queued, tenant queues, pushes, served, removed, sheds "
      "by reason, LIFO switches, queues by rule state, the load gauge, shedding. With obs.detail on: the queue-wait "
-     "histogram and a row set per tenant, the gateway's first metrics with a tenant label. Holds the health rule admission: "
+     "histogram and a row set per tenant, the gateway's first metrics with a tenant label. Since chunk 9 also "
+     "the fair dispatcher's totals (limit, in flight, active tenants, tenants with a lease, rounds, selections "
+     "held back by reason, lease starts and ends, saturated time) and, per tenant, in flight, share and time "
+     "at share. Holds the health rule admission: "
      "degraded while a tenant queue shed within the last interval.")
 comp(P, "o-h2h", "Admission head-to-head table",
      "scripts/admission-head-to-head.sh and test/analysis/admission-head-to-head. One DuckDB query over the "
@@ -1355,7 +1409,10 @@ comp(P, "o-assert", "SQL assertions and their runner",
      "against the leases ended and, where the scenario has a fault, error-contract replies by row = faults "
      "injected; in tier S also proxy completed = workload completed and replies by row = what the clients saw. "
      "For the admission scenarios: conservation (the engine's sheds = the queues' sheds too), served-wait bounds "
-     "from the histogram buckets, depth, and 53M01 replies = sheds. For the pool scenarios: in every flush "
+     "from the histogram buckets, depth, and 53M01 replies = sheds. For the fairness scenarios: in every flush "
+     "lease starts - ends = in flight = the sum over tenants, at most the limit; the quiet tenant against its "
+     "run alone; the flooder's part of the shedding; every one of 40 quiet tenants on its own rows; and time at "
+     "share for a tenant holding transactions. For the pool scenarios: in every flush "
      "open + connecting is at most the cap, every dial and checkout has one outcome, nothing is lent at the "
      "end, and each scenario's own claim (the dial rate, the breaker's recovery, the fake's connection peak, "
      "no statement left without a reply).",
@@ -1551,11 +1608,13 @@ component_diagram("component-engine", "Components: engine", "05-component-engine
                   "put the pool core behind the pool, breaker and release seams, through the pool core adapter, "
                   "and chunk 8 the admission queues behind the queue seam, through the admission queue adapter. "
                   "Where the two meet, a request waits in one place, its tenant's queue, and a breaker that opens "
-                  "refuses the queue through the admission queues. The "
-                  "pipeline's arrow to admission stays dashed until the dispatcher, the limit and the gate exist, "
+                  "refuses the queue through the admission queues. Chunk 9 installed the fair dispatcher on those "
+                  "queues: the engine reports every lease start and end to it, and tells the pool only the demand "
+                  "the dispatcher would release. The "
+                  "pipeline's arrow to admission stays dashed until the limit and the gate exist, "
                   "and so do the arrows to the coalescer and the retry policy.",
                   ["n-shell", "n-sim", "n-pgwire", "n-adm", "n-coal", "n-pool", "n-retry", "n-obs", "n-work"],
-                  ["e%d" % i for i in (1, 2, 22, 3, 4, 5, 6, 7, 27, 23, 8, 31, 30, 32, 33, 9, 10, 34, 35, 36, 37, 38, 39, 40, 12, 13, 14, 15, 24, 25, 26, 29, 16, 17, 28, 18, 19, 20, 21)])
+                  ["e%d" % i for i in (1, 2, 22, 3, 4, 5, 6, 7, 27, 23, 8, 31, 30, 32, 33, 41, 42, 9, 10, 34, 35, 36, 37, 38, 39, 40, 12, 13, 14, 15, 24, 25, 26, 29, 16, 17, 28, 18, 19, 20, 21)])
 component_diagram("component-wire", "Components: wire layer", "06-component-wire-layer", "c-pgwire",
                   "internal/pgwire: our framer and message coding, both session machines, SCRAM, the two trackers, the wire snapshot, the SQL lexer, the classifier with its courtesy reject list, the safe-shape recogniser, the error contract and reply builders, the test proxies and their scenarios; planned: the pgproto3 codec boundary",
                   "pgproto3 provides message structs and nothing else. The framer, session machines, SCRAM, "
@@ -1577,9 +1636,11 @@ component_diagram("component-admission", "Components: admission", "07-component-
                   "Decisions run in order: gate, then queue, then dispatch under the limit. The two queue rules are "
                   "equal, selectable implementations of one interface. Two control loops read two different signals: "
                   "the queue rule reads queue wait, and the adaptive limit reads database round-trip time. Chunk 8 "
-                  "built the queues, both rules, the comparison arms, and the seam the dispatcher plugs into, with "
-                  "one default that serves the tenant whose head is oldest. The gate, the limit, round robin, and "
-                  "shares are planned. The core takes a tenant as a string and a request as an integer id, so "
+                  "built the queues, both rules, the comparison arms, and the seam the dispatcher plugs into. Chunk 9 "
+                  "built the fair dispatcher: shares by weight, a tenant below its share first, round robin, and "
+                  "leases counted per tenant. The limit it enforces is a settable integer, fixed at the pool size "
+                  "until the adaptive limit drives it. The gate and the adaptive limit are planned (chunk 10). "
+                  "The core takes a tenant as a string and a request as an integer id, so "
                   "nothing in it imports the work vocabulary yet.",
                   ["n-engine", "n-work", "n-obs"], ["a%d" % i for i in range(1, 17)])
 component_diagram("component-pool", "Components: pool", "08-component-pool", "c-pool",
@@ -1628,7 +1689,7 @@ component_diagram("component-observability", "Components: observability", "12-co
                   "generator's own source, and a Prometheus in the dev stack that scrapes /metrics directly. "
                   "Chunk 7 added the pool source and its health rule for the breaker. "
                   "Chunk 8 added the admission source, the gateway's first with per-tenant rows, its health rule for "
-                  "shedding, and the head-to-head table.",
+                  "shedding, and the head-to-head table. Chunk 9 added the fairness metrics to the admission source.",
                   ["n-engine", "n-shell", "n-e2e", "n-mgctl", "n-sim", "n-pgwire", "n-adm", "n-pool", "csvfiles", "duckdb", "otelcol", "prom"],
                   ["o%d" % i for i in (1, 2, 25, 26, 27, 3, 24, 28, 29, 4, 15, 8, 9, 10, 11, 12, 31, 32, 5, 6, 7, 16, 18, 17, 19,
                                          13, 20, 21, 14, 33, 22, 23, 50, 51, 34, 35, 52, 53, 57, 58, 61, 62, 63, 64, 65, 66, 68, 37, 54, 59, 67, 38, 39, 40, 41, 42, 55, 56, 60, 69, 43, 44, 45, 46, 47, 48, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 83, 84, 85, 86, 80, 81, 82)])

@@ -202,6 +202,15 @@ Record: `chunks/c08-admission/` (brief, notes, gate extra).
 | `chunks/c08-admission/gate/extra.sh` | G10: `fuzz-plant.sh` and `admission-head-to-head.sh --check` | Opus | — |
 | `../docs/knowledge/admission-queues.md` | Facts for chunks 9, 10, 13, 14: the core API, the seam, plants, the dispatcher hook, scenario cost | Opus | — |
 
+## Phase 2, chunk 9 — fairness (Opus, 2026-11-27)
+
+Record: `chunks/c09-fairness/` (brief, notes, gate extra).
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../scripts/fuzz-plant.sh` (changed) | Also plants `admission.FairPlantUnpopKeepsTurn` (`MG_FUZZ_PLANT=fairness-unpop-turn`) and requires `FuzzFairnessOps` to find it within `FUZZ_SECONDS`; no committed seed finds it on its own | Opus | Found after 2 s of 20 s (empty cache) |
+| `chunks/c09-fairness/gate/extra.sh` | G10: `fuzz-plant.sh`, then the fairness canaries in `internal/admission`, `internal/proxy` and `test/e2e` on their own | Opus | — |
+| `../docs/knowledge/fairness.md` | Facts for chunks 10, 13, 14: the fair rule as built, where chunk 10 sets the limit (`Queues.SetLimit`, `AdmissionQueue.SetLimit`), the metrics, scenario cost | Opus | — |
 ## Lease-lab port — the keepers of `exp/lease-lab` (Opus, 2026-11-27)
 
 Notes: `chunks/lease-lab-port/NOTES.md`; evaluation: `chunks/lease-lab-port/EVALUATION.md`.

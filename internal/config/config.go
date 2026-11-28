@@ -98,6 +98,7 @@ type File struct {
 	Fleet       Fleet      `json:"fleet"`
 	Backend     Backend    `json:"backend"`
 	Breaker     Breaker    `json:"breaker"`
+	Fairness    Fairness   `json:"fairness"`
 
 	res resolved
 }
