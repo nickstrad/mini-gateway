@@ -34,8 +34,15 @@ from pathlib import Path
 # LANDED_LETTER  a lettered chunk that landed after chunk LANDED: "a" while chunk 6a is the last
 #           landing, so the pages say "chunks 0–6a". A chunk number in BUILT and REL_BUILT is then
 #           a whole number or such a name in quotes ("6a"). Set it back to "" when LANDED moves on.
+# ALSO_LANDED  whole-numbered chunks that landed out of order, ahead of LANDED: [12] while chunk 12 (the
+#           retry policy) has landed and chunks 10 and 11 have not. LANDED stays the end of the unbroken
+#           run, so the pages say "chunks 0–9 and chunk 12" and claim nothing of chunks 10 and 11. A later
+#           chunk that lands ahead of the run adds itself here (chunk 11: [11, 12]). When the run reaches
+#           the list (chunk 10 lands with 11 and 12 already in), move LANDED on past it and empty the list.
+#           The device first served chunk 8, which landed before chunk 7.
 LANDED = 9
 LANDED_LETTER = ""
+ALSO_LANDED = [12]
 
 BUILT = {
     # chunk 1 — simulator kernel (diagram 11)
@@ -76,9 +83,9 @@ BUILT = {
     "o-csv": 3,       # internal/obs/csvflush (schema.go, writer.go, reader.go)
     "o-log": 3,       # internal/obs/logline
     "o-simsrc": 3,    # internal/obs/simsrc (chunk 4 added the fake's authentication counters and the clients' startup counters)
-    "o-catalog": 3,   # internal/obs/catalog; scripts/gen-docs.sh, scripts/gen-docs.d/c03-csv-schema.sh; docs/csv-schema.md (chunk 5 added the classifier source, chunk 6 the engine and shell metrics, chunk 6a the load generator's metrics, chunk 7 the pool metrics, chunk 8 the admission metrics, chunk 9 the fairness metrics of component admission)
-    "o-simrun": 6,    # internal/obs/simrun (chunk 3); chunk 4 added wire.go (the wire scenarios), chunk 5 classifier.go (the classifier scenarios), chunk 6 custom.go (a run handed its sources); chunk 7: its tests run the scenarios and their SQL on 4 workers and skip the four heavy pool scenarios under -short; chunk 8: its baseline test also runs the admission scenarios (e2e.AdmissionBaseline in engine_test.go); chunk 9: and the fairness scenarios (e2e.FairBaseline), skipped under -short
-    "o-assert": 6,    # scripts/csv-assert.sh, test/analysis (views.sql, guard.sql, 245 assertion files: 5 of chunk 3, 57 of chunk 4, 3 of chunk 5, 130 of chunk 6, 27 of chunk 7, 15 of chunk 8, 8 of chunk 9); make csv-assert; scripts/chaos.sh (chunk 6a: one line per scenario, a failure's rows and REPLAY line under it)
+    "o-catalog": 3,   # internal/obs/catalog; scripts/gen-docs.sh, scripts/gen-docs.d/c03-csv-schema.sh; docs/csv-schema.md (chunk 5 added the classifier source, chunk 6 the engine and shell metrics, chunk 6a the load generator's metrics, chunk 7 the pool metrics, chunk 8 the admission metrics, chunk 9 the fairness metrics of component admission, chunk 12 component retry and the engine's retry metrics)
+    "o-simrun": 6,    # internal/obs/simrun (chunk 3); chunk 4 added wire.go (the wire scenarios), chunk 5 classifier.go (the classifier scenarios), chunk 6 custom.go (a run handed its sources); chunk 7: its tests run the scenarios and their SQL on 4 workers and skip the four heavy pool scenarios under -short; chunk 8: its baseline test also runs the admission scenarios (e2e.AdmissionBaseline in engine_test.go); chunk 9: and the fairness scenarios (e2e.FairBaseline), skipped under -short; chunk 12: and the retry scenarios (e2e.RetryBaselineJobs), skipped under -short
+    "o-assert": 6,    # scripts/csv-assert.sh, test/analysis (views.sql, guard.sql, 253 assertion files: 5 of chunk 3, 57 of chunk 4, 3 of chunk 5, 130 of chunk 6, 27 of chunk 7, 15 of chunk 8, 8 of chunk 9, 8 of chunk 12); make csv-assert; scripts/chaos.sh (chunk 6a: one line per scenario, a failure's rows and REPLAY line under it)
     "o-wiresrc": 4,   # internal/obs/wiresrc
     "o-clssrc": 5,    # internal/obs/clssrc
     "csvfiles": 3,    # written by internal/obs/csvflush; described in docs/csv-schema.md
@@ -101,7 +108,7 @@ BUILT = {
     "w-rejects": 5,   # internal/pgwire: rejectlist.go, rejectlist_doc.go; docs/reject-list.md
     "w-classifier": 5,  # internal/pgwire: classify.go, snapshot_classifier.go
     "w-share": 5,     # internal/pgwire: share.go, share_doc.go; docs/safe-shape.md; tier R test in share_tierr_test.go
-    "w-errors": 5,    # internal/pgwire: errors.go, errors_doc.go, reply.go; docs/error-contract.md (chunk 7 added the row lost-mid-statement-in-transaction)
+    "w-errors": 5,    # internal/pgwire: errors.go, errors_doc.go, reply.go; docs/error-contract.md (chunk 7 added the row lost-mid-statement-in-transaction; chunk 12 errors_retry.go and the column "Retried by the proxy?")
     "w-clsworld": 5,  # internal/pgwire/pgwiretest/clsworld; run by internal/pgwire/classify_e2e_test.go and internal/obs/simrun/classifier_test.go
     # chunk 6 — walking skeleton (diagrams 1, 2, 3, 5 and 12)
     "app": 6,         # a client connects, logs in and runs statements through cmd/mini-gateway (test/e2e tier R: psql, pgbench-style runs)
@@ -111,14 +118,14 @@ BUILT = {
     "e-transport": 6, # internal/proxy: api.go (events, actions, the read constants; chunk 7 added ActDBCancel and EvDBCancelDone)
     "e-sessions": 6,  # internal/proxy: client.go (chunk 7: the key map e.keys, the timer tClientIdleTx)
     "e-backends": 6,  # internal/proxy: dbconn.go (chunk 7: the phases dpChecking and dpCleaning, the core path)
-    "e-pipeline": 6,  # internal/proxy: startRequest, gates, enqueue, dispatch, lend, forward in lease.go (chunk 7: the breaker seam now refuses with 53M03, one checkout per enqueue; chunk 8: the queueTouched calls, Expire and Unpop; chunk 9: lend reports the lease start, fairRedispatch at the top of finish in engine.go)
-    "e-seams": 6,     # internal/proxy: seams.go (chunk 8 added ShedQueue, chunk 7's join its Refuse)
+    "e-pipeline": 6,  # internal/proxy: startRequest, gates, enqueue, dispatch, lend, forward in lease.go (chunk 7: the breaker seam now refuses with 53M03, one checkout per enqueue; chunk 8: the queueTouched calls, Expire and Unpop; chunk 9: lend reports the lease start, fairRedispatch at the top of finish in engine.go; chunk 12: forward reports each first attempt, the retry clamps in enqueue and forward, the breaker re-check at the top of dispatch)
+    "e-seams": 6,     # internal/proxy: seams.go (chunk 8 added ShedQueue, chunk 7's join its Refuse; chunk 12 the fields Attempt, BreakerOpen, Draining and Deadline of Failure)
     "e-reset": 6,     # internal/proxy: replyDone, release, startReset, resetJudge, judgeReset in lease.go (chunk 7: coreRelease in corepool.go, the re-seed in the judge; chunk 9: release reports the lease end)
-    "e-fail": 6,      # internal/proxy: leaseFailed, statementLost, reachedFor, lostRow in lease.go; reply in client.go (chunk 7: the row for a loss mid-statement inside a transaction)
+    "e-fail": 6,      # internal/proxy: leaseFailed, statementLost, reachedFor, lostRow in lease.go; reply in client.go (chunk 7: the row for a loss mid-statement inside a transaction; chunk 12: statementLost offers the failure before counting it, matrix.go and docs/fault-matrix.md)
     "e-clock": 6,     # internal/proxy: timers.go; fireTimers in engine.go (chunk 7 added the timer kinds tPool and tClientIdleTx, chunk 8 tAdmission)
-    "e-publish": 6,   # internal/proxy: snapshot.go; Snapshot and the EvPublish case in engine.go; chunk 7: PoolSnapshot in corepool.go; chunk 8: AdmissionSnapshot in admission.go
+    "e-publish": 6,   # internal/proxy: snapshot.go; Snapshot and the EvPublish case in engine.go; chunk 7: PoolSnapshot in corepool.go; chunk 8: AdmissionSnapshot in admission.go; chunk 12: RetrySnapshot in retry.go and the retry counters
     "e-proxysim": 6,  # internal/proxy/proxysim (proxysim.go, world.go; chunk 7: the cancel connection)
-    "o-enginesrc": 6, # internal/obs/enginesrc (chunk 7: mapPoolPath, the pool source and the breaker rule; chunk 8: the admission source and rule)
+    "o-enginesrc": 6, # internal/obs/enginesrc (chunk 7: mapPoolPath, the pool source and the breaker rule; chunk 8: the admission source and rule; chunk 12: the retry source and the engine's retry metrics)
     # chunk 6a — operator tools (diagrams 3 and 12)
     "c-mgctl": "6a",  # cmd/mgctl (main.go); internal/mgctl (commands.go, contract.go, session.go, password.go, tls.go)
     "c-dev": "6a",    # deploy/dev (docker-compose.yml, init.sql, env.sh, up.sh, load.sh, down.sh); the run-up, load and run-down blocks of the Makefile
@@ -147,6 +154,16 @@ BUILT = {
     "o-h2h": 8,       # scripts/admission-head-to-head.sh; test/analysis/admission-head-to-head (head-to-head.query, head-to-head.md)
     # chunk 9 — fairness between tenants (diagrams 5, 7 and 12)
     "a-dispatch": 9,  # internal/admission: Fair, FairConfig, Pick, LeaseStart, LeaseEnd, SetLimit and Releasable in fair.go; takeTurn and untakeTurn there, the turn in queues.go; Dispatcher, OldestFirst and SetDispatcher in queues.go (chunk 8); the reference model and FuzzFairnessOps in its tests
+    # chunk 12 — retry policy (diagrams 2, 3, 5, 10 and 12). Landed before chunks 10 and 11: see ALSO_LANDED.
+    "c-retry": 12,    # internal/retry (retry.go, config.go; the reference model and FuzzRetryOps in its tests); internal/retry/retrytest
+    "r-policy": 12,   # internal/retry: Policy, Failure, Reason and Decision in retry.go; New
+    "r-off": 12,      # internal/retry: Off in retry.go; KindOff, the zero Config, in config.go
+    "r-once": 12,     # internal/retry: PreForwardOnce, Decide and eligible in retry.go
+    "r-budget": 12,   # internal/retry: Attempt, charge and withdraw in retry.go; the constants, Validate and Share in config.go
+    "r-snap": 12,     # internal/retry: Snapshot and its Check in retry.go
+    "r-everything": 12,  # internal/retry/retrytest: Everything in everything.go; the Plant bits in config.go
+    "e-retry": 12,    # internal/proxy: retry.go; the Retry field in config.go; initRetry in engine.go; the retryEnded calls in lease.go, client.go and corepool.go
+    "o-retrysrc": 12, # internal/obs/retrysrc
 }
 
 PARTIAL = {
@@ -163,15 +180,18 @@ PARTIAL = {
           "creation-rate budgets taken from the fleet block. Chunk 9 built fairness between tenants: each active "
           "tenant has a share of the database connections by its weight, a tenant below its share is served "
           "first, and a transaction held open counts against its tenant. The limit the shares divide is the "
-          "pool size, fixed. Not built: the adaptive "
-          "limit and the rate gate, read coalescing, the retry policy, the OTLP push, and the rest of the fleet "
+          "pool size, fixed. Chunk 12 built the retry policy: off by default; switched on, the proxy runs a "
+          "request again at most once, only when nothing of it reached the database, outside a transaction, "
+          "within a token budget, and the client still gets one reply. Not built: the adaptive "
+          "limit and the rate gate, read coalescing, the OTLP push, and the rest of the fleet "
           "configuration and the drain of N instances.",
     "c-engine": "Built in chunk 6 (internal/proxy, internal/proxy/proxysim): every component drawn here except two "
                 "parts — the fan-out of a shared reply to its waiters (chunk 11) and the drain sequence (chunk 13). "
                 "Chunk 7 put the pool core behind the pool, breaker and release seams (corepool.go) and chunk 8 the "
                 "admission queues behind the queue seam (admission.go). Chunk 9 installed the fair dispatcher on those "
-                "queues and reports every lease start and end to it (fairness.go). The stages that belong to "
-                "cores not built yet run their stand-ins: a rate gate that always allows, no coalescing, retry off.",
+                "queues and reports every lease start and end to it (fairness.go). Chunk 12 put the retry policy "
+                "behind the retry seam (retry.go); a granted retry re-enters at the queue stage. The stages that belong to "
+                "cores not built yet run their stand-ins: a rate gate that always allows, no coalescing.",
     "e-relay": "Built in chunk 6 (internal/proxy: relay, relayEvents and relayed in lease.go; writeClient and the "
                "pauses in client.go): all of it for the one client of a reply. Not built: the fan-out to every waiter "
                "of a shared read (chunk 11).",
@@ -192,35 +212,40 @@ PARTIAL = {
                 "tenant_capacity, max_tenants, lifo and lifo_hold, with their defaults; queue.rule accepts only "
                 "timeout and control-law. Built in chunk 9 (fairness.go): the fairness keys default_weight and weights "
                 "(a tenant and a weight each): 1 to 1,000, zero or omitted meaning the default, at most 4,096 "
-                "entries, a tenant named twice refused. Not built: the division of budgets whose cores are not built (the rate "
+                "entries, a tenant named twice refused. Built in chunk 12 (retry.go): the retry keys policy (off or "
+                "pre-forward-once; default off), bucket_cap (tokens per instance, default 100) and floor (tokens "
+                "for the fleet, default 10, divided by fleet.instances): zero or omitted means the default; with "
+                "the policy on, a floor below one token per instance or above the cap is refused and a remainder "
+                "is a warning. Not built: the division of budgets whose cores are not built (the rate "
                 "gate's rates, chunk 10) and the full fleet block (chunk 13).",
     "c-e2e": "Built in chunk 6 (test/e2e): the scenario harness — a scenario is written once as a Spec and runs in "
-             "tier S and tier R; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz "
+             "both tiers; 21 tier S scenarios, 14 tier R tests, the canaries and ablations, the operation fuzz "
              "target FuzzEngineOps, and make chaos (scripts/chaos.sh). Built in chunk 6a: the load generator "
-             "(cmd/loadgen, internal/loadgen with its runner live and its test fake loadgentest), all of what is "
-             "said of it here; the seeded mgctl model test in both tiers; and a tier R test of the run targets "
-             "(16 tier R tests). Built in chunk 8: the admission world (open-loop clients through the engine on "
-             "the simulator, one connection, a fixed read time) with the head-to-head scenarios (four arms at "
-             "1.2×, 2× and 10× load), anti-bufferbloat with recovery for both rules against a first-come control, "
-             "the first burst after idle, two canaries, and a tier R overload test against Postgres with "
-             "pg_sleep (17 tier R tests). Built in chunk 7: the pool scenarios (22, among them the hard cap under "
-             "1,000 clients at once, the reconnection storm, cold start, lifetimes, the database restart alone and "
-             "behind the admission queues, silent mass death, the night trickle, cancel, idle in a transaction, and "
-             "session state under each release policy), run with the pool core where the chunk 6 scenarios keep "
-             "the fixed set; a relay between the proxy and the fake Postgres that injects the path faults "
-             "(blackhole, a peer that forgot the connection, idle drop, polite close, slots held); their canaries "
-             "and ablations; and five tier R pool tests (22 tier R tests), among them 500 clients on 16 "
-             "database connections. Built in chunk 9: the fairness scenarios — a noisy neighbour at 10× capacity "
-             "beside a quiet tenant (compared with the quiet tenant alone; with one shared queue it starves), "
-             "41 tenants with one flooder, a tenant holding transactions open, their canaries, and a tier R "
-             "noisy-neighbour test (23 tier R tests now). Not built: make bench (scripts/bench.sh answers \"not built yet\"; chunk 14).",
+             "(cmd/loadgen, internal/loadgen), all of what is said of it here; the seeded mgctl model test in both "
+             "tiers; and a tier R test of the run targets. Built in chunk 8: the admission world (open-loop "
+             "clients through the engine on the simulator, one connection, a fixed read time) with the "
+             "head-to-head scenarios (four arms at 1.2×, 2× and 10× load), anti-bufferbloat with recovery for both "
+             "rules against a first-come control, the first burst after idle, two canaries, and a tier R overload "
+             "test with pg_sleep. Built in chunk 7: the pool scenarios (22, among them the hard cap under 1,000 "
+             "clients, the reconnection storm, cold start, lifetimes, the database restart alone and behind the "
+             "admission queues, silent mass death, the night trickle, cancel, idle in a transaction, and session "
+             "state under each release policy); a relay that injects the path faults; their canaries and "
+             "ablations; and five tier R pool tests, among them 500 clients on 16 database connections. Built in "
+             "chunk 9: the fairness scenarios — a noisy neighbour at 10× capacity beside a quiet tenant, 41 "
+             "tenants with one flooder, a tenant holding transactions open, their canaries, and a tier R "
+             "noisy-neighbour test. Built in chunk 12: the retry scenarios — the retry storm and a sweep with "
+             "kills at every point of the conversation, each with the policy off, on, and the test-only "
+             "retry-everything policy (the ablation: it applies writes twice); a relay that refuses a first write "
+             "with zero bytes accepted; the storm with two tenants of unequal weight; and a tier R retry-storm "
+             "test, which shows no duplicate write and the recovery but no retry (24 tier R tests). Not built: "
+             "make bench (scripts/bench.sh answers \"not built yet\"; chunk 14).",
     "c-sim": "Built in chunks 1, 2 and 4: every component drawn here — the kernel (internal/sim), simnet, simtest, the toy "
              "protocol (simtoy), cmd/mgsim, the fake Postgres, the simulated clients, the test client, the simulated TLS "
              "handshake (simtls), the scenario world with its five direct baselines (clients straight at the fake, no "
              "proxy) and the fidelity runner, and scripts/tier-r.sh. Since chunk 6 the engine runs on it, through the "
              "engine's own test package internal/proxy/proxysim. Not built: no synthetic workload drives the cores "
-             "(the two cores built so far, the pool and admission, are driven by their own reference-model "
-             "tests and through the engine).",
+             "(the three cores built so far, the pool, admission and the retry policy, are driven by their own "
+             "reference-model tests and through the engine).",
     "c-pgwire": "Built in chunks 4 and 5 (internal/pgwire): every component drawn here except the codec boundary. Chunk 4: "
                 "the framer, the hand-written message coding, both session machines, the SCRAM-SHA-256 functions, the "
                 "two trackers, the startup FATAL replies, the wire snapshot, and the test packages pgwiretest and "
@@ -230,14 +255,15 @@ PARTIAL = {
                 "(three startup rows added). Not built: the "
                 "codec boundary (no file in the package imports pgproto3; the reply builders code their messages by "
                 "hand). Nothing produces outcomes yet.",
-    "c-obs": "Built in chunks 1, 3, 4, 5, 6, 7, 8 and 9: everything except the OTLP push adapter (chunk 15) and the health "
+    "c-obs": "Built in chunks 1, 3, 4, 5, 6, 7, 8, 9 and 12: everything except the OTLP push adapter (chunk 15) and the health "
              "rules for the limit's floor and draining. Since chunk 6 the "
              "shell creates a collector in the real process, with the engine, wire and classifier sources, and "
              "serves the outputs over HTTP. The binary attaches the JSON, Prometheus and CSV adapters; the log-line "
              "adapter is attached only by the scenario flush harness. Chunk 6a: the story report, and the load "
              "generator's metrics in the catalog. Chunk 7: the pool source with the health rule for the breaker. "
              "Chunk 8: the admission source with the health rule for shedding, and the head-to-head table. "
-             "Chunk 9: the fairness metrics in the admission source, totals and per tenant, with no new health rule.",
+             "Chunk 9: the fairness metrics in the admission source, totals and per tenant, with no new health rule. "
+             "Chunk 12: the retry source and the engine's retry metrics, with no new health rule.",
     "prom": "Built in chunk 6a (deploy/dev): the dev stack starts a Prometheus v3.9.1 that scrapes the gateway's "
             "/metrics directly, every second. Not built: the production path through the Collector (chunk 15).",
     "o-health": "Built in chunks 3, 6, 7 and 8. Chunk 3 (internal/obs: health.go): the three states, the rule table "
@@ -400,12 +426,22 @@ REL_BUILT = {
     "p19": 7,   # proxy/corepool.go: corePump calls Demand, coreOpened calls Opened; dbconn.go: DialFailed
     "p20": 7,   # proxy/corepool.go: poolTimer calls Tick; corePump arms tPool at Next
     "o86": 7,   # poolsrc/poolsrc.go: HealthRules; appended in enginesrc.HealthRules
+    # Chunk 12. Arrows of the retry policy that are wholly true although the engine, observability or the suite is only partly built:
+    "c9": 12,   # proxy/retry.go: RetryCore holds a retry.Policy; attempted calls Attempt, offerRetry calls Decide through the seam
+    "c18": 12,  # retry/retry.go: obs.Gauge and obs.Conserve; obs/retrysrc reads the snapshot
+    "t1": 12,   # proxy/retry.go: RetryCore.Retry calls Policy.Decide with a retry.Failure
+    "t2": 12,   # proxy/retry.go: attempted calls RetryCore.Attempt, from forward in lease.go
+    "t3": 12,   # proxy/retry.go: Engine.RetrySnapshot
+    "t8": 12,   # retry/retry.go: obs.Gauge (Level), obs.Conserve in Snapshot.Check
+    "t10": 12,  # test/e2e/c12_retry.go: the arm everything hands retrytest.NewEverything to the engine's retry seam
 }
 # =========================================================================== end of AS BUILT
 
 HERE = Path(__file__).resolve().parent
 LANDED_NAME = "%d%s" % (LANDED, LANDED_LETTER)
-REVISION = "target-approved-2026-11-24-rulings+built-through-chunk-%s" % LANDED_NAME
+assert all(isinstance(c, int) and c > LANDED + 1 for c in ALSO_LANDED) and ALSO_LANDED == sorted(set(ALSO_LANDED)), \
+    "ALSO_LANDED holds whole chunks that landed past a chunk that has not: %s" % ALSO_LANDED
+REVISION = "target-approved-2026-11-24-rulings+built-through-chunk-%s" % "+".join([LANDED_NAME] + ["%d" % c for c in ALSO_LANDED])
 SRC = ["plan"]
 
 E = {}      # id -> element
@@ -548,8 +584,13 @@ container("c-coal", "Coalescer",
           "fitting the safe shape, in hinted mode those carrying the client's mark. Never writes.",
           tech="Go, pure core")
 container("c-retry", "Retry policy",
-          "internal/retry. A policy interface. Off by default; the other policy retries once, only when nothing reached "
-          "the database, within a 10% budget.", tech="Go, pure core")
+          "internal/retry. A policy interface with two policies. Off is the default. PreForwardOnce grants a "
+          "request at most one retry, only when nothing of it reached the database, outside a transaction, "
+          "within an integer token budget: a tenth of a token per first attempt, one token per retry, a cap and "
+          "a starting floor. A deterministic core with no Postgres types and no I/O: every call takes the time. "
+          "Its tests check it against a reference model and with the fuzz target FuzzRetryOps. The test-only "
+          "retry-everything policy is in its test package retrytest, which the binary does not link.",
+          tech="Go, pure core")
 container("c-obs", "Observability",
           "internal/obs and its sub-packages; test/analysis; scripts/csv-assert.sh; scripts/report.sh; "
           "scripts/admission-head-to-head.sh. Snapshot conventions (the one raw "
@@ -562,7 +603,8 @@ container("c-config", "Configuration",
           "rule and its times, the capacities, adaptive LIFO), the pool keys (connect cap, idle timeout, "
           "lifetime, jitter, the check, the cancel cap), the lease keys (reset: always or on-switch; reseed), the "
           "breaker keys, the backend keys (TCP keepalive, server keepalive, the path's idle limit), the fairness "
-          "block (a default weight and a weight per tenant), the static "
+          "block (a default weight and a weight per tenant), the retry block (the policy, the budget's cap and "
+          "its floor), the static "
           "fleet block (instance count N; fleet budgets divided by N), load-time validation that fails closed "
           "and names the key, warnings for risky settings, and the config fingerprint.", tech="Go")
 container("c-sim", "Simulator harness",
@@ -617,7 +659,7 @@ rel("c4", "c-engine", "c-pgwire", "Runs the session machines and trackers over t
 rel("c5", "c-engine", "c-adm", "Gate, enqueue, pick the next request, report completions", "Go, in-process")
 rel("c6", "c-engine", "c-coal", "Join or start a shared read; fan the reply out", "Go, in-process")
 rel("c7", "c-engine", "c-pool", "Lend and release connections; performs the pool's open, check, clean-up, reset and close decisions; breaker state", "Go, in-process")
-rel("c9", "c-engine", "c-retry", "Ask whether a failure may be retried", "Go, in-process")
+rel("c9", "c-engine", "c-retry", "Reports each first attempt it forwards; asks whether a failed statement may be retried", "Go, in-process")
 rel("c10", "c-shell", "pg", "Opens the pooled connections, with TCP keepalive, and moves their bytes; sends each cancel request on a connection of its own", "Postgres wire protocol; TCP, TLS by config")
 rel("c11", "c-engine", "c-obs", "Keeps its counters as one plain snapshot (histograms, gauges, a conservation check); answers each publish event with a publish action", "Go, plain structs")
 rel("c12", "c-shell", "c-obs", "Creates the collector and publishes once per interval; the admin listener serves exporters and health from the last published snapshot", "Go, in-process")
@@ -625,6 +667,7 @@ rel("c13", "telemetry", "c-shell", "Scrapes Prometheus text and JSON stats", "HT
 rel("c14", "c-obs", "telemetry", "Pushes OTLP metrics to a Collector that feeds Prometheus (last build chunk); flushes CSV files; writes log lines", "OTLP/HTTP JSON, files")
 rel("c15", "c-shell", "c-config", "Loads and validates the config and the fleet block at start", "Go, in-process")
 rel("c16", "c-adm", "c-obs", "Keeps its counters as one plain snapshot (gauges with peaks, queue-wait histograms, a conservation check); the admission source mapping reads it", "Go, plain structs")
+rel("c18", "c-retry", "c-obs", "Keeps its counters as one plain snapshot (a gauge with its peak, two conservation checks); the retry source mapping reads it", "Go, plain structs")
 rel("c17", "c-pool", "c-obs", "Keeps its counters as one plain snapshot (gauges with peaks, two histograms, a conservation check); the pool source mapping reads it", "Go, plain structs")
 
 # --------------------------------------------------------------------------- container view B (drivers and seams)
@@ -634,7 +677,7 @@ rel("s3", "c-pgwire", "c-work", "Produces work units and outcomes", "Go types")
 rel("s4", "c-adm", "c-work", "Written against these types only", "Go types")
 rel("s5", "c-pool", "c-work", "Written against these types only: so far it uses the tenant id", "Go types")
 rel("s6", "c-coal", "c-work", "Written against these types only", "Go types")
-rel("s8", "c-retry", "c-work", "Written against these types only", "Go types")
+rel("s8", "c-retry", "c-work", "Written against these types only: so far it uses the three-valued reached-the-database fact", "Go types")
 rel("s9", "c-sim", "pgproto3", "The fake Postgres and the test client encode and decode real wire messages, in one file each", "Go import, test code")
 rel("s10", "c-e2e", "c-sim", "Tier S: runs each scenario on the simulator", "Go test")
 rel("s11", "c-e2e", "c-shell", "Tier R: runs the real binary and drives it with test clients. The load generator logs in as its tenants and sends open-loop load", "Process, Postgres wire protocol")
@@ -690,12 +733,17 @@ comp(P, "e-pipeline", "Request pipeline",
      "53M01. A request waits only in the queue: a checkout that cannot lend leaves it there, and so does a "
      "request the fair dispatcher holds back; while one is held back the dispatch is tried once more at the "
      "end of every event. Statements inside an open transaction skip from "
-     "the reject list straight to forward on the connection the client already holds.")
+     "the reject list straight to forward on the connection the client already holds. A request the retry "
+     "policy grants a retry re-enters at the queue stage: the stages before it are not run again.")
 comp(P, "e-seams", "Stage seams and stand-ins",
      "The small interfaces the pipeline calls: classifier, breaker, rate gate, coalescer, queue, pool, release "
      "policy, retry policy. The queue seam has an extension for a queue that sheds: remove, expire or refuse at an "
-     "instant, sweep, next deadline, take the shed requests, put back a popped one, close. Also the stand-ins: a "
-     "rate gate that always allows, no coalescing and retry off, used until their cores are built; and a breaker "
+     "instant, sweep, next deadline, take the shed requests, put back a popped one, close. The retry seam is "
+     "handed each failure with its facts: reached, in a transaction, the attempt, breaker open, draining, the "
+     "request's deadline. Also the stand-ins: a "
+     "rate gate that always allows and no coalescing, used until their cores are built; a retry policy that "
+     "never retries, which no engine uses by default any more (the engine builds the retry core from its "
+     "config, and that core's default is Off); and a breaker "
      "that is always closed, a fixed set of connections, reset after every lease and one bounded first-come "
      "queue, which an engine configured without the pool core or without a queue rule still uses (tests only: "
      "the config file always gives both). The engine's config can replace any of them.", tech="Go interfaces")
@@ -719,7 +767,10 @@ comp(P, "e-fail", "Failure classifier",
      "that its first write was refused with zero bytes accepted) and picks the error-contract row: 08006 for a safe "
      "read or when nothing reached, 08007 otherwise, FATAL 08006 when a transaction lost its connection (between "
      "statements, or mid-statement unless the message could have ended the transaction: then 08007), and a "
-     "close with no message once part of the reply was sent. Hands the fact to the retry seam.")
+     "close with no message once part of the reply was sent. Offers every lost statement, with the fact, to the "
+     "retry seam before it is counted failed: when a retry is granted the request runs again and this failure "
+     "sends the client nothing. The fault × path table (matrix.go) lists every fault and place with its row, "
+     "its deadline, the reached fact and whether the proxy retries it; docs/fault-matrix.md is generated from it.")
 comp(P, "e-clock", "Deadline table",
      "Every wait the engine has, as deadlines on the clock passed in with each event: one heap, and the next "
      "wake-up time returned as an action. The admission queues' next deadline is one timer in it, and the pool core's next deadline another. Timers due at or before an event's time fire before the event is "
@@ -728,8 +779,8 @@ comp(P, "e-drain", "Drain controller",
      "Sequences shutdown: stop admitting, finish transactions in progress within a bound, close idle connections, exit.")
 comp(P, "e-publish", "Snapshot publisher",
      "Snapshot(): the engine's counters as one plain struct — clients, requests by stage and outcome, replies by "
-     "row, leases, resets, relay, connections, cancels, three histograms — with its conservation check, beside the wire, "
-     "classifier, reply, pool and admission snapshots the engine holds. On a publish event the engine returns a publish action; its "
+     "row, leases, resets, relay, connections, cancels, retries, three histograms — with its conservation check, beside the wire, "
+     "classifier, reply, pool, admission and retry snapshots the engine holds. On a publish event the engine returns a publish action; its "
      "driver then has the collector read the snapshots, between events.")
 comp(P, "e-proxysim", "Simulator driver",
      "internal/proxy/proxysim. The engine on the simulator: accepts and dials on simulated streams, keeps the same "
@@ -760,6 +811,20 @@ comp(P, "e-corepool", "Pool core adapter",
      "for a request still queued the client gets 57014 at once. A client idle inside a transaction past its "
      "deadline gets FATAL 25P03 and its connection is rolled back, reset and reused. The engine's invariants "
      "require every connection's phase to agree with the core after every event.")
+comp(P, "e-retry", "Retry adapter",
+     "internal/proxy/retry.go. Puts the retry policy behind the retry seam. Reports each first attempt to it "
+     "at the forward. When a statement is lost it offers the failure with its facts: whether anything "
+     "reached the database, whether the request is inside a transaction, the attempt, whether the breaker is "
+     "not closed (read without side effect; half-open counts as open), draining, and the request's deadline "
+     "(its arrival plus timeouts.statement). A granted retry re-enters at the queue stage in the same step and "
+     "waits in its tenant's admission queue like any request, with a new turn from the fair dispatcher. It "
+     "holds one place in that queue and no connection: the failed one was already closed or sent to the "
+     "dirty-connection table. Its queue wait and its statement deadline end at the request's deadline at the "
+     "latest. Before every lend the breaker is read again, and a waiting retry behind a breaker that is not "
+     "closed is answered 53M03; its token is not returned. The client gets one reply: the retry's outcome, or "
+     "the failure's own row when the policy declines. Every retried request ends counted once (completed, "
+     "failed, shed, gone, breaker). The engine's invariants require its counts to equal the policy's, and "
+     "its quiesce check refuses a retry still pending.")
 rel("e1", "n-shell", "e-transport", "Implements it with TCP sockets; posts events through one bounded mailbox", "Go", "implementation")
 rel("e2", "e-proxysim", "e-transport", "Implements it with simulated byte streams on the simulator's event loop", "Go", "implementation")
 rel("e22", "e-proxysim", "n-sim", "Runs on the simulator's loop, byte streams and simulated TLS handshake; starts the fake Postgres", "Go, test code")
@@ -786,7 +851,13 @@ rel("e39", "e-corepool", "e-admq", "When the breaker opens: sweep, then refuse e
 rel("e41", "e-pipeline", "e-admq", "Reports each lease start at the lend; while a request is held back, dispatches again at the end of every event", "Go")
 rel("e42", "e-reset", "e-admq", "Reports the lease end at a release", "Go")
 rel("e40", "e-sessions", "e-corepool", "A client's cancel request, found by its key; a client idle inside a transaction past its deadline", "Go")
-rel("e12", "e-pipeline", "n-retry", "May this failure be retried", "Go")
+rel("e12", "e-pipeline", "n-retry", "Through the retry adapter: each first attempt at the forward, each lost statement", "Go")
+rel("e43", "e-retry", "e-seams", "Implements the retry seam", "Go", "implementation")
+rel("e44", "e-retry", "n-retry", "Attempt, Decide, Snapshot", "Go")
+rel("e45", "e-fail", "e-retry", "Each lost statement, before it is counted failed; a granted one is run again instead of answered", "Go")
+rel("e46", "e-retry", "e-pipeline", "Re-enters a granted retry at the queue stage; ends its queue wait and statement deadline at the request's deadline; counts first attempts at the forward", "Go")
+rel("e47", "e-retry", "e-corepool", "Reads the breaker's state without side effect, at the offer and before every lend", "Go")
+rel("e48", "e-retry", "e-admq", "Takes a waiting retry out of its tenant queue when the breaker is not closed; it is answered 53M03", "Go")
 rel("e13", "e-pipeline", "e-backends", "Forwards the statement on the lent connection", "Go")
 rel("e14", "e-backends", "e-relay", "Reply messages and the end-of-reply status byte", "Go")
 rel("e15", "e-relay", "e-sessions", "Reply bytes for each recipient", "Go")
@@ -796,7 +867,7 @@ rel("e26", "e-reset", "e-seams", "Asks the release policy; returns the connectio
 rel("e29", "e-reset", "n-pgwire", "Encodes the reset's Query; frames its reply", "Go")
 rel("e16", "e-pipeline", "e-fail", "Every refusal and failure", "Go")
 rel("e17", "e-fail", "n-pgwire", "Builds the error reply for its contract row", "Go")
-rel("e28", "e-fail", "e-seams", "Hands each failure, with its reached fact, to the retry policy", "Go")
+rel("e28", "e-fail", "e-seams", "Hands each lost statement, with its reached fact, to the retry seam", "Go")
 rel("e18", "e-clock", "e-pipeline", "A deadline was reached", "Go")
 rel("e19", "e-drain", "e-pipeline", "Sets the draining input", "Go")
 rel("e20", "e-publish", "n-obs", "Uses the histogram, the gauge and the conservation check; the engine source mapping reads its snapshot", "Go, plain structs")
@@ -876,7 +947,9 @@ comp(P, "w-share", "Safe-shape recogniser",
      "row-level security policy that hides a side effect.")
 comp(P, "w-errors", "Error contract and reply builders",
      "One table of 24 rows: each refusal and failure, its reply form, its SQLSTATE, whether anything reached the "
-     "database, whether a write may have applied, and what happens to the client connection. The reply builder "
+     "database, whether a write may have applied, whether the proxy itself may retry it (one row may: "
+     "lost-after-read, and only for a failure where nothing reached the database), and what happens to the "
+     "client connection. The reply builder "
      "appends the ErrorResponse and the correct end marker for a row and counts replies by row. The "
      "discard-until-Sync rule refuses extended-protocol messages. docs/error-contract.md is generated from the "
      "table. The engine sends the rows of the walking skeleton, the admission shed row and the pool's rows "
@@ -1133,25 +1206,45 @@ rel("f11", "f-join", "n-work", "Reads the share key of a work unit", "Go types")
 # --------------------------------------------------------------------------- retry components
 P = "c-retry"
 comp(P, "r-policy", "Policy",
-     "The interface the engine asks: given this failure — did anything reach the database, is the breaker open, how "
-     "much of the deadline is left — may it be retried.", tech="Go interface")
+     "The interface the engine calls: Attempt for each first attempt it forwards, Decide for each failed "
+     "statement, Snapshot. A failure carries the facts a decision reads: did anything reach the database, is "
+     "the request inside a transaction, which attempt this was, is the breaker open, is the instance "
+     "draining, and the request's deadline. The answer is retry, or one refusal reason.", tech="Go interface")
 comp(P, "r-off", "Off",
-     "The default. Never retries.")
+     "The default. Never retries: every failure offered is refused with the reason off. It still counts "
+     "first attempts and offers.")
 comp(P, "r-once", "PreForwardOnce",
-     "Retries at most once, only when nothing reached the database, only within budget, never while the breaker is "
-     "open, never holding a queue slot or a connection while it waits.")
+     "Grants a retry only when all of these hold, checked in this order: the request has not been retried "
+     "before, it is outside a transaction, nothing of it reached the database, the breaker is not open, the "
+     "instance is not draining, the time is before the request's deadline (at the deadline is late), and the "
+     "budget holds a whole token. Each refusal is counted under the first reason that applies.")
 comp(P, "r-budget", "Retry budget",
-     "An integer bucket: each first attempt deposits a tenth of a token, each retry takes one; capped, so credit "
-     "expires. Retries stay at or below 10% of requests.")
+     "An integer bucket counted in tenths of a token. It starts at the floor (from the config file: "
+     "retry.floor, 10 tokens by default, divided by fleet.instances). Each first attempt deposits one tenth; "
+     "a retry withdraws ten, and only when ten are held. Deposits above the cap (retry.bucket_cap, 100 tokens "
+     "per instance by default) are lost and counted as expired; stored credit does not expire with time. So "
+     "from the start of a run ten times the retries is at most the first attempts plus the floor, and the "
+     "largest burst of retries after a quiet period is the cap.")
 comp(P, "r-snap", "Retry snapshot",
-     "Snapshot(): attempts, retries, budget level, deposits, withdrawals, exhaustions, refusals by reason.")
-rel("t1", "n-engine", "r-policy", "May this failure be retried", "Go")
-rel("t2", "n-engine", "r-budget", "Deposit on each first attempt", "Go")
+     "Snapshot(): the policy in force, first attempts, failures offered, retries granted, refusals by reason "
+     "(a refusal for budget is an exhaustion), the budget's level with its peak, its cap and floor, and the "
+     "tenths deposited, withdrawn and expired. Its check holds the conservation laws (offered = retries + "
+     "refusals; deposits = withdrawals + expired + level), the level within the cap, and the budget bound.")
+comp(P, "r-everything", "Retry-everything policy and plants",
+     "internal/retry/retrytest. A deliberately wrong policy for the ablation runs: it retries every failure, "
+     "up to three times, whatever reached the database. The binary does not link it. Beside it the core has "
+     "test-only plant bits (ignore the reached fact, no once bound, no withdrawal, no cap, ignore the "
+     "breaker, withdraw first) that the config file can never set.", tags=("test",))
+rel("t1", "n-engine", "r-policy", "Offers each failed statement with its facts: may it be retried", "Go")
+rel("t2", "n-engine", "r-budget", "Reports each first attempt it forwards, which deposits a tenth of a token", "Go")
 rel("t3", "n-engine", "r-snap", "Snapshot()", "Go")
 rel("t4", "r-off", "r-policy", "Implements", "Go", "implementation")
 rel("t5", "r-once", "r-policy", "Implements", "Go", "implementation")
-rel("t6", "r-once", "r-budget", "Withdraw one token per retry", "Go")
-rel("t7", "r-policy", "n-work", "Reads the outcome's reached-the-database fact", "Go types")
+rel("t6", "r-once", "r-budget", "Withdraws one token per retry; refuses when less than one is held", "Go")
+rel("t7", "r-policy", "n-work", "The reached-the-database fact of a failure is the work vocabulary's three-valued type", "Go types")
+rel("t8", "r-snap", "n-obs", "Uses the gauge and the conservation check; the retry source mapping reads the snapshot", "Go, plain structs")
+rel("t9", "r-everything", "r-policy", "Implements", "Go, test code", "implementation")
+rel("t10", "n-e2e", "r-everything", "The ablation arm of each retry scenario runs the engine with it; the canaries set the plant bits", "Go test")
 
 # --------------------------------------------------------------------------- simulator components
 P = "c-sim"
@@ -1362,7 +1455,9 @@ comp(P, "o-enginesrc", "Engine source mapping",
      "internal/obs/enginesrc. The metric declarations of component engine and the mapping to points from two "
      "snapshots: the engine's, and the shell's (mailbox depth and peak, goroutines, readers and writers, deadlines; "
      "names shell_...). Labels are outcome, reason and mode; no tenant label so far. Registers the engine's wire, "
-     "classifier, pool and admission sources beside its own. Holds the health rule database: degraded while no "
+     "classifier, pool, admission and retry sources beside its own. Its retry metrics: failures offered and "
+     "granted, requests run again, those still pending with their peak, retries by error-contract row, and "
+     "retried requests by how they ended. Holds the health rule database: degraded while no "
      "database connection is usable and the last connect failed or the breaker is not closed; hands on the "
      "breaker rule and the admission rule with it.")
 comp(P, "o-poolsrc", "Pool source mapping",
@@ -1370,6 +1465,11 @@ comp(P, "o-poolsrc", "Pool source mapping",
      "points: every field of the snapshot, with labels reason (closes, lease ends, dirty-table outcomes), "
      "outcome (checkouts, checks) and mode (resets, breaker transitions); no tenant label. The two histograms "
      "only with obs.detail on. Holds the health rule breaker: degraded while the breaker is open or half-open.")
+comp(P, "o-retrysrc", "Retry source mapping",
+     "internal/obs/retrysrc. The metric declarations of component retry and the mapping from the retry "
+     "snapshot to points: the policy in force, first attempts, offers, retries, refusals by reason, "
+     "exhaustions, the budget's level with its peak, cap and floor, and the tenths deposited, withdrawn and "
+     "expired. The one label is reason; no tenant label. Holds no health rule.")
 comp(P, "o-admsrc", "Admission source mapping",
      "internal/obs/admsrc. The metric declarations of component admission and the mapping from the admission "
      "snapshot to points. Totals always: the rule, capacities, queued, tenant queues, pushes, served, removed, sheds "
@@ -1412,7 +1512,10 @@ comp(P, "o-assert", "SQL assertions and their runner",
      "from the histogram buckets, depth, and 53M01 replies = sheds. For the fairness scenarios: in every flush "
      "lease starts - ends = in flight = the sum over tenants, at most the limit; the quiet tenant against its "
      "run alone; the flooder's part of the shedding; every one of 40 quiet tenants on its own rows; and time at "
-     "share for a tenant holding transactions. For the pool scenarios: in every flush "
+     "share for a tenant holding transactions. For the retry scenarios: per flush window ten times the "
+     "retries is at most the first attempts plus the credit carried in; a retried request ends in exactly "
+     "one way; retries only on the row lost-after-read; writes applied never exceed the distinct writes "
+     "sent, except in the retry-everything arm. For the pool scenarios: in every flush "
      "open + connecting is at most the cap, every dial and checkout has one outcome, nothing is lent at the "
      "end, and each scenario's own claim (the dial rate, the breaker's recovery, the fake's connection peak, "
      "no statement left without a reply).",
@@ -1481,9 +1584,9 @@ rel("o57", "o-clssrc", "n-pgwire", "Reads the classifier, reply-builder and disc
 rel("o58", "o-clssrc", "o-collector", "Gives it one source for component classifier, with its metric declarations", "Go")
 rel("o59", "o-catalog", "o-clssrc", "Lists every metric it declares", "Go")
 rel("o60", "o-simrun", "o-clssrc", "Takes the classifier source of the scenario's test gateway", "Go")
-rel("o61", "o-enginesrc", "n-engine", "Reads the engine snapshot and the wire, classifier, reply, pool and admission snapshots the engine holds", "Go")
+rel("o61", "o-enginesrc", "n-engine", "Reads the engine snapshot and the wire, classifier, reply, pool, admission and retry snapshots the engine holds", "Go")
 rel("o62", "o-enginesrc", "n-shell", "Reads the shell's counters through a function the shell hands over", "Go")
-rel("o63", "o-enginesrc", "o-collector", "Registers the engine source (shell metrics included) and the engine's wire, classifier, pool and admission sources", "Go")
+rel("o63", "o-enginesrc", "o-collector", "Registers the engine source (shell metrics included) and the engine's wire, classifier, pool, admission and retry sources", "Go")
 rel("o64", "o-enginesrc", "o-wiresrc", "Takes the wire source for the engine's wire snapshot", "Go")
 rel("o65", "o-enginesrc", "o-clssrc", "Takes the classifier source for the engine's classifier and reply snapshots", "Go")
 rel("o66", "o-enginesrc", "o-health", "Supplies the rule database", "Go")
@@ -1504,6 +1607,9 @@ rel("o83", "o-poolsrc", "n-pool", "Reads the pool snapshot", "Go")
 rel("o84", "o-enginesrc", "o-poolsrc", "Takes the pool source for the engine's pool snapshot", "Go")
 rel("o85", "o-catalog", "o-poolsrc", "Lists every metric it declares", "Go")
 rel("o86", "o-poolsrc", "o-health", "Supplies the rule breaker", "Go")
+rel("o87", "o-retrysrc", "n-retry", "Reads the retry snapshot", "Go")
+rel("o88", "o-enginesrc", "o-retrysrc", "Takes the retry source for the engine's retry snapshot", "Go")
+rel("o89", "o-catalog", "o-retrysrc", "Lists every metric it declares", "Go")
 rel("o80", "o-h2h", "duckdb", "Runs its one query", "DuckDB CLI")
 rel("o81", "o-h2h", "csvfiles", "Reads the flushed runs of every arm and load", "read_csv")
 rel("o82", "o-h2h", "n-e2e", "--run and --check run the head-to-head scenarios into a run directory", "go test")
@@ -1562,7 +1668,7 @@ diagram("container", "container", "Containers: the request path", "02-container-
               "Observability hangs off the side: the engine publishes snapshots, and the admin listener serves them.",
         nodes=["app", "operator", "c-shell", "c-engine", "c-pgwire", "c-adm", "c-coal", "c-pool", "c-retry",
                "c-obs", "c-config", "pg", "telemetry"],
-        rels=["c%d" % i for i in range(1, 18) if i != 8], boundary="mini-gateway process",
+        rels=["c%d" % i for i in range(1, 19) if i != 8], boundary="mini-gateway process",
         detail={"c-engine": "component-engine", "c-pgwire": "component-wire", "c-adm": "component-admission",
                 "c-pool": "component-pool", "c-coal": "component-coalescer",
                 "c-retry": "component-retry", "c-obs": "component-observability"})
@@ -1600,7 +1706,7 @@ def component_diagram(id, title, file, scope, shows, intro, extra_nodes, rels):
 
 
 component_diagram("component-engine", "Components: engine", "05-component-engine", "c-engine",
-                  "internal/proxy: the transport seam and its simulator driver, the two connection tables, the request pipeline and its stage seams, the pool core adapter, the admission queue adapter, the lease end with its reset, the reply relay, the failure classifier, deadlines, the snapshot",
+                  "internal/proxy: the transport seam and its simulator driver, the two connection tables, the request pipeline and its stage seams, the pool core adapter, the admission queue adapter, the retry adapter, the lease end with its reset, the reply relay, the failure classifier, deadlines, the snapshot",
                   "The engine is where the seams meet. Below it, the transport seam has two implementations. Above it, "
                   "the pipeline calls each core through a small stage interface, so a core can be replaced by a "
                   "pass-through. That is how each scenario's ablation run is made. Chunk 6 built the walking skeleton: "
@@ -1610,11 +1716,13 @@ component_diagram("component-engine", "Components: engine", "05-component-engine
                   "Where the two meet, a request waits in one place, its tenant's queue, and a breaker that opens "
                   "refuses the queue through the admission queues. Chunk 9 installed the fair dispatcher on those "
                   "queues: the engine reports every lease start and end to it, and tells the pool only the demand "
-                  "the dispatcher would release. The "
+                  "the dispatcher would release. Chunk 12 put the retry policy behind the retry seam, through the "
+                  "retry adapter: a granted retry goes back to its tenant's queue holding no connection, so "
+                  "the fair dispatcher and the pool treat it as any waiting request. The "
                   "pipeline's arrow to admission stays dashed until the limit and the gate exist, "
-                  "and so do the arrows to the coalescer and the retry policy.",
+                  "and so does the arrow to the coalescer.",
                   ["n-shell", "n-sim", "n-pgwire", "n-adm", "n-coal", "n-pool", "n-retry", "n-obs", "n-work"],
-                  ["e%d" % i for i in (1, 2, 22, 3, 4, 5, 6, 7, 27, 23, 8, 31, 30, 32, 33, 41, 42, 9, 10, 34, 35, 36, 37, 38, 39, 40, 12, 13, 14, 15, 24, 25, 26, 29, 16, 17, 28, 18, 19, 20, 21)])
+                  ["e%d" % i for i in (1, 2, 22, 3, 4, 5, 6, 7, 27, 23, 8, 31, 30, 32, 33, 41, 42, 9, 10, 34, 35, 36, 37, 38, 39, 40, 12, 43, 44, 45, 46, 47, 48, 13, 14, 15, 24, 25, 26, 29, 16, 17, 28, 18, 19, 20, 21)])
 component_diagram("component-wire", "Components: wire layer", "06-component-wire-layer", "c-pgwire",
                   "internal/pgwire: our framer and message coding, both session machines, SCRAM, the two trackers, the wire snapshot, the SQL lexer, the classifier with its courtesy reject list, the safe-shape recogniser, the error contract and reply builders, the test proxies and their scenarios; planned: the pgproto3 codec boundary",
                   "pgproto3 provides message structs and nothing else. The framer, session machines, SCRAM, "
@@ -1658,9 +1766,14 @@ component_diagram("component-coalescer", "Components: coalescer", "09-component-
                   "Followers take no queue slot and no connection. The leader passes through admission like any request.",
                   ["n-engine", "n-work"], ["f%d" % i for i in range(1, 12)])
 component_diagram("component-retry", "Components: retry policy", "10-component-retry", "c-retry",
-                  "internal/retry: the policy interface, its two policies, the budget",
-                  "The default policy is Off. Failures after anything reached the database are never retried under any policy.",
-                  ["n-engine", "n-work"], ["t%d" % i for i in range(1, 8)])
+                  "internal/retry: the policy interface, its two policies, the budget, the snapshot, and the test-only retry-everything policy",
+                  "The default policy is Off. A failure after anything reached the database, or inside a "
+                  "transaction, is never retried under either policy. Chunk 12 built all of it as one "
+                  "deterministic core: it does no I/O and keeps no clock, and the engine tells it of each first "
+                  "attempt and asks it about each failed statement. Where a granted retry waits, and what it "
+                  "holds while it waits, is the engine's part (the retry adapter on the engine diagram). The "
+                  "floor is divided by fleet.instances in the config; the cap is per instance.",
+                  ["n-engine", "n-work", "n-obs", "n-e2e"], ["t%d" % i for i in range(1, 11)])
 component_diagram("component-simulator", "Components: simulator harness", "11-component-simulator", "c-sim",
                   "internal/sim and its sub-packages, internal/testclient and internal/randdist: the loop, the clock, simulated byte streams, the simulated TLS handshake, the fake Postgres, simulated clients, the test client, the scenario world with its baselines and fidelity runner, faults and the shrinker, the trace, invariants and the quiesce check, replay, the toy protocol",
                   "The harness owns the world around the engine. The engine's own test package, proxysim, implements "
@@ -1689,17 +1802,18 @@ component_diagram("component-observability", "Components: observability", "12-co
                   "generator's own source, and a Prometheus in the dev stack that scrapes /metrics directly. "
                   "Chunk 7 added the pool source and its health rule for the breaker. "
                   "Chunk 8 added the admission source, the gateway's first with per-tenant rows, its health rule for "
-                  "shedding, and the head-to-head table. Chunk 9 added the fairness metrics to the admission source.",
-                  ["n-engine", "n-shell", "n-e2e", "n-mgctl", "n-sim", "n-pgwire", "n-adm", "n-pool", "csvfiles", "duckdb", "otelcol", "prom"],
+                  "shedding, and the head-to-head table. Chunk 9 added the fairness metrics to the admission source. "
+                  "Chunk 12 added the retry source and the engine's retry metrics.",
+                  ["n-engine", "n-shell", "n-e2e", "n-mgctl", "n-sim", "n-pgwire", "n-adm", "n-pool", "n-retry", "csvfiles", "duckdb", "otelcol", "prom"],
                   ["o%d" % i for i in (1, 2, 25, 26, 27, 3, 24, 28, 29, 4, 15, 8, 9, 10, 11, 12, 31, 32, 5, 6, 7, 16, 18, 17, 19,
-                                         13, 20, 21, 14, 33, 22, 23, 50, 51, 34, 35, 52, 53, 57, 58, 61, 62, 63, 64, 65, 66, 68, 37, 54, 59, 67, 38, 39, 40, 41, 42, 55, 56, 60, 69, 43, 44, 45, 46, 47, 48, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 83, 84, 85, 86, 80, 81, 82)])
+                                         13, 20, 21, 14, 33, 22, 23, 50, 51, 34, 35, 52, 53, 57, 58, 61, 62, 63, 64, 65, 66, 68, 37, 54, 59, 67, 38, 39, 40, 41, 42, 55, 56, 60, 69, 43, 44, 45, 46, 47, 48, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 83, 84, 85, 86, 87, 88, 89, 80, 81, 82)])
 
 
 # --------------------------------------------------------------------------- output
 def landed(chunk):
-    """True for a chunk that has landed: a whole number up to LANDED, or a lettered name such as "6a"."""
+    """True for a chunk that has landed: a whole number up to LANDED or in ALSO_LANDED, or a lettered name such as "6a"."""
     if isinstance(chunk, int) and not isinstance(chunk, bool):
-        return 0 <= chunk <= LANDED
+        return 0 <= chunk <= LANDED or chunk in ALSO_LANDED
     m = re.fullmatch(r"(\d+)([a-z])", chunk) if isinstance(chunk, str) else None
     return bool(m) and (int(m.group(1)) < LANDED or (int(m.group(1)) == LANDED and m.group(2) <= LANDED_LETTER))
 
@@ -1745,7 +1859,15 @@ def built_rel(i):
 def built_line():
     if LANDED == 0:
         return "Built so far: chunk 0, which built no part of these diagrams. Dashed parts are planned."
-    return "Built so far: chunks 0–%s. Dashed parts are planned." % LANDED_NAME
+    if not ALSO_LANDED:
+        return "Built so far: chunks 0–%s. Dashed parts are planned." % LANDED_NAME
+
+    def names(chunks):
+        t = ["%d" % c for c in chunks]
+        return ("chunk " if len(t) == 1 else "chunks ") + (t[0] if len(t) == 1 else ", ".join(t[:-1]) + " and " + t[-1])
+    missing = [c for c in range(LANDED + 1, ALSO_LANDED[-1]) if c not in ALSO_LANDED]
+    return "Built so far: chunks 0–%s and %s (%s %s not landed yet). Dashed parts are planned." % (
+        LANDED_NAME, names(ALSO_LANDED), names(missing), "has" if len(missing) == 1 else "have")
 
 
 def counts(d):

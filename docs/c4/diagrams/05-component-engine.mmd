@@ -5,7 +5,7 @@ flowchart TB
   N_ADM["Admission"]:::planned
   N_COAL["Coalescer"]:::planned
   N_POOL["Pool"]:::built
-  N_RETRY["Retry policy"]:::planned
+  N_RETRY["Retry policy"]:::built
   N_OBS["Observability"]:::planned
   N_WORK["Work vocabulary"]:::built
   subgraph SCOPE["Engine"]
@@ -23,6 +23,7 @@ flowchart TB
     E_PROXYSIM["Simulator driver"]:::built
     E_ADMQ["Admission queue adapter"]:::built
     E_COREPOOL["Pool core adapter"]:::built
+    E_RETRY["Retry adapter"]:::built
   end
   N_SHELL -->|1 implements| E_TRANSPORT
   E_PROXYSIM -->|2 implements| E_TRANSPORT
@@ -50,21 +51,27 @@ flowchart TB
   E_COREPOOL -->|24| E_FAIL
   E_COREPOOL -->|25| E_ADMQ
   E_SESSIONS -->|26| E_COREPOOL
-  E_PIPELINE -.->|27| N_RETRY
-  E_PIPELINE -->|28| E_BACKENDS
-  E_BACKENDS -->|29| E_RELAY
-  E_RELAY -->|30| E_SESSIONS
-  E_RELAY -.->|31| E_RESET
-  E_RESET -->|32| E_BACKENDS
-  E_RESET -->|33| E_SEAMS
-  E_RESET -->|34| N_PGWIRE
-  E_PIPELINE -->|35| E_FAIL
-  E_FAIL -->|36| N_PGWIRE
-  E_FAIL -->|37| E_SEAMS
-  E_CLOCK -->|38| E_PIPELINE
-  E_DRAIN -->|39| E_PIPELINE
-  E_PUBLISH -->|40| N_OBS
-  E_PIPELINE -->|41| N_WORK
+  E_PIPELINE -->|27| N_RETRY
+  E_RETRY -->|28 implements| E_SEAMS
+  E_RETRY -->|29| N_RETRY
+  E_FAIL -->|30| E_RETRY
+  E_RETRY -->|31| E_PIPELINE
+  E_RETRY -->|32| E_COREPOOL
+  E_RETRY -->|33| E_ADMQ
+  E_PIPELINE -->|34| E_BACKENDS
+  E_BACKENDS -->|35| E_RELAY
+  E_RELAY -->|36| E_SESSIONS
+  E_RELAY -.->|37| E_RESET
+  E_RESET -->|38| E_BACKENDS
+  E_RESET -->|39| E_SEAMS
+  E_RESET -->|40| N_PGWIRE
+  E_PIPELINE -->|41| E_FAIL
+  E_FAIL -->|42| N_PGWIRE
+  E_FAIL -->|43| E_SEAMS
+  E_CLOCK -->|44| E_PIPELINE
+  E_DRAIN -->|45| E_PIPELINE
+  E_PUBLISH -->|46| N_OBS
+  E_PIPELINE -->|47| N_WORK
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned

@@ -1,24 +1,29 @@
 flowchart TB
   N_ENGINE["Engine"]:::planned
   N_WORK["Work vocabulary"]:::built
+  N_OBS["Observability"]:::planned
+  N_E2E["End-to-end suite and load generator"]:::planned
   subgraph SCOPE["Retry policy"]
-    R_POLICY["Policy"]:::planned
-    R_OFF["Off"]:::planned
-    R_ONCE["PreForwardOnce"]:::planned
-    R_BUDGET["Retry budget"]:::planned
-    R_SNAP["Retry snapshot"]:::planned
+    R_POLICY["Policy"]:::built
+    R_OFF["Off"]:::built
+    R_ONCE["PreForwardOnce"]:::built
+    R_BUDGET["Retry budget"]:::built
+    R_SNAP["Retry snapshot"]:::built
+    R_EVERYTHING["Retry-everything policy and plants"]:::built
   end
-  N_ENGINE -.->|1| R_POLICY
-  N_ENGINE -.->|2| R_BUDGET
-  N_ENGINE -.->|3| R_SNAP
-  R_OFF -.->|4 implements| R_POLICY
-  R_ONCE -.->|5 implements| R_POLICY
-  R_ONCE -.->|6| R_BUDGET
-  R_POLICY -.->|7| N_WORK
+  N_ENGINE -->|1| R_POLICY
+  N_ENGINE -->|2| R_BUDGET
+  N_ENGINE -->|3| R_SNAP
+  R_OFF -->|4 implements| R_POLICY
+  R_ONCE -->|5 implements| R_POLICY
+  R_ONCE -->|6| R_BUDGET
+  R_POLICY -->|7| N_WORK
+  R_SNAP -->|8| N_OBS
+  R_EVERYTHING -->|9 implements| R_POLICY
+  N_E2E -->|10| R_EVERYTHING
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned
   end
   classDef built fill:#d9ecd9,stroke:#2e6b34,stroke-width:2px,color:#1c1e21
   classDef planned stroke-width:1px,stroke-dasharray:6 4
-  style SCOPE stroke-dasharray:6 4
