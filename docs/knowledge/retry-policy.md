@@ -89,3 +89,19 @@ as `retry.Config.WithDefaults` for one instance).
 - Fairness adds no row to `docs/fault-matrix.md` or `docs/error-contract.md`.
 - Tests: `internal/proxy/join_retry_fair_test.go`; scenario
   `TestScenarioRetryStormTwoTenantsOfUnequalWeight` (`test/e2e/c12_c09_join_test.go`).
+
+## Forcing budget exhaustion in a tier S scenario (join repair, 2026-11-28)
+
+- The policy deposits only at a forward (`Engine.forward` → `attempted`, first attempts only),
+  and a write to a doomed (`FaultHalfOpen`) connection is refused and decided in the same instant
+  as its forward. So a doom burst yields exactly one eligible zero-byte refusal: the pool marks the
+  siblings suspect and checks them before they are lent again.
+- To force a budget refusal with a one-token bucket, put two doom bursts around a phase too short
+  for any client to issue a second operation (shorter than `retryClientGap`) and keep the relay's
+  fault window out of it. The first lend after burst 1 spends the token. At most `clients - 1`
+  deposits follow, and the first lend after burst 2 adds one more, so with 8 clients the level is at
+  most 8 tenths < 10 and the retry is refused for budget. The storm does this
+  (`stormSpendAt`/`stormExhaustAt`, `RetrySpec.Exhausts`); the margin is `10 - clients` tenths,
+  so the storm needs fewer than 10 clients.
+- Picking seeds that happen to exhaust is fragile: any change to the schedule (the fair dispatcher,
+  and later the adaptive limit and the coalescer) moves which seeds exhaust.
