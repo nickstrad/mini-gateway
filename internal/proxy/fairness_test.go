@@ -302,6 +302,7 @@ func TestFairNoDialPastTheFairLimitWhileConnectionsOpen(t *testing.T) {
 	if len(r.dbs) != 2 {
 		t.Fatalf("fair limit 2, four waiting: %d dials, want 2", len(r.dbs))
 	}
+	r.tick(2 * time.Millisecond)
 	for _, id := range append([]proxy.ConnID(nil), r.dbs...) {
 		r.open(id)
 	}

@@ -73,7 +73,7 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `admission` | `capacity` | gauge | — | count | sum | Total capacity across the tenant queues (queue.capacity). |
 | `admission` | `fair_states` | gauge | — | count | sum | Tenants with a lease in flight, each holding one dispatcher state. |
 | `admission` | `fair_states_peak` | gauge | — | count | max | Most tenants with a lease in flight at once. |
-| `admission` | `held` | counter | reason | count | sum | Selections that lent nothing, by reason (limit: the limit is reached; share: one lease short of the limit, every waiting tenant is at or above its share). |
+| `admission` | `held` | counter | reason | count | sum | Selections that lent nothing, by reason (limit: the limit is reached; share: one lease short of the limit, every waiting tenant is at or above its share while an active tenant is below its share). |
 | `admission` | `in_flight` | gauge | — | count | sum | Leases in flight now across tenants; a transaction held open counts until its lease ends. |
 | `admission` | `in_flight_peak` | gauge | — | count | max | Most leases in flight at once. |
 | `admission` | `lease_ends` | counter | — | count | sum | Leases ended on any path (release, dirty connection, lost connection, shutdown). |

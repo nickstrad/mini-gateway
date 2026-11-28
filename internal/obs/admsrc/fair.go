@@ -20,7 +20,7 @@ func fairMetrics() []obs.MetricDesc {
 		obs.GaugeDesc("fair_states", 0, "Tenants with a lease in flight, each holding one dispatcher state."),
 		obs.HighWaterDesc("fair_states_peak", 0, "Most tenants with a lease in flight at once."),
 		obs.CounterDesc("rounds", 0, "Turns given: requests chosen for a connection in round-robin order across tenants."),
-		obs.CounterDesc("held", lr, "Selections that lent nothing, by reason (limit: the limit is reached; share: one lease short of the limit, every waiting tenant is at or above its share)."),
+		obs.CounterDesc("held", lr, "Selections that lent nothing, by reason (limit: the limit is reached; share: one lease short of the limit, every waiting tenant is at or above its share while an active tenant is below its share)."),
 		obs.CounterDesc("lease_starts", 0, "Leases started, as reported to the dispatcher."),
 		obs.CounterDesc("lease_ends", 0, "Leases ended on any path (release, dirty connection, lost connection, shutdown)."),
 		obs.CounterDesc("saturated_time", 0, "Time with leases in flight at the limit.").WithUnit(obs.UnitNs),
