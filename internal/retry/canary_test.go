@@ -15,6 +15,9 @@ func propertyFails(cfg Config) bool {
 	return false
 }
 
+// TestCanaryEveryPlantedBudgetBugFailsTheProperty proves that each planted
+// retry bug (reached, once bound, withdrawal, cap, breaker, withdraw-first)
+// fails the reference-model property test while the unplanted policy passes.
 func TestCanaryEveryPlantedBudgetBugFailsTheProperty(t *testing.T) {
 	for _, c := range []struct {
 		name  string

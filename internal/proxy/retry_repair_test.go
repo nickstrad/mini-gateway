@@ -29,6 +29,9 @@ func queuedRetry(t *testing.T, edit func(*proxy.Config)) (*coreRig, proxy.ConnID
 	return r, id
 }
 
+// TestRetryGrantedWhileClosedIsRefusedWhenTheBreakerOpensBeforeItIsForwarded
+// proves dispatch re-checks Breaker.Open before lending a queued retry, answers
+// 53M03 under RetryEndBreaker, and keeps the withdrawn token spent.
 func TestRetryGrantedWhileClosedIsRefusedWhenTheBreakerOpensBeforeItIsForwarded(t *testing.T) {
 	b := &switchBreaker{}
 	r, _ := queuedRetry(t, func(c *proxy.Config) { c.Seams.Breaker = b })
@@ -55,6 +58,8 @@ func TestRetryGrantedWhileClosedIsRefusedWhenTheBreakerOpensBeforeItIsForwarded(
 	}
 }
 
+// TestRetryStillForwardedWhenTheBreakerStaysClosed proves the dispatch breaker
+// re-check does not block a queued retry while the breaker remains closed.
 func TestRetryStillForwardedWhenTheBreakerStaysClosed(t *testing.T) {
 	b := &switchBreaker{}
 	r, _ := queuedRetry(t, func(c *proxy.Config) { c.Seams.Breaker = b })
@@ -67,6 +72,9 @@ func TestRetryStillForwardedWhenTheBreakerStaysClosed(t *testing.T) {
 	}
 }
 
+// TestRetryQueuedWhenThePoolCoreBreakerOpensIsFlushedBeforeAnyForward proves
+// the shipped pool core flushes a queued retry with 53M03 (RetryEndShed) the
+// instant its breaker opens, before dispatch runs.
 func TestRetryQueuedWhenThePoolCoreBreakerOpensIsFlushedBeforeAnyForward(t *testing.T) {
 	r, _ := queuedRetry(t, func(c *proxy.Config) { c.Pool.BreakerFailures = 2 })
 	if r.pool().Breaker != int64(pool.BreakerClosed) {
@@ -91,6 +99,8 @@ func TestRetryQueuedWhenThePoolCoreBreakerOpensIsFlushedBeforeAnyForward(t *test
 	}
 }
 
+// TestRetryQueuedAndCancelledByTheClientEndsFailed proves cancelling a queued
+// retry answers 57014 and records RetryEndFailed with RetryPending back to 0.
 func TestRetryQueuedAndCancelledByTheClientEndsFailed(t *testing.T) {
 	r, _ := queuedRetry(t, nil)
 	a := r.cancelFrom(90, r.clientKey(11))
@@ -106,6 +116,8 @@ func TestRetryQueuedAndCancelledByTheClientEndsFailed(t *testing.T) {
 	}
 }
 
+// TestRetryQueuedWhenTheBreakerFlushesEndsShed proves pool-core breaker flush
+// records RetryEndShed and BreakerFlushed while conserving RetryPending.
 func TestRetryQueuedWhenTheBreakerFlushesEndsShed(t *testing.T) {
 	r, _ := queuedRetry(t, func(c *proxy.Config) { c.Pool.BreakerFailures = 2 })
 	r.run(r.ev(proxy.EvDBDialFailed, r.lastDial(), nil, 0))
@@ -118,6 +130,8 @@ func TestRetryQueuedWhenTheBreakerFlushesEndsShed(t *testing.T) {
 	}
 }
 
+// TestRetryInFlightWhenTheClientCloses proves a client disconnect while a
+// retry is forwarded records RetryEndGone and clears RetryPending.
 func TestRetryInFlightWhenTheClientCloses(t *testing.T) {
 	r, _ := queuedRetry(t, nil)
 	next := r.lastDial()
@@ -134,6 +148,9 @@ func TestRetryInFlightWhenTheClientCloses(t *testing.T) {
 	}
 }
 
+// TestTheCapacityTableStatesTheCapAsTheLargestRetryBurst proves the generated
+// capacity-table retry row states that stored credit does not expire with time
+// and that the cap is the largest retry burst.
 func TestTheCapacityTableStatesTheCapAsTheLargestRetryBurst(t *testing.T) {
 	for _, row := range proxy.CapacityRows(proxy.Config{}) {
 		if row.Key != "retry.bucket_cap, retry.floor" {

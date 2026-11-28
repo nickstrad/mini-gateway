@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+// TestQuiesceRefusesALeaseStillInFlightAndPassesOnceItEnds proves Queues.Quiesce
+// rejects a lease still held in the fair dispatcher and passes once it ends.
 func TestQuiesceRefusesALeaseStillInFlightAndPassesOnceItEnds(t *testing.T) {
 	q, f := fairCore(t, 2)
 	if err := q.Quiesce(); err != nil {

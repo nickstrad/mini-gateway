@@ -20,17 +20,23 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/workload"
 )
 
+// RetryArm selects which retry policy arm a tier S retry scenario executes.
 type RetryArm uint8
 
 const (
+	// ArmOff runs the default Off retry policy.
 	ArmOff RetryArm = iota
+	// ArmOn runs PreForwardOnce with the scenario's budget settings.
 	ArmOn
+	// ArmEverything runs the test-only retry-everything ablation policy.
 	ArmEverything
+	// NumRetryArms is the sentinel count of RetryArm values.
 	NumRetryArms
 )
 
 var retryArmNames = [NumRetryArms]string{"off", "on", "everything"}
 
+// String returns the arm name used in subtest names and CSV run metadata.
 func (a RetryArm) String() string {
 	if a < NumRetryArms {
 		return retryArmNames[a]
@@ -53,6 +59,8 @@ const (
 	retrySlowBound  = 1100 * time.Millisecond
 )
 
+// RetrySpec defines a tier S retry scenario's workload phases, relay fault
+// plan, breaker threshold, budget parameters, and optional tenant weights.
 type RetrySpec struct {
 	Name     string
 	Clients  int
@@ -70,6 +78,8 @@ type RetrySpec struct {
 	Weights  []admission.TenantWeight
 }
 
+// RetryRun holds the simulated world, relay stats, client outcomes, engine and
+// policy snapshots, and optional CSV flush output of one retry scenario run.
 type RetryRun struct {
 	Spec    RetrySpec
 	Arm     RetryArm
@@ -83,6 +93,8 @@ type RetryRun struct {
 	Final   obs.InstanceSnapshot
 }
 
+// StormPattern faults 30% of queries in the storm window: 10% across all five
+// kill points, 10% after-applied kills, and 10% connection dooms.
 func StormPattern(n int64) (KillPoint, bool) {
 	switch n % 10 {
 	case 0:
@@ -95,6 +107,8 @@ func StormPattern(n int64) (KillPoint, bool) {
 	return 0, false
 }
 
+// SweepPattern faults every second query, rotating across all five kill points
+// and FaultDoom so no point in the conversation is missed.
 func SweepPattern(n int64) (KillPoint, bool) {
 	if n%2 != 0 {
 		return 0, false
@@ -102,6 +116,9 @@ func SweepPattern(n int64) (KillPoint, bool) {
 	return KillPoint(n / 2 % int64(NumKillPoints+1)), true
 }
 
+// RetryStormSpec returns the tier S retry-storm scenario configured with two
+// doom bursts around a short spend phase so a one-token bucket exhausts by
+// construction on every seed.
 func RetryStormSpec() RetrySpec {
 	return RetrySpec{Name: "retry-storm", Clients: 8, Tenants: 4, Conns: 4, Duration: 4 * time.Second,
 		Phases: []Phase{{0, 450 * time.Millisecond}, {stormSpendAt, stormSpendAt + stormSpendFor}, {stormExhaustAt, 3500 * time.Millisecond}},
@@ -110,6 +127,8 @@ func RetryStormSpec() RetrySpec {
 		Breaker: 3, Recovery: 3200 * time.Millisecond, Cap: stormCapTokens, Floor: stormCapTokens, Exhausts: true}
 }
 
+// RetrySweepSpec returns the tier S no-double-apply scenario sweeping kills at
+// every point of the conversation with the breaker effectively disabled.
 func RetrySweepSpec() RetrySpec {
 	return RetrySpec{Name: "retry-no-double-apply", Clients: 6, Tenants: 2, Conns: 4, Duration: 3 * time.Second,
 		Phases:  []Phase{{0, 250 * time.Millisecond}, {400 * time.Millisecond, 2500 * time.Millisecond}},
@@ -135,6 +154,8 @@ func retryFingerprint(sp RetrySpec, arm RetryArm) string {
 	return fmt.Sprintf("%s-%s-c%d-n%d-b%d-p%d", sp.Name, arm, sp.Conns, sp.Clients, sp.Breaker, sp.Plant)
 }
 
+// RunRetry executes sp under arm and seed in the deterministic simulator,
+// optionally flushing CSV snapshots into dir.
 func RunRetry(sp RetrySpec, arm RetryArm, seed int64, dir, replay string) (*RetryRun, error) {
 	relay := newRetryRelay(sp.Relay)
 	fake := fakepg.Config{Rows: clientRows(sp.Clients), MaxConnections: 256,
@@ -187,6 +208,8 @@ func (r *RetryRun) applied() map[string]int {
 	return out
 }
 
+// Duplicates returns the number of distinct statements applied more than once
+// in fake Postgres's write log.
 func (r *RetryRun) Duplicates() int {
 	n := 0
 	for _, c := range r.applied() {
@@ -207,6 +230,8 @@ func (r *RetryRun) forbiddenRetries() int64 {
 	return n
 }
 
+// CheckProduct verifies all product retry invariants on r: no statement applied
+// twice, no forbidden-row retries, fast refusals, full recovery, and budget bounds.
 func (r *RetryRun) CheckProduct() error {
 	if len(r.World.Fake.WriteLog()) >= logCap {
 		return failf("write log full: %d records", logCap)
@@ -315,6 +340,8 @@ func (r *RetryRun) checkBudget() error {
 	return nil
 }
 
+// CheckAblation verifies the retry-everything arm breaks the product contract
+// by retrying forbidden rows, duplicating writes, and amplifying forwards.
 func (r *RetryRun) CheckAblation() error {
 	if r.forbiddenRetries() == 0 {
 		return failf("the retry-everything arm retried no failure the contract forbids")
@@ -331,6 +358,7 @@ func (r *RetryRun) CheckAblation() error {
 	return nil
 }
 
+// Summary formats a compact diagnostic line for a retry scenario run.
 func (r *RetryRun) Summary() string {
 	s := r.Relay.Stats()
 	return fmt.Sprintf("%s/%s seed %d: queries %d faulted %d kills %v dooms %d/%d skipped %d; policy attempts %d retries %d refused %v level %d; engine retried %d ends %v rows-forbidden %d; duplicates %d",
@@ -338,8 +366,11 @@ func (r *RetryRun) Summary() string {
 		r.Policy.Refused, r.Policy.Level.Value, r.Engine.RetriedRequests, r.Engine.RetryEnds, r.forbiddenRetries(), r.Duplicates())
 }
 
+// RetryScenarioNames returns the tier S retry scenario names skipped under -short.
 func RetryScenarioNames() []string { return []string{RetryStormSpec().Name, RetrySweepSpec().Name} }
 
+// RetryBaselineJobs builds seed-1 jobs for both retry scenarios across all
+// three arms for the observability baseline suite.
 func RetryBaselineJobs(dir string) []func() (obs.InstanceSnapshot, error) {
 	var jobs []func() (obs.InstanceSnapshot, error)
 	for _, sp := range []RetrySpec{RetryStormSpec(), RetrySweepSpec()} {
@@ -365,6 +396,7 @@ func RetryBaselineJobs(dir string) []func() (obs.InstanceSnapshot, error) {
 	return jobs
 }
 
+// WorkloadSnapshot exports per-tenant client operation counts for CSV flushing.
 func (r *RetryRun) WorkloadSnapshot() workload.Snapshot {
 	tenants := make([]workload.TenantSnapshot, max(r.Spec.Tenants, 1))
 	empty := obs.NewDurationHistogram().Snapshot()

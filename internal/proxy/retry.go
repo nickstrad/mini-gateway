@@ -13,19 +13,31 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// RetryEnd classifies how a request that the proxy ran again eventually ended.
+// Every retried request records exactly one RetryEnd on its final exit path.
 type RetryEnd uint8
 
 const (
+	// RetryEndCompleted means the retried request received a full reply.
 	RetryEndCompleted RetryEnd = iota
+	// RetryEndFailed means the retry failed with an error or was cancelled.
 	RetryEndFailed
+	// RetryEndShed means the retry was shed in the queue (rule, overflow,
+	// tenant cap, request deadline, or pool-core breaker flush).
 	RetryEndShed
+	// RetryEndGone means the client disconnected or the engine shut down while
+	// the retry was queued or in flight.
 	RetryEndGone
+	// RetryEndBreaker means the breaker opened after the grant and the retry
+	// was refused at dispatch before any byte was forwarded.
 	RetryEndBreaker
+	// NumRetryEnds is the sentinel count of RetryEnd values.
 	NumRetryEnds
 )
 
 var retryEndNames = [NumRetryEnds]string{"completed", "failed", "shed", "gone", "breaker"}
 
+// String returns the label value of r, or "?" for an out-of-range RetryEnd.
 func (r RetryEnd) String() string {
 	if r < NumRetryEnds {
 		return retryEndNames[r]
@@ -33,25 +45,34 @@ func (r RetryEnd) String() string {
 	return "?"
 }
 
+// RetryCore adapts a retry.Policy core to the engine's RetryPolicy seam while
+// also exposing first-attempt notifications and snapshots.
 type RetryCore struct{ p retry.Policy }
 
+// NewRetryCore wraps p as a RetryPolicy seam backed by the retry core.
 func NewRetryCore(p retry.Policy) *RetryCore { return &RetryCore{p: p} }
 
+// Retry forwards a lost-statement failure to the underlying retry.Policy.
 func (r *RetryCore) Retry(now Instant, f Failure) bool {
 	return r.p.Decide(retry.Time(now), retry.Failure{Reached: f.Reached, InTx: f.InTx, Attempt: f.Attempt,
 		BreakerOpen: f.BreakerOpen, Draining: f.Draining, Deadline: retry.Time(f.Deadline)}).Retry
 }
 
+// Attempt records a forwarded first attempt with the underlying retry.Policy.
 func (r *RetryCore) Attempt(now Instant) { r.p.Attempt(retry.Time(now)) }
 
+// Snapshot returns the current retry.Snapshot from the underlying policy.
 func (r *RetryCore) Snapshot() retry.Snapshot { return r.p.Snapshot() }
 
 type retryAttempts interface{ Attempt(now Instant) }
 
 type breakerState interface{ Open() bool }
 
+// Open reports whether the pool breaker is open or half-open without calling
+// Allow, so inspecting it for retries never counts as demand or starts a trial.
 func (b CoreBreaker) Open() bool { return b.cp.p.Breaker() != pool.BreakerClosed }
 
+// Open always reports false for ClosedBreaker.
 func (ClosedBreaker) Open() bool { return false }
 
 func (e *Engine) initRetry() error {
@@ -65,6 +86,8 @@ func (e *Engine) initRetry() error {
 	return nil
 }
 
+// RetrySnapshot returns the retry core's snapshot and true when the engine's
+// retry seam is a *RetryCore.
 func (e *Engine) RetrySnapshot() (retry.Snapshot, bool) {
 	if rc, ok := e.seams.Retry.(*RetryCore); ok {
 		return rc.Snapshot(), true
@@ -107,6 +130,8 @@ func (e *Engine) refuseRetriesBehindOpenBreaker() bool {
 	if !e.breakerOpen() {
 		return false
 	}
+	// Collect and sort IDs before mutating e.waiting so refusal order is
+	// deterministic and satisfies the determinism lint.
 	ids := make([]RequestID, 0, len(e.waiting))
 	for id := range e.waiting {
 		ids = append(ids, id)
@@ -122,6 +147,8 @@ func (e *Engine) refuseRetriesBehindOpenBreaker() bool {
 			continue
 		}
 		delete(e.waiting, id)
+		// The token spent at grant is intentionally not refunded so an outage
+		// cannot mint credit; the refusal is recorded under RetryEndBreaker.
 		e.refuseWaiting(c, RetryEndBreaker)
 		refused = true
 	}
@@ -160,6 +187,8 @@ func (e *Engine) rerun(c *client, req *request) {
 	c.req = req
 	c.phase = cpIdle
 	c.status = pgwire.StatusIdle
+	// Re-enter at enqueue so the retry waits only in its tenant queue (one
+	// waiting place) without re-running classify, reject, or rate gates.
 	e.enqueue(c)
 	if c.phase == cpIdle {
 		e.pump(c)

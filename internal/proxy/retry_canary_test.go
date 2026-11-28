@@ -63,6 +63,8 @@ func retriedWithTheBreakerOpen(t *testing.T, plant retry.Plant) bool {
 	return r.e.Snapshot().RetryAsked > 0
 }
 
+// TestCanaryEveryRetryMechanismHasAnEngineTestThatFailsWhenRemoved proves
+// removing the reached-no, once-per-request, or breaker guard is caught in the engine.
 func TestCanaryEveryRetryMechanismHasAnEngineTestThatFailsWhenRemoved(t *testing.T) {
 	for _, c := range []struct {
 		name  string
@@ -84,12 +86,16 @@ func TestCanaryEveryRetryMechanismHasAnEngineTestThatFailsWhenRemoved(t *testing
 	}
 }
 
+// TestRetryBudgetExhaustionIsVisibleAndCounted proves an empty budget refuses
+// a second eligible zero-byte failure and records RefusedBudget.
 func TestRetryBudgetExhaustionIsVisibleAndCounted(t *testing.T) {
 	if retriedPastAnEmptyBudget(t, 0) {
 		t.Fatal("a retry ran past an empty budget")
 	}
 }
 
+// TestCanaryBudgetWithdrawalRemovedBreaksTheEngineInvariants proves
+// PlantNoWithdraw fails retry.Snapshot.Check as run by Engine.Invariants.
 func TestCanaryBudgetWithdrawalRemovedBreaksTheEngineInvariants(t *testing.T) {
 	p, _ := retry.New(retry.Config{Kind: retry.KindPreForwardOnce, CapTokens: 1, FloorTokens: 1, Plant: retry.PlantNoWithdraw})
 	rc := proxy.NewRetryCore(p)
@@ -101,6 +107,8 @@ func TestCanaryBudgetWithdrawalRemovedBreaksTheEngineInvariants(t *testing.T) {
 	}
 }
 
+// TestCanaryBucketCapRemovedBreaksTheEngineInvariants proves PlantNoCap fails
+// retry.Snapshot.Check when deposits push the level past the cap.
 func TestCanaryBucketCapRemovedBreaksTheEngineInvariants(t *testing.T) {
 	p, err := retry.New(retry.Config{Kind: retry.KindPreForwardOnce, CapTokens: 1, FloorTokens: 1, Plant: retry.PlantNoCap})
 	if err != nil {

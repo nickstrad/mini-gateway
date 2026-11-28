@@ -32,6 +32,8 @@ func retryEngine(t *testing.T) *Engine {
 	return e
 }
 
+// TestInvariantsCatchAPendingRetryNoRequestHolds proves Engine.Invariants
+// rejects a non-zero RetryPending gauge when no live client holds a retry.
 func TestInvariantsCatchAPendingRetryNoRequestHolds(t *testing.T) {
 	e := retryEngine(t)
 	e.snap.RetryOffered++
@@ -48,6 +50,8 @@ func TestInvariantsCatchAPendingRetryNoRequestHolds(t *testing.T) {
 	}
 }
 
+// TestInvariantsCatchTheEngineAndThePolicyDisagreeing proves Engine.Invariants
+// fails when the engine's RetryOffered/RetryAsked disagree with the policy.
 func TestInvariantsCatchTheEngineAndThePolicyDisagreeing(t *testing.T) {
 	e := retryEngine(t)
 	e.snap.RetryOffered++
@@ -59,6 +63,8 @@ func TestInvariantsCatchTheEngineAndThePolicyDisagreeing(t *testing.T) {
 	}
 }
 
+// TestInvariantsCatchABrokenBudget proves Engine.Invariants runs the retry
+// policy's Snapshot.Check and catches broken deposit conservation.
 func TestInvariantsCatchABrokenBudget(t *testing.T) {
 	e := retryEngine(t)
 	rc := e.seams.Retry.(*RetryCore)
@@ -77,6 +83,8 @@ func (b brokenPolicy) Snapshot() retry.Snapshot {
 	return s
 }
 
+// TestQuiesceRefusesAPendingRetry proves Engine.Quiesce fails when
+// RetryPending is non-zero.
 func TestQuiesceRefusesAPendingRetry(t *testing.T) {
 	e := retryEngine(t)
 	if err := e.Quiesce(); err != nil {

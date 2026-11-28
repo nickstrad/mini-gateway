@@ -10,6 +10,8 @@ import (
 
 const weightedAtShareRatio = 10
 
+// RetryStormWeightedSpec returns the retry-storm scenario with two tenants
+// weighted 3:1 so fair shares bind alongside budgeted retries.
 func RetryStormWeightedSpec() RetrySpec {
 	sp := RetryStormSpec()
 	sp.Name = "retry-storm-weighted"
@@ -18,6 +20,9 @@ func RetryStormWeightedSpec() RetrySpec {
 	return sp
 }
 
+// TestScenarioRetryStormTwoTenantsOfUnequalWeight proves the retry storm holds
+// all product retry invariants behind weighted fair dispatching, with the 3:1
+// weights taking effect and exact replay.
 func TestScenarioRetryStormTwoTenantsOfUnequalWeight(t *testing.T) {
 	if testing.Short() {
 		t.Skip("retry scenario: run without -short")

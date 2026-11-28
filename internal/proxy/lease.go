@@ -125,6 +125,8 @@ func (e *Engine) queueExpired(c *client) {
 
 func (e *Engine) dispatch() {
 	for e.seams.Queue.Len() > 0 && e.seams.Pool.Idle() > 0 {
+		// Re-check the breaker before lending to any queued retry so a breaker
+		// opening after the grant cannot forward the retry on a custom seam.
 		if e.refuseRetriesBehindOpenBreaker() {
 			continue
 		}
@@ -380,6 +382,9 @@ func (e *Engine) statementLost(c *client, d *dbConn) {
 	e.snap.InFlight.Add(-1)
 	reached := reachedFor(d, req)
 	row := lostRow(req, reached)
+	// Offer the failure before recording a client failure: a granted retry keeps
+	// the request alive for its one client reply. The failed connection was
+	// already closed or moved to the dirty table before reaching statementLost.
 	if e.offerRetry(c, req, reached, row) {
 		e.rerun(c, req)
 		return

@@ -9,6 +9,10 @@ import (
 
 const noRow = pgwire.ErrRowCount
 
+// MatrixRow describes one fault-by-path entry in the generated fault × path
+// matrix (docs/fault-matrix.md). NotRetried overrides Row.ProxyRetry when a
+// specific path can never retry (for example at the deadline or with the
+// breaker open).
 type MatrixRow struct {
 	Fault      string
 	Where      string
@@ -22,6 +26,8 @@ type MatrixRow struct {
 	Tests      []string
 }
 
+// Retried reports whether this fault-by-path row is retried by the proxy under
+// pre-forward-once.
 func (m MatrixRow) Retried() bool {
 	return m.NotRetried == "" && m.Row < noRow && m.Row.ProxyRetry() == pgwire.ProxyRetryWhenNotReached && m.Reached == work.No && !m.InTx
 }
@@ -51,6 +57,7 @@ func (m MatrixRow) reachedCell() string {
 	return m.Reached.String()
 }
 
+// RetriedCell formats m's "Retried by the proxy?" cell for docs/fault-matrix.md.
 func (m MatrixRow) RetriedCell() string {
 	switch {
 	case m.Retried():
@@ -69,6 +76,8 @@ func (m MatrixRow) RetriedCell() string {
 
 const notApplicable = work.Tri(9)
 
+// FaultMatrixRows returns the complete fault × path matrix covered by the
+// proxy's error contract and test suite.
 func FaultMatrixRows() []MatrixRow {
 	no, yes, na := work.No, work.Yes, notApplicable
 	return []MatrixRow{
@@ -137,6 +146,8 @@ func FaultMatrixRows() []MatrixRow {
 	}
 }
 
+// FaultMatrixMarkdown renders FaultMatrixRows as the Markdown table written to
+// docs/fault-matrix.md by scripts/gen-docs.sh.
 func FaultMatrixMarkdown() []byte {
 	var b strings.Builder
 	b.WriteString("# Fault × path matrix\n\n")

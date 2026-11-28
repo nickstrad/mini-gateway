@@ -47,6 +47,8 @@ func collect(t *testing.T, s retry.Snapshot) obs.InstanceSnapshot {
 	return out
 }
 
+// TestMappingExportsEveryFieldOfTheRetrySnapshot proves Map exports every
+// numeric field of retry.Snapshot (except the unused Refused[Granted] slot).
 func TestMappingExportsEveryFieldOfTheRetrySnapshot(t *testing.T) {
 	var s retry.Snapshot
 	f := &filler{paths: map[int64]string{}}
@@ -64,6 +66,8 @@ func TestMappingExportsEveryFieldOfTheRetrySnapshot(t *testing.T) {
 	}
 }
 
+// TestRetryCountersMoveAndConserve proves exported retry metrics match exact
+// deposit, withdrawal, exhaustion, and refusal counts after a sample sequence.
 func TestRetryCountersMoveAndConserve(t *testing.T) {
 	p, _ := retry.New(retry.Config{Kind: retry.KindPreForwardOnce, CapTokens: 2, FloorTokens: 1})
 	for range 30 {
@@ -89,6 +93,8 @@ func TestRetryCountersMoveAndConserve(t *testing.T) {
 	}
 }
 
+// TestHealthIsUnchangedByRetries proves exhausted retry budgets leave every
+// engine health rule in StateOK.
 func TestHealthIsUnchangedByRetries(t *testing.T) {
 	quiet, _ := retry.New(retry.Config{Kind: retry.KindPreForwardOnce})
 	busy, _ := retry.New(retry.Config{Kind: retry.KindPreForwardOnce, CapTokens: 1, FloorTokens: 1})

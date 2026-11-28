@@ -67,6 +67,9 @@ func (r *coreRig) lastDial() proxy.ConnID {
 	return r.dbs[len(r.dbs)-1]
 }
 
+// TestRetryAZeroByteRefusalRunsAgainOnANewConnectionAndTheClientGetsOneReply
+// proves a zero-byte write refusal queues one retry holding no connection,
+// dials a replacement, forwards the statement, and delivers exactly one reply.
 func TestRetryAZeroByteRefusalRunsAgainOnANewConnectionAndTheClientGetsOneReply(t *testing.T) {
 	r := newRetryRig(t, nil)
 	id := r.idleConn(11)
@@ -107,6 +110,8 @@ func TestRetryAZeroByteRefusalRunsAgainOnANewConnectionAndTheClientGetsOneReply(
 	}
 }
 
+// TestRetryAtMostOncePerRequest proves a second zero-byte refusal on the
+// replacement connection is refused with RefusedOnce and answered 08006.
 func TestRetryAtMostOncePerRequest(t *testing.T) {
 	r := newRetryRig(t, nil)
 	id := r.idleConn(11)
@@ -129,6 +134,8 @@ func TestRetryAtMostOncePerRequest(t *testing.T) {
 	}
 }
 
+// TestRetryNeverAfterBytesWereAccepted proves even one accepted byte marks the
+// failure Reached == Yes, refuses with RefusedReached, and answers 08007.
 func TestRetryNeverAfterBytesWereAccepted(t *testing.T) {
 	r := newRetryRig(t, nil)
 	id := r.idleConn(11)
@@ -143,6 +150,8 @@ func TestRetryNeverAfterBytesWereAccepted(t *testing.T) {
 	}
 }
 
+// TestRetryNeverOnACloseWithoutAWriteReport proves a backend close without
+// EvDBWriteRefused is treated as Reached == Yes and never retried.
 func TestRetryNeverOnACloseWithoutAWriteReport(t *testing.T) {
 	r := newRetryRig(t, nil)
 	id := r.idleConn(11)
@@ -156,6 +165,8 @@ func TestRetryNeverOnACloseWithoutAWriteReport(t *testing.T) {
 	}
 }
 
+// TestRetryNeverAfterARelayedByte proves relaying any reply byte prevents a
+// retry even if EvDBWriteRefused arrives afterward.
 func TestRetryNeverAfterARelayedByte(t *testing.T) {
 	r := newRetryRig(t, nil)
 	id := r.idleConn(11)
@@ -169,6 +180,8 @@ func TestRetryNeverAfterARelayedByte(t *testing.T) {
 	}
 }
 
+// TestRetryNeverOnStatementSilence proves a statement timeout is treated as
+// Reached == Yes, refused with RefusedReached, and answered 08007.
 func TestRetryNeverOnStatementSilence(t *testing.T) {
 	r := newRetryRig(t, func(c *proxy.Config) { c.Timeouts.Statement = time.Second })
 	id := r.idleConn(11)
@@ -183,6 +196,8 @@ func TestRetryNeverOnStatementSilence(t *testing.T) {
 	}
 }
 
+// TestRetryNeverInsideATransactionWhateverReachedSays proves a zero-byte
+// refusal inside an open transaction is refused with RefusedInTx and FATAL 08006.
 func TestRetryNeverInsideATransactionWhateverReachedSays(t *testing.T) {
 	r := newRetryRig(t, nil)
 	id := r.firstLease(11, "BEGIN")
@@ -198,6 +213,8 @@ func TestRetryNeverInsideATransactionWhateverReachedSays(t *testing.T) {
 	}
 }
 
+// TestRetryNeverWhenTheLossOpensTheBreaker proves the pool breaker sees the
+// loss before offerRetry, so a loss that opens the breaker is refused RefusedBreaker.
 func TestRetryNeverWhenTheLossOpensTheBreaker(t *testing.T) {
 	r := newRetryRig(t, func(c *proxy.Config) { c.Pool.BreakerFailures = 1 })
 	id := r.idleConn(11)
@@ -214,6 +231,8 @@ func TestRetryNeverWhenTheLossOpensTheBreaker(t *testing.T) {
 	}
 }
 
+// TestRetryDecidedWithoutConsultingTheBreakersAllow proves checking the
+// breaker for retries uses a pure read and neither starts a trial nor changes state.
 func TestRetryDecidedWithoutConsultingTheBreakersAllow(t *testing.T) {
 	r := newRetryRig(t, nil)
 	id := r.idleConn(11)
@@ -229,6 +248,8 @@ func TestRetryDecidedWithoutConsultingTheBreakersAllow(t *testing.T) {
 	}
 }
 
+// TestRetryNeverWhileDraining proves a zero-byte refusal while the engine is
+// draining is refused with RefusedDraining.
 func TestRetryNeverWhileDraining(t *testing.T) {
 	r := newRetryRig(t, nil)
 	id := r.idleConn(11)
@@ -265,6 +286,8 @@ func (r *coreRig) releaseAndLendTo(id proxy.ConnID) {
 	}
 }
 
+// TestRetryRefusedAtTheRequestDeadlineExactly proves a failure at exact
+// equality (now == arrival + timeouts.statement) is refused with RefusedDeadline.
 func TestRetryRefusedAtTheRequestDeadlineExactly(t *testing.T) {
 	r, id := deadlineRig(t)
 	arrived := r.now
@@ -277,6 +300,8 @@ func TestRetryRefusedAtTheRequestDeadlineExactly(t *testing.T) {
 	}
 }
 
+// TestRetryGrantedJustBeforeTheRequestDeadlineAndBoundedByIt proves a retry
+// granted 1 ns before the request deadline is shed 53M01 at the exact deadline.
 func TestRetryGrantedJustBeforeTheRequestDeadlineAndBoundedByIt(t *testing.T) {
 	r, id := deadlineRig(t)
 	arrived := r.now
@@ -296,6 +321,8 @@ func TestRetryGrantedJustBeforeTheRequestDeadlineAndBoundedByIt(t *testing.T) {
 	}
 }
 
+// TestRetryWaitsInTheTenantQueueWithTheAdmissionRule proves a granted retry
+// re-enters the tenant's admission queue rather than a separate buffer.
 func TestRetryWaitsInTheTenantQueueWithTheAdmissionRule(t *testing.T) {
 	r := newRetryRig(t, func(c *proxy.Config) {
 		c.Admission = admission.Config{Rule: admission.RuleTimeout, Interval: int64(10 * time.Second), Target: int64(5 * time.Second)}
@@ -312,6 +339,8 @@ func TestRetryWaitsInTheTenantQueueWithTheAdmissionRule(t *testing.T) {
 	}
 }
 
+// TestRetryShutdownWithAPendingRetryEndsItAndConserves proves Engine.Shutdown
+// ends a queued retry under RetryEndGone so Invariants and Quiesce pass.
 func TestRetryShutdownWithAPendingRetryEndsItAndConserves(t *testing.T) {
 	r := newRetryRig(t, nil)
 	id := r.idleConn(11)
@@ -330,6 +359,8 @@ func TestRetryShutdownWithAPendingRetryEndsItAndConserves(t *testing.T) {
 	}
 }
 
+// TestRetryClientGoneWhileTheRetryIsQueued proves a client closing while its
+// retry waits in the queue records RetryEndGone and clears RetryPending.
 func TestRetryClientGoneWhileTheRetryIsQueued(t *testing.T) {
 	r := newRetryRig(t, nil)
 	id := r.idleConn(11)
@@ -341,6 +372,8 @@ func TestRetryClientGoneWhileTheRetryIsQueued(t *testing.T) {
 	}
 }
 
+// TestRetryOffByDefaultAnswersTheRow proves the default Off policy refuses an
+// eligible zero-byte loss with RefusedOff and answers 08006.
 func TestRetryOffByDefaultAnswersTheRow(t *testing.T) {
 	r := newCoreRig(t, nil)
 	id := r.idleConn(11)
@@ -356,6 +389,8 @@ func TestRetryOffByDefaultAnswersTheRow(t *testing.T) {
 	}
 }
 
+// TestRetryEverythingAblationRerunsAWriteThatMayHaveReached proves the
+// test-only Everything ablation policy re-forwards an accepted write after close.
 func TestRetryEverythingAblationRerunsAWriteThatMayHaveReached(t *testing.T) {
 	r := newCoreRig(t, func(c *proxy.Config) { c.Seams.Retry = proxy.NewRetryCore(retrytest.NewEverything()) })
 	id := r.idleConn(11)
@@ -368,6 +403,8 @@ func TestRetryEverythingAblationRerunsAWriteThatMayHaveReached(t *testing.T) {
 	}
 }
 
+// TestRetryHealthIsUnchangedByRetries proves enabling retries leaves the
+// engine's health inputs (DBDown, Draining, Breaker) identical to Off.
 func TestRetryHealthIsUnchangedByRetries(t *testing.T) {
 	on := newRetryRig(t, nil)
 	off := newCoreRig(t, nil)
@@ -383,6 +420,8 @@ func TestRetryHealthIsUnchangedByRetries(t *testing.T) {
 	}
 }
 
+// TestRetryForwardedStatementEndsAtTheRequestDeadline proves a forwarded retry
+// clamps its statement timer to arrival + timeouts.statement and answers 08007 there.
 func TestRetryForwardedStatementEndsAtTheRequestDeadline(t *testing.T) {
 	r, id := deadlineRig(t)
 	arrived := r.now
@@ -405,6 +444,8 @@ func TestRetryForwardedStatementEndsAtTheRequestDeadline(t *testing.T) {
 	}
 }
 
+// TestRetryNeverInsideATransactionMidStatement proves a mid-statement backend
+// close inside a transaction is refused with RefusedInTx and FATAL 08006.
 func TestRetryNeverInsideATransactionMidStatement(t *testing.T) {
 	r := newRetryRig(t, nil)
 	id := r.firstLease(11, "BEGIN")

@@ -46,6 +46,9 @@ func randomOps(r *rand.Rand, n int, failShare int) []op {
 	return ops
 }
 
+// TestPropertyBudgetAgreesWithTheReferenceModel proves that Off and
+// PreForwardOnce match the reference model and window budget bounds across
+// random sequences of attempts, failures, breaker states, and deadlines.
 func TestPropertyBudgetAgreesWithTheReferenceModel(t *testing.T) {
 	runs := propertyRuns
 	if testing.Short() {
@@ -71,6 +74,9 @@ func allEligibleFailures(n int) []op {
 	return ops
 }
 
+// TestPathologicalSignalEveryRequestFailingPreForwardStaysUnderTheBound proves
+// that even when every first attempt fails pre-forward, retries stay within
+// 10% of first attempts plus the floor and budget exhaustion is counted.
 func TestPathologicalSignalEveryRequestFailingPreForwardStaysUnderTheBound(t *testing.T) {
 	cfg := Config{Kind: KindPreForwardOnce, CapTokens: 50, FloorTokens: 5}
 	p, _ := New(cfg)
@@ -99,6 +105,8 @@ func attemptsThenFailures(attempts, failures int) []op {
 	return append(ops, allEligibleFailures(failures)...)
 }
 
+// TestAQuietHourCannotBankAStorm proves the bucket cap discards excess
+// deposits so a million quiet attempts still yield at most CapTokens retries.
 func TestAQuietHourCannotBankAStorm(t *testing.T) {
 	cfg := Config{Kind: KindPreForwardOnce, CapTokens: 20, FloorTokens: 2}
 	p, _ := New(cfg)
@@ -123,6 +131,8 @@ func TestAQuietHourCannotBankAStorm(t *testing.T) {
 	}
 }
 
+// TestBucketHoldingExactlyOneTokenGrantsOneRetry proves the exact one-token
+// boundary: 10 tenths grant, 0 and 9 tenths refuse with RefusedBudget.
 func TestBucketHoldingExactlyOneTokenGrantsOneRetry(t *testing.T) {
 	p, _ := New(Config{Kind: KindPreForwardOnce, CapTokens: 5, FloorTokens: 1})
 	if s := p.Snapshot(); s.Level.Value != 10 {
@@ -149,6 +159,8 @@ func TestBucketHoldingExactlyOneTokenGrantsOneRetry(t *testing.T) {
 	}
 }
 
+// TestBucketExactlyAtTheCap proves reaching CapTokens loses no credit and the
+// next deposit past the cap is counted as Expired.
 func TestBucketExactlyAtTheCap(t *testing.T) {
 	p, _ := New(Config{Kind: KindPreForwardOnce, CapTokens: 2, FloorTokens: 1})
 	for range 10 {
@@ -163,6 +175,8 @@ func TestBucketExactlyAtTheCap(t *testing.T) {
 	}
 }
 
+// TestEveryRefusalReasonIsReachedAndCounted proves PreForwardOnce reaches and
+// counts every refusal reason in its eligibility order while conserving offers.
 func TestEveryRefusalReasonIsReachedAndCounted(t *testing.T) {
 	p, _ := New(Config{Kind: KindPreForwardOnce, CapTokens: 1, FloorTokens: 1})
 	cases := []struct {
@@ -195,6 +209,8 @@ func TestEveryRefusalReasonIsReachedAndCounted(t *testing.T) {
 	}
 }
 
+// TestDeadlineAtEqualityRefusesAndJustBeforeGrants proves now == Deadline
+// refuses with RefusedDeadline while now == Deadline-1 grants.
 func TestDeadlineAtEqualityRefusesAndJustBeforeGrants(t *testing.T) {
 	p, _ := New(Config{Kind: KindPreForwardOnce})
 	if d := p.Decide(100, Failure{Reached: work.No, Deadline: 100}); d.Reason != RefusedDeadline {
@@ -205,6 +221,8 @@ func TestDeadlineAtEqualityRefusesAndJustBeforeGrants(t *testing.T) {
 	}
 }
 
+// TestOffNeverRetriesAndCountsEveryOffer proves the zero Config builds Off,
+// never retries eligible failures, and counts every attempt and offer.
 func TestOffNeverRetriesAndCountsEveryOffer(t *testing.T) {
 	p, err := New(Config{})
 	if err != nil {
@@ -228,6 +246,8 @@ func TestOffNeverRetriesAndCountsEveryOffer(t *testing.T) {
 	}
 }
 
+// TestConfigValidationNamesTheKey proves invalid retry configs fail closed
+// with ErrConfig naming the offending key, while the zero Config takes defaults.
 func TestConfigValidationNamesTheKey(t *testing.T) {
 	cases := []struct {
 		c   Config
@@ -253,6 +273,8 @@ func TestConfigValidationNamesTheKey(t *testing.T) {
 	}
 }
 
+// TestFloorShareDividesByInstancesAndRefusesBelowOne proves Share uses integer
+// floor division and rejects any fleet division that leaves less than 1 token.
 func TestFloorShareDividesByInstancesAndRefusesBelowOne(t *testing.T) {
 	if n, err := Share(10, 3); err != nil || n != 3 {
 		t.Fatalf("10 over 3: %d %v", n, err)
@@ -265,6 +287,8 @@ func TestFloorShareDividesByInstancesAndRefusesBelowOne(t *testing.T) {
 	}
 }
 
+// TestSnapshotCheckCatchesBrokenConservation proves Snapshot.Check rejects
+// broken offer, deposit, level, withdrawal, and granted-refusal invariants.
 func TestSnapshotCheckCatchesBrokenConservation(t *testing.T) {
 	p, _ := New(Config{Kind: KindPreForwardOnce})
 	p.Attempt(0)
@@ -309,6 +333,8 @@ func fuzzPlant() Plant {
 	return 0
 }
 
+// FuzzRetryOps fuzzes decoded sequences of attempts and failures against the
+// reference model and checks the planted withdraw-first bug when requested.
 func FuzzRetryOps(f *testing.F) {
 	for _, s := range [][]byte{{}, {0, 1, 0, 1, 0, 2}, {0, 0, 0, 0, 0, 0, 3, 0, 1, 1, 0, 1}, {2, 0, 0, 0, 0, 0}} {
 		f.Add(s)
@@ -325,6 +351,8 @@ func FuzzRetryOps(f *testing.F) {
 	})
 }
 
+// TestFuzzDecodingIsTotalBoundedAndLocal proves decodeOps is total, caps op
+// count at fuzzMaxOps, keeps fields in range, and keeps single-byte edits local.
 func TestFuzzDecodingIsTotalBoundedAndLocal(t *testing.T) {
 	long := make([]byte, 10_000)
 	for i := range long {
@@ -357,6 +385,8 @@ func TestFuzzDecodingIsTotalBoundedAndLocal(t *testing.T) {
 	}
 }
 
+// TestFuzzPlantIsFoundByTheReferenceModel proves PlantWithdrawFirst fails the
+// reference model on a single ineligible failure.
 func TestFuzzPlantIsFoundByTheReferenceModel(t *testing.T) {
 	cfg := smallConfig(KindPreForwardOnce)
 	cfg.Plant = PlantWithdrawFirst
@@ -366,6 +396,8 @@ func TestFuzzPlantIsFoundByTheReferenceModel(t *testing.T) {
 	}
 }
 
+// TestWindowCheckAgreesWithThePairwiseCheck proves the linear window bound
+// check matches the O(n^2) pairwise check across 20,000 random traces.
 func TestWindowCheckAgreesWithThePairwiseCheck(t *testing.T) {
 	r := rand.New(rand.NewPCG(12, 12))
 	failed := 0
@@ -392,6 +424,8 @@ func TestWindowCheckAgreesWithThePairwiseCheck(t *testing.T) {
 	}
 }
 
+// TestStoredCreditDoesNotExpireWithTimeAndTheLargestBurstIsTheCap proves
+// banked credit survives an idle hour and caps the resulting retry burst at CapTokens.
 func TestStoredCreditDoesNotExpireWithTimeAndTheLargestBurstIsTheCap(t *testing.T) {
 	cfg := Config{Kind: KindPreForwardOnce, CapTokens: 20, FloorTokens: 1}
 	p, _ := New(cfg)
@@ -417,6 +451,9 @@ func TestStoredCreditDoesNotExpireWithTimeAndTheLargestBurstIsTheCap(t *testing.
 	}
 }
 
+// TestAnOmittedFloorFollowsASmallCapAndABadCapNamesOnlyTheCap proves an
+// omitted floor clamps to a smaller positive cap and a negative cap reports
+// only retry.bucket_cap.
 func TestAnOmittedFloorFollowsASmallCapAndABadCapNamesOnlyTheCap(t *testing.T) {
 	if c := (Config{Kind: KindPreForwardOnce, CapTokens: 5}).WithDefaults(); c.FloorTokens != 5 || c.Validate() != nil {
 		t.Fatalf("cap 5, floor omitted: %+v %v", c, c.Validate())

@@ -7,8 +7,11 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/retry"
 )
 
+// DefaultRetryPolicy disables proxy-initiated retries unless explicitly enabled.
 const DefaultRetryPolicy = "off"
 
+// Retry configures the proxy's retry policy and token budget. BucketCap is per
+// instance; Floor is fleet-wide and divided by fleet.instances when Policy is on.
 type Retry struct {
 	Policy    string `json:"policy"`
 	BucketCap int64  `json:"bucket_cap"`
@@ -23,6 +26,8 @@ func (f *File) applyRetryDefaults() {
 	}
 	if r.Floor == 0 {
 		r.Floor = retry.DefaultFloorTokens
+		// Match retry.Config.WithDefaults across the fleet so omitting floor
+		// beside a small valid bucket_cap stays consistent.
 		if r.BucketCap >= 1 && r.BucketCap <= retry.MaxTokens {
 			r.Floor = min(r.Floor, r.BucketCap*int64(f.instances()))
 		}
@@ -36,6 +41,9 @@ func (f *File) instances() int {
 	return f.Fleet.Instances
 }
 
+// RetryFloorPerInstance returns this instance's share of retry.floor after
+// dividing by fleet.instances, falling back to 1 if validation has not yet
+// rejected an invalid floor.
 func (f *File) RetryFloorPerInstance() int64 {
 	per, err := retry.Share(f.Retry.Floor, f.instances())
 	if err != nil {
@@ -72,6 +80,8 @@ func (f *File) validateRetry() error {
 		errs = append(errs, bad("retry.floor", "must be 1 to %d tokens (0 or omitted means the default %d), got %d",
 			retry.MaxTokens, retry.DefaultFloorTokens, r.Floor))
 	}
+	// Skip fleet floor division while the policy is off because nothing draws
+	// from the bucket.
 	if len(errs) > 0 || kind == retry.KindOff {
 		return errors.Join(errs...)
 	}

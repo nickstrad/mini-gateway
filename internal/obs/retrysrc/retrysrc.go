@@ -1,3 +1,5 @@
+// Package retrysrc maps retry.Snapshot into component "retry" metrics for the
+// observability collector. Retries add no health rule.
 package retrysrc
 
 import (
@@ -8,11 +10,13 @@ import (
 const (
 	lr = obs.LabelReason
 
+	// MetricLevel is the gauge name for the retry budget level in tenths of a token.
 	MetricLevel = "budget_level"
 )
 
 var none = obs.Labels{}
 
+// Metrics declares every metric exported under obs.ComponentRetry.
 func Metrics() []obs.MetricDesc {
 	return []obs.MetricDesc{
 		obs.GaugeDesc("policy", 0, "Retry policy in force: 0 off, 1 pre-forward-once, 2 a test-only policy."),
@@ -31,6 +35,7 @@ func Metrics() []obs.MetricDesc {
 	}
 }
 
+// Map emits every counter and gauge in s to e under obs.ComponentRetry.
 func Map(s retry.Snapshot, e *obs.Emitter) {
 	e.Gauge("policy", none, s.Kind)
 	e.Counter("attempts", none, s.Attempts)
@@ -49,6 +54,7 @@ func Map(s retry.Snapshot, e *obs.Emitter) {
 	e.Counter("expired", none, s.Expired)
 }
 
+// Source wraps snap as an obs.Source for obs.ComponentRetry.
 func Source(snap func() retry.Snapshot) obs.Source {
 	return obs.NewSource(obs.ComponentRetry, Metrics(), snap, Map)
 }

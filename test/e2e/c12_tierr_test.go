@@ -148,6 +148,9 @@ func tierRRetryRun(t *testing.T, env *RealEnv, arm string, retry map[string]any)
 	return s, stopAndRead(t, env, g, "tierr-retry-storm")
 }
 
+// TestTierRRetryStorm proves against live Postgres 17 that terminating 30% of
+// backends leaves zero duplicate writes, bounds forwards within the budget,
+// keeps refusals fast, and restores full goodput under both off and on policies.
 func TestTierRRetryStorm(t *testing.T) {
 	env := tierR(t)
 	if err := env.Exec("DELETE FROM marks WHERE at LIKE 'retry-%'"); err != nil {

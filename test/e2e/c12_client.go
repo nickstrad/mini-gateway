@@ -20,8 +20,10 @@ const (
 	maxClientErrors   = 1 << 16
 )
 
+// Phase defines a virtual-time activity window [From, Until) for retry scenario clients.
 type Phase struct{ From, Until time.Duration }
 
+// RetryOp records one client write operation across its client-side attempts.
 type RetryOp struct {
 	Text     string
 	Start    sim.Time
@@ -31,12 +33,16 @@ type RetryOp struct {
 	Code     string
 }
 
+// ErrReply records one error or disconnect observed by a retry scenario client
+// together with its elapsed virtual latency from send.
 type ErrReply struct {
 	Code    string
 	Elapsed time.Duration
 	At      sim.Time
 }
 
+// RetryClientResult aggregates operations, errors, sends, and redials for one
+// simulated retry scenario client.
 type RetryClientResult struct {
 	Ops      []RetryOp
 	Errors   []ErrReply

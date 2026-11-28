@@ -7,6 +7,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// TestEveryErrorRowStatesWhetherTheProxyRetriesIt proves docs/error-contract.md
+// records ProxyRetry on every row and forbids retries on all non-eligible rows.
 func TestEveryErrorRowStatesWhetherTheProxyRetriesIt(t *testing.T) {
 	doc := ErrorRowsMarkdown()
 	for id := ErrRowID(0); id < ErrRowCount; id++ {

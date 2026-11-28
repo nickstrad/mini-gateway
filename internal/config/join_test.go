@@ -51,6 +51,8 @@ func TestPoolAndQueueKeysAreValidatedTogether(t *testing.T) {
 	}
 }
 
+// TestRetryAndFairnessKeysAreValidatedTogether proves File.Validate reports
+// bad retry, fairness, and queue keys together in one joined error.
 func TestRetryAndFairnessKeysAreValidatedTogether(t *testing.T) {
 	_, err := parseEdited(t, map[string]any{"retry.policy": "everything", "retry.bucket_cap": -1, "fairness.default_weight": -2, "queue.rule": "fifo"})
 	if err == nil {
@@ -63,6 +65,9 @@ func TestRetryAndFairnessKeysAreValidatedTogether(t *testing.T) {
 	}
 }
 
+// TestBinaryDefaultRunsTheFairDispatcherWithTheRetryPolicyOff proves the
+// default binary config runs the fair dispatcher with retries off, and that
+// switching retry.policy to pre-forward-once runs both together.
 func TestBinaryDefaultRunsTheFairDispatcherWithTheRetryPolicyOff(t *testing.T) {
 	f, err := parseEdited(t, nil)
 	if err != nil {

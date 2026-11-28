@@ -20,20 +20,31 @@ const (
 	maxKilledTexts     = 1 << 16
 )
 
+// KillPoint selects where the retry test relay cuts or dooms a database
+// connection relative to a client query.
 type KillPoint uint8
 
 const (
+	// KillBeforeForward resets the front connection before forwarding the Query.
 	KillBeforeForward KillPoint = iota
+	// KillAfterForward forwards the Query to fake Postgres and resets both ends.
 	KillAfterForward
+	// KillAfterApplied resets after fake Postgres applies the write and starts replying.
 	KillAfterApplied
+	// KillMidReply relays the command response and cuts before ReadyForQuery.
 	KillMidReply
+	// KillAfterReply forwards ReadyForQuery and cuts immediately afterward.
 	KillAfterReply
+	// NumKillPoints is the number of mid-query kill points.
 	NumKillPoints
+	// FaultDoom arms a half-open zero-byte refusal on the connection once its
+	// reset completes and it sits quiet for doomDelay.
 	FaultDoom = NumKillPoints
 )
 
 var killNames = [...]string{"before-forward", "after-forward", "after-applied", "mid-reply", "after-reply", "doom"}
 
+// String returns the label name of k, or "?" for an out-of-range value.
 func (k KillPoint) String() string {
 	if int(k) < len(killNames) {
 		return killNames[k]
@@ -41,12 +52,16 @@ func (k KillPoint) String() string {
 	return "?"
 }
 
+// RelayPlan configures when and how the retry test relay injects kills and
+// half-open connection dooms between the proxy and fake Postgres.
 type RelayPlan struct {
 	From, Until time.Duration
 	DoomAllAt   []time.Duration
 	Pattern     func(n int64) (KillPoint, bool)
 }
 
+// RelayStats summarizes the queries, kills, and half-open dooms performed by
+// the retry test relay.
 type RelayStats struct {
 	Pairs        int64
 	Queries      int64

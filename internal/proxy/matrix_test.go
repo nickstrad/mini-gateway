@@ -20,6 +20,8 @@ var (
 
 const matrixDoc = "fault-matrix.md"
 
+// TestFaultMatrixDocumentIsGeneratedFromTheCode proves docs/fault-matrix.md is
+// byte-identical to proxy.FaultMatrixMarkdown (or updates it when flagged).
 func TestFaultMatrixDocumentIsGeneratedFromTheCode(t *testing.T) {
 	want := proxy.FaultMatrixMarkdown()
 	root := filepath.Join("..", "..", "docs")
@@ -40,6 +42,8 @@ func TestFaultMatrixDocumentIsGeneratedFromTheCode(t *testing.T) {
 	}
 }
 
+// TestEveryFaultMatrixRowStatesRetryAndATestThatExists proves every row in
+// FaultMatrixRows names real tests or scenarios and only one row is retried.
 func TestEveryFaultMatrixRowStatesRetryAndATestThatExists(t *testing.T) {
 	var src bytes.Buffer
 	for _, dir := range []string{".", "../pool", "../pgwire", "../shell", "../admission", "../../test/e2e"} {
@@ -89,6 +93,8 @@ func TestEveryFaultMatrixRowStatesRetryAndATestThatExists(t *testing.T) {
 	}
 }
 
+// TestOnlyTheZeroByteRefusalOfALentConnectionIsRetried proves NotRetried and
+// RetriedCell agree with Retried and isolate the single retryable matrix row.
 func TestOnlyTheZeroByteRefusalOfALentConnectionIsRetried(t *testing.T) {
 	var retried []string
 	for _, m := range proxy.FaultMatrixRows() {

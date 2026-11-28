@@ -46,6 +46,9 @@ func runRetry(t *testing.T, sp RetrySpec, arm RetryArm, seed int64) *RetryRun {
 	return a
 }
 
+// TestScenarioRetry proves the retry-storm and retry-no-double-apply scenarios
+// pass product checks under off/on, break them under the ablation arm, flush
+// valid CSVs, and satisfy the bit-identical replay law.
 func TestScenarioRetry(t *testing.T) {
 	for _, sp := range []RetrySpec{RetryStormSpec(), RetrySweepSpec()} {
 		t.Run(sp.Name, func(t *testing.T) {
@@ -75,6 +78,8 @@ func TestScenarioRetry(t *testing.T) {
 	}
 }
 
+// TestCanaryRetryStormCatchesAPolicyThatIgnoresReached proves removing the
+// reached-no guard causes retry-storm/on to fail CheckProduct.
 func TestCanaryRetryStormCatchesAPolicyThatIgnoresReached(t *testing.T) {
 	if testing.Short() {
 		t.Skip("retry scenario canary: runs without -short")
@@ -90,6 +95,8 @@ func TestCanaryRetryStormCatchesAPolicyThatIgnoresReached(t *testing.T) {
 	}
 }
 
+// TestCanaryRetrySweepCatchesAPolicyThatIgnoresReached proves removing the
+// reached-no guard produces duplicate writes in retry-no-double-apply/on.
 func TestCanaryRetrySweepCatchesAPolicyThatIgnoresReached(t *testing.T) {
 	if testing.Short() {
 		t.Skip("retry scenario canary: runs without -short")
@@ -110,6 +117,9 @@ func withRetryOn(sp Spec) Spec {
 	return sp
 }
 
+// TestScenarioRetryRerunsKillRowsAndResultsWithThePolicyOn proves earlier kill
+// scenarios and results-equal-direct still pass with PreForwardOnce enabled
+// and perform zero retries on post-forward losses.
 func TestScenarioRetryRerunsKillRowsAndResultsWithThePolicyOn(t *testing.T) {
 	names := map[string]bool{"e2e-results": true, "e2e-kill-before-read": true, "e2e-kill-before-write": true, "e2e-kill-during-reply": true,
 		"e2e-kill-mid-transaction": true, "e2e-kill-after-reply": true, "e2e-silent-db-query": true}

@@ -106,6 +106,8 @@ func (h *coreRig) noRetryForward(a []proxy.Action) {
 	}
 }
 
+// TestJoinARetryHeldBackAtItsShareOpensNoConnection proves a waiting retry held
+// back at its tenant's fair share is excluded from pool demand and triggers no dial.
 func TestJoinARetryHeldBackAtItsShareOpensNoConnection(t *testing.T) {
 	h := retryHeldAtShare(t, nil)
 	dials, p := h.dials(), h.pool()
@@ -120,6 +122,9 @@ func TestJoinARetryHeldBackAtItsShareOpensNoConnection(t *testing.T) {
 	}
 }
 
+// TestJoinARetriedTenantAtItsShareLetsTheTenantBelowItsShareGoFirst proves a
+// tenant below its share receives the freed slot ahead of a waiting retry at
+// share, and the retry runs once its own tenant releases a lease.
 func TestJoinARetriedTenantAtItsShareLetsTheTenantBelowItsShareGoFirst(t *testing.T) {
 	h := retryHeldAtShare(t, nil)
 	dials := h.dials()
@@ -158,6 +163,9 @@ func TestJoinARetriedTenantAtItsShareLetsTheTenantBelowItsShareGoFirst(t *testin
 	}
 }
 
+// TestJoinARetryHeldBackAtItsShareIsLentWhenItsOwnLeaseEnds proves ending one
+// of the retried tenant's open transactions lends to its waiting retry and
+// starts the fair lease exactly once.
 func TestJoinARetryHeldBackAtItsShareIsLentWhenItsOwnLeaseEnds(t *testing.T) {
 	h := retryHeldAtShare(t, nil)
 	h.noForwardOfTheRetry(h.tick(10 * time.Millisecond))
@@ -171,6 +179,8 @@ func TestJoinARetryHeldBackAtItsShareIsLentWhenItsOwnLeaseEnds(t *testing.T) {
 	}
 }
 
+// TestJoinARetryHeldBackByTheDispatcherEndsAtTheRequestDeadline proves a retry
+// held back at share is still shed with 53M01 at the exact request deadline.
 func TestJoinARetryHeldBackByTheDispatcherEndsAtTheRequestDeadline(t *testing.T) {
 	h := retryHeldAtShare(t, func(c *proxy.Config) { c.Timeouts.Statement = time.Second })
 	deadline := h.arrived + proxy.Instant(time.Second)
@@ -189,6 +199,9 @@ func TestJoinARetryHeldBackByTheDispatcherEndsAtTheRequestDeadline(t *testing.T)
 	}
 }
 
+// TestJoinTheBreakerReCheckRunsWhenAnotherTenantsLeaseEndsWhileARetryIsHeldBack
+// proves releasing another tenant's transaction dispatches the held retry if
+// the breaker is closed and answers 53M03 (RetryEndBreaker) if it opened.
 func TestJoinTheBreakerReCheckRunsWhenAnotherTenantsLeaseEndsWhileARetryIsHeldBack(t *testing.T) {
 	for _, open := range []bool{false, true} {
 		b := &switchBreaker{}
@@ -214,6 +227,9 @@ func TestJoinTheBreakerReCheckRunsWhenAnotherTenantsLeaseEndsWhileARetryIsHeldBa
 	}
 }
 
+// TestJoinThePoolBreakerOpeningFlushesARetryHeldBackByTheDispatcher proves the
+// real pool breaker opening flushes both a held-back retry and another queued
+// tenant with 53M03 while preserving fair in-flight counts.
 func TestJoinThePoolBreakerOpeningFlushesARetryHeldBackByTheDispatcher(t *testing.T) {
 	h := retryHeldAtShare(t, func(c *proxy.Config) { c.Pool.BreakerFailures = 2 })
 	h.login(15, 1)
@@ -229,6 +245,9 @@ func TestJoinThePoolBreakerOpeningFlushesARetryHeldBackByTheDispatcher(t *testin
 	}
 }
 
+// TestJoinShutdownWithAHeldBackRetryAndLeasesOfTwoTenants proves Engine.Shutdown
+// clears a held-back retry and active leases of two tenants so Invariants,
+// Quiesce, and admission conservation all pass.
 func TestJoinShutdownWithAHeldBackRetryAndLeasesOfTwoTenants(t *testing.T) {
 	h := retryHeldAtShare(t, nil)
 	h.login(15, 1)
@@ -307,6 +326,9 @@ func forwardOrder(t *testing.T, refuse bool) []string {
 	return order
 }
 
+// TestJoinARetryTakesANewTurnBehindItsTenantsQueueAndNoTenantGainsService
+// proves a granted retry re-enters at the tail of its tenant's queue and spends
+// a new round-robin turn without advancing ahead of other tenants.
 func TestJoinARetryTakesANewTurnBehindItsTenantsQueueAndNoTenantGainsService(t *testing.T) {
 	plain := forwardOrder(t, false)
 	retried := forwardOrder(t, true)
@@ -320,6 +342,8 @@ func TestJoinARetryTakesANewTurnBehindItsTenantsQueueAndNoTenantGainsService(t *
 	}
 }
 
+// TestJoinEveryRetryEngineTestHoldsBehindTheFairDispatcher proves every retry
+// engine unit test passes behind the fair dispatcher under both product rules.
 func TestJoinEveryRetryEngineTestHoldsBehindTheFairDispatcher(t *testing.T) {
 	defer func() { coreAdmission = admission.Config{} }()
 	for _, rule := range []admission.RuleKind{admission.RuleTimeout, admission.RuleControlLaw} {
@@ -388,6 +412,9 @@ func (r *coreRig) lendWrite(client proxy.ConnID, tenant int, sql string, on prox
 	}
 }
 
+// TestJoinARetryOverflowingItsTenantQueueShedsTheEarlierWaitingRetry proves
+// pushing a second retry into a 1-slot tenant ring sheds the earlier retry with
+// 53M01 (RetryEndShed) while the surviving retry completes cleanly.
 func TestJoinARetryOverflowingItsTenantQueueShedsTheEarlierWaitingRetry(t *testing.T) {
 	r := fairRig(t, 2, func(c *proxy.Config) {
 		retryOn(c)
@@ -427,6 +454,8 @@ func TestJoinARetryOverflowingItsTenantQueueShedsTheEarlierWaitingRetry(t *testi
 	}
 }
 
+// TestJoinARetryRefusedAtTheTenantCapIsShedAndEndsItsRetry proves a retry whose
+// evicted tenant cannot allocate a slot at MaxTenants is shed 53M01 (RetryEndShed).
 func TestJoinARetryRefusedAtTheTenantCapIsShedAndEndsItsRetry(t *testing.T) {
 	r := fairRig(t, 1, func(c *proxy.Config) {
 		retryOn(c)
@@ -458,6 +487,9 @@ func TestJoinARetryRefusedAtTheTenantCapIsShedAndEndsItsRetry(t *testing.T) {
 	}
 }
 
+// TestJoinARetryAboveItsShareTakesAFreeLeaseButNotTheLastOneReserved proves a
+// tenant above its share stays held on the reserved last slot until another
+// lease frees, then receives the work-conserving slot while reserving the last.
 func TestJoinARetryAboveItsShareTakesAFreeLeaseButNotTheLastOneReserved(t *testing.T) {
 	var q *admission.Queues
 	r := fairRig(t, 6, func(c *proxy.Config) {
@@ -533,6 +565,9 @@ func seamFair(t *testing.T, c *proxy.Config) *admission.Queues {
 	return aq.Core()
 }
 
+// TestJoinARetryHeldByAFairLimitBelowTheConnectionsIsNoDemand proves a retry
+// held at a fair limit below pool.connections reports zero Releasable demand
+// and triggers no dial past the limit.
 func TestJoinARetryHeldByAFairLimitBelowTheConnectionsIsNoDemand(t *testing.T) {
 	var q *admission.Queues
 	r := fairRig(t, 4, func(c *proxy.Config) {
@@ -595,6 +630,9 @@ func TestJoinARetryHeldByAFairLimitBelowTheConnectionsIsNoDemand(t *testing.T) {
 	}
 }
 
+// TestJoinTheBreakerReCheckRunsWhenAnotherTenantsLeaseIsLostWhileARetryIsHeldBack
+// proves losing another tenant's plain-statement lease triggers fairRedispatch
+// and either lends the idle connection or refuses the retry with 53M03 if open.
 func TestJoinTheBreakerReCheckRunsWhenAnotherTenantsLeaseIsLostWhileARetryIsHeldBack(t *testing.T) {
 	for _, open := range []bool{false, true} {
 		b := &switchBreaker{}

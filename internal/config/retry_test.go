@@ -11,6 +11,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/retry"
 )
 
+// TestRetryDefaultIsOffAndOffNeverRetries proves the default config selects
+// retry.policy "off" and that the resulting policy never retries eligible losses.
 func TestRetryDefaultIsOffAndOffNeverRetries(t *testing.T) {
 	f, err := parseEdited(t, nil)
 	if err != nil {
@@ -48,6 +50,8 @@ func TestRetryDefaultIsOffAndOffNeverRetries(t *testing.T) {
 	}
 }
 
+// TestRetryKeysFailClosedNamingTheKey proves invalid retry policy names, caps,
+// and fleet-divided floors fail config parsing with errors naming each key.
 func TestRetryKeysFailClosedNamingTheKey(t *testing.T) {
 	for _, c := range []struct {
 		edits map[string]any
@@ -69,6 +73,8 @@ func TestRetryKeysFailClosedNamingTheKey(t *testing.T) {
 	}
 }
 
+// TestRetryZeroMeansTheDefault proves explicit zero and empty retry keys take
+// their documented defaults.
 func TestRetryZeroMeansTheDefault(t *testing.T) {
 	f, err := parseEdited(t, map[string]any{"retry.bucket_cap": 0, "retry.floor": 0, "retry.policy": ""})
 	if err != nil {
@@ -79,6 +85,8 @@ func TestRetryZeroMeansTheDefault(t *testing.T) {
 	}
 }
 
+// TestRetryFloorIsDividedByInstancesAndTheRatioAndCapAreNot proves retry.floor
+// divides by fleet.instances with a remainder warning while bucket_cap does not.
 func TestRetryFloorIsDividedByInstancesAndTheRatioAndCapAreNot(t *testing.T) {
 	f, err := parseEdited(t, map[string]any{"retry.policy": "pre-forward-once", "retry.floor": 10, "retry.bucket_cap": 40,
 		"fleet.instances": 3, "fleet.backend_connections": 12})
@@ -102,6 +110,8 @@ func TestRetryFloorIsDividedByInstancesAndTheRatioAndCapAreNot(t *testing.T) {
 	}
 }
 
+// TestRetryEverythingIsUnreachableFromTheBinary proves no product Kind names
+// "everything" and cmd/... does not link internal/retry/retrytest.
 func TestRetryEverythingIsUnreachableFromTheBinary(t *testing.T) {
 	for k := retry.Kind(0); k < retry.NumKinds; k++ {
 		if strings.Contains(k.String(), "everything") {
@@ -120,6 +130,8 @@ func TestRetryEverythingIsUnreachableFromTheBinary(t *testing.T) {
 	}
 }
 
+// TestConfigNeverSetsARetryPlant proves parsed configs leave retry.Config.Plant
+// zero for every valid policy.
 func TestConfigNeverSetsARetryPlant(t *testing.T) {
 	for _, policy := range []string{"off", "pre-forward-once"} {
 		f, err := parseEdited(t, map[string]any{"retry.policy": policy})
@@ -132,6 +144,8 @@ func TestConfigNeverSetsARetryPlant(t *testing.T) {
 	}
 }
 
+// TestRetryOmittedFloorFollowsASmallBucketCap proves omitting retry.floor
+// beside a small bucket_cap clamps the floor across the fleet rather than failing.
 func TestRetryOmittedFloorFollowsASmallBucketCap(t *testing.T) {
 	f, err := parseEdited(t, map[string]any{"retry.policy": "pre-forward-once", "retry.bucket_cap": 5})
 	if err != nil {
