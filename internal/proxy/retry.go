@@ -107,16 +107,17 @@ func (e *Engine) refuseRetriesBehindOpenBreaker() bool {
 	if !e.breakerOpen() {
 		return false
 	}
-	var ids []RequestID
-	for id, c := range e.waiting {
-		if c != nil && c.phase == cpQueued && c.req != nil && c.req.id == id && c.req.attempt > 0 && !c.req.retryOver {
-			ids = append(ids, id)
-		}
+	ids := make([]RequestID, 0, len(e.waiting))
+	for id := range e.waiting {
+		ids = append(ids, id)
 	}
 	slices.Sort(ids)
 	refused := false
 	for _, id := range ids {
 		c := e.waiting[id]
+		if c == nil || c.phase != cpQueued || c.req == nil || c.req.id != id || c.req.attempt == 0 || c.req.retryOver {
+			continue
+		}
 		if !e.takeQueued(id) {
 			continue
 		}
