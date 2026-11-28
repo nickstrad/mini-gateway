@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/obs"
+	"github.com/nickstrad/mini-gateway/internal/proxy"
 )
 
 const (
@@ -76,7 +77,11 @@ func (s *tierRStorm) client(env *RealEnv, g *Gateway, arm string, idx int, end t
 	if !dial() {
 		return
 	}
-	defer func() { c.Close() }()
+	defer func() {
+		if c != nil {
+			c.Close()
+		}
+	}()
 	for n := 0; time.Now().Before(end); n++ {
 		o := tierROp{client: idx, n: n, start: time.Now()}
 		sql := fmt.Sprintf("INSERT INTO marks (client, round, txid, at) VALUES (%d, %d, 0, 'retry-%s')", idx, n, arm)
@@ -187,8 +192,12 @@ func TestTierRRetryStorm(t *testing.T) {
 			attempts, retries := final.Value(obs.ComponentRetry, "attempts", none), final.Value(obs.ComponentRetry, "retries", none)
 			floor := final.Value(obs.ComponentRetry, "budget_floor", none)
 			forwards := ev(final, "stage_passed", obs.Labels{Mode: "forward"})
-			if forwards != attempts+retries || 10*retries > attempts+floor {
-				t.Fatalf("forwards %d attempts %d retries %d floor %d", forwards, attempts, retries, floor)
+			refusedAtForward := ev(final, "retry_ends", obs.Labels{Outcome: proxy.RetryEndBreaker.String()})
+			if forwards != attempts+retries-refusedAtForward || 10*retries > attempts+floor {
+				t.Fatalf("forwards %d attempts %d retries %d (%d refused at the forward) floor %d", forwards, attempts, retries, refusedAtForward, floor)
+			}
+			if offered := final.Value(obs.ComponentRetry, "offered", none); offered == 0 {
+				t.Fatalf("no statement was lost in flight during the faults (codes %v): the storm tested nothing", s.codes)
 			}
 			if arm.retry == nil && retries != 0 {
 				t.Fatalf("%d retries with the policy off", retries)
