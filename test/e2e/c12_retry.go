@@ -303,7 +303,7 @@ func (r *RetryRun) checkBudget() error {
 	if p.Retries*retry.WithdrawTenths > p.Attempts*retry.DepositTenths+p.Floor {
 		return failf("%d retries for %d first attempts and the floor %d", p.Retries, p.Attempts, p.Floor)
 	}
-	if forwards := e.StagePassed[proxy.StageForward]; forwards != p.Attempts+p.Retries-e.RetryEnds[proxy.RetryEndBreaker] {
+	if forwards := e.StagePassed[proxy.StageForward]; forwards < p.Attempts || forwards > p.Attempts+p.Retries-e.RetryEnds[proxy.RetryEndBreaker] {
 		return failf("%d statements forwarded for %d first attempts and %d retries (%d refused at the forward)", forwards, p.Attempts, p.Retries,
 			e.RetryEnds[proxy.RetryEndBreaker])
 	}

@@ -101,8 +101,9 @@ connection (`test/e2e/c12_relay.go`, a test-side relay in the manner of chunk 7'
    the policy (`Retries`, `Withdrawals = 10 × Retries` unchanged), so the budget bound and its
    proofs stand, nothing is counted twice, and the spent token is visible as
    `engine.retry_ends{outcome="breaker"}`. Refunding would need a deposit that is not a first
-   attempt and would let an outage buy more retries. Forwards = first attempts + retries − ends
-   `breaker` (`checkBudget`, `load.sql`, `TestTierRRetryStorm`). Held by
+   attempt and would let an outage buy more retries. First attempts ≤ forwards ≤ first attempts + retries − ends
+   `breaker` (`checkBudget`, `load.sql`, `TestTierRRetryStorm`); the upper bound is met exactly only
+   when no granted retry ends in the queue (shed, cancelled or gone) before it is forwarded. Held by
    `TestRetryGrantedWhileClosedIsRefusedWhenTheBreakerOpensBeforeItIsForwarded` (level, retries,
    withdrawals and offers unchanged from the grant; invariants hold).
    **In the shipped wiring this schedule does not happen**: the pool core emits `ActRefuseQueued`

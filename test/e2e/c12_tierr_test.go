@@ -193,7 +193,7 @@ func TestTierRRetryStorm(t *testing.T) {
 			floor := final.Value(obs.ComponentRetry, "budget_floor", none)
 			forwards := ev(final, "stage_passed", obs.Labels{Mode: "forward"})
 			refusedAtForward := ev(final, "retry_ends", obs.Labels{Outcome: proxy.RetryEndBreaker.String()})
-			if forwards != attempts+retries-refusedAtForward || 10*retries > attempts+floor {
+			if forwards < attempts || forwards > attempts+retries-refusedAtForward || 10*retries > attempts+floor {
 				t.Fatalf("forwards %d attempts %d retries %d (%d refused at the forward) floor %d", forwards, attempts, retries, refusedAtForward, floor)
 			}
 			if offered := final.Value(obs.ComponentRetry, "offered", none); offered == 0 {

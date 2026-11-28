@@ -17,7 +17,7 @@ SELECT run_id || ': forwards ' || forwards || ' attempts ' || attempts || ' retr
        || ' distinct sent ' || distinct_sent || ' acknowledged ' || acked || ' (arm ' || arm || ')'
 FROM j
 WHERE scenario IN ('retry-storm', 'retry-no-double-apply')
-  AND (forwards IS NULL OR (arm <> 'everything' AND forwards <> attempts + retries - refused_at_forward)
+  AND (forwards IS NULL OR (arm <> 'everything' AND (forwards < attempts OR forwards > attempts + retries - refused_at_forward))
        OR (arm <> 'everything' AND (applied > distinct_sent OR applied < acked)) OR acked < 1)
 UNION ALL
 SELECT run_id || ': retry-everything forwarded ' || forwards || ' statements for ' || attempts || ' first attempts: no amplification'

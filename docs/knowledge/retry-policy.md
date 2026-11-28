@@ -45,7 +45,7 @@ Facts a later builder needs about the proxy's own retry. Full notes, claims and 
 - Engine counters: `RetryOffered`, `RetryAsked` (granted), `RetriedRequests`, `RetryPending`,
   `RetryEnds[completed|failed|shed|gone|breaker]`, `RetryRows[row]`. Every end path of a request calls
   `retryEnded` (reply, final failure, shed, breaker flush, breaker at the forward, queued cancel, client gone);
-  `Quiesce` refuses a non-zero `RetryPending`. Forwards = first attempts + retries − ends `breaker`.
+  `Quiesce` refuses a non-zero `RetryPending`. First attempts ≤ forwards ≤ first attempts + retries − ends `breaker`; the upper bound is met exactly only when no granted retry ends in the queue (shed, cancelled or gone) before it is forwarded.
 
 ## Config (`retry` section)
 
