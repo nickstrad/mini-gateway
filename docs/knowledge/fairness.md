@@ -21,6 +21,13 @@ Reference notes for chunks 10, 13, and 14 before changing the dispatcher, the co
 - Round-robin turns live in `tenantQueue.turn` alongside `Queues.round`. A newly created tenant queue joins behind every already-waiting tenant and just ahead of the tenant served last. `Unpop` restores the turn, round counter, and held flag.
 - Dispatcher state (`fairTenant`) exists only while a tenant holds at least one lease; `tenant_time_at_share` is stored as a cumulative per-tenant counter in chunk 8's table (4,096 tenants, then `other`).
 
+## Coalesced flights and the limit (chunk 11 join, 2026-11-28)
+
+- The limit counts leases, not answers. A coalesced flight's owner waits in its own tenant's queue and holds one lease for that tenant; followers take no queue place and no lease.
+- With `coalesce.key_scope: all-tenants` (the default), a follower of another tenant rides the owner's lease and spends none of its own share.
+- Handoff caveat: when the owner leaves (cancel or disconnect) and a follower of another tenant remains, the follower takes the flight over (`LeftHandoff`). The read keeps running, and a zero-byte refusal can re-queue and retry it, all charged to the leaving tenant's share until the lease ends (`request.tenant`, `d.lastTenant`). Without that follower the proxy would cancel the read (`LeftLast`) and free the share. So a tenant can hold database concurrency beyond its own share at the expense of a tenant that abandons shared reads.
+- `coalesce.key_scope: tenant` keeps every flight inside one tenant, which gives strict isolation. The capacity row "Leases in flight across tenants" (`fairnessCapacityRows`, `docs/capacity-table.md`) states the same.
+
 ## Observability
 
 Component `admission` exports `limit`, `in_flight` (+peak), `active_tenants` (+peak), `fair_states` (+peak), `rounds`, `held{limit,share}`, `lease_starts`, `lease_ends`, and `saturated_time`, plus per-tenant `tenant_in_flight`, `tenant_share`, and `tenant_time_at_share` when `obs.detail` is enabled. `Engine.Invariants` checks that the dispatcher's per-tenant and total in-flight counts match the engine's outstanding leases (error prefix `fairness:`). No new health rule is added.
