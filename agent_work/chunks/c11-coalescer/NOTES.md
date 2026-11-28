@@ -361,7 +361,13 @@ grants, 577 expiries, 597 promotions, 182 refused promotions, 99 breaker refusal
 What it found: **on the repaired tree, nothing**. With each fix reverted it fails on its own:
 M-R1 at seed 0 (`client … is on flight 4, the coalescer has it on 0`), M-R2 at seed 109 and
 M-R2b at seed 384 (a client got a retried statement's reply 106 ms and 301 ms past its own
-deadline), M-R3 at seed 63. The `-short` run (60 sequences) catches M-R1 and M-R3 but not M-R2
+deadline). The historical M-R3 failure at seed 63 exposed the held-owner arrival
+loss, not an open-breaker forwarding oracle. With that arrival loss fixed, the
+original randomized test catches M-R3 only through its refused-promotion coverage
+check; the two deterministic breaker tests directly catch the defect. Arbitration
+adds an assertion after every generated event that each promotion while the custom
+breaker is open increments the refused-promotion count. This excludes ordinary
+first attempts admitted before the custom breaker opened. The `-short` run (60 sequences) catches M-R1 and M-R3 but not M-R2
 or M-R2b. Two harness facts turned up while building it, neither a defect. First, a statement
 deadline sends a cancel, and that client is not read until the cancel connection reports
 `EvDBCancelDone` (chunk 7's behaviour; the generator completes cancels). Second, the admission

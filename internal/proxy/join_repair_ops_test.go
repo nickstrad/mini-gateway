@@ -123,6 +123,16 @@ func (o *opsRig) isRead(b []byte) bool {
 	return false
 }
 
+func (o *opsRig) ev(kind proxy.EventKind, conn proxy.ConnID, data []byte, n int) []proxy.Action {
+	before := o.e.Snapshot()
+	a := o.coreRig.ev(kind, conn, data, n)
+	after := o.e.Snapshot()
+	if o.b.open && after.CoalescePromoted-before.CoalescePromoted != after.CoalescePromotedRefused-before.CoalescePromotedRefused {
+		o.t.Fatal("a held flight promoted at an open breaker was not refused")
+	}
+	return a
+}
+
 func (o *opsRig) take(a []proxy.Action) {
 	for _, x := range a {
 		switch x.Kind {
