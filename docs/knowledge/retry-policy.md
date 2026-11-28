@@ -73,3 +73,19 @@ as `retry.Config.WithDefaults` for one instance).
   flight loses that reply (the reset then fails, no client error).
 - `Snapshot.Check` of the core enforces the budget bound only for `KindPreForwardOnce`; the
   ablation policy reports its own kind (2) so the engine invariants stay green while it misbehaves.
+
+## Behind the fair dispatcher (join with chunk 9, 2026-11-28)
+
+- Every admission queue runs chunk 9's fair dispatcher, so a granted retry waits behind it like
+  any request of its tenant. The lost lease is reported ended (`leaseLost` / `coreDirty` →
+  `fairEnded`) before `statementLost` offers the retry, and `lend` starts its next lease once.
+- A retry held back by the dispatcher (its tenant at its share at the last free lease, or the
+  limit reached) is not pool demand (`Queues.Releasable`): no dial for it. It still ends at the
+  request deadline (the clamp is on its queue timer) and the breaker re-check at the top of
+  `dispatch` covers lends made by `fairRedispatch` and after another tenant's lease ends.
+- A retry is a new push, so it takes a new round-robin turn at the tail of its tenant queue: a
+  tenant cannot gain service through retries; it pays one extra turn per retried request. Chunk
+  8's `pushes` and `served` count a retried request twice.
+- Fairness adds no row to `docs/fault-matrix.md` or `docs/error-contract.md`.
+- Tests: `internal/proxy/join_retry_fair_test.go`; scenario
+  `TestScenarioRetryStormTwoTenantsOfUnequalWeight` (`test/e2e/c12_c09_join_test.go`).
