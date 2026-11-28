@@ -496,11 +496,32 @@ grep '^| `' agent_work/chunks/lease-lab-port/NOTES.md | awk -F'`' 'NF>=7 && $4 !
 
 ## Gate
 
-`GATE_ONLY=G0,G1,G2,G3,G6 scripts/gate.sh lease-lab-port` on the clean tree at `c7ea95e`
-(stage build, baseline `98cee87`, `dirty_tree=false`): **overall pass**, exit 0,
-`counts_for_landing=false` because `GATE_ONLY` was used. Not the full gate: G4, G5, G7–G10
-were not run (deviation 1). Rows: G0 tools, gofmt, build, vet, tools-vet, tools-test, tidy
-pass; G1 detlint (27 package patterns), importlint, boundlint, paniccheck pass; G2 comments
-pass; G3 unit pass (1,245 s under load), counted pass (5 tests), race pass (6 package
-patterns); G6 tier-r pass (380 s, Postgres 17.11). `gate/result.json` is not committed. The
-only commit after `c7ea95e` changes this section of NOTES.md.
+**Repair round**, on the clean tree at `5e13280` (stage build, baseline `98cee87`,
+`dirty_tree=false`), `GATE_OUT=/tmp/zgw-lease-lab-port/gate scripts/gate.sh lease-lab-port`,
+all stages (no `GATE_ONLY`), load average 25 to 40 with three other gates running:
+**overall fail**, exit 1. `counts_for_landing=false` only because `GATE_OUT` was set; the
+orchestrator runs the landing gate.
+
+- Pass: G0 (all 7 rows), G1 (all 4), G2 comments, G3 unit (1,793 s: this is
+  `go test -count=1 -timeout 30m ./...`, including `agent_work/adversarial/lease-lab-port`),
+  G3 counted, G3 race, G4 markers, G4 sweep (2,296 s, 200 seeds), G8 gen-docs, G9 site;
+  G10 skip-none.
+- G5 fuzz fail: `internal/pgwire FuzzClassify` had `no execution rate in the go test
+  output`. Its 1,101-entry seed corpus did not finish baseline coverage within 20 s under
+  load, so no rate line was printed. No crash was found. Rerun alone (`go test -run '^$'
+  -fuzz '^FuzzClassify$' -fuzztime 20s ./internal/pgwire/`): PASS, 3,040 execs/s.
+- G6 tier-r fail: `TestTierRSlowReader` (`dropped 0 pauses 34`). G7 csv fail is the same run
+  (`tierr-slow-reader/faults.sql: 1 violating rows over 1 runs`; the other 236 SQL files
+  pass). This test is not touched by this branch, and the flake already exists on main:
+  `git archive 98cee87`, `MG_TIER_R=1 go test -count=10 -run '^TestTierRSlowReader$'`: 9
+  PASS, 1 FAIL (`dropped 0 pauses 27`). On this branch, `-count=5`: 4 PASS, 1 FAIL
+  (`dropped 0 pauses 28`). Under load the slow client is sometimes not dropped within the
+  test's window. Left for its owner; no product or unrelated test code changes in this
+  repair.
+- Rerun of the two red stages on the same clean tree,
+  `GATE_ONLY=G5,G6 GATE_OUT=/tmp/zgw-lease-lab-port/gate2 scripts/gate.sh lease-lab-port`:
+  **overall pass**, exit 0. G5 fuzz pass (406 s, 18 targets, 0 without a rate). G6 tier-r
+  pass (430 s, Postgres 17.11).
+- Running G3 rewrites tracked evidence logs under `agent_work/adversarial/lease-lab-port/
+  evidence/` (the adversary's harness appends to them). I restored them with `git checkout`
+  after each run. They are not part of this repair.
