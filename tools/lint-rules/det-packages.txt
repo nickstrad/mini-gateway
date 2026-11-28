@@ -47,3 +47,4 @@ internal/admission
 internal/obs/admsrc
 # Chunk 11: the coalescer core (flight table, join modes, caps, no-share list).
 internal/coalesce
+internal/obs/coalsrc
