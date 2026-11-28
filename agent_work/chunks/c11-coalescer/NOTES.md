@@ -277,6 +277,122 @@ DST_SEEDS=10 go test -count=1 -run 'TestScenarioCoalesce/coalesce-hot-key-(weigh
   mode a read arriving then is held behind it (a second read later), never joined to the retry.
   Conservative: no waiter gets a read started before it arrived.
 
+## Join repair round
+
+Repair builder: Opus (`claude-opus-5-5`), 2026-11-28, branch `work/c11-coalescer`, after Neon's
+scoped review of the join (`REVIEW-3.md`: FAIL, 1 blocker, 2 major, 1 minor). Decision (c)
+stands: a flight whose statement is lost with nothing reached is retried once for the whole
+flight. Each defect was where that decision met code that assumed otherwise. Each was fixed at
+its root after its probe was reproduced as a failing test in `internal/proxy`
+(`join_repair_test.go`). Mutations were run in the scratch copy `/tmp/zgw-c11-repair/mut`
+(deleted after), one source edit at a time.
+
+| Finding | Commit | Regression tests (failed before the fix) | Mutation that fails them |
+| --- | --- | --- | --- |
+| 1 BLOCKER: a running flight at its flight deadline offered and granted a retry on a flight `Table.expire` had removed | `a89f70f`: `statementLost` offers the loss only while the request's flight is still in the table (`flightGone`). A flight the coalescer has ended takes the declined path: `coalFailed` records the row, unfollows the owner (a no-op `Finish` on the gone flight), and every follower's `NoticeExpired` finds `e.ends[f]` set, so owner and followers get the same row | `TestRepairARunningFlightAtItsFlightDeadlineIsNeverOfferedARetry` (both join modes; refusal before (deadline − 1 ns, close at the deadline), at, and after the deadline; `coalesce.deadline` = statement / 2); `TestRepairAPromotedHeldFlightAtItsFlightDeadlineIsNeverOfferedARetry` (strict; deadline = statement / 2 and = statement; the same three timings). Each asserts offered 0, three or two identical replies with one `ReadyForQuery` each, no flight, waiter or queue entry left, nothing sent after, and a fresh read on the key works. Before the fix: `client 10 is on flight 1, the coalescer has it on 0` (the reviewer's probe) | M-R1: drop `!e.flightGone(req) &&` |
+| 2 MAJOR: `coalStart` moved `req.enq`, so a promoted held flight's request deadline moved by its hold time | `e0394e7`: `request.arrived` is set once in `startRequest`. `requestDeadline` counts from it, and `coalStart` still moves `enq`, so `engine.queue_wait` keeps measuring queue wait | `TestRepairAPromotedHeldFlightIsNeverRetriedAtOrPastItsArrivalPlusTheStatementTimeout` (`coalesce.deadline` statement / 2, = statement, 2 × statement; refusal at arrival + statement and 50 ms past it: shared error, asked 0); `TestRepairARetryOfAPromotedHeldFlightEndsAtItsArrivalPlusTheStatementTimeout` (deadline = and 2 × statement: retry granted at arrival + 7/8 statement, silent 1 ns before arrival + statement, everyone answered once at it, retry end `failed`, a late reply goes nowhere) | M-R2: `requestDeadline` from `req.enq` |
+| 2, after a handoff | (same commit; no code: `coalHandoff` moves the request, so `arrived` is the original leader's, at or before every follower's) | `TestRepairAfterAHandoffTheLeadersArrivalBoundsTheRetrySoNoFollowerGetsAStatementSentPastItsDeadline` (both modes; deadline 2 × statement so the flight deadline does not bind; the leader leaves, the follower that arrived 100 ms later owns the flight; refusal at 3/4 statement → retry; arm 1: the dial never opens, the retry is shed `53M01` exactly at the **leader's** arrival + statement, 100 ms before the follower's own deadline, and the late connection gets nothing; arm 2: the retry is sent before both deadlines and the follower gets its bytes) | M-R2b: `coalHandoff` gives the request the new owner's arrival |
+| 3 MAJOR: a held flight promoted behind a retry the breaker refused was left queued (pool-core flush) or forwarded (custom breaker) | `cc74b7c`: `coalStart` refuses the promoted flight when `breakerOpen()` (open or half-open, the same test chunk 12's re-check uses): `53M03` to its owner and every waiter, never queued, never forwarded. Counted as failed (reached no) and in the new `engine.coalesce_promoted_refused`, not as a shed: the admission core never saw it, so `requests_shed = admission.shed` and `breaker_flushed = admission.shed{breaker}` still hold | `TestRepairAHeldFlightPromotedBehindARetryTheCustomBreakerRefusesIsRefusedWithAllItsWaiters` (both modes: the retried owner and its two waiters plus the held flight's owner and its follower each get one `53M03`; nothing sent; queued, coalesced, flights 0; strict: promoted 1, refused at promotion 1); `TestRepairAHeldFlightPromotedByThePoolBreakerFlushIsRefusedAndTheFlushLeavesNothingQueued` (the real pool core: a dial failure opens it; six clients `53M03`; queued 0 in the engine and the admission queues). Before: the read sent on connection 3 / `Queued 1` after the flush | M-R3: drop the `breakerOpen` branch |
+| 4 MINOR: the cross-tenant riding and handoff limit missing where fairness is read | `aa2028e`: `fairnessCapacityRows` ("Leases in flight across tenants", regenerated `docs/capacity-table.md`); `f3dd514`: `docs/knowledge/fairness.md` section "Coalesced flights and the limit"; the caveat below. `book/` not edited | — (generated document held by `scripts/gen-docs.sh --check`) | — |
+
+The fault matrix (`aa2028e`, generated) now says a flight whose flight deadline has passed is
+never offered a retry. It has a new row, "Held flight promoted while the breaker is open", and the
+new tests are listed on the rows they hold.
+
+**Handoff keep-alive caveat (finding 4).** Followers that only ride a read the leader runs to
+completion add no database work. A cross-tenant handoff is the exception. If tenant A starts a
+slow shared read and leaves (cancel or disconnect) with no follower, the proxy cancels the read
+(`LeftLast`) and frees A's share. With a follower of tenant B, `LeftHandoff` keeps the read
+running, and a zero-byte refusal re-queues and retries it. All of it is charged to A's share
+until the lease ends, while B spends none of its own. So B can hold database concurrency beyond
+its share at A's expense when A abandons shared reads. `coalesce.key_scope: tenant` gives strict
+isolation.
+
+### Every path that reaches `offerRetry` (item 1)
+
+`offerRetry` has one caller, `statementLost`. That function now declines to offer when the
+request carries a flight the coalescer no longer has. A request with no flight (`fl == 0`), or
+with coalescing off, behaves exactly as chunk 12 built it.
+
+| Caller of `statementLost` | Can the flight already be ended or removed? | Why it is safe now |
+| --- | --- | --- |
+| `statementDeadline` (pool core) ← `coalExpireOwner` `cpActive` (the flight deadline) | yes, always: `Table.expire` has removed it | `flightGone` → shared error (finding 1) |
+| `leaseFailed(CloseDBStatementDeadline)` (fixed set) ← `coalExpireOwner` `cpActive` | yes, always | same |
+| `statementDeadline` / `leaseFailed` ← the statement timer `tDBStatement` (`dbconn.go`) | no: while the flight is in the table the timer's loss is decision (c) (one retry for the flight, the flight still live, e.g. with `coalesce.deadline` above the statement timeout); once the flight deadline has fired it ended the statement through the row above and the statement timer was cancelled with the lease | `flightGone` declines if the flight is gone |
+| `leaseFailed(CloseDBLost)` ← `EvDBClosed` (`dbconn.go`) | only after the flight deadline, which ends the statement first (the lease is gone, so `leaseFailed` no longer reaches `statementLost`) | `flightGone` |
+| `leaseFailed(CloseDBViolation / CloseDBServerFatal)` (`relay`, `relayEvents`) | no: a lent owner's flight is ended only by `coalReady` (clears `req.fl` first), `coalFailed` (clears it first), `coalLeave` with `LeftLast` (clears it first) or the flight deadline (row 1) | `fl == 0` is chunk 12's unshared path; row 1 by `flightGone` |
+| `Table.Shutdown` → `NoticeExpireOwner` → `cpActive` | yes | `flightGone`, and the engine is draining (the policy declines too) |
+
+Other ways a flight ends while its owner still holds the request: a handoff (the flight lives on
+with a new owner; `Owner` still finds it), detaching at the reply cap (the flight stays in the
+table until `Finish`; the bytes already relayed make the loss reached, so no retry), and a queued
+owner at the flight deadline (`cpQueued`, shed through the admission queue, `req.fl` cleared). A
+queued retry's held flight promoted at an open breaker is finding 3.
+
+**Chain (finding 3).** A key has at most one running flight and one held flight. A third strict
+read arriving while the second is held follows the held flight; it does not form a third flight.
+The tests put such a follower (client 19) on the held flight: it gets `53M03` with the rest. When
+the refused promoted flight ends, its entry has no held flight behind it, so the chain stops. A
+retried owner of another key in the same flush is refused by the same rule.
+
+### The property test (item 5)
+
+`FuzzEngineOps` does not exist, and the chunk's operation fuzz target (`FuzzCoalesceOps`) drives
+the flight table alone. So the repair adds
+`TestRepairRandomFlightsRetriesDeadlinesAndBreakerTransitionsKeepTheInvariants`
+(`internal/proxy/join_repair_ops_test.go`). It runs **400 sequences** (60 under `-short`) of 160
+random operations each on the full engine, with the pool core (3 connections, breaker after 3
+failures), the fair dispatcher, the retry policy `pre-forward-once`, a custom breaker seam, and
+strict joins (relaxed in a quarter of the sequences). `coalesce.deadline` is statement / 2, =
+statement or 2 × statement. There are two operation mixes, one of them a slow database. Operations: a client sends one of two
+shared reads; a waiting client leaves and a new one logs in; a zero-byte write refusal followed
+at once by the close, or with the close later; a lost connection; a reply; server replies to
+startup, resets and checks; a dial opens or fails; time advances 1–150 ms with a timer; the
+custom breaker opens or closes; a cancel connection completes. `Engine.Invariants` runs after
+every event, and the engine/admission/pool agreement after every operation. An oracle checks
+that no client receives the reply of a retried statement at or after its own arrival +
+`timeouts.statement`. Each sequence ends with a drain: every client answered, all closed, past the
+admission queues' quiet window, then `Quiesce`. The test fails if any of these never happened
+over the run: retries granted, flights expired, held flights, promotions, promotions refused at an
+open breaker, breaker refusals of a retry, pool-breaker flushes, handoffs. One run reached 521
+grants, 577 expiries, 597 promotions, 182 refused promotions, 99 breaker refusals of a retry,
+194 flushes and 270 handoffs (about 9 s).
+
+What it found: **on the repaired tree, nothing**. With each fix reverted it fails on its own:
+M-R1 at seed 0 (`client … is on flight 4, the coalescer has it on 0`), M-R2 at seed 109 and
+M-R2b at seed 384 (a client got a retried statement's reply 106 ms and 301 ms past its own
+deadline), M-R3 at seed 63. The `-short` run (60 sequences) catches M-R1 and M-R3 but not M-R2
+or M-R2b. Two harness facts turned up while building it, neither a defect. First, a statement
+deadline sends a cancel, and that client is not read until the cancel connection reports
+`EvDBCancelDone` (chunk 7's behaviour; the generator completes cancels). Second, the admission
+queues stay armed for their quiet window (16 intervals) after the last request, so the drain
+steps past it before `Quiesce`.
+
+### Results
+
+All on 2026-11-28, load average 8–9 on 4 cores (other sessions running alongside).
+
+| Check | Result |
+| --- | --- |
+| `gofmt -l`, `go build ./... && go vet ./...` | pass, nothing listed |
+| `go test -count=1 -timeout 30m ./internal/proxy/... ./internal/coalesce/... ./internal/admission/... ./internal/retry/... ./internal/config/...` | all pass (`proxy` 20.8 s with the property test) |
+| `./agent_work/adversarial/c09-fairness/...`, `.../c11-coalescer/...`, `.../c12-retry/...` | all three pass unchanged (no file under `agent_work/adversarial/` edited) |
+| `scripts/gen-docs.sh --check` | pass (`docs/capacity-table.md`, `docs/csv-schema.md`, `docs/fault-matrix.md` regenerated by the repair) |
+| 5-seed sweep: `DST_SEEDS=5 RUN_DIR=<dir> MG_C11_FULL_SWEEP=1 go test -run '^(TestScenarioCoalesce\|TestScenarioRetry\|TestScenarioRetryStormTwoTenantsOfUnequalWeight\|TestScenarioFairNoisyNeighbour\|TestScenarioFairNoisyNeighbourAblation\|TestScenarioFairManyTenants\|TestScenarioFairHeldTransactions\|TestScenarioFairResultsEqualDirect)$' ./test/e2e/` | pass (872 s): the 27 coalescer scenarios with replay and ablation, the fairness and retry scenarios |
+| `scripts/csv-assert.sh <dir>/<scenario> test/analysis/<scenario>/*.sql` per scenario | 0 failures in each of the 33 run directories (DuckDB v1.5.5) |
+| `GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh c11-coalescer` at `f3dd514`, clean tree | **overall pass** (`counts_for_landing` false by `GATE_ONLY`): G0 all, G1 detlint (32 patterns), importlint, boundlint, paniccheck, G2 comments (baseline `2e725b1`), G3 unit (1,284 s, every package including the adversarial ones), G3 counted, G3 race (115 s). The rewritten evidence logs under `agent_work/adversarial/lease-lab-port/` were restored with `git checkout`; `gate/result.json` and the gate logs removed |
+
+Size of the repair: product Go +65 / −25 lines (`request.arrived`, `flightGone`,
+`refusePromoted`, one counter with `Snapshot` realigned by gofmt, matrix and capacity text);
+tests +864 lines (`join_repair_test.go` 405, `join_repair_ops_test.go` 459).
+
+Commands:
+
+```
+go test -count=1 -run 'TestRepair' ./internal/proxy/                    # the six regression tests and the property test
+go test -count=1 -short -run 'TestRepairRandom' -v ./internal/proxy/    # 60 sequences
+```
+
 ## Repair round (2026-11-28, Opus, after Neon review 1 and Astra's attacks)
 
 | Item | Outcome |
@@ -713,6 +829,13 @@ flight `cancelled`), overflows by cap. Health rule: open point 10.
 8. The flight key is the tenant's length (8 bytes, big-endian), the tenant, then the exact text,
    so no two different (tenant, text) pairs share a flight whatever bytes either holds.
 9. A deadline or no-share expiry computed past the largest instant saturates at it.
+10. A held flight promoted while the breaker is open or half-open (`breakerOpen`) is refused
+    `53M03` with all its waiters, even when a half-open breaker would have let a new arrival
+    through as a trial. Conservative: it never adds a read behind an open breaker. Counted in
+    `engine.coalesce_promoted_refused`, as failed rather than shed (it never entered the
+    admission queues).
+11. A cross-tenant handoff keeps an abandoned read (and its retry) running on the leaving
+    tenant's share until the lease ends ("Join repair round", finding 4).
 
 ## Gate runs (`GATE_BASE=6cffb0f scripts/gate.sh c11-coalescer`, build stage)
 
