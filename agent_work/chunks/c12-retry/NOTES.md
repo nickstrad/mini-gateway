@@ -3,6 +3,166 @@
 Builder: Opus (`claude-opus-5-5`), 2026-11-27, branch `work/c12-retry`, worktree
 `/root/Software/mini-gateway-work/c12`, on top of `f93f0f2` (chunk 7 + 8 landed on main).
 
+## Join repair round
+
+Repair builder: Opus (`claude-opus-5-5`), 2026-11-28, branch `work/c12-retry`, the one repair
+round after `REVIEW-3.md` (NITS, four minor; the orchestrator fixed all four). **Test code only:
+none of the new tests found a defect, and no product code changed.**
+
+| Finding | Commit | Test |
+| --- | --- | --- |
+| 1 weights not asserted | `5599506` | `TestScenarioRetryStormTwoTenantsOfUnequalWeight` now requires tenant 1 (weight 1) to spend more than `weightedAtShareRatio` (10) times as long at its share (`TenantSnapshot.AtShare`) as tenant 0 (weight 3). Measured with the weights on, seeds 1–10: tenant 1 at 252–382 ms, tenant 0 at 0–2.6 ms (at least 100 times longer). Without the weights (the reviewer's mutation M-w1, `Fairness: admission.FairConfig{}`): ratio 0.48–1.6. M-w1 now fails the test on seeds 1, 2 (ratio) and 3 (no request ever held at its share). |
+| 2 exhaustion on pinned seeds | `2f91e85` | `retry-storm/on`: `checkBudget` requires `Refused[budget] > 0` on **every** seed (`RetrySpec.Exhausts` is now a bool, set by the storm and inherited by the weighted variant; the pinned seed list is gone). Construction below. |
+| 3 four untested interactions | `bafef03` | (a) `TestJoinARetryOverflowingItsTenantQueueShedsTheEarlierWaitingRetry`, `TestJoinARetryRefusedAtTheTenantCapIsShedAndEndsItsRetry`; (b) `TestJoinARetryAboveItsShareTakesAFreeLeaseButNotTheLastOneReserved`; (c) `TestJoinARetryHeldByAFairLimitBelowTheConnectionsIsNoDemand`; (d) `TestJoinTheBreakerReCheckRunsWhenAnotherTenantsLeaseIsLostWhileARetryIsHeldBack`, all in `internal/proxy/join_retry_fair_test.go` |
+| 4 package global reset without `defer` | `2be82a6` | `TestJoinEveryRetryEngineTestHoldsBehindTheFairDispatcher` resets `coreAdmission` with `defer` |
+
+Knowledge: `docs/knowledge/retry-policy.md`, section "Forcing budget exhaustion in a tier S
+scenario" (`3871406`).
+
+### Finding 2: exhaustion by construction
+
+Two facts from a trace of the policy (a throw-away wrapper around `retry.Policy` that logged every
+`Attempt` and `Decide`, in a scratch copy): (1) the bucket gets a deposit only at a forward of a
+first attempt (`Engine.forward` → `attempted`); (2) a write to a doomed connection is refused, and
+the retry decided, in the same instant as its forward, before any other lend. A doom burst
+therefore gives exactly one eligible zero-byte refusal: the pool marks the siblings suspect and
+checks them before they are lent again. That is why the old storm exhausted only when the relay's
+"doom every tenth query" pattern happened to put two eligible losses within ten first attempts.
+
+The storm now runs `0–450 ms`, a doom burst at `600 ms`, a **spend phase** `700–720 ms`
+(`stormSpendAt`, `stormSpendFor`), a second burst at `800 ms`, then `850–3500 ms`
+(`stormExhaustAt`). The relay's fault window moved from `700–1700 ms` to `850–1850 ms` (same
+length), so the spend phase has no fault except burst 1. In the spend phase each client sends one
+operation (20 ms is shorter than `retryClientGap`, so its next one waits for `850 ms`). The first
+lend lands on a doomed connection and its retry takes the one token (level 10 → 0). At most the other
+7 clients' first attempts deposit after it (≤ 7 tenths), and nothing fails there that a client
+would resend. At `850 ms` every connection has been idle for 50 ms and is doomed. The first
+forward deposits one tenth, the level is at most 8 < 10, and the retry is refused for budget, on
+every seed and whatever order the dispatcher serves in. Traced: level 8 at `850.1 ms` on seeds
+1, 2, 4, 8. The margin is `10 - clients` tenths, so the construction holds for fewer than ten
+clients. No simulated time was added (still 4 s). `RelayPlan.DoomAllAt` became a list. The sweep
+scenario keeps one burst at `300 ms`.
+
+Seeds 1 to 30, arm `on`, `Policy.Refused[budget]` (probe: `RunRetry(sp, ArmOn, seed, "", "")`
+plus `CheckProduct`, and `CheckAblation` on the `everything` arm; the "no dispatcher" columns
+come from a scratch copy whose `proxy.New` skips `installFair`). All 360 runs passed every check:
+2 specs × 3 arms × 30 seeds × 2 builds.
+
+| Seed | `retry-storm`, fair dispatcher | `retry-storm`, no dispatcher | `retry-storm-weighted`, fair | `retry-storm-weighted`, no dispatcher |
+| --- | --- | --- | --- | --- |
+| 1 | 3 | 3 | 4 | 3 |
+| 2 | 1 | 3 | 2 | 3 |
+| 3 | 4 | 2 | 3 | 2 |
+| 4 | 5 | 2 | 1 | 2 |
+| 5 | 2 | 2 | 2 | 2 |
+| 6 | 2 | 2 | 1 | 2 |
+| 7 | 2 | 3 | 1 | 3 |
+| 8 | 3 | 3 | 2 | 3 |
+| 9 | 1 | 5 | 2 | 5 |
+| 10 | 1 | 4 | 2 | 4 |
+| 11 | 3 | 3 | 3 | 3 |
+| 12 | 4 | 4 | 3 | 4 |
+| 13 | 2 | 2 | 4 | 2 |
+| 14 | 3 | 3 | 3 | 3 |
+| 15 | 2 | 2 | 2 | 2 |
+| 16 | 3 | 1 | 5 | 1 |
+| 17 | 2 | 3 | 3 | 3 |
+| 18 | 1 | 2 | 2 | 2 |
+| 19 | 2 | 4 | 3 | 4 |
+| 20 | 3 | 2 | 2 | 2 |
+| 21 | 1 | 4 | 2 | 4 |
+| 22 | 2 | 1 | 1 | 1 |
+| 23 | 2 | 2 | 4 | 2 |
+| 24 | 3 | 2 | 1 | 2 |
+| 25 | 2 | 2 | 3 | 2 |
+| 26 | 2 | 2 | 2 | 2 |
+| 27 | 1 | 1 | 1 | 1 |
+| 28 | 3 | 3 | 1 | 3 |
+| 29 | 7 | 4 | 2 | 4 |
+| 30 | 4 | 3 | 3 | 3 |
+
+Without the dispatcher the two specs give the same numbers, as they should: without the fair
+dispatcher the tenant count and the weights change nothing. Before the repair, behind the
+dispatcher, seeds 2, 4 and 8 of 1–10 never exhausted (`[3, 0, 4, 0, 2, 1, 2, 0, 1, 4]`).
+
+### What moved
+
+- `retry-storm` (all arms) and `retry-storm-weighted`: a new schedule, so every digest and every
+  flushed file of the storm changed. Nothing stores them: no golden digest or committed baseline
+  holds a retry scenario (the `internal/obs/simrun` baseline reruns the storm at seed 1 and checks
+  it; it passes, below). `scripts/gen-docs.sh --check` passes: no generated document moved.
+- The storm's fault window starts at `850 ms` instead of `700 ms`, and its recovery point
+  (`3200 ms`) is unchanged.
+- Unchanged: `retry-no-double-apply` (same single burst), `CheckProduct` and `CheckAblation`,
+  `budget.sql`, `conservation.sql`, `load.sql`, both canaries, the tier R storm.
+- Superseded: "The one place the join moved a test" below (the pin to 1, 3, 5), Deviation 1 and
+  stated limit 8 (both now say exhaustion is by construction).
+
+### Finding 3: the four join tests
+
+- (a) **Overflow:** tenant ring of 1 (`queue.tenant_capacity`), two writes of tenant 0 lent on two
+  idle connections, both refused with zero bytes. The second retry's push sheds the first
+  (`ReasonOverflow`), whose client gets `53M01` (retry end `shed`), and `RetryPending` stays 1.
+  The surviving retry is lent to the replacement connection and completes: ends `shed` 1 and
+  `completed` 1, pending 0, fair lease starts and ends equal to the engine's. **Tenant cap:**
+  `queue.max_tenants` 2, one connection. Tenant 0's write is lent and tenants 1 and 2 queue, so
+  tenant 0's empty queue is evicted for tenant 2. The refused write's retry finds no tenant slot
+  (`ReasonTenants`) and is shed `53M01`: asked 1, pending 0, end `shed` 1, the other two still
+  queued, tenant 0 in flight 0.
+- (b) Limit 6, equal weights (share 3). Tenant 0 holds 4 transactions plus a write, and tenant 1
+  holds 1 transaction. After the refusal tenant 0 is at 4 of its share 3: the retry is held, with
+  `Releasable` 0 and no dial (the last lease is reserved for tenant 1). Tenant 0 commits one
+  transaction (3, two leases free): the work-conserving rule lends the freed connection to the
+  retry. During that reset the retry was releasable, so the pool dialled once; the test opens that
+  dial so a lease is idle. A new tenant-0 request is held (`HeldShare` +1, `Releasable` 0, nothing
+  written to the idle connection), and tenant 1's request gets the idle connection. Mutation:
+  removing the last-slot reservation from `Fair.Pick` fails it.
+- (c) `pool.connections` 4, `fairness.limit` 3. The test installs the fair dispatcher through the
+  `Queue` seam (`seamFair`: the same `admission.NewFair(c.FairConfig())` the engine installs) so
+  it can read `Queues.Releasable` without new product code. Tenant 0 holds a transaction and a
+  write, tenant 1 a transaction (3 = the limit), and tenant 2's request waits (`Releasable` 0, no
+  dial). After the refusal: `Releasable` 1, one dial, and tenant 2 (below its share) gets it.
+  Then the retry waits at the limit: `Releasable` 0, no dial over five 100 ms events, 3 open of 4.
+  Tenant 1 commits and the retry gets that connection without a dial, then completes. **Mutation
+  M-c2 (`checkoutDemand` returns `0, false`) now fails this join test.**
+- (d) The premise of `retryHeldAtShare`, plus a tenant-1 `SELECT pg_sleep(1)` running on a new
+  connection. Tenant 1's transaction commits, so one connection is idle while the retry stays held
+  (last slot reserved for tenant 1). Then the running statement's connection is lost
+  (`EvDBClosed`, not in a transaction, so the client stays open and nothing else dispatches). Breaker
+  seam closed: the retry gets the idle connection in that event. Open: the retry is answered
+  `53M03`, retry end `breaker`, nothing forwarded. **Mutation M-b3 (no `fairRedispatch` in
+  `Engine.finish`) now fails this join test.** A first version lost tenant 1's *transaction*
+  instead: closing that client dispatches on its own, so M-b3 survived. That is why the lost lease
+  is a plain statement.
+
+Mutations in a scratch copy (`/tmp/zgw-c12/mut`, deleted after), `go test -run '^TestJoin'
+./internal/proxy/`:
+
+| Mutation | Result |
+| --- | --- |
+| M-b3 `e.fairRedispatch()` removed from `Engine.finish` | killed: `TestJoinTheBreakerReCheckRunsWhenAnotherTenantsLeaseIsLostWhileARetryIsHeldBack` |
+| M-c2 `checkoutDemand` returns `0, false` | killed: `TestJoinARetryHeldByAFairLimitBelowTheConnectionsIsNoDemand` |
+| the last-slot reservation removed from `Fair.Pick` | killed: `TestJoinARetryAboveItsShareTakesAFreeLeaseButNotTheLastOneReserved` |
+| M-w1 `Fairness: admission.FairConfig{}` in `RetrySpec.engineConfig` | killed: `TestScenarioRetryStormTwoTenantsOfUnequalWeight` (seeds 1–3) |
+| the storm's second doom burst removed (`DoomAllAt` = 600 ms only) | killed: `checkBudget` fails `retry-storm/on` seed 7 ("the budget was never exhausted"; probe over seeds 1–10, the other nine still exhaust by chance) |
+
+### Results
+
+All on 2026-11-28 at the repair's code commits (`2be82a6`..`5599506`; NOTES only after them), load
+average 5–15 on 4 cores (other sessions' runs beside these):
+
+| Check | Result |
+| --- | --- |
+| `go build ./... && go vet ./...`, `gofmt -l` | pass, nothing listed |
+| `go test -count=1 ./internal/proxy/... ./internal/admission/... ./internal/retry/... ./internal/config/...` | all pass |
+| `go test -count=1 ./internal/obs/simrun/` (the baseline, the storm at seed 1 included) | pass (525 s) |
+| `GOMAXPROCS=2 go test -count=1 -run '^(TestScenarioRetry\|TestCanaryRetry\|TestScenarioFair\|TestCanaryFair)' ./test/e2e/` (seed 1) | pass (161 s): every fairness scenario and canary, both retry scenarios × 3 arms, the weighted storm seeds 1–3, both retry canaries |
+| `./agent_work/adversarial/c09-fairness/...`, `./agent_work/adversarial/c12-retry/...` | both pass unchanged (no file under `agent_work/adversarial/` edited) |
+| `scripts/gen-docs.sh --check` | pass (all four generators current) |
+| 10-seed sweep, `DST_SEEDS=10 RUN_DIR=… go test -run '^(TestScenarioRetry\|TestScenarioRetryStormTwoTenantsOfUnequalWeight)$' ./test/e2e/` | pass (190 s): `retry-storm` and `retry-no-double-apply`, 3 arms × seeds 1–10 each, replay law and flushed-file equality; the weighted storm seeds 1–3 |
+| `scripts/csv-assert.sh <sweep>/<scenario> test/analysis/<scenario>/*.sql` | 0 failures: `retry-storm` (`budget.sql`, `conservation.sql`, `load.sql` over 30 runs), `retry-no-double-apply` (the same three over 30 runs). Given the sweep root alone the script also lists the 94 scenarios with SQL files and no run in that root; that is a usage artefact, not a failure of these runs |
+| `GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh c12-retry` | <GATE> |
+
 ## Join with chunk 9
 
 Join builder: Opus (`claude-opus-5-5`), 2026-11-28, branch `work/c12-retry`, worktree
@@ -147,6 +307,8 @@ the order is `SELECT 11` (t1), `SELECT 12` (t0), `SELECT 13` (t1); with the zero
 the same three and then the retried write).
 
 ### The one place the join moved a test
+
+(Superseded by "Join repair round": the pin below is gone and the storm exhausts by construction.)
 
 `retry-storm/on` requires a budget refusal on pinned seeds (Deviation 1: exhaustion was never by
 construction). Behind the fair dispatcher the storm's four tenants are served round robin instead
@@ -377,6 +539,10 @@ health rule gives the same state with and without exhausted retries) and
   after the gap goes, without a check, to a doomed connection, its first write fails with zero
   bytes accepted, and the policy grants the retry from the floor (4 tokens in the sweep, 1 in the
   storm's one-token budget: the bucket starts full at one token).
+- **A budget refusal in the storm's `on` arm** (since the join repair round): the second doom
+  burst (800 ms) follows a 20 ms spend phase in which each client sends one operation, so at most
+  seven deposits follow the grant that spends the one token, and the first lend at 850 ms is
+  refused for budget at a level of at most 8 tenths ("Join repair round", Finding 2).
 - **Ablation duplicates (sweep).** A text the relay killed at `after-applied` (the fake applied
   it, the relay cut before the reply) is exempt from every later fault; the breaker is effectively
   off in the sweep (`pool.MaxBreakerFailures`), so `Everything`'s retry of it waits for a
@@ -480,7 +646,9 @@ every row (only `lost-after-read` says yes, with its conditions).
 
 ## Deviations
 
-1. **Exhaustion in the scenarios is shown on pinned seeds, not by construction.** Corrected
+1. **Exhaustion in the scenarios was shown on pinned seeds, not by construction, until the join
+   repair round; since then the storm exhausts by construction on every seed** (see "Join repair
+   round", Finding 2; the history below is kept). Corrected
    reason (review minor 6): before the repair the scenarios retried 12–17 (storm) and 4–9 (sweep)
    times, but the `on` arm's floor of 4 tokens plus 450–835 first attempts (a tenth of a token
    each, 503–555 and 217–266 tenths lost at the 20-token cap) kept the bucket far above one
@@ -557,8 +725,11 @@ exactly, which the orchestrator has narrowed. No adversarial test asserts someth
    closed for the retry decision and for the re-check before the forward.
 7. A retry refused at the forward because the breaker opened keeps its withdrawn token (decision
    10); the budget is not refunded.
-8. Budget exhaustion in tier S is required only on the storm's pinned seeds 1, 3, 5 (Deviation 1;
-   seed 2 stopped exhausting behind the fair dispatcher, "Join with chunk 9").
+8. Budget exhaustion in tier S is required on every seed of the storm's `on` arm, by construction
+   (two doom bursts around a one-operation spend phase; "Join repair round"). The construction
+   needs fewer than ten clients (margin `10 - clients` tenths) and the relay's fault window kept
+   out of the spend phase; `retry-no-double-apply` (20-token cap) does not exhaust and is not
+   required to.
 4. The cap is per instance and is not divided by N: the fleet's banked credit is N × cap.
 5. `retry.floor` is the bucket's starting level (in tokens), not a time-based reserve: a fresh
    instance can retry `floor` times before deposits; after that only the 10% ratio refills it.
