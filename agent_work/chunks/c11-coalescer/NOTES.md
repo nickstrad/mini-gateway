@@ -372,7 +372,7 @@ flight `cancelled`), overflows by cap. Health rule: open point 10.
 | 3 | `6158b29` (coalescer seeds capped at 10 / 1 in the sweep) | G4 timeout again, in chunk 6's `TestScenarioE2E` (every coalescer scenario had passed); load 30–45 with another agent's gate running |
 | 4, 5 | stopped / dirty tree | a stray fuzz input left by a killed `fuzz-plant.sh` made one start dirty; restarted |
 | 6, 7 | `1eccd4c`, `6fb6d76` (1,000-client tests out of G3; one coalescer baseline in simrun) | G3 failed: `internal/obs/simrun` hit its 30-minute package timeout (in chunk 3/4 tests in run 7); also chunk 7's wall-clock `TestFuzzPoolOpsCostIsBounded` under the race detector (11.9 ms against 5 ms). Load average 25–40 with three other agents' full gates (c09, c12, lease-lab-port) running at the same time |
-| final | see "Final gate" below | run after the other gates finished |
+| 8 (final) | `d37bf98` | **pass, `counts_for_landing: true`**, clean tree, build stage: G3 unit 919 s, race 57 s; G4 sweep 1,466 s (200 seeds per scenario); G5 19 fuzz targets (two retried once on Go's own deadline error, CR-2); G6 tier R 420 s (Postgres 17.11); G7 5,359 run directories, 111 scenarios with SQL; G8, G9; G10 extra 56 s (all four fuzz plants found in 1–3 s; core, engine and hot-key tests green). `result.json` was deleted afterwards, not committed |
 
 ## Commands
 
