@@ -126,7 +126,7 @@ health rule gives the same state with and without exhausted retries) and
   `Reached == No` and clients retry only `53M01`, `53M03`, `08006` (never `08007`), and `08006`
   for a write means reached-no.
 
-## Mutation proofs (scratch copy `/tmp/zgw-c12/mut`, script `/tmp/zgw-c12/mutate.sh`)
+## Mutation proofs (scratch copy under `/tmp/zgw-c12/`, deleted after the run; each mutation was one string replacement and the listed tests)
 
 | Mutation | Killed by |
 | --- | --- |
@@ -151,14 +151,13 @@ Both tier S scenarios, all three arms (`off`, `on`, `everything`), **207 distinc
 (1–207), every seed run twice for the replay law: 1,242 distinct (scenario, arm, seed) runs, all
 passed, 0 failed. The runner takes at most 20 seeds per call (as chunk 7's) and the three pinned
 seeds (1, 2, 3, `test/e2e/testdata/seeds.txt`) come first, so the sweep was twelve calls with
-`DST_SEEDS=20` and `DST_SEED_BASE` 4, 21, 38, …, 191 (`/tmp/zgw-c12/sweep.sh`, one `RUN_DIR`
-per call, logs `/tmp/zgw-c12/sweep-<base>.log`; each call: 120 passed, 0 failed). Distinct seeds
+`DST_SEEDS=20` and `DST_SEED_BASE` 4, 21, 38, …, 191 (a scratch script, one `RUN_DIR`
+per call; each call: 120 passed, 0 failed). Distinct seeds
 counted from the `--- PASS` lines of all twelve logs.
 
 `scripts/csv-assert.sh <run-dir>/<scenario> test/analysis/<scenario>/*.sql` over every call's
 runs: all 24 (12 calls × 2 scenarios) green: "3 SQL files run, 0 failures"
-each (`budget.sql`, `conservation.sql`, `load.sql`; DuckDB v1.5.5). Logs
-`/tmp/zgw-c12/csv-sweep.out`, `/tmp/zgw-c12/csv-rest.out`.
+each (`budget.sql`, `conservation.sql`, `load.sql`; DuckDB v1.5.5). The scratch logs were deleted after the counts were recorded here.
 
 Without `DST_SEEDS` (the unit run, `go test ./...`) `TestScenarioRetry` runs seed 1 only, so the
 package stays inside the gate's 30-minute `go test` limit; the gate's own sweep (G4) sets
