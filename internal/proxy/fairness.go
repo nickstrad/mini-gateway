@@ -136,7 +136,11 @@ func fairnessCapacityRows(c Config) []CapacityRow {
 	return []CapacityRow{
 		{"Leases in flight across tenants (the fair limit; held transactions count)", "the database's concurrency; each tenant's share of it",
 			itoa(f.Limit) + ", the value of pool.connections", "pool.connections",
-			"The request waits in its tenant queue. A tenant below its share (limit x weight / active weight, at least 1) is lent before one at or above it, and the last free lease is held back only while an active tenant is below its share", "queue.interval / queue.target", "admission.in_flight"},
+			"The request waits in its tenant queue. A tenant below its share (limit x weight / active weight, at least 1) is lent before one at or above it, " +
+				"and the last free lease is held back only while an active tenant is below its share. " +
+				"The limit counts leases, not answers: with coalesce.key_scope all-tenants a follower of another tenant rides a flight on the owner's lease and spends none of its own share, " +
+				"and when the owner leaves, a follower of another tenant takes the flight over and keeps the read (and a retry of it) running on the leaving tenant's share until the lease ends. " +
+				"coalesce.key_scope tenant keeps every flight inside one tenant (strict isolation)", "queue.interval / queue.target", "admission.in_flight"},
 		{"Tenants with leases in flight (fair dispatcher state)", "proxy memory", "at most the leases in flight; " + itoa(f.MaxLeases), "pool.connections",
 			"Cannot fill: a state exists only while its tenant holds a lease and is removed when its last lease ends", "-", "admission.fair_states"},
 		{"Tenant weights", "proxy memory", itoa(admission.MaxWeights) + " entries, each 0 to " + itoa(admission.MaxWeight), "fairness.weights",
