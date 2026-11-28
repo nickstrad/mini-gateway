@@ -8,6 +8,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/simtest"
 )
 
+const weightedAtShareRatio = 10
+
 func RetryStormWeightedSpec() RetrySpec {
 	sp := RetryStormSpec()
 	sp.Name = "retry-storm-weighted"
@@ -52,10 +54,20 @@ func TestScenarioRetryStormTwoTenantsOfUnequalWeight(t *testing.T) {
 				t.Fatalf("the weighted shares never held a request back during the storm\n%s", replay)
 			}
 			served := 0
+			var atShare [2]int64
 			for _, row := range adm.PerTenant {
 				if row.Served > 0 {
 					served++
 				}
+				for i := range atShare {
+					if row.Tenant == proxysim.TenantName(i) {
+						atShare[i] = row.AtShare
+					}
+				}
+			}
+			if atShare[1] == 0 || atShare[1] <= weightedAtShareRatio*atShare[0] {
+				t.Fatalf("the weights did not take effect: tenant 1 (weight 1) at its share %d ns, tenant 0 (weight 3) %d ns, want more than %d times\n%s",
+					atShare[1], atShare[0], weightedAtShareRatio, replay)
 			}
 			if served != 2 {
 				t.Fatalf("%d tenants served\n%s", served, replay)
