@@ -1,5 +1,5 @@
 -- requires: retry.attempts retry.retries retry.budget_level retry.budget_floor retry.budget_cap
--- claim: retry-storm, every arm: in every flush window, retries times ten are at most the first attempts of the window plus the budget (in tenths) carried into it, which is at most the cap; from the start of the run, at most a tenth of the first attempts plus the floor; the level never passes the cap. With the policy off there is no retry at all.
+-- claim: retry-no-double-apply, every arm: in every flush window, retries times ten are at most the first attempts of the window plus the budget (in tenths) carried into it, which is at most the cap; from the start of the run, at most a tenth of the first attempts plus the floor; the level never passes the cap. With the policy off there is no retry at all.
 SELECT run_id || ': schema_version ' || schema_version AS violation FROM runs WHERE schema_version <> 1
 UNION ALL
 (WITH w AS (

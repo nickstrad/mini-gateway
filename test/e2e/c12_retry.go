@@ -1,7 +1,9 @@
 package e2e
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/admission"
@@ -41,6 +43,7 @@ const (
 	retryFlush      = 500 * time.Millisecond
 	retryCapTokens  = 20
 	retryFloor      = 4
+	stormCapTokens  = 1
 	retryClientGap  = 25 * time.Millisecond
 	retryWriteTime  = 2 * time.Millisecond
 	fastBreakerBest = 5 * time.Millisecond
@@ -59,6 +62,9 @@ type RetrySpec struct {
 	Breaker  int
 	Recovery time.Duration
 	Plant    retry.Plant
+	Cap      int64
+	Floor    int64
+	Exhausts []int64
 }
 
 type RetryRun struct {
@@ -97,7 +103,7 @@ func RetryStormSpec() RetrySpec {
 	return RetrySpec{Name: "retry-storm", Clients: 8, Tenants: 4, Conns: 4, Duration: 4 * time.Second,
 		Phases:  []Phase{{0, 450 * time.Millisecond}, {700 * time.Millisecond, 3500 * time.Millisecond}},
 		Relay:   RelayPlan{From: 700 * time.Millisecond, Until: 1700 * time.Millisecond, DoomAllAt: 600 * time.Millisecond, Pattern: StormPattern},
-		Breaker: 3, Recovery: 3200 * time.Millisecond}
+		Breaker: 3, Recovery: 3200 * time.Millisecond, Cap: stormCapTokens, Floor: stormCapTokens, Exhausts: []int64{1, 2, 3}}
 }
 
 func RetrySweepSpec() RetrySpec {
@@ -113,7 +119,7 @@ func (sp RetrySpec) engineConfig(arm RetryArm) proxy.Config {
 		Admission: admission.Config{Rule: admission.RuleTimeout, LIFO: admission.LIFOAdaptive}}
 	switch arm {
 	case ArmOn:
-		c.Retry = retry.Config{Kind: retry.KindPreForwardOnce, CapTokens: retryCapTokens, FloorTokens: retryFloor, Plant: sp.Plant}
+		c.Retry = retry.Config{Kind: retry.KindPreForwardOnce, CapTokens: cmp.Or(sp.Cap, retryCapTokens), FloorTokens: cmp.Or(sp.Floor, retryFloor), Plant: sp.Plant}
 	case ArmEverything:
 		c.Seams.Retry = proxy.NewRetryCore(retrytest.NewEverything())
 	}
@@ -291,11 +297,15 @@ func (r *RetryRun) checkBudget() error {
 	if p.Retries == 0 || e.RetriedRequests == 0 {
 		return failf("no retry with the policy on: %+v", p)
 	}
+	if slices.Contains(r.Spec.Exhausts, r.Seed) && p.Refused[retry.RefusedBudget] == 0 {
+		return failf("seed %d: the budget was never exhausted (cap %d tokens): %+v", r.Seed, p.Cap/retry.WithdrawTenths, p)
+	}
 	if p.Retries*retry.WithdrawTenths > p.Attempts*retry.DepositTenths+p.Floor {
 		return failf("%d retries for %d first attempts and the floor %d", p.Retries, p.Attempts, p.Floor)
 	}
-	if forwards := e.StagePassed[proxy.StageForward]; forwards != p.Attempts+p.Retries {
-		return failf("%d statements forwarded for %d first attempts and %d retries", forwards, p.Attempts, p.Retries)
+	if forwards := e.StagePassed[proxy.StageForward]; forwards != p.Attempts+p.Retries-e.RetryEnds[proxy.RetryEndBreaker] {
+		return failf("%d statements forwarded for %d first attempts and %d retries (%d refused at the forward)", forwards, p.Attempts, p.Retries,
+			e.RetryEnds[proxy.RetryEndBreaker])
 	}
 	return nil
 }
@@ -304,8 +314,14 @@ func (r *RetryRun) CheckAblation() error {
 	if r.forbiddenRetries() == 0 {
 		return failf("the retry-everything arm retried no failure the contract forbids")
 	}
-	if r.Policy.Retries <= r.Engine.RetriedRequests && r.Engine.RetriedRequests == 0 {
-		return failf("the retry-everything arm retried nothing")
+	if n := r.Duplicates(); n == 0 {
+		return failf("the retry-everything arm applied no statement twice")
+	}
+	if forwards := r.Engine.StagePassed[proxy.StageForward]; forwards <= r.Policy.Attempts {
+		return failf("the retry-everything arm forwarded %d statements for %d first attempts: no amplification", forwards, r.Policy.Attempts)
+	}
+	if r.CheckProduct() == nil {
+		return failf("the retry-everything arm passes the product checks")
 	}
 	return nil
 }

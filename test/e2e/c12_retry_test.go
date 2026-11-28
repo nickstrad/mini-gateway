@@ -9,7 +9,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/sim/simtest"
 )
 
-const retrySweepCap = poolSweepSeeds
+const retrySweepCap = 10
 
 func retryReplay(name string, arm RetryArm, seed int64) string {
 	return "REPLAY: go test ./test/e2e -run '^TestScenarioRetry$/^" + name + "$/^" + arm.String() + "$' -seed=" + itoa(int(seed)) + " -count=1"
@@ -52,6 +52,7 @@ func TestScenarioRetry(t *testing.T) {
 			if testing.Short() {
 				t.Skip("retry scenarios: run without -short (sweep, gate)")
 			}
+			t.Parallel()
 			seeds := simtest.Seeds(t)
 			if os.Getenv("DST_SEEDS") == "" && os.Getenv("DST_SEED") == "" {
 				seeds = seeds[:1]
