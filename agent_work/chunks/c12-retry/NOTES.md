@@ -161,7 +161,7 @@ average 5–15 on 4 cores (other sessions' runs beside these):
 | `scripts/gen-docs.sh --check` | pass (all four generators current) |
 | 10-seed sweep, `DST_SEEDS=10 RUN_DIR=… go test -run '^(TestScenarioRetry\|TestScenarioRetryStormTwoTenantsOfUnequalWeight)$' ./test/e2e/` | pass (190 s): `retry-storm` and `retry-no-double-apply`, 3 arms × seeds 1–10 each, replay law and flushed-file equality; the weighted storm seeds 1–3 |
 | `scripts/csv-assert.sh <sweep>/<scenario> test/analysis/<scenario>/*.sql` | 0 failures: `retry-storm` (`budget.sql`, `conservation.sql`, `load.sql` over 30 runs), `retry-no-double-apply` (the same three over 30 runs). Given the sweep root alone the script also lists the 94 scenarios with SQL files and no run in that root; that is a usage artefact, not a failure of these runs |
-| `GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh c12-retry` | <GATE> |
+| `GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh c12-retry` | at `ea59edd`, clean tree: **overall pass** (`counts_for_landing` false by `GATE_ONLY`): G0 all, G1 detlint (30 patterns), importlint, boundlint, paniccheck, G2 comments (baseline `d5dc685`), G3 unit (850 s, every package including both adversarial packages), G3 counted, G3 race (127 s). The rewritten evidence logs under `agent_work/adversarial/` were restored with `git checkout`; `gate/result.json` and the untracked `gate/` logs removed |
 
 ## Join with chunk 9
 
