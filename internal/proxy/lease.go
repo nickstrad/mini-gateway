@@ -25,7 +25,7 @@ func (e *Engine) startRequest(c *client, body []byte) {
 	}
 	e.snap.StagePassed[StageReject]++
 	e.nextReq++
-	req := &request{id: e.nextReq, msg: pgwire.AppendQuery(nil, text), unit: u, inTx: inTx, enq: e.now, tenant: c.tenant}
+	req := &request{id: e.nextReq, msg: pgwire.AppendQuery(nil, text), unit: u, inTx: inTx, enq: e.now, arrived: e.now, tenant: c.tenant}
 	if inTx && c.db != nil {
 		e.snap.Accepted++
 		c.req = req

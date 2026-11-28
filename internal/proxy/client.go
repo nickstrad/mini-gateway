@@ -26,6 +26,7 @@ type request struct {
 	unit    work.Unit
 	inTx    bool
 	enq     Instant
+	arrived Instant
 	sent    Instant
 	start   int64
 	relayed int64
