@@ -64,7 +64,10 @@ func TestScenarioRetry(t *testing.T) {
 				t.Run(arm.String(), func(t *testing.T) {
 					t.Parallel()
 					for _, seed := range seeds {
-						t.Run("seed="+itoa(int(seed)), func(t *testing.T) { runRetry(t, sp, arm, seed) })
+						t.Run("seed="+itoa(int(seed)), func(t *testing.T) {
+							t.Parallel()
+							runRetry(t, sp, arm, seed)
+						})
 					}
 				})
 			}
