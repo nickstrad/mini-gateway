@@ -9,7 +9,7 @@ The set covers three C4 levels plus a deployment view: system context, container
 ## Diagrams
 
 <!-- diagram-table:start -->
-**Built so far: chunks 0–8. Dashed parts are planned.** The Built column counts the elements of each diagram that exist in the code.
+**Built so far: chunks 0–9. Dashed parts are planned.** The Built column counts the elements of each diagram that exist in the code.
 
 | # | Level | File | Built | Shows |
 | --- | --- | --- | --- | --- |
@@ -19,7 +19,7 @@ The set covers three C4 levels plus a deployment view: system context, container
 | 4 | Deployment | [04-deployment-fleet.md](04-deployment-fleet.md) | 0 of 10 | The supported multi-instance deployment: static fleet config, per-instance enforcement, no run-time coordination |
 | 5 | Components | [05-component-engine.md](05-component-engine.md) | 15 of 23 | internal/proxy: the transport seam and its simulator driver, the two connection tables, the request pipeline and its stage seams, the pool core adapter, the admission queue adapter, the lease end with its reset, the reply relay, the failure classifier, deadlines, the snapshot |
 | 6 | Components | [06-component-wire-layer.md](06-component-wire-layer.md) | 20 of 23 | internal/pgwire: our framer and message coding, both session machines, SCRAM, the two trackers, the wire snapshot, the SQL lexer, the classifier with its courtesy reject list, the safe-shape recogniser, the error contract and reply builders, the test proxies and their scenarios; planned: the pgproto3 codec boundary |
-| 7 | Components | [07-component-admission.md](07-component-admission.md) | 6 of 13 | internal/admission: the rate gate, per-tenant queues, both CoDel modes behind one interface, the dispatcher, the adaptive limit |
+| 7 | Components | [07-component-admission.md](07-component-admission.md) | 7 of 13 | internal/admission: the rate gate, per-tenant queues, both CoDel modes behind one interface, the dispatcher, the adaptive limit |
 | 8 | Components | [08-component-pool.md](08-component-pool.md) | 10 of 12 | internal/pool: the hard cap, the creation limiter, leases with their release policies, the check before reuse, the breaker, the dirty-connection table, the reaper, cancels, the snapshot |
 | 9 | Components | [09-component-coalescer.md](09-component-coalescer.md) | 1 of 9 | internal/coalesce: the join rule, the flight table, waiters, the flight's own deadline, the shared reply |
 | 10 | Components | [10-component-retry.md](10-component-retry.md) | 1 of 7 | internal/retry: the policy interface, its two policies, the budget |
