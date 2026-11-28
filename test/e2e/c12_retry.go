@@ -104,7 +104,7 @@ func RetryStormSpec() RetrySpec {
 	return RetrySpec{Name: "retry-storm", Clients: 8, Tenants: 4, Conns: 4, Duration: 4 * time.Second,
 		Phases:  []Phase{{0, 450 * time.Millisecond}, {700 * time.Millisecond, 3500 * time.Millisecond}},
 		Relay:   RelayPlan{From: 700 * time.Millisecond, Until: 1700 * time.Millisecond, DoomAllAt: 600 * time.Millisecond, Pattern: StormPattern},
-		Breaker: 3, Recovery: 3200 * time.Millisecond, Cap: stormCapTokens, Floor: stormCapTokens, Exhausts: []int64{1, 2, 3}}
+		Breaker: 3, Recovery: 3200 * time.Millisecond, Cap: stormCapTokens, Floor: stormCapTokens, Exhausts: []int64{1, 3, 5}}
 }
 
 func RetrySweepSpec() RetrySpec {
