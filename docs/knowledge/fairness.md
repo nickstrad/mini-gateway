@@ -21,6 +21,13 @@ Reference notes for chunks 10, 13, and 14 before changing the dispatcher, the co
 - Round-robin turns live in `tenantQueue.turn` alongside `Queues.round`. A newly created tenant queue joins behind every already-waiting tenant and just ahead of the tenant served last. `Unpop` restores the turn, round counter, and held flag.
 - Dispatcher state (`fairTenant`) exists only while a tenant holds at least one lease; `tenant_time_at_share` is stored as a cumulative per-tenant counter in chunk 8's table (4,096 tenants, then `other`).
 
+## Coalesced flights and the limit (chunk 11 join, 2026-11-28)
+
+- The fair limit counts database leases, not client answers. A coalesced flight's owner occupies one place in its tenant's queue and holds one lease counted against that tenant; followers hold neither a queue slot nor a lease.
+- Under `coalesce.key_scope: all-tenants` (the default), a follower belonging to another tenant rides the owner's lease without spending its own tenant's share.
+- Cross-tenant handoff caveat: if the owner of a shared read leaves (cancel or disconnect) while a follower of another tenant remains, handoff (`LeftHandoff`) keeps the read running—and any zero-byte-loss retry re-queued and retried—charged to the leaving tenant's share until the lease ends (`request.tenant`, `d.lastTenant`). Without that follower, the proxy would have cancelled the read (`LeftLast`) and freed the share. A tenant can therefore hold database concurrency beyond its own share at the expense of another tenant that abandons shared reads.
+- Setting `coalesce.key_scope: tenant` keeps every flight within a single tenant for strict isolation, matching the "Leases in flight across tenants" row of `docs/capacity-table.md` (`fairnessCapacityRows`).
+
 ## Observability
 
 Component `admission` exports `limit`, `in_flight` (+peak), `active_tenants` (+peak), `fair_states` (+peak), `rounds`, `held{limit,share}`, `lease_starts`, `lease_ends`, and `saturated_time`, plus per-tenant `tenant_in_flight`, `tenant_share`, and `tenant_time_at_share` when `obs.detail` is enabled. `Engine.Invariants` checks that the dispatcher's per-tenant and total in-flight counts match the engine's outstanding leases (error prefix `fairness:`). No new health rule is added.

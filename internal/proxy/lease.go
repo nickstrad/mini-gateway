@@ -25,7 +25,7 @@ func (e *Engine) startRequest(c *client, body []byte) {
 	}
 	e.snap.StagePassed[StageReject]++
 	e.nextReq++
-	req := &request{id: e.nextReq, msg: pgwire.AppendQuery(nil, text), unit: u, inTx: inTx, enq: e.now}
+	req := &request{id: e.nextReq, msg: pgwire.AppendQuery(nil, text), unit: u, inTx: inTx, enq: e.now, arrived: e.now, tenant: c.tenant}
 	if inTx && c.db != nil {
 		e.snap.Accepted++
 		c.req = req
@@ -34,6 +34,10 @@ func (e *Engine) startRequest(c *client, body []byte) {
 		return
 	}
 	if !e.gates(c) {
+		return
+	}
+	if e.coal != nil {
+		e.coalJoin(c, req)
 		return
 	}
 	e.snap.Accepted++
@@ -75,14 +79,14 @@ func (e *Engine) enqueue(c *client) {
 	// observe zero-wait requests as well as queued ones.
 	if e.shedQ == nil && e.seams.Queue.Len() == 0 && e.seams.Pool.Idle() > 0 {
 		attempted = true
-		if id, ok := e.seams.Pool.Checkout(e.now, c.tenant); ok {
+		if id, ok := e.seams.Pool.Checkout(e.now, c.req.tenant); ok {
 			e.snap.StagePassed[StageQueue]++
 			e.queueHist.Record(0)
 			e.lend(c, e.dbs[id])
 			return
 		}
 	}
-	if !e.seams.Queue.Push(e.now, c.tenant, req.id) {
+	if !e.seams.Queue.Push(e.now, req.tenant, req.id) {
 		e.snap.StageRefuse[StageQueue]++
 		e.shed(c)
 		e.queueTouched()
@@ -99,6 +103,7 @@ func (e *Engine) enqueue(c *client) {
 }
 
 func (e *Engine) shed(c *client) {
+	e.coalRefused(c, pgwire.ErrRowShed)
 	e.snap.Shed++
 	e.retryEnded(c.req, RetryEndShed)
 	c.req = nil
@@ -140,10 +145,10 @@ func (e *Engine) dispatch() {
 		if c == nil || c.phase != cpQueued || c.req == nil || c.req.id != id {
 			continue
 		}
-		dbID, ok := e.seams.Pool.Checkout(e.now, c.tenant)
+		dbID, ok := e.seams.Pool.Checkout(e.now, c.req.tenant)
 		if !ok {
 			if e.shedQ == nil || !e.shedQ.Unpop() {
-				e.seams.Queue.Push(e.now, c.tenant, id)
+				e.seams.Queue.Push(e.now, c.req.tenant, id)
 			}
 			e.waiting[id] = c
 			e.queueTouched()
@@ -163,12 +168,12 @@ func (e *Engine) lend(c *client, d *dbConn) {
 	e.snap.StagePassed[StageLease]++
 	e.snap.LeasesStarted++
 	// Track lease lifetime rather than statement lifetime so open transactions count against their tenant's share.
-	e.fairStarted(c.tenant)
+	e.fairStarted(c.req.tenant)
 	e.snap.DBIdle.Add(-1)
 	e.snap.DBLent.Add(1)
 	d.phase = dpLent
 	d.client = c
-	d.lastTenant = c.tenant
+	d.lastTenant = c.req.tenant
 	c.db = d
 	e.forward(c)
 }
@@ -187,6 +192,7 @@ func (e *Engine) forward(c *client) {
 	e.attempted(req)
 	e.writeDB(d, req.msg)
 	e.t.arm(&d.stmtT, e.retryClamp(req, e.after(e.cfg.Timeouts.Statement)), tDBStatement, nil, d)
+	e.coalSent(req)
 }
 
 func (e *Engine) relay(d *dbConn, b []byte) []byte {
@@ -241,6 +247,9 @@ func (e *Engine) holdCap() int {
 }
 
 func (e *Engine) relayed(c *client, seg []byte) {
+	if e.coalStoring(c, seg) {
+		return
+	}
 	if c.req != nil {
 		c.req.relayed += int64(len(seg))
 	}
@@ -274,6 +283,7 @@ func (e *Engine) relayEvents(d *dbConn, evs []pgwire.CycleEvent, held []byte) {
 				e.leaseFailed(d, CloseDBServerFatal)
 				return
 			}
+			e.coalSawError(c)
 			e.relayed(c, held)
 		case pgwire.CycleParameterStatus:
 			e.snap.ParamStatusTurn++
@@ -281,6 +291,9 @@ func (e *Engine) relayEvents(d *dbConn, evs []pgwire.CycleEvent, held []byte) {
 			if c.req == nil {
 				e.leaseFailed(d, CloseDBViolation)
 				return
+			}
+			if e.coalReady(d, c, held, ev.Status) {
+				continue
 			}
 			e.relayed(c, held)
 			e.replyDone(d, c, ev.Status)
@@ -316,7 +329,9 @@ func (e *Engine) release(d *dbConn, c *client, status byte) {
 	}
 	e.snap.StagePassed[StageRelease]++
 	e.snap.LeasesEnded++
-	e.fairEnded(c.tenant)
+	// End the lease on d.lastTenant (the tenant that started it), not c.tenant,
+	// because a cross-tenant flight handoff can change c mid-lease.
+	e.fairEnded(d.lastTenant)
 	d.client = nil
 	c.db = nil
 	in := ReleaseInput{Conn: d.id, Tenant: c.tenant, LastTenant: d.lastTenant, Status: status, Unread: len(d.hold) > 0 || d.cur.mid() || d.trailing}
@@ -383,12 +398,16 @@ func (e *Engine) statementLost(c *client, d *dbConn) {
 	reached := reachedFor(d, req)
 	row := lostRow(req, reached)
 	// Offer the failure before recording a client failure: a granted retry keeps
-	// the request alive for its one client reply. The failed connection was
-	// already closed or moved to the dirty table before reaching statementLost.
-	if e.offerRetry(c, req, reached, row) {
+	// the request alive for its one client reply (and keeps all waiters on a
+	// live coalesced flight). A flight already expired/removed by the coalescer
+	// is never offered a retry. The failed connection was already closed or
+	// moved to the dirty table before reaching statementLost.
+	if !e.flightGone(req) && e.offerRetry(c, req, reached, row) {
+		e.coalRetried(req)
 		e.rerun(c, req)
 		return
 	}
+	e.coalFailed(c, req, row, reached)
 	e.snap.Failed++
 	e.reached(reached)
 	e.retryEnded(req, RetryEndFailed)

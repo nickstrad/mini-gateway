@@ -154,11 +154,24 @@ type Snapshot struct {
 	BreakerFlushed     int64
 	IdleInTxRolledBack int64
 
-	RetryOffered    int64
-	RetriedRequests int64
-	RetryPending    obs.Gauge
-	RetryEnds       [NumRetryEnds]int64
-	RetryRows       [pgwire.ErrRowCount]int64
+	Coalesced               obs.Gauge
+	CoalesceLed             int64
+	CoalesceFollowed        int64
+	CoalescePassed          int64
+	CoalesceRefused         int64
+	CoalesceReplies         int64
+	CoalesceErrors          int64
+	CoalesceOverflowed      int64
+	CoalesceHandoffs        int64
+	CoalescePromoted        int64
+	CoalescePromotedRefused int64
+	CoalesceExpired         int64
+	CancelsCoalesced        int64
+	RetryOffered            int64
+	RetriedRequests         int64
+	RetryPending            obs.Gauge
+	RetryEnds               [NumRetryEnds]int64
+	RetryRows               [pgwire.ErrRowCount]int64
 }
 
 // Check enforces exact counter conservation and capacity invariants on s.
@@ -168,7 +181,8 @@ func (s Snapshot) Check() error {
 		errs = append(errs, err)
 	}
 	if err := obs.Conserve(obs.T("accepted", s.Accepted), obs.T("completed", s.Completed), obs.T("failed", s.Failed),
-		obs.T("shed", s.Shed), obs.T("queued", s.Queued.Value), obs.T("in_flight", s.InFlight.Value)); err != nil {
+		obs.T("shed", s.Shed), obs.T("queued", s.Queued.Value), obs.T("in_flight", s.InFlight.Value),
+		obs.T("coalesced", s.Coalesced.Value)); err != nil {
 		errs = append(errs, err)
 	}
 	var rows int64

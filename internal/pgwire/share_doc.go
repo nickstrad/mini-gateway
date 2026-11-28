@@ -31,6 +31,7 @@ func SafeShapeMarkdown() string {
 	b.WriteString("## Parenthesis keywords\n\nWords that may precede `(` without being a function call. Each is a reserved or column-name keyword in PostgreSQL 17, which no unqualified function call can use as its name.\n\n" + shareDocWords(ShareParenKeywords) + "\n\n")
 	b.WriteString("## Share allow-list\n\nFunctions with no side effect and no per-call or per-session result.\n\n" + shareDocWords(ShareAllowList) + "\n\n")
 	b.WriteString("## Hint\n\nA text that begins with the exact bytes `" + ShareHint + "` is reported as `Hinted`. The hint never makes a text `SafeRead` or `Shareable`; in `hinted` mode the coalescer shares on the mark alone.\n")
+	b.WriteString("\n## Limits\n\nThe safe shape trusts the objects a text names. A view, a user-defined operator, a function that shadows an allow-listed name, or a row-level security policy can hide a side effect or a per-call result behind a text that fits the shape. `coalesce.mode` defaults to `auto`, so such a statement is shared like any other read: callers that arrive together get one result. On a database with such objects set `coalesce.mode` to `off`, or to `hinted` and mark only the statements that are safe to share.\n")
 	return b.String()
 }
 

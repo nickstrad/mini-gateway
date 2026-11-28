@@ -140,6 +140,50 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `classifier` | `sql_statements` | counter | — | count | sum | SQL statements in the classified Query messages. |
 | `classifier` | `statements` | counter | — | count | sum | Query messages classified. |
 | `classifier` | `statements_by_class` | counter | outcome | count | sum | Query messages classified, by class (outcome). |
+| `coalescer` | `detached` | counter | — | count | sum | Flights that stopped sharing (the reply passed its cap, or the reply left a transaction open). |
+| `coalescer` | `flight_ends` | counter | outcome | count | sum | Flights ended (outcome: completed, failed, cancelled, expired). |
+| `coalescer` | `flights` | gauge | — | count | sum | Flights now (queued, running or held). |
+| `coalescer` | `flights_peak` | gauge | — | count | max | Most flights at once. |
+| `coalescer` | `flights_started` | counter | — | count | sum | Flights started: the request that starts one waits in the queue for a connection, or for the running read of its key (strict). |
+| `coalescer` | `followers_left` | counter | — | count | sum | Waiters other than the owner that left before the flight ended. |
+| `coalescer` | `handoffs` | counter | — | count | sum | Times the request owning a flight left and a waiting one took over the queue slot or the connection. |
+| `coalescer` | `held` | counter | — | count | sum | Flights started behind a read already running on the database (strict). |
+| `coalescer` | `hits` | counter | — | count | sum | Requests that joined a flight and take no queue slot and no connection. |
+| `coalescer` | `hot_key_hits` | counter | mode | count | sum | Offers of the most offered keys (mode: rank, 1 is the hottest; coalesce.hot_keys, off by default). |
+| `coalescer` | `join_mode` | gauge | mode | count | sum | 1 for the join mode (mode: strict, relaxed). |
+| `coalescer` | `left_unknown` | counter | — | count | sum | Leaves for requests not on any flight. |
+| `coalescer` | `max_flights` | gauge | — | count | sum | Cap on keys with a flight (coalesce.max_flights). |
+| `coalescer` | `max_reply_bytes` | gauge | — | bytes | sum | Cap on the stored reply of one flight (coalesce.max_reply_bytes). |
+| `coalescer` | `max_waiters` | gauge | — | count | sum | Cap on waiters per flight, the request that started it included (coalesce.max_waiters). |
+| `coalescer` | `mode` | gauge | mode | count | sum | 1 for the coalesce mode this instance runs (mode: off, auto, hinted). |
+| `coalescer` | `no_share` | gauge | — | count | sum | Keys on the no-share list now. |
+| `coalescer` | `no_share_added` | counter | — | count | sum | Keys put on the no-share list. |
+| `coalescer` | `no_share_ends` | counter | reason | count | sum | Keys taken off the no-share list (reason: expired, evicted, renewed). |
+| `coalescer` | `no_share_for` | gauge | — | ns | sum | How long a key stays on the no-share list (coalesce.no_share_for). |
+| `coalescer` | `no_share_max` | gauge | — | count | sum | Cap on keys on the no-share list (coalesce.no_share_max). |
+| `coalescer` | `no_share_peak` | gauge | — | count | max | Most keys on the no-share list at once. |
+| `coalescer` | `not_eligible` | counter | — | count | sum | Requests the mode does not share (not the safe shape under auto, no mark under hinted, or off). |
+| `coalescer` | `offered` | counter | — | count | sum | Shareable requests offered to the flight table; each ends started, hit, refused or passed. |
+| `coalescer` | `overflows` | counter | reason | count | sum | Caps reached (reason: waiters, reply, flights, unshareable). |
+| `coalescer` | `passed` | counter | reason | count | sum | Shareable requests passed on unshared (reason: no-share, full, duplicate). |
+| `coalescer` | `promoted` | counter | — | count | sum | Held flights started when the running read of their key ended. |
+| `coalescer` | `refused` | counter | — | count | sum | Requests refused 53M04 at the waiter cap. |
+| `coalescer` | `running` | gauge | — | count | sum | Flights running on the database now. |
+| `coalescer` | `running_peak` | gauge | — | count | max | Most flights running at once. |
+| `coalescer` | `sent` | counter | — | count | sum | Flights whose request was written to the database. |
+| `coalescer` | `shared_errors` | counter | — | count | sum | Flights whose waiters all got one error: an error reply from the database or a proxy error. |
+| `coalescer` | `stored_bytes` | gauge | — | bytes | sum | Reply bytes stored for sharing now. |
+| `coalescer` | `stored_bytes_peak` | gauge | — | bytes | max | Most reply bytes stored at once. |
+| `coalescer` | `table_size` | gauge | — | count | sum | Keys with a flight now. |
+| `coalescer` | `table_size_peak` | gauge | — | count | max | Most keys with a flight at once. |
+| `coalescer` | `tenant_hits` | counter | tenant | count | sum | Requests of this tenant that joined a flight. |
+| `coalescer` | `waiter_ends` | counter | outcome | count | sum | Waiters that left a flight (outcome: reply, shared-error, own-error, gone, refused). |
+| `coalescer` | `waiters_in` | counter | — | count | sum | Requests that waited on a flight, the starting one included. |
+| `coalescer` | `waiters_per_flight` | histogram | — | count | by bucket | Waiters answered by one flight that completed or failed, the owner included. |
+| `coalescer` | `waiters_per_flight_clamped_high` | counter | — | count | sum | Values recorded into waiters_per_flight above its range, clamped to the highest bucket. |
+| `coalescer` | `waiters_per_flight_clamped_low` | counter | — | count | sum | Values recorded into waiters_per_flight below its range, clamped to the lowest bucket. |
+| `coalescer` | `waiting` | gauge | — | count | sum | Requests waiting on flights now. |
+| `coalescer` | `waiting_peak` | gauge | — | count | max | Most requests waiting on flights at once. |
 | `engine` | `backend_no_reply` | counter | — | count | sum | Statements whose bytes were handed over and that had received zero reply bytes at the statement deadline. |
 | `engine` | `breaker_flushed` | counter | — | count | sum | Queued requests answered 53M03 when the breaker opened with nothing usable. |
 | `engine` | `cancel_connections` | gauge | — | count | sum | Cancel connections open now. |
@@ -159,6 +203,14 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `engine` | `clients_in_transaction` | gauge | — | count | sum | Clients holding a lease inside a transaction now. |
 | `engine` | `clients_in_transaction_peak` | gauge | — | count | max | Most clients inside a transaction at once. |
 | `engine` | `clients_refused` | counter | — | count | sum | Client connections refused at the client or startup cap. |
+| `engine` | `coalesce_answers` | counter | outcome | count | sum | Requests that waited on a flight and were answered by it (outcome: reply, error, refused). |
+| `engine` | `coalesce_cancels` | counter | — | count | sum | Cancel requests from waiters on a flight, answered 57014 without touching the shared read. |
+| `engine` | `coalesce_expired` | counter | — | count | sum | Flights that reached their deadline (the statement deadline from their start) before a reply. |
+| `engine` | `coalesce_handoffs` | counter | — | count | sum | Times a flight's queue slot or connection passed to a waiting request because its owner left. |
+| `engine` | `coalesce_joins` | counter | outcome | count | sum | Accepted requests by what the coalesce stage did (outcome: led, followed, passed). |
+| `engine` | `coalesce_promoted` | counter | — | count | sum | Flights held behind a running read of their key that then went to the queue. |
+| `engine` | `coalesce_promoted_refused` | counter | — | count | sum | Held flights refused 53M03 with all their waiters when promoted while the breaker was open (never queued, never forwarded). |
+| `engine` | `coalesce_refused` | counter | — | count | sum | Requests refused 53M04 at the coalescer's waiter cap before acceptance. |
 | `engine` | `connections_resetting` | gauge | — | count | sum | Database connections being reset now. |
 | `engine` | `connections_resetting_peak` | gauge | — | count | max | Most database connections being reset at once. |
 | `engine` | `database_capacity` | gauge | — | count | sum | Size of the fixed set of database connections. |
@@ -197,6 +249,8 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `engine` | `relay_pauses` | counter | — | count | sum | Times reading a database connection was paused for a slow client. |
 | `engine` | `replies` | counter | reason | count | sum | Proxy-made replies by error-contract row (reason). |
 | `engine` | `requests_accepted` | counter | — | count | sum | Requests that passed the gates in front of the queue. |
+| `engine` | `requests_coalesced` | gauge | — | count | sum | Requests waiting on a shared flight now: neither queued nor in flight, holding no queue slot and no connection. |
+| `engine` | `requests_coalesced_peak` | gauge | — | count | max | Most requests waiting on shared flights at once. |
 | `engine` | `requests_completed` | counter | — | count | sum | Requests whose reply reached its end marker. |
 | `engine` | `requests_failed` | counter | — | count | sum | Accepted requests that failed after acceptance. |
 | `engine` | `requests_in_flight` | gauge | — | count | sum | Requests forwarded and not yet answered. |

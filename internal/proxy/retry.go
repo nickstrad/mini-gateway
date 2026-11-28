@@ -95,8 +95,10 @@ func (e *Engine) RetrySnapshot() (retry.Snapshot, bool) {
 	return retry.Snapshot{}, false
 }
 
+// requestDeadline anchors retry expiry to the original arrival instant rather
+// than req.enq, which strict-mode promotion updates for queue-wait histograms.
 func (e *Engine) requestDeadline(req *request) Instant {
-	return addDuration(req.enq, e.cfg.Timeouts.Statement)
+	return addDuration(req.arrived, e.cfg.Timeouts.Statement)
 }
 
 func addDuration(at Instant, d time.Duration) Instant {

@@ -15,6 +15,11 @@
 #     middle of a tenant queue swaps the tail into the hole (admission.PlantRemoveSwapsTail), so
 #     the queue order no longer matches the reference model. The seed corpus does not trigger
 #     it; the fuzzer must.
+#   FuzzCoalesceOps (chunk 11): with MG_FUZZ_PLANT=coalesce-leaver-result a waiter that leaves a
+#     flight is dropped from the waiter index but stays on the flight's list, so a cancel at the
+#     instant the result arrives still gets the shared result (coalesce.PlantLeaverGetsResult).
+#     The table's own check (waiters on flights against members) or the driver (a waiter answered
+#     after it left) reports it.
 #   FuzzRetryOps (chunk 12): with MG_FUZZ_PLANT=retry-withdraw-first the retry budget withdraws a
 #     token before it checks whether the failure may be retried at all (retry.PlantWithdrawFirst),
 #     so a refused failure still costs budget and the level no longer matches the reference model.
@@ -70,6 +75,7 @@ fail=0
 plant FuzzEngineOps test/e2e queued-vanish 'queue holds' queue-slot || fail=1
 plant FuzzPoolOps internal/pool reset-clears-suspect 'lent suspect' reset-clears-suspect || fail=1
 plant FuzzAdmissionOps internal/admission admission-remove-order 'position [0-9]+: core|reference' remove-order || fail=1
+plant FuzzCoalesceOps internal/coalesce coalesce-leaver-result 'left its flight|waiters on flights' leaver-result || fail=1
 plant FuzzRetryOps internal/retry retry-withdraw-first 'reference|withdrawn for' withdraw-first || fail=1
 plant FuzzFairnessOps internal/admission fairness-unpop-turn 'the model gives|rounds [0-9]+, model' unpop-turn || fail=1
 [ "$fail" = 0 ] || exit 1

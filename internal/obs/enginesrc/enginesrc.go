@@ -9,6 +9,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 	"github.com/nickstrad/mini-gateway/internal/obs/admsrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/clssrc"
+	"github.com/nickstrad/mini-gateway/internal/obs/coalsrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/poolsrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/retrysrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/wiresrc"
@@ -114,6 +115,16 @@ func Metrics() []obs.MetricDesc {
 		obs.CounterDesc("client_cancels", lo, "Client cancel requests by outcome (forwarded, queued, refused, unmatched, ignored)."),
 		obs.CounterDesc("breaker_flushed", 0, "Queued requests answered 53M03 when the breaker opened with nothing usable."),
 		obs.CounterDesc("idle_in_transaction_rolled_back", 0, "Transactions left idle past timeouts.idle_in_transaction and rolled back."),
+		obs.GaugeDesc("requests_coalesced", 0, "Requests waiting on a shared flight now: neither queued nor in flight, holding no queue slot and no connection."),
+		obs.HighWaterDesc("requests_coalesced_peak", 0, "Most requests waiting on shared flights at once."),
+		obs.CounterDesc("coalesce_joins", lo, "Accepted requests by what the coalesce stage did (outcome: led, followed, passed)."),
+		obs.CounterDesc("coalesce_answers", lo, "Requests that waited on a flight and were answered by it (outcome: reply, error, refused)."),
+		obs.CounterDesc("coalesce_handoffs", 0, "Times a flight's queue slot or connection passed to a waiting request because its owner left."),
+		obs.CounterDesc("coalesce_promoted", 0, "Flights held behind a running read of their key that then went to the queue."),
+		obs.CounterDesc("coalesce_promoted_refused", 0, "Held flights refused 53M03 with all their waiters when promoted while the breaker was open (never queued, never forwarded)."),
+		obs.CounterDesc("coalesce_expired", 0, "Flights that reached their deadline (the statement deadline from their start) before a reply."),
+		obs.CounterDesc("coalesce_refused", 0, "Requests refused 53M04 at the coalescer's waiter cap before acceptance."),
+		obs.CounterDesc("coalesce_cancels", 0, "Cancel requests from waiters on a flight, answered 57014 without touching the shared read."),
 		obs.CounterDesc("retry_offered", 0, "Failed statements offered to the retry policy."),
 		obs.CounterDesc("retried_requests", 0, "Requests run again by the proxy at least once."),
 		obs.GaugeDesc("retries_pending", 0, "Requests run again whose outcome is not known yet."),
@@ -178,6 +189,24 @@ func mapPoolPath(s proxy.Snapshot, e *obs.Emitter) {
 	}
 	e.Counter("breaker_flushed", none, s.BreakerFlushed)
 	e.Counter("idle_in_transaction_rolled_back", none, s.IdleInTxRolledBack)
+	mapCoalesce(s, e)
+}
+
+func mapCoalesce(s proxy.Snapshot, e *obs.Emitter) {
+	e.Gauge("requests_coalesced", none, s.Coalesced.Value)
+	e.Gauge("requests_coalesced_peak", none, s.Coalesced.Peak)
+	e.Counter("coalesce_joins", obs.Labels{Outcome: "led"}, s.CoalesceLed)
+	e.Counter("coalesce_joins", obs.Labels{Outcome: "followed"}, s.CoalesceFollowed)
+	e.Counter("coalesce_joins", obs.Labels{Outcome: "passed"}, s.CoalescePassed)
+	e.Counter("coalesce_answers", obs.Labels{Outcome: "reply"}, s.CoalesceReplies)
+	e.Counter("coalesce_answers", obs.Labels{Outcome: "error"}, s.CoalesceErrors)
+	e.Counter("coalesce_answers", obs.Labels{Outcome: "refused"}, s.CoalesceOverflowed)
+	e.Counter("coalesce_handoffs", none, s.CoalesceHandoffs)
+	e.Counter("coalesce_promoted", none, s.CoalescePromoted)
+	e.Counter("coalesce_promoted_refused", none, s.CoalescePromotedRefused)
+	e.Counter("coalesce_expired", none, s.CoalesceExpired)
+	e.Counter("coalesce_cancels", none, s.CancelsCoalesced)
+	e.Counter("coalesce_refused", none, s.CoalesceRefused)
 }
 
 func mapClients(s proxy.Snapshot, e *obs.Emitter) {
@@ -362,6 +391,7 @@ func Sources(e *proxy.Engine, shell func() proxy.ShellSnapshot) []obs.Source {
 			return clssrc.Snapshot{Classifier: e.ClassifierSnapshot(), Replies: e.ReplySnapshot(), Sync: e.SyncSnapshot()}
 		}),
 		admsrc.Source(e.AdmissionSnapshot),
+		coalsrc.Source(e.CoalesceSnapshot),
 		retrysrc.Source(func() retry.Snapshot { s, _ := e.RetrySnapshot(); return s }),
 	}
 }
@@ -383,5 +413,5 @@ func HealthRules() []obs.Rule {
 			return obs.StateDegraded, "database unreachable: no usable connection and dials failing"
 		}
 		return obs.StateOK, "database reachable"
-	}}, poolsrc.HealthRules()[0]}, admsrc.HealthRules()...)
+	}}, poolsrc.HealthRules()[0]}, append(admsrc.HealthRules(), coalsrc.HealthRules()...)...)
 }

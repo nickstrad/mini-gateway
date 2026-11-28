@@ -25,6 +25,7 @@ func (f *File) applyDefaults() {
 	setString(&f.ClientTLS.Mode, DefaultClientTLS)
 	setString(&f.BackendTLS.Mode, DefaultBackendTLS)
 	setString(&f.Lease.Reset, DefaultLeaseReset)
+	f.applyCoalesceDefaults()
 	f.applyPoolDefaults()
 	f.divideFleetConnections()
 	p := f.proxyCaps().WithDefaults()
@@ -33,6 +34,8 @@ func (f *File) applyDefaults() {
 	f.Limits.MaxClients = p.MaxClients
 	f.Limits.MaxStartup = p.MaxStartup
 	f.Limits.ReplyBuffer = p.ReplyBufferCap
+	// Write the resolved cap back so omitted and explicit defaults share one fingerprint.
+	f.Coalesce.MaxReplyBytes = p.Coalesce.MaxReplyBytes
 	f.Timeouts = timeoutsFrom(p.Timeouts)
 	f.Pool.CheckTimeout = Duration(p.Timeouts.CheckTimeout)
 	f.applyQueueDefaults(p)
@@ -65,7 +68,7 @@ func (f *File) proxyCaps() proxy.Config {
 	return proxy.Config{Connections: f.Pool.Connections, QueueCap: f.Queue.Capacity, MaxClients: f.Limits.MaxClients,
 		MaxStartup: f.Limits.MaxStartup, ReplyBufferCap: f.Limits.ReplyBuffer, Timeouts: f.poolTimeouts(),
 		Reset: f.resetPolicy(), Reseed: f.Lease.Reseed == LeaseReseedOn, Pool: f.poolCore(), Admission: f.admission(),
-		Fairness: f.fairness(), Retry: f.retryCore()}
+		Coalesce: f.coalesce(), KeyScope: f.keyScope(), Fairness: f.fairness(), Retry: f.retryCore()}
 }
 
 // Proxy converts the JSON Timeouts block into proxy.Timeouts.
@@ -106,6 +109,7 @@ func (f *File) validate(base string) error {
 	add(f.validateObs())
 	add(f.validateFleet())
 	add(f.validatePool())
+	add(f.validateCoalesce())
 	add(f.validateRetry())
 	return errors.Join(errs...)
 }

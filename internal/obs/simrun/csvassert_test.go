@@ -188,7 +188,7 @@ func TestCSVAssertBaselineCountsFromFlushedFiles(t *testing.T) {
 		ran += len(j.sqls)
 	}
 	if ran+tierR+skipped != analysisFiles(t) || ran == 0 || tierR == 0 {
-		t.Fatalf("%d SQL files run over the simulator runs, %d left to the tier R runs and %d to the sweep (-short), of %d", ran, tierR, skipped, analysisFiles(t))
+		t.Fatalf("%d SQL files run over the simulator runs, %d left to the tier R runs and %d to runs this test does not make (the coalescer sweep, and the heavy scenarios under -short), of %d", ran, tierR, skipped, analysisFiles(t))
 	}
 }
 

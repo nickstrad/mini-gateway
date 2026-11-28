@@ -51,6 +51,27 @@ func engineJobs(dir string) []engineRun {
 			return r.Final, nil
 		})
 	}
+	for _, sc := range e2e.CoalesceScenarios() {
+		if !coalesceRunHere(sc.Spec.Name) {
+			continue
+		}
+		jobs = append(jobs, func() (obs.InstanceSnapshot, error) {
+			r, err := e2e.RunSim(sc.Spec, 1, e2e.SimOptions{Dir: dir})
+			if err == nil {
+				err = sc.Check(r)
+			}
+			if err == nil {
+				err = r.Flush.Check()
+			}
+			if ab := sc.AblationArm(); err == nil && ab != nil {
+				_, err = e2e.RunSim(*ab, 1, e2e.SimOptions{Dir: dir, Arm: "ablation"})
+			}
+			if err != nil {
+				return obs.InstanceSnapshot{}, err
+			}
+			return r.Final, nil
+		})
+	}
 	if !testing.Short() {
 		for _, j := range e2e.RetryBaselineJobs(dir) {
 			jobs = append(jobs, j)
@@ -59,8 +80,17 @@ func engineJobs(dir string) []engineRun {
 	return jobs
 }
 
+func coalesceRunHere(name string) bool {
+	return name == e2e.CoalesceBaselineScenario || name == e2e.CoalesceHotKeyScenario && !testing.Short()
+}
+
 func shortSkipped() []string {
 	var out []string
+	for _, sc := range e2e.CoalesceScenarios() {
+		if !coalesceRunHere(sc.Spec.Name) {
+			out = append(out, sc.Spec.Name)
+		}
+	}
 	if !testing.Short() {
 		return out
 	}

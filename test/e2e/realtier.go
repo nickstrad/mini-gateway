@@ -91,6 +91,7 @@ type GatewayOpts struct {
 	MaxStartup int
 	MaxClients int
 	Queue      map[string]any
+	Coalesce   map[string]any
 	Retry      map[string]any
 }
 
@@ -166,6 +167,12 @@ func (env *RealEnv) gatewayConfig(o GatewayOpts, dir string) map[string]any {
 		cfg["client_tls"] = map[string]any{"mode": "off"}
 	}
 	env.poolConfig(o, cfg)
+	switch {
+	case o.Coalesce != nil:
+		cfg["coalesce"] = o.Coalesce
+	case o.Reset == "on-switch":
+		cfg["coalesce"] = map[string]any{"mode": "off"}
+	}
 	if o.Retry != nil {
 		cfg["retry"] = o.Retry
 	}

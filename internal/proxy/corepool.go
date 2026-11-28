@@ -399,7 +399,9 @@ func (e *Engine) coreStepFailed(d *dbConn, why ResetFailure) {
 func (e *Engine) coreRelease(d *dbConn, c *client, status byte) {
 	e.snap.StagePassed[StageRelease]++
 	e.snap.LeasesEnded++
-	e.fairEnded(c.tenant)
+	// Report the tenant that started the lease (d.lastTenant), not c.tenant,
+	// because a cross-tenant flight handoff can change c before release.
+	e.fairEnded(d.lastTenant)
 	d.client = nil
 	c.db = nil
 	in := ReleaseInput{Conn: d.id, Tenant: c.tenant, LastTenant: d.lastTenant, Status: status, Unread: len(d.hold) > 0 || d.cur.mid() || d.trailing}
@@ -550,6 +552,9 @@ func (e *Engine) cancelDone(id ConnID) {
 
 func (e *Engine) clientCancel(key pgwire.BackendKey) {
 	t := e.keys[key]
+	if e.coalCancel(t) {
+		return
+	}
 	switch {
 	case t == nil || t.phase == cpClosed:
 		e.snap.CancelsUnmatched++
@@ -622,6 +627,7 @@ func (e *Engine) refuseAdmitted() {
 }
 
 func (e *Engine) refuseWaiting(c *client, end RetryEnd) {
+	e.coalRefused(c, pgwire.ErrRowBreakerOpen)
 	e.t.cancel(&c.queueT)
 	e.snap.Queued.Add(-1)
 	e.snap.Shed++

@@ -15,7 +15,7 @@ flowchart TB
     C_WORK["Work vocabulary<br/>internal/work"]:::built
     C_ADM["Admission<br/>internal/admission"]:::planned
     C_POOL["Pool<br/>internal/pool"]:::built
-    C_COAL["Coalescer<br/>internal/coalesce"]:::planned
+    C_COAL["Coalescer<br/>internal/coalesce"]:::built
     C_RETRY["Retry policy<br/>internal/retry"]:::built
     C_CONFIG["Configuration<br/>internal/config"]:::planned
   end
@@ -27,7 +27,7 @@ flowchart TB
   C_ENGINE -->|6| C_WORK
   C_ADM -.->|7| C_WORK
   C_POOL -->|8| C_WORK
-  C_COAL -.->|9| C_WORK
+  C_COAL -->|9| C_WORK
   C_RETRY -->|10| C_WORK
   C_SIM -->|11| PGPROTO3
   C_E2E -->|12| C_SIM

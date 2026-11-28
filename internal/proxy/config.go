@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/admission"
+	"github.com/nickstrad/mini-gateway/internal/coalesce"
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
 	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/retry"
@@ -229,6 +230,7 @@ type Config struct {
 	Pool           *pool.Config
 	Reseed         bool
 	Admission      admission.Config
+	Coalesce       coalesce.Config
 	Retry          retry.Config
 	Fairness       admission.FairConfig
 }
@@ -281,6 +283,7 @@ func (c Config) WithDefaults() Config {
 			*p.v = p.def
 		}
 	}
+	c.Coalesce = c.coalesceDefaults()
 	return c
 }
 
@@ -325,6 +328,7 @@ func (c Config) Validate() error {
 		errs = append(errs, c.admissionConfig().Validate())
 		errs = append(errs, c.fairConfig().Validate())
 	}
+	errs = append(errs, c.coalesceErrors()...)
 	errs = append(errs, c.Retry.WithDefaults().Validate())
 	return errors.Join(errs...)
 }

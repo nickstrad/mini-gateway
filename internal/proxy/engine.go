@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/nickstrad/mini-gateway/internal/coalesce"
 	"github.com/nickstrad/mini-gateway/internal/obs"
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
 	"github.com/nickstrad/mini-gateway/internal/pool"
@@ -53,6 +54,14 @@ type Engine struct {
 	cancelConns []ConnID
 	keys        map[pgwire.BackendKey]*client
 	poolT       *timer
+
+	coal       FlightTable
+	coalT      *timer
+	followers  map[RequestID]*client
+	members    map[RequestID]*client
+	ends       map[coalesce.FlightID]flightEnd
+	endOrder   []coalesce.FlightID
+	noticeBusy bool
 }
 
 // ErrEngine is the sentinel error for engine-level failures.
@@ -89,6 +98,9 @@ func New(cfg Config) (*Engine, error) {
 	}
 	if e.seams.Rate == nil {
 		e.seams.Rate = OpenRate{}
+	}
+	if err := e.initCoalesce(); err != nil {
+		return nil, err
 	}
 	if e.seams.Coalescer == nil {
 		e.seams.Coalescer = NoCoalesce{}
@@ -161,6 +173,7 @@ func (e *Engine) Shutdown(now Instant, out []Action) []Action {
 	e.t.cancel(&e.redialT)
 	// Remove empty tenant queues and cancel tAdmission so Quiesce sees no pending timer.
 	e.closeAdmission()
+	e.coalShutdown()
 	return e.finish()
 }
 
@@ -285,6 +298,8 @@ func (e *Engine) fire(t *timer) {
 		e.admT = nil
 		e.shedQ.Sweep(e.now)
 		e.queueTouched()
+	case tCoalesce:
+		e.coalTimer()
 	}
 }
 
@@ -377,6 +392,7 @@ func (e *Engine) Quiesce() error {
 		errs = append(errs, fmt.Errorf("%d retries pending", n))
 	}
 	errs = append(errs, e.admissionQuiet())
+	errs = append(errs, e.coalQuiet())
 	return errors.Join(errs...)
 }
 
@@ -427,6 +443,9 @@ func (e *Engine) Invariants() error {
 		return err
 	}
 	if err := e.retryCheck(); err != nil {
+		return err
+	}
+	if err := e.coalCheck(); err != nil {
 		return err
 	}
 	if e.core != nil {

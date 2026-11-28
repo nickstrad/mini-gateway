@@ -105,14 +105,22 @@ func freshEngineCounter(t *testing.T, admin, metric string) int64 {
 
 func adminStats(t *testing.T, admin string) obs.InstanceSnapshot {
 	t.Helper()
-	resp, err := http.Get("http://" + admin + "/stats")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatal(err)
+	deadline := time.Now().Add(freshStatsDeadline)
+	var b []byte
+	for {
+		resp, err := http.Get("http://" + admin + "/stats")
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusServiceUnavailable || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 	s, err := jsonstats.Decode(b)
 	if err != nil {

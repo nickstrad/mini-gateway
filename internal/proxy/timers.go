@@ -17,6 +17,7 @@ const (
 	tPool
 	tClientIdleTx
 	tAdmission
+	tCoalesce
 )
 
 type timer struct {

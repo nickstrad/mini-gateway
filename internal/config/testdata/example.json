@@ -15,6 +15,8 @@
   "timeouts": {"client_startup": "5s", "client_mid_message": "5s", "client_idle": "10m", "queue_wait": "5s",
                "database_connect": "2s", "statement": "30s", "reset": "1s", "client_write": "5s", "redial_delay": "100ms"},
   "lease": {"reset": "always"},
+  "coalesce": {"mode": "auto", "key_scope": "all-tenants", "join": "strict", "max_flights": 1024, "max_waiters": 1024,
+               "max_reply_bytes": 65536, "no_share_for": "10s", "no_share_max": 256, "hot_keys": 0},
   "obs": {"publish_interval": "1s", "detail": true, "csv": {"dir": "", "max_bytes": 0}},
   "fleet": {"instances": 1, "backend_connections": 4, "connect_rate_per_s": 10, "backend_max_connections": 100}
 }
