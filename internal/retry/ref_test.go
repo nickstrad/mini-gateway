@@ -147,13 +147,11 @@ func runOps(cfg Config, ops []op) ([]string, error) {
 		return nil, err
 	}
 	ref := newRef(cfg)
-	var trail []string
 	var now Time
 	var w window
 	w.record(0, 0, ref.tenths)
 	for i, o := range ops {
 		now += o.dt
-		trail = append(trail, o.String())
 		switch o.kind {
 		case opAttempt:
 			p.Attempt(now)
@@ -163,25 +161,33 @@ func runOps(cfg Config, ops []op) ([]string, error) {
 			f.Deadline = now + o.ttl
 			got, want := p.Decide(now, f), ref.decide(now, f)
 			if got != want {
-				return trail, fmt.Errorf("op %d: decision %+v, reference %+v", i, got, want)
+				return trailOf(ops[:i+1]), fmt.Errorf("op %d: decision %+v, reference %+v", i, got, want)
 			}
 		}
 		s := p.Snapshot()
 		if err := s.Check(); err != nil {
-			return trail, fmt.Errorf("op %d: %w", i, err)
+			return trailOf(ops[:i+1]), fmt.Errorf("op %d: %w", i, err)
 		}
 		if err := agree(s, ref); err != nil {
-			return trail, fmt.Errorf("op %d: %w", i, err)
+			return trailOf(ops[:i+1]), fmt.Errorf("op %d: %w", i, err)
 		}
 		w.record(s.Attempts, s.Retries, s.Level.Value)
 	}
 	cfg = cfg.WithDefaults()
 	if cfg.Kind == KindPreForwardOnce {
 		if err := w.check(cfg.CapTokens*10, cfg.FloorTokens*10); err != nil {
-			return trail, err
+			return trailOf(ops), err
 		}
 	}
-	return trail, nil
+	return nil, nil
+}
+
+func trailOf(ops []op) []string {
+	out := make([]string, len(ops))
+	for i, o := range ops {
+		out[i] = o.String()
+	}
+	return out
 }
 
 func agree(s Snapshot, ref *refModel) error {
