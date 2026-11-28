@@ -68,6 +68,7 @@ func want(t *testing.T, got, w any) {
 
 // The backend model deliberately keeps cancelled reads alive until their acknowledgement.
 func TestAdv_1_CancelAcknowledgementGap(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 1 narrowed: at most one read per key among the flights the coalescer owns; a cancelled read still finishing, a key on the no-share list and a full flight table pass outside it and are counted. See agent_work/chunks/c11-coalescer/ADVERSARIAL.md.")
 	x := table(t, cfg())
 	u := unit("k")
 	f := x.Join(0, 1, u)
@@ -79,6 +80,7 @@ func TestAdv_1_CancelAcknowledgementGap(t *testing.T) {
 	}
 }
 func TestAdv_1_NoShareBypassOverlap(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 1 narrowed: at most one read per key among the flights the coalescer owns; a cancelled read still finishing, a key on the no-share list and a full flight table pass outside it and are counted. See agent_work/chunks/c11-coalescer/ADVERSARIAL.md.")
 	x := table(t, cfg())
 	u := unit("k")
 	f := x.Join(0, 1, u)
@@ -90,6 +92,7 @@ func TestAdv_1_NoShareBypassOverlap(t *testing.T) {
 	}
 }
 func TestAdv_1_FullTableDuplicateBypass(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 1 narrowed: at most one read per key among the flights the coalescer owns; a cancelled read still finishing, a key on the no-share list and a full flight table pass outside it and are counted. See agent_work/chunks/c11-coalescer/ADVERSARIAL.md.")
 	conf := cfg()
 	conf.MaxFlights = 1
 	x := table(t, conf)
@@ -265,7 +268,10 @@ func tie(t *testing.T, firstResult bool, why c.LeaveWhy) {
 }
 func TestAdv_6_CancelBeforeResultTie(t *testing.T) { tie(t, false, c.LeaveCancel) }
 func TestAdv_6_GoneBeforeResultTie(t *testing.T)   { tie(t, false, c.LeaveGone) }
-func TestAdv_6_ResultBeforeCancelTie(t *testing.T) { tie(t, true, c.LeaveCancel) }
+func TestAdv_6_ResultBeforeCancelTie(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 6 narrowed: at one instant the order of events decides; a result applied before a waiter's leave is delivered to it. See agent_work/chunks/c11-coalescer/ADVERSARIAL.md.")
+	tie(t, true, c.LeaveCancel)
+}
 func allLeave(t *testing.T, held bool, why c.LeaveWhy) {
 	x := table(t, cfg())
 	u := unit("x")
