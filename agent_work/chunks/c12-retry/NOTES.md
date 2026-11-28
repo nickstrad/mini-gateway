@@ -208,7 +208,7 @@ cores (other sessions' runs beside these):
 | `agent_work/chunks/c09-fairness/gate/extra.sh`, `agent_work/chunks/c12-retry/gate/extra.sh` | both pass (planted fuzz bugs found, canaries green) |
 | 5-seed sweep, `DST_SEEDS=5 RUN_DIR=… go test -run '^(TestScenarioFair\|TestScenarioRetry)' ./test/e2e/` | every fairness scenario, `retry-no-double-apply` and the weighted storm pass; `retry-storm/on` seed 2 failed (above); after `6f9a0bb` `retry-storm` all arms seeds 1–5 pass (15 runs) |
 | `scripts/csv-assert.sh` over the sweep's flushed files | 0 failures: `fair-held-transactions`, `fair-many-tenants`, `fair-noisy-neighbour`, `fair-results`, `retry-no-double-apply` (15 runs), `retry-storm` (15 runs, after the re-pin) |
-| `GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh c12-retry` | GATE-PLACEHOLDER |
+| `GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh c12-retry` | at `20f4b47`, clean tree: **overall pass** (`counts_for_landing` false by `GATE_ONLY`): G0 all, G1 detlint (30 patterns), importlint, boundlint, paniccheck, G2 comments (baseline `d5dc685`), G3 unit (952 s, every package including both adversarial packages), G3 counted, G3 race (93 s). The rewritten evidence logs under `agent_work/adversarial/` were restored with `git checkout`; `gate/result.json` and the untracked `gate/` logs removed |
 
 ## Repair round
 
