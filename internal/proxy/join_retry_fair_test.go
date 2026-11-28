@@ -364,3 +364,268 @@ func TestJoinEveryRetryEngineTestHoldsBehindTheFairDispatcher(t *testing.T) {
 		}
 	}
 }
+
+const secondInsertSQL = "INSERT INTO kv VALUES ('k2', 'v')"
+
+func (r *coreRig) idleConns(tenant int, clients ...proxy.ConnID) []proxy.ConnID {
+	r.t.Helper()
+	var ids []proxy.ConnID
+	for _, c := range clients {
+		ids = append(ids, r.lease(c, tenant, "SELECT "+strconv.Itoa(int(c))))
+	}
+	for i, id := range ids {
+		r.db(id, complete("SELECT "+strconv.Itoa(int(clients[i])), 'I'))
+		r.finishReset(id)
+	}
+	return ids
+}
+
+func (r *coreRig) lendWrite(client proxy.ConnID, tenant int, sql string, on proxy.ConnID) {
+	r.t.Helper()
+	r.login(client, tenant)
+	if a := r.send(client, sql); !bytes.Equal(written(a, proxy.ActDBWrite, on), query(sql)) {
+		r.t.Fatalf("premise: %q was not lent to %d: %q", sql, on, written(a, proxy.ActDBWrite, on))
+	}
+}
+
+func TestJoinARetryOverflowingItsTenantQueueShedsTheEarlierWaitingRetry(t *testing.T) {
+	r := fairRig(t, 2, func(c *proxy.Config) {
+		retryOn(c)
+		c.Admission.TenantCapacity = 1
+	})
+	ids := r.idleConns(0, 20, 21)
+	r.lendWrite(10, 0, insertSQL, ids[0])
+	r.lendWrite(11, 0, secondInsertSQL, ids[1])
+	if a := r.refuseAndClose(ids[0]); len(written(a, proxy.ActClientWrite, 10)) != 0 {
+		t.Fatalf("the first write's client got a reply before its retry ran: %q", written(a, proxy.ActClientWrite, 10))
+	}
+	if s, _ := r.agree(); s.RetryPending.Value != 1 || r.queuedOf(0) != 1 {
+		t.Fatalf("premise: pending %d queued %d", s.RetryPending.Value, r.queuedOf(0))
+	}
+	a := r.refuseAndClose(ids[1])
+	if !replied(a, 10, "53M01") || len(written(a, proxy.ActClientWrite, 11)) != 0 {
+		t.Fatalf("the second retry did not take the full tenant ring's only slot: client 10 got %q, client 11 got %q", written(a, proxy.ActClientWrite, 10), written(a, proxy.ActClientWrite, 11))
+	}
+	s, as := r.agree()
+	if s.RetryAsked != 2 || s.RetryPending.Value != 1 || s.RetryEnds[proxy.RetryEndShed] != 1 || as.Shed[admission.ReasonOverflow] != 1 || r.queuedOf(0) != 1 {
+		t.Fatalf("asked %d pending %d ends %v overflow %d queued %d", s.RetryAsked, s.RetryPending.Value, s.RetryEnds, as.Shed[admission.ReasonOverflow], r.queuedOf(0))
+	}
+	fresh := r.lastDial()
+	a = r.open(fresh)
+	if on, ok := retryForwardedOn(a); ok {
+		t.Fatalf("the shed retry was forwarded on %d", on)
+	}
+	if !bytes.HasSuffix(written(a, proxy.ActDBWrite, fresh), query(secondInsertSQL)) {
+		t.Fatalf("the waiting retry was not lent to the new connection: %q", written(a, proxy.ActDBWrite, fresh))
+	}
+	if got := written(r.db(fresh, complete("INSERT 0 1", 'I')), proxy.ActClientWrite, 11); !bytes.Equal(got, complete("INSERT 0 1", 'I')) {
+		t.Fatalf("client reply %q", got)
+	}
+	s, as = r.agree()
+	if s.RetryPending.Value != 0 || s.RetryEnds[proxy.RetryEndShed] != 1 || s.RetryEnds[proxy.RetryEndCompleted] != 1 || as.Fair.LeaseStarts != s.LeasesStarted || as.Fair.LeaseEnds != s.LeasesEnded {
+		t.Fatalf("pending %d ends %v fair starts %d ends %d engine %d %d", s.RetryPending.Value, s.RetryEnds, as.Fair.LeaseStarts, as.Fair.LeaseEnds, s.LeasesStarted, s.LeasesEnded)
+	}
+}
+
+func TestJoinARetryRefusedAtTheTenantCapIsShedAndEndsItsRetry(t *testing.T) {
+	r := fairRig(t, 1, func(c *proxy.Config) {
+		retryOn(c)
+		c.Admission.MaxTenants = 2
+	})
+	id := r.idleConn(20)
+	r.lendWrite(10, 0, insertSQL, id)
+	for _, c := range []struct {
+		client proxy.ConnID
+		tenant int
+	}{{11, 1}, {12, 2}} {
+		r.login(c.client, c.tenant)
+		r.q(c.client, "SELECT "+strconv.Itoa(int(c.client)))
+	}
+	if _, as := r.agree(); as.Queued.Value != 2 || r.queuedOf(0) != 0 {
+		t.Fatalf("premise: queued %d, tenant 0 queued %d", as.Queued.Value, r.queuedOf(0))
+	}
+	a := r.refuseAndClose(id)
+	if !replied(a, 10, "53M01") {
+		t.Fatalf("the retry refused at the tenant cap was not answered 53M01: %q", written(a, proxy.ActClientWrite, 10))
+	}
+	r.noRetryForward(a)
+	s, as := r.agree()
+	if s.RetryAsked != 1 || s.RetryPending.Value != 0 || s.RetryEnds[proxy.RetryEndShed] != 1 || as.Shed[admission.ReasonTenants] != 1 || as.Queued.Value != 2 {
+		t.Fatalf("asked %d pending %d ends %v refused at the tenant cap %d queued %d", s.RetryAsked, s.RetryPending.Value, s.RetryEnds, as.Shed[admission.ReasonTenants], as.Queued.Value)
+	}
+	if as.Fair.InFlight.Value != 0 || tenantInFlight(r, 0) != 0 {
+		t.Fatalf("in flight %d, tenant 0 %d", as.Fair.InFlight.Value, tenantInFlight(r, 0))
+	}
+}
+
+func TestJoinARetryAboveItsShareTakesAFreeLeaseButNotTheLastOneReserved(t *testing.T) {
+	var q *admission.Queues
+	r := fairRig(t, 6, func(c *proxy.Config) {
+		retryOn(c)
+		q = seamFair(t, c)
+	})
+	var held []proxy.ConnID
+	for c := range proxy.ConnID(4) {
+		held = append(held, r.heldTx(10+c, 0))
+	}
+	spare := r.idleConns(0, 20)[0]
+	r.lendWrite(14, 0, insertSQL, spare)
+	r.heldTx(15, 1)
+	if tenantInFlight(r, 0) != 5 || tenantInFlight(r, 1) != 1 || r.e.AdmissionSnapshot().Fair.InFlight.Value != 6 {
+		t.Fatalf("premise: in flight %d / %d", tenantInFlight(r, 0), tenantInFlight(r, 1))
+	}
+	dials := r.dials()
+	r.refuseAndClose(spare)
+	r.noRetryForward(r.tick(2 * time.Millisecond))
+	s, as := r.agree()
+	if s.RetryPending.Value != 1 || r.queuedOf(0) != 1 || tenantInFlight(r, 0) != 4 || as.Fair.InFlight.Value != 5 || q.Releasable() != 0 || r.dials() != dials {
+		t.Fatalf("a retry of a tenant above its share took the last lease reserved for tenant 1: pending %d queued %d in flight %d releasable %d dials %d",
+			s.RetryPending.Value, r.queuedOf(0), tenantInFlight(r, 0), q.Releasable(), r.dials()-dials)
+	}
+	on, ok := retryForwardedOn(r.commit(10, held[0]))
+	if !ok || on != held[0] {
+		t.Fatalf("two leases free: the retry of a tenant at its share was not lent the freed connection: forwarded %v on %d", ok, on)
+	}
+	if tenantInFlight(r, 0) != 4 || r.e.AdmissionSnapshot().Fair.InFlight.Value != 5 {
+		t.Fatalf("in flight %d / total %d after the retry was lent", tenantInFlight(r, 0), r.e.AdmissionSnapshot().Fair.InFlight.Value)
+	}
+	if r.dials() != dials+1 {
+		t.Fatalf("premise: one dial for the releasable retry while the freed connection was reset, got %d", r.dials()-dials)
+	}
+	last := r.dbs[len(r.dbs)-1]
+	r.open(last)
+	if r.pool().Idle.Value != 1 {
+		t.Fatalf("premise: idle %d", r.pool().Idle.Value)
+	}
+	_, before := r.agree()
+	r.login(16, 0)
+	a := r.q(16, "SELECT 16")
+	a = append(a, r.tick(2*time.Millisecond)...)
+	_, as = r.agree()
+	if len(written(a, proxy.ActDBWrite, last)) != 0 || r.queuedOf(0) != 1 || q.Releasable() != 0 || as.Fair.HeldShare == before.Fair.HeldShare || r.dials() != dials+1 {
+		t.Fatalf("the last lease was not held back for tenant 1: wrote %q, tenant 0 queued %d, releasable %d, held at share %d -> %d, dials %d",
+			written(a, proxy.ActDBWrite, last), r.queuedOf(0), q.Releasable(), before.Fair.HeldShare, as.Fair.HeldShare, r.dials()-dials)
+	}
+	r.login(17, 1)
+	if a := r.q(17, "SELECT 17"); !bytes.HasSuffix(written(a, proxy.ActDBWrite, last), query("SELECT 17")) {
+		t.Fatalf("the last lease went to %q, not to tenant 1 below its share", written(a, proxy.ActDBWrite, last))
+	}
+	if got := written(r.db(held[0], complete("INSERT 0 1", 'I')), proxy.ActClientWrite, 14); !bytes.Equal(got, complete("INSERT 0 1", 'I')) {
+		t.Fatalf("client reply %q", got)
+	}
+	if s, _ := r.agree(); s.RetryPending.Value != 0 || s.RetryEnds[proxy.RetryEndCompleted] != 1 {
+		t.Fatalf("pending %d ends %v", s.RetryPending.Value, s.RetryEnds)
+	}
+}
+
+func seamFair(t *testing.T, c *proxy.Config) *admission.Queues {
+	t.Helper()
+	aq, err := proxy.NewAdmissionQueue(c.AdmissionConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := admission.NewFair(c.FairConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	aq.Core().SetDispatcher(f)
+	c.Seams.Queue = aq
+	return aq.Core()
+}
+
+func TestJoinARetryHeldByAFairLimitBelowTheConnectionsIsNoDemand(t *testing.T) {
+	var q *admission.Queues
+	r := fairRig(t, 4, func(c *proxy.Config) {
+		retryOn(c)
+		c.Fairness.Limit = 3
+		q = seamFair(t, c)
+	})
+	releasable := func(want int, when string) {
+		t.Helper()
+		if got := q.Releasable(); got != want {
+			t.Fatalf("%s: releasable %d, want %d", when, got, want)
+		}
+	}
+	if !r.e.AdmissionSnapshot().Fair.On || q.Limit() != 3 {
+		t.Fatalf("premise: fair %v limit %d", r.e.AdmissionSnapshot().Fair.On, q.Limit())
+	}
+	r.heldTx(10, 0)
+	other := r.heldTx(11, 1)
+	spare := r.idleConns(0, 20)[0]
+	r.lendWrite(12, 0, insertSQL, spare)
+	r.login(13, 2)
+	r.q(13, "SELECT 13")
+	dials := r.dials()
+	r.tick(2 * time.Millisecond)
+	releasable(0, "at the fair limit")
+	if r.dials() != dials {
+		t.Fatalf("premise: %d dials past the fair limit", r.dials()-dials)
+	}
+	r.refuseAndClose(spare)
+	releasable(1, "the retry's lost lease ended")
+	fresh := r.lastDial()
+	if r.dials() != dials+1 {
+		t.Fatalf("one lease free: %d dials, want 1", r.dials()-dials)
+	}
+	a := r.open(fresh)
+	if !bytes.HasSuffix(written(a, proxy.ActDBWrite, fresh), query("SELECT 13")) {
+		t.Fatalf("the free lease went to %q, not to tenant 2 below its share", written(a, proxy.ActDBWrite, fresh))
+	}
+	releasable(0, "the retry waits at the fair limit")
+	for range 5 {
+		r.noRetryForward(r.tick(100 * time.Millisecond))
+	}
+	if p := r.pool(); r.dials() != dials+1 || p.Open.Value+p.Connecting.Value != 3 {
+		t.Fatalf("a retry held at the fair limit below pool.connections was demand: %d dials, open %d connecting %d", r.dials()-dials, p.Open.Value, p.Connecting.Value)
+	}
+	if s, as := r.agree(); s.RetryPending.Value != 1 || r.queuedOf(0) != 1 || as.Fair.InFlight.Value != 3 {
+		t.Fatalf("pending %d queued %d in flight %d", s.RetryPending.Value, r.queuedOf(0), as.Fair.InFlight.Value)
+	}
+	on, ok := retryForwardedOn(r.commit(11, other))
+	if !ok || on != other {
+		t.Fatalf("the retry was not lent the connection freed below the fair limit: forwarded %v on %d", ok, on)
+	}
+	releasable(0, "the retry was lent")
+	if r.dials() != dials+1 {
+		t.Fatalf("%d dials after the retry was lent", r.dials()-dials)
+	}
+	r.db(other, complete("INSERT 0 1", 'I'))
+	if s, _ := r.agree(); s.RetryPending.Value != 0 || s.RetryEnds[proxy.RetryEndCompleted] != 1 {
+		t.Fatalf("pending %d ends %v", s.RetryPending.Value, s.RetryEnds)
+	}
+}
+
+func TestJoinTheBreakerReCheckRunsWhenAnotherTenantsLeaseIsLostWhileARetryIsHeldBack(t *testing.T) {
+	for _, open := range []bool{false, true} {
+		b := &switchBreaker{}
+		h := retryHeldAtShare(t, func(c *proxy.Config) { c.Seams.Breaker = b })
+		h.login(15, 1)
+		h.q(15, "SELECT pg_sleep(1)")
+		running := h.dbs[len(h.dbs)-1]
+		h.open(running)
+		h.noForwardOfTheRetry(h.commit(14, h.other))
+		if h.pool().Idle.Value != 1 || tenantInFlight(h.coreRig, 1) != 1 || h.queuedOf(0) != 1 {
+			t.Fatalf("premise: idle %d, tenant 1 in flight %d, tenant 0 queued %d", h.pool().Idle.Value, tenantInFlight(h.coreRig, 1), h.queuedOf(0))
+		}
+		b.open = open
+		a := h.run(h.ev(proxy.EvDBClosed, running, nil, 0))
+		if bytes.Equal(written(a, proxy.ActDBWrite, h.other), query("")) {
+			a = append(a, h.db(h.other, emptyReply())...)
+		}
+		on, forwarded := retryForwardedOn(a)
+		s, _ := h.agree()
+		if !open {
+			if !forwarded || on != h.other || s.RetryEnds[proxy.RetryEndBreaker] != 0 {
+				t.Fatalf("breaker closed: tenant 1's lease was lost and the idle connection must go to the retry: forwarded %v on %d, ends %v", forwarded, on, s.RetryEnds)
+			}
+			continue
+		}
+		h.noForwardOfTheRetry(a)
+		if !replied(a, 13, "53M03") {
+			t.Fatalf("breaker open: client got %q", written(a, proxy.ActClientWrite, 13))
+		}
+		if s.RetryEnds[proxy.RetryEndBreaker] != 1 || s.RetryPending.Value != 0 || s.Queued.Value != 0 || tenantInFlight(h.coreRig, 0) != 2 {
+			t.Fatalf("ends %v pending %d queued %d in flight %d", s.RetryEnds, s.RetryPending.Value, s.Queued.Value, tenantInFlight(h.coreRig, 0))
+		}
+	}
+}
