@@ -764,7 +764,10 @@ func (sc CoalesceScenario) AblationArm() *Spec {
 	return &ab
 }
 
-const CoalesceHeavyEnv = "MG_C11_HEAVY"
+const (
+	CoalesceHeavyEnv         = "MG_C11_HEAVY"
+	CoalesceBaselineScenario = "coalesce-caps-strict"
+)
 
 func CoalesceHeavyRuns(short bool) bool {
 	return !short && (os.Getenv("RUN_DIR") != "" || os.Getenv(CoalesceHeavyEnv) == "1")

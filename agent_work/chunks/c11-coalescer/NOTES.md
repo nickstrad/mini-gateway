@@ -239,8 +239,7 @@ the p99 values are indicative only; the read counts are the headline.
 `scripts/ci-fast.sh` took 401 s on 2026-11-27 with the machine's load average at 10–14 on 4
 cores (other builds running); it was not measurable alone. This chunk adds about 6 s of tier S
 scenarios under `-short` (21 light scenarios, one seed; the 1,000-client ones skip), about 1 s of
-core and `coalsrc` tests, and 21 short baseline runs in `internal/obs/simrun` (each under a
-second). The 1,000-client hot-key scenarios run only where their files are kept (the sweep, with
+core and `coalsrc` tests, and one baseline run in `internal/obs/simrun` (under a second). The 1,000-client hot-key scenarios run only where their files are kept (the sweep, with
 `RUN_DIR` set, one seed) or with `MG_C11_HEAVY=1` (the gate's extra, three seeds; my sweeps),
 never under `-short`; `TestCoalesceHotKeyNumbers` runs only with `MG_C11_HEAVY=1`. This was
 tightened after the fourth gate run, whose G3 unit stage hit the 30-minute package timeout in
@@ -313,7 +312,11 @@ flight `cancelled`), overflows by cap. Health rule: open point 10.
   passed (run of 2026-11-27, `/tmp/zgw-c11/tr1.log`: only that test failed, before the change).
   Not a weakening: the on-switch test's subject is the reset policy, which coalescing does not
   touch.
-- `internal/obs/simrun/engine_test.go`: adds the coalescer scenarios to the baseline runs.
+- `internal/obs/simrun/engine_test.go`: adds one coalescer scenario (`coalesce-caps-strict`, which
+  moves every coalescer metric, the per-tenant hits included) to the baseline runs and lists the
+  other coalescer scenarios as left to the sweep, whose files G7 asserts. All of them were
+  baseline runs until the sixth gate run, where `internal/obs/simrun` hit its 30-minute timeout
+  at a load average of about 40.
 - `test/e2e/c06a_tierr_test.go` (`adminStats`): waits, at most `freshStatsDeadline` (15 s), while
   `/stats` answers `503 nothing published yet`, then decodes. Reason: the first full gate run of
   this chunk failed G6 on `TestTierRMgctlSeededModelAgainstTheRealBinary` with `invalid character
