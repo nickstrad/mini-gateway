@@ -2,6 +2,7 @@ package proxy_test
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 	"time"
 
@@ -401,5 +402,53 @@ func TestRepairAHeldFlightPromotedByThePoolBreakerFlushIsRefusedAndTheFlushLeave
 		h.noRead(a)
 		h.everyoneRefusedByTheBreaker(a, 14, 15, 16, 18, 19, 20)
 		h.noRead(h.tick(10 * time.Millisecond))
+	}
+}
+
+func TestRepairHeldHandoffsPreserveTheOriginalArrival(t *testing.T) {
+	for _, cancel := range []bool{false, true} {
+		for _, twice := range []bool{false, true} {
+			t.Run(fmt.Sprintf("cancel=%v/twice=%v", cancel, twice), func(t *testing.T) {
+				h := repairRig(t, coalesce.JoinStrict, 2*joinStatement, nil)
+				for id := proxy.ConnID(10); id <= 14; id++ {
+					h.login(id, int(id)%3)
+				}
+				base := h.now
+				h.qHolding(10, sharedRead)
+				first := h.dbs[len(h.dbs)-1]
+				h.openHolding(first)
+				for i, id := range []proxy.ConnID{11, 12, 13, 14} {
+					at := []time.Duration{10, 20, 180, 200}[i] * time.Millisecond
+					h.now = base + proxy.Instant(at)
+					h.noRead(h.qHolding(id, sharedRead))
+				}
+				h.now = base + proxy.Instant(210*time.Millisecond)
+				leave := func(id proxy.ConnID) {
+					if cancel {
+						h.cancelFrom(id+100, h.clientKey(id))
+					} else {
+						h.run(h.ev(proxy.EvClientClosed, id, nil, 0))
+					}
+				}
+				leave(11)
+				if twice {
+					leave(14)
+				}
+				h.now = base + proxy.Instant(250*time.Millisecond)
+				a := h.dbHolding(first, readReply("first"))
+				a = append(a, h.dbHolding(first, complete("DISCARD ALL", 'I'))...)
+				on, _ := h.untilHeldRead(a)
+				h.now = base + proxy.Instant(450*time.Millisecond)
+				a = h.refuseAndClose(on)
+				if s, _ := h.agree(); s.RetryAsked != 0 || s.RetryPending.Value != 0 {
+					t.Fatalf("held handoff moved deadline: asked %d pending %d", s.RetryAsked, s.RetryPending.Value)
+				}
+				h.noRead(a)
+				if got := written(a, proxy.ActClientWrite, 12); !bytes.Contains(got, []byte("08006")) {
+					t.Fatalf("earlier follower got %q", got)
+				}
+				h.noRead(h.tick(10 * time.Millisecond))
+			})
+		}
 	}
 }
