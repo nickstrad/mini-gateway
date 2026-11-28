@@ -1,0 +1,11 @@
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:331: tier R: 0 dirty observations over 15 hostile leases
+--- PASS: TestTierRSessionStateNeverCrossesClients (2.60s)
+PASS
+ok  	github.com/nickstrad/mini-gateway/test/e2e	19.370s
+=== RUN   TestTierRSessionStateNeverCrossesClients
+    tierr_test.go:405: 21 dirty observations through the proxy (prepared 0, cursors 19, listens 0, adv_locks 0, session_gucs 0, temp_rels 0, role_changed 18, secret read back 0)
+--- FAIL: TestTierRSessionStateNeverCrossesClients (2.53s)
+FAIL
+FAIL	github.com/nickstrad/mini-gateway/test/e2e	18.325s
+FAIL

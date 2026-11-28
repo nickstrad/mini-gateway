@@ -1,0 +1,288 @@
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (37.33s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (59.90s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (31.54s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (31.64s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (20.89s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (20.04s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (17.42s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (14.37s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (21.22s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (16.27s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (17.53s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (19.01s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (18.67s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (15.98s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (19.66s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (21.19s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (32.45s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (27.79s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (19.64s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+panic: test timed out after 8m0s
+	running tests:
+		TestTierRPoolSessionStateUnderEachReleasePolicy (17s)
+
+goroutine 292 [running]:
+testing.(*M).startAlarm.func1()
+	/usr/local/go/src/testing/testing.go:2802 +0x354
+created by time.goFunc
+	/usr/local/go/src/time/sleep.go:215 +0x2d
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0x13a8bf86e008, {0xa89bbb?, 0x0?}, 0xaa1ce0)
+	/usr/local/go/src/testing/testing.go:2109 +0x4e5
+testing.runTests.func1(0x13a8bf86e008)
+	/usr/local/go/src/testing/testing.go:2585 +0x3e
+testing.tRunner(0x13a8bf86e008, 0x13a8bf0ffbc0)
+	/usr/local/go/src/testing/testing.go:2036 +0xea
+testing.runTests({0xa7d5be, 0x21}, {0xa85d63, 0x2a}, 0x13a8bf0258a8, {0xefc280, 0x35, 0x35}, {0xc2ba9e38defd0b09, 0x748dc1ef68, ...})
+	/usr/local/go/src/testing/testing.go:2583 +0x505
+testing.(*M).Run(0x13a8bf0ac820)
+	/usr/local/go/src/testing/testing.go:2443 +0x6ac
+github.com/nickstrad/mini-gateway/test/e2e.TestMain(0x13a8bf0ac820)
+	/root/Software/mini-gateway-work/lease-port-adv/test/e2e/tierr_test.go:43 +0x156
+main.main()
+	_testmain.go:154 +0xa5
+
+goroutine 274 [runnable]:
+encoding/csv.(*Reader).readRecord(0x13a8bf394d50, {0x0, 0x0?, 0x0})
+	/usr/local/go/src/encoding/csv/reader.go:449 +0x14ee
+encoding/csv.(*Reader).ReadAll(0x13a8bf394d50)
+	/usr/local/go/src/encoding/csv/reader.go:240 +0x58
+github.com/nickstrad/mini-gateway/internal/obs/csvflush.readCSV({0x13a8bf4d8480, 0xc0}, {0x13a8bf8f05b0, 0xd, 0x4?})
+	/root/Software/mini-gateway-work/lease-port-adv/internal/obs/csvflush/reader.go:60 +0x277
+github.com/nickstrad/mini-gateway/internal/obs/csvflush.Read({0x13a8bf4d9680, 0xb4})
+	/root/Software/mini-gateway-work/lease-port-adv/internal/obs/csvflush/reader.go:126 +0x405
+github.com/nickstrad/mini-gateway/internal/obs/csvflush.RoundTrip({0x13a8bf4d9680?, 0x9?}, {0x13a8bf395840, 0x1, 0x0?})
+	/root/Software/mini-gateway-work/lease-port-adv/internal/obs/csvflush/reader.go:199 +0x3a
+github.com/nickstrad/mini-gateway/test/e2e.stopAndRead(0x13a8bf86e6c8, 0x13a8bf1c2000, 0x13a8bf2d81e0, {0x13a8bf03a440, 0x20})
+	/root/Software/mini-gateway-work/lease-port-adv/test/e2e/tierr_test.go:97 +0x490
+github.com/nickstrad/mini-gateway/test/e2e.policyRun(0x13a8bf86e6c8, 0x13a8bf1c2000, {0xa67566, 0x6}, {0xa66811, 0x2})
+	/root/Software/mini-gateway-work/lease-port-adv/test/e2e/c07_tierr_test.go:190 +0x97f
+github.com/nickstrad/mini-gateway/test/e2e.TestTierRPoolSessionStateUnderEachReleasePolicy(0x13a8bf86e6c8)
+	/root/Software/mini-gateway-work/lease-port-adv/test/e2e/c07_tierr_test.go:202 +0x173
+testing.tRunner(0x13a8bf86e6c8, 0xaa1ce0)
+	/usr/local/go/src/testing/testing.go:2036 +0xea
+created by testing.(*T).Run in goroutine 1
+	/usr/local/go/src/testing/testing.go:2101 +0x4c5
+FAIL	github.com/nickstrad/mini-gateway/test/e2e	500.739s
+FAIL
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (17.75s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (21.50s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (17.11s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (20.91s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (16.75s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (5.85s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (5.67s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (3.80s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (4.92s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (6.41s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (6.17s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (6.12s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (5.04s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (4.41s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (4.15s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (3.84s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (4.04s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (4.51s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (4.42s)
+=== RUN   TestTierRPoolSessionStateUnderEachReleasePolicy
+    c07_tierr_test.go:202: tierr-pool-session-always: crossings 0, same-tenant carry-over 0, seed residue other tenant true same tenant true; switches 0 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-on-switch: crossings 0, same-tenant carry-over 8, seed residue other tenant true same tenant true; switches 18 reseeds 0
+    c07_tierr_test.go:202: tierr-pool-session-always-reseed: crossings 0, same-tenant carry-over 0, seed residue other tenant false same tenant false; switches 0 reseeds 45
+    c07_tierr_test.go:202: tierr-pool-session-on-switch-reseed: crossings 0, same-tenant carry-over 8, seed residue other tenant false same tenant true; switches 18 reseeds 18
+--- PASS: TestTierRPoolSessionStateUnderEachReleasePolicy (4.62s)
+PASS
+ok  	github.com/nickstrad/mini-gateway/test/e2e	184.558s
