@@ -154,23 +154,24 @@ type Snapshot struct {
 	BreakerFlushed     int64
 	IdleInTxRolledBack int64
 
-	Coalesced          obs.Gauge
-	CoalesceLed        int64
-	CoalesceFollowed   int64
-	CoalescePassed     int64
-	CoalesceRefused    int64
-	CoalesceReplies    int64
-	CoalesceErrors     int64
-	CoalesceOverflowed int64
-	CoalesceHandoffs   int64
-	CoalescePromoted   int64
-	CoalesceExpired    int64
-	CancelsCoalesced   int64
-	RetryOffered       int64
-	RetriedRequests    int64
-	RetryPending       obs.Gauge
-	RetryEnds          [NumRetryEnds]int64
-	RetryRows          [pgwire.ErrRowCount]int64
+	Coalesced               obs.Gauge
+	CoalesceLed             int64
+	CoalesceFollowed        int64
+	CoalescePassed          int64
+	CoalesceRefused         int64
+	CoalesceReplies         int64
+	CoalesceErrors          int64
+	CoalesceOverflowed      int64
+	CoalesceHandoffs        int64
+	CoalescePromoted        int64
+	CoalescePromotedRefused int64
+	CoalesceExpired         int64
+	CancelsCoalesced        int64
+	RetryOffered            int64
+	RetriedRequests         int64
+	RetryPending            obs.Gauge
+	RetryEnds               [NumRetryEnds]int64
+	RetryRows               [pgwire.ErrRowCount]int64
 }
 
 // Check enforces exact counter conservation and capacity invariants on s.

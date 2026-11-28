@@ -121,6 +121,7 @@ func Metrics() []obs.MetricDesc {
 		obs.CounterDesc("coalesce_answers", lo, "Requests that waited on a flight and were answered by it (outcome: reply, error, refused)."),
 		obs.CounterDesc("coalesce_handoffs", 0, "Times a flight's queue slot or connection passed to a waiting request because its owner left."),
 		obs.CounterDesc("coalesce_promoted", 0, "Flights held behind a running read of their key that then went to the queue."),
+		obs.CounterDesc("coalesce_promoted_refused", 0, "Held flights refused 53M03 with all their waiters when promoted while the breaker was open (never queued, never forwarded)."),
 		obs.CounterDesc("coalesce_expired", 0, "Flights that reached their deadline (the statement deadline from their start) before a reply."),
 		obs.CounterDesc("coalesce_refused", 0, "Requests refused 53M04 at the coalescer's waiter cap before acceptance."),
 		obs.CounterDesc("coalesce_cancels", 0, "Cancel requests from waiters on a flight, answered 57014 without touching the shared read."),
@@ -202,6 +203,7 @@ func mapCoalesce(s proxy.Snapshot, e *obs.Emitter) {
 	e.Counter("coalesce_answers", obs.Labels{Outcome: "refused"}, s.CoalesceOverflowed)
 	e.Counter("coalesce_handoffs", none, s.CoalesceHandoffs)
 	e.Counter("coalesce_promoted", none, s.CoalescePromoted)
+	e.Counter("coalesce_promoted_refused", none, s.CoalescePromotedRefused)
 	e.Counter("coalesce_expired", none, s.CoalesceExpired)
 	e.Counter("coalesce_cancels", none, s.CancelsCoalesced)
 	e.Counter("coalesce_refused", none, s.CoalesceRefused)

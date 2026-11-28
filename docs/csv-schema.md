@@ -209,6 +209,7 @@ Every metric a component may export. Kind `histogram` rows go to `histograms.csv
 | `engine` | `coalesce_handoffs` | counter | — | count | sum | Times a flight's queue slot or connection passed to a waiting request because its owner left. |
 | `engine` | `coalesce_joins` | counter | outcome | count | sum | Accepted requests by what the coalesce stage did (outcome: led, followed, passed). |
 | `engine` | `coalesce_promoted` | counter | — | count | sum | Flights held behind a running read of their key that then went to the queue. |
+| `engine` | `coalesce_promoted_refused` | counter | — | count | sum | Held flights refused 53M03 with all their waiters when promoted while the breaker was open (never queued, never forwarded). |
 | `engine` | `coalesce_refused` | counter | — | count | sum | Requests refused 53M04 at the coalescer's waiter cap before acceptance. |
 | `engine` | `connections_resetting` | gauge | — | count | sum | Database connections being reset now. |
 | `engine` | `connections_resetting_peak` | gauge | — | count | max | Most database connections being reset at once. |

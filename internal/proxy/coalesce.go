@@ -281,8 +281,26 @@ func (e *Engine) coalStart(c *client, f coalesce.FlightID) {
 	c.phase = cpIdle
 	c.req.fl, c.req.store = f, true
 	c.req.enq = e.now
+	if e.breakerOpen() {
+		e.refusePromoted(c)
+		return
+	}
 	e.enqueue(c)
 	if c.phase == cpIdle {
+		e.pump(c)
+	}
+}
+
+func (e *Engine) refusePromoted(c *client) {
+	req := c.req
+	e.snap.CoalescePromotedRefused++
+	e.coalFailed(c, req, pgwire.ErrRowBreakerOpen, work.No)
+	e.snap.Failed++
+	e.reached(work.No)
+	e.retryEnded(req, RetryEndBreaker)
+	c.req = nil
+	e.reply(c, pgwire.ErrRowBreakerOpen)
+	if c.phase != cpClosed {
 		e.pump(c)
 	}
 }
