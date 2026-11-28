@@ -25,6 +25,8 @@ func readReply(v string) []byte {
 	return append(b, complete("SELECT 1", 'I')...)
 }
 
+// TestFollowerGetsTheSameBytesAsTheRequestThatRanTheRead proves a follower takes
+// no queue slot or connection and receives the exact stored bytes plus ReadyForQuery.
 func TestFollowerGetsTheSameBytesAsTheRequestThatRanTheRead(t *testing.T) {
 	r := coalRig(t, coalesce.JoinRelaxed)
 	r.client(11)
@@ -50,6 +52,8 @@ func TestFollowerGetsTheSameBytesAsTheRequestThatRanTheRead(t *testing.T) {
 	}
 }
 
+// TestStrictHoldsARequestThatArrivesWhileTheReadRuns proves strict mode holds a
+// concurrent arrival behind a running read and promotes it after completion.
 func TestStrictHoldsARequestThatArrivesWhileTheReadRuns(t *testing.T) {
 	r := coalRig(t, coalesce.JoinStrict)
 	r.client(11)
@@ -76,6 +80,8 @@ func TestStrictHoldsARequestThatArrivesWhileTheReadRuns(t *testing.T) {
 	}
 }
 
+// TestALeaverAtTheInstantOfTheResultIsNotAnswered proves a follower disconnecting
+// before the reply at the same instant receives no reply while peers do.
 func TestALeaverAtTheInstantOfTheResultIsNotAnswered(t *testing.T) {
 	r := coalRig(t, coalesce.JoinRelaxed)
 	r.client(11)
@@ -98,6 +104,8 @@ func TestALeaverAtTheInstantOfTheResultIsNotAnswered(t *testing.T) {
 	}
 }
 
+// TestTheOwnerLeavingHandsTheLeaseToAWaiter proves disconnecting the flight owner
+// transfers the active lease to a surviving follower without closing the DB connection.
 func TestTheOwnerLeavingHandsTheLeaseToAWaiter(t *testing.T) {
 	r := coalRig(t, coalesce.JoinRelaxed)
 	r.client(11)
@@ -120,6 +128,8 @@ func TestTheOwnerLeavingHandsTheLeaseToAWaiter(t *testing.T) {
 	}
 }
 
+// TestInvariantsCoverFlightsAndWaiters proves Engine.Invariants detects missing
+// follower entries, corrupted owner flight IDs, and an unarmed coalescer timer.
 func TestInvariantsCoverFlightsAndWaiters(t *testing.T) {
 	for _, c := range []struct {
 		name    string
@@ -145,6 +155,8 @@ func TestInvariantsCoverFlightsAndWaiters(t *testing.T) {
 	}
 }
 
+// TestEngineQuiescesWithAnEmptyFlightTableAndNoTimer proves Quiesce rejects an
+// active flight and succeeds once the flight finishes and clients close.
 func TestEngineQuiescesWithAnEmptyFlightTableAndNoTimer(t *testing.T) {
 	r := coalRig(t, coalesce.JoinRelaxed)
 	r.client(11)

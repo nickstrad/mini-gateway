@@ -150,6 +150,8 @@ func (h *heldFlight) everyoneShed(a []proxy.Action) {
 	}
 }
 
+// TestJoinFollowersOfOtherTenantsRideAFlightWithNoQueuePlaceAndNoLease proves
+// cross-tenant followers take no queue slot, no lease, and trigger no pool dials.
 func TestJoinFollowersOfOtherTenantsRideAFlightWithNoQueuePlaceAndNoLease(t *testing.T) {
 	for _, join := range joinModes {
 		h := heldFlightPremise(t, join, nil)
@@ -183,6 +185,8 @@ func TestJoinFollowersOfOtherTenantsRideAFlightWithNoQueuePlaceAndNoLease(t *tes
 	}
 }
 
+// TestJoinAQueuedOwnerHandoffAcrossTenantsUnderABindingShareKeepsTheChargeOnTheQueuedTenant
+// proves a queued handoff to another tenant keeps the queue slot and lease charge on the first tenant.
 func TestJoinAQueuedOwnerHandoffAcrossTenantsUnderABindingShareKeepsTheChargeOnTheQueuedTenant(t *testing.T) {
 	for _, join := range joinModes {
 		h := heldFlightPremise(t, join, nil)
@@ -209,6 +213,8 @@ func TestJoinAQueuedOwnerHandoffAcrossTenantsUnderABindingShareKeepsTheChargeOnT
 	}
 }
 
+// TestJoinARunningOwnerHandoffAcrossTenantsEndsTheLeaseOnTheTenantItWasLentTo
+// proves a running cross-tenant handoff on the pool core ends the lease on d.lastTenant.
 func TestJoinARunningOwnerHandoffAcrossTenantsEndsTheLeaseOnTheTenantItWasLentTo(t *testing.T) {
 	for _, join := range joinModes {
 		h := heldFlightPremise(t, join, nil)
@@ -235,6 +241,8 @@ func TestJoinARunningOwnerHandoffAcrossTenantsEndsTheLeaseOnTheTenantItWasLentTo
 	}
 }
 
+// TestJoinAFlightHeldBackByTheDispatcherEndsAtItsDeadlineWithOneSharedError proves
+// a flight held by fairness sheds at its flight deadline with 53M01 for all waiters.
 func TestJoinAFlightHeldBackByTheDispatcherEndsAtItsDeadlineWithOneSharedError(t *testing.T) {
 	for _, join := range joinModes {
 		h := heldFlightPremise(t, join, nil)
@@ -302,6 +310,8 @@ func (h *heldFlight) silent(a []proxy.Action) {
 	}
 }
 
+// TestJoinALeaderRefusedWithNothingReachedIsRetriedOnceForTheWholeFlight proves a
+// zero-byte refusal retries once for the whole flight and counts one first attempt.
 func TestJoinALeaderRefusedWithNothingReachedIsRetriedOnceForTheWholeFlight(t *testing.T) {
 	for _, join := range joinModes {
 		h := heldFlightPremise(t, join, retryOn)
@@ -341,6 +351,8 @@ func TestJoinALeaderRefusedWithNothingReachedIsRetriedOnceForTheWholeFlight(t *t
 	}
 }
 
+// TestJoinARetriedFlightLostAgainIsAnsweredOnceWithOneSharedError proves a second
+// zero-byte refusal on a retried flight declines further retry and shares one error.
 func TestJoinARetriedFlightLostAgainIsAnsweredOnceWithOneSharedError(t *testing.T) {
 	for _, join := range joinModes {
 		h := heldFlightPremise(t, join, retryOn)
@@ -365,6 +377,8 @@ func TestJoinARetriedFlightLostAgainIsAnsweredOnceWithOneSharedError(t *testing.
 	}
 }
 
+// TestJoinWithTheRetryPolicyOffALeaderRefusedSharesItsErrorAtOnce proves zero-byte
+// refusals share their error immediately when the retry policy is off.
 func TestJoinWithTheRetryPolicyOffALeaderRefusedSharesItsErrorAtOnce(t *testing.T) {
 	for _, join := range joinModes {
 		h := heldFlightPremise(t, join, nil)
@@ -405,6 +419,8 @@ func heldRetriedFlight(t *testing.T, join coalesce.JoinMode, edit func(*proxy.Co
 	return h
 }
 
+// TestJoinARetriedFlightOwnerHeldInTheQueueEndsAtTheEarlierOfTheFlightAndRequestDeadlines
+// proves a queued retry expires at whichever of the flight or request deadline comes first.
 func TestJoinARetriedFlightOwnerHeldInTheQueueEndsAtTheEarlierOfTheFlightAndRequestDeadlines(t *testing.T) {
 	for _, arm := range []struct {
 		name   string
@@ -446,6 +462,8 @@ func (h *heldFlight) noReadAfter(a []proxy.Action) []proxy.Action {
 	return a
 }
 
+// TestJoinTheBreakerReCheckRunsForARetriedFlightOwnerAtTheLendThatWouldTakeIt
+// proves dispatch refuses a queued retried flight with 53M03 for all waiters when the breaker opens.
 func TestJoinTheBreakerReCheckRunsForARetriedFlightOwnerAtTheLendThatWouldTakeIt(t *testing.T) {
 	for _, open := range []bool{false, true} {
 		for _, join := range joinModes {
@@ -478,6 +496,8 @@ func TestJoinTheBreakerReCheckRunsForARetriedFlightOwnerAtTheLendThatWouldTakeIt
 	}
 }
 
+// TestJoinShutdownWithARetryPendingAndFlightsHeldSendsNothingNewToTheDatabase
+// proves Shutdown writes only transaction ROLLBACKs and quiesces pending retries and held flights.
 func TestJoinShutdownWithARetryPendingAndFlightsHeldSendsNothingNewToTheDatabase(t *testing.T) {
 	for _, join := range joinModes {
 		h := heldRetriedFlight(t, join, nil)
@@ -549,6 +569,8 @@ func (r *rig) clientOf(id proxy.ConnID, tenant int) {
 	r.ack(r.ev(proxy.EvClientData, id, b[proxy.FirstClientRead:], 0))
 }
 
+// TestJoinARunningOwnerHandoffAcrossTenantsOnTheFixedSetEndsTheLeaseOnTheTenantItWasLentTo
+// proves a running cross-tenant handoff on the fixed set ends the lease on d.lastTenant.
 func TestJoinARunningOwnerHandoffAcrossTenantsOnTheFixedSetEndsTheLeaseOnTheTenantItWasLentTo(t *testing.T) {
 	r := fixedSetFlightRig(t)
 	r.clientOf(11, 0)
@@ -574,6 +596,8 @@ func TestJoinARunningOwnerHandoffAcrossTenantsOnTheFixedSetEndsTheLeaseOnTheTena
 	}
 }
 
+// TestJoinShutdownEmptiesTheFlightTableEvenOfAFlightNoClientHolds proves coalShutdown
+// clears an orphaned flight so Quiesce passes after Shutdown.
 func TestJoinShutdownEmptiesTheFlightTableEvenOfAFlightNoClientHolds(t *testing.T) {
 	r := coalRig(t, coalesce.JoinStrict)
 	if !r.e.StrandFlightForTest(999) {

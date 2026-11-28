@@ -65,6 +65,8 @@ func runCoalesce(t *testing.T, sc CoalesceScenario, seed int64) *SimRun {
 	return a
 }
 
+// TestScenarioCoalesce runs all 27 tier S coalescer scenarios with replay
+// determinism checks, ablations, and optional direct-arm comparisons.
 func TestScenarioCoalesce(t *testing.T) {
 	for _, sc := range CoalesceScenarios() {
 		t.Run(sc.Spec.Name, func(t *testing.T) {
@@ -90,6 +92,8 @@ func TestScenarioCoalesce(t *testing.T) {
 	}
 }
 
+// TestCoalesceHotKeyNumbers logs seed-1 tier S read counts and latency
+// percentiles for strict, relaxed, off, and direct arms under 1,000 clients.
 func TestCoalesceHotKeyNumbers(t *testing.T) {
 	if testing.Short() || os.Getenv(CoalesceHeavyEnv) != "1" {
 		t.Skip("1,000 clients per arm: runs with " + CoalesceHeavyEnv + "=1 (the gate's extra)")

@@ -18,6 +18,8 @@ func keyBytes(r *rand.Rand) []byte {
 	return b
 }
 
+// TestDifferentShareKeysNeverMapToOneFlightKey proves keyOf is injective over
+// 20,000 random (tenant, text) pairs containing 0x00 and 0xff bytes.
 func TestDifferentShareKeysNeverMapToOneFlightKey(t *testing.T) {
 	r := rand.New(rand.NewPCG(11, 0x6b6579))
 	seen := make(map[string]work.ShareKey)
@@ -34,6 +36,8 @@ func TestDifferentShareKeysNeverMapToOneFlightKey(t *testing.T) {
 	}
 }
 
+// FuzzShareKeyIsUnambiguous fuzzes keyOf injectivity and splitKey round-tripping
+// across arbitrary tenant and statement byte strings.
 func FuzzShareKeyIsUnambiguous(f *testing.F) {
 	f.Add("a", "b\x00c", "a\x00b", "c")
 	f.Add("", "\x00", "\x00", "")
@@ -49,6 +53,8 @@ func FuzzShareKeyIsUnambiguous(f *testing.F) {
 	})
 }
 
+// TestTenantAndTextWithAZeroByteStartTwoFlights proves NUL bytes in tenant or
+// text cannot cause two distinct share keys to collide on one flight.
 func TestTenantAndTextWithAZeroByteStartTwoFlights(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto})
 	a := read("a", "b\x00c")
@@ -63,6 +69,8 @@ func TestTenantAndTextWithAZeroByteStartTwoFlights(t *testing.T) {
 	}
 }
 
+// TestADeadlineNearTheLargestInstantSaturates proves flight deadlines and
+// no-share expiries saturate at maxInstant instead of wrapping negative.
 func TestADeadlineNearTheLargestInstantSaturates(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto, Deadline: Second, NoShareFor: Second, MaxReplyBytes: 1})
 	now := Instant(maxInstant - 100)
@@ -87,6 +95,7 @@ func TestADeadlineNearTheLargestInstantSaturates(t *testing.T) {
 	}
 }
 
+// TestSaturatingAdd proves after saturates at maxInstant without int64 overflow.
 func TestSaturatingAdd(t *testing.T) {
 	for _, c := range []struct{ a, b, want Instant }{
 		{1, 2, 3},

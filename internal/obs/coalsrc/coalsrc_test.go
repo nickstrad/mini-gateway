@@ -55,6 +55,8 @@ func collect(t *testing.T, s coalesce.Snapshot, detail bool) obs.InstanceSnapsho
 	return out
 }
 
+// TestMappingExportsEveryFieldOfTheCoalescerSnapshot proves Map exports every
+// numeric field of coalesce.Snapshot.
 func TestMappingExportsEveryFieldOfTheCoalescerSnapshot(t *testing.T) {
 	var s coalesce.Snapshot
 	f := &filler{paths: map[int64]string{}}
@@ -78,6 +80,8 @@ func TestMappingExportsEveryFieldOfTheCoalescerSnapshot(t *testing.T) {
 	}
 }
 
+// TestCountersMoveAndConserveThroughTheMapping proves a shared flight moves
+// coalescer counters and preserves conservation through the obs collector.
 func TestCountersMoveAndConserveThroughTheMapping(t *testing.T) {
 	tb, err := coalesce.New(coalesce.Config{Mode: coalesce.ModeAuto})
 	if err != nil {
@@ -114,6 +118,8 @@ func TestCountersMoveAndConserveThroughTheMapping(t *testing.T) {
 	}
 }
 
+// TestDetailOffExportsNoTenantRows proves per-tenant hit metrics are suppressed
+// when obs.detail is false.
 func TestDetailOffExportsNoTenantRows(t *testing.T) {
 	s := coalesce.Snapshot{PerTenant: []coalesce.TenantHits{{Tenant: "a", Hits: 3}}, Hits: 3}
 	for _, p := range collect(t, s, false).Points {
@@ -123,6 +129,8 @@ func TestDetailOffExportsNoTenantRows(t *testing.T) {
 	}
 }
 
+// TestHealthStatesTheCoalescerNeverDegradesTheInstance proves the coalescer
+// health check reports StateOK and includes the waiting request count.
 func TestHealthStatesTheCoalescerNeverDegradesTheInstance(t *testing.T) {
 	snap := collect(t, coalesce.Snapshot{Waiting: obs.Gauge{Value: 7}}, false)
 	st, why := coalsrc.HealthRules()[0].Check(snap)

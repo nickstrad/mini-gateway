@@ -8,18 +8,25 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// Cap identifies which coalescer bound was reached on an overflow or detach.
 type Cap uint8
 
 const (
+	// CapWaiters means a flight reached Config.MaxWaiters (owner included).
 	CapWaiters Cap = iota
+	// CapReply means a flight's stored reply exceeded Config.MaxReplyBytes.
 	CapReply
+	// CapFlights means distinct live keys reached Config.MaxFlights.
 	CapFlights
+	// CapUnshareable means a completed reply ended with a non-idle transaction status.
 	CapUnshareable
+	// NumCaps is the sentinel count of Cap values.
 	NumCaps
 )
 
 var capNames = [NumCaps]string{"waiters", "reply", "flights", "unshareable"}
 
+// String returns the canonical reason label for c, or "?" if out of range.
 func (c Cap) String() string {
 	if c < NumCaps {
 		return capNames[c]
@@ -27,17 +34,22 @@ func (c Cap) String() string {
 	return "?"
 }
 
+// TenantHits records the cumulative coalesced hits for one tenant (or OtherTenant).
 type TenantHits struct {
 	Tenant work.TenantID
 	Hits   int64
 }
 
+// HotKey records one entry from the opt-in Space-Saving hot-key tracker.
+// Key text stays inside the snapshot; exporters emit rank counts only.
 type HotKey struct {
 	Tenant work.TenantID
 	Text   string
 	Count  int64
 }
 
+// Snapshot is a plain-value copy of Table counters, gauges, histogram,
+// per-tenant hits, and opt-in hot-key counts.
 type Snapshot struct {
 	Mode          Mode
 	Join          JoinMode
@@ -96,6 +108,7 @@ type Snapshot struct {
 	HotKeys          []HotKey
 }
 
+// Snapshot returns a full, sorted, plain-value copy of t's observability state.
 func (t *Table) Snapshot() Snapshot {
 	s := t.snap
 	s.WaitersPerFlight = t.waiters.Snapshot()
@@ -104,8 +117,11 @@ func (t *Table) Snapshot() Snapshot {
 	return s
 }
 
+// Counters returns t's scalar counters and gauges without cloning slices or histograms.
 func (t *Table) Counters() Snapshot { return t.snap }
 
+// Check verifies exact conservation across offers, waiters, flights, and
+// no-share entries, plus table bounds and per-tenant hit totals.
 func (s Snapshot) Check() error {
 	var errs []error
 	add := func(err error) {
@@ -147,6 +163,8 @@ func (s Snapshot) Check() error {
 
 const maxStep = 1 << 26
 
+// Check verifies snapshot conservation and internal consistency between the
+// creation-ordered flight list, key entries, member map, and gauges.
 func (t *Table) Check() error {
 	if err := t.snap.Check(); err != nil {
 		return err
@@ -187,6 +205,8 @@ func (t *Table) Check() error {
 	return nil
 }
 
+// Quiesce verifies that no flights, waiters, no-share entries, stored bytes,
+// or undrained notices remain in t.
 func (t *Table) Quiesce() error {
 	var errs []error
 	if t.head != none || len(t.byKey) != 0 || len(t.members) != 0 {

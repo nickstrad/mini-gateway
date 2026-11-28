@@ -34,6 +34,7 @@ func (f *File) applyDefaults() {
 	f.Limits.MaxClients = p.MaxClients
 	f.Limits.MaxStartup = p.MaxStartup
 	f.Limits.ReplyBuffer = p.ReplyBufferCap
+	// Write the resolved cap back so omitted and explicit defaults share one fingerprint.
 	f.Coalesce.MaxReplyBytes = p.Coalesce.MaxReplyBytes
 	f.Timeouts = timeoutsFrom(p.Timeouts)
 	f.Pool.CheckTimeout = Duration(p.Timeouts.CheckTimeout)

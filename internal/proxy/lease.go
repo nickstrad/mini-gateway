@@ -329,6 +329,8 @@ func (e *Engine) release(d *dbConn, c *client, status byte) {
 	}
 	e.snap.StagePassed[StageRelease]++
 	e.snap.LeasesEnded++
+	// End the lease on d.lastTenant (the tenant that started it), not c.tenant,
+	// because a cross-tenant flight handoff can change c mid-lease.
 	e.fairEnded(d.lastTenant)
 	d.client = nil
 	c.db = nil
@@ -396,8 +398,10 @@ func (e *Engine) statementLost(c *client, d *dbConn) {
 	reached := reachedFor(d, req)
 	row := lostRow(req, reached)
 	// Offer the failure before recording a client failure: a granted retry keeps
-	// the request alive for its one client reply. The failed connection was
-	// already closed or moved to the dirty table before reaching statementLost.
+	// the request alive for its one client reply (and keeps all waiters on a
+	// live coalesced flight). A flight already expired/removed by the coalescer
+	// is never offered a retry. The failed connection was already closed or
+	// moved to the dirty table before reaching statementLost.
 	if !e.flightGone(req) && e.offerRetry(c, req, reached, row) {
 		e.coalRetried(req)
 		e.rerun(c, req)

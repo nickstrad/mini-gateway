@@ -5,19 +5,27 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// Verdict is the action the caller must take for an incoming request after Join.
 type Verdict uint8
 
 const (
+	// VerdictPass means the request is not shared and proceeds unshared.
 	VerdictPass Verdict = iota
+	// VerdictLead means the request owns a new flight and must enter the queue.
 	VerdictLead
+	// VerdictFollow means the request joined an existing flight and waits for a notice.
 	VerdictFollow
+	// VerdictHold means the request owns a strict-mode next flight waiting behind a running read.
 	VerdictHold
+	// VerdictRefuse means the flight reached MaxWaiters; caller answers 53M04 immediately.
 	VerdictRefuse
+	// NumVerdicts is the sentinel count of Verdict values.
 	NumVerdicts
 )
 
 var verdictNames = [NumVerdicts]string{"pass", "lead", "follow", "hold", "refuse"}
 
+// String returns the canonical verdict name, or "?" if out of range.
 func (v Verdict) String() string {
 	if v < NumVerdicts {
 		return verdictNames[v]
@@ -25,27 +33,40 @@ func (v Verdict) String() string {
 	return "?"
 }
 
+// Waits reports whether the request waits in the coalescer rather than entering
+// the admission queue immediately.
 func (v Verdict) Waits() bool { return v == VerdictFollow || v == VerdictHold }
 
+// Joined is the result of Table.Join.
 type Joined struct {
 	Verdict Verdict
 	Flight  FlightID
 }
 
+// NoticeKind classifies an asynchronous notice emitted for another request on
+// a flight. Callers must drain Table.TakeNotice after every Table method.
 type NoticeKind uint8
 
 const (
+	// NoticeReply delivers a completed shared reply to a follower.
 	NoticeReply NoticeKind = iota + 1
+	// NoticeError delivers a shared failure or error reply to a follower.
 	NoticeError
+	// NoticeRefused answers a follower with 53M04 after its flight detached at a cap.
 	NoticeRefused
+	// NoticeExpired answers a follower after its flight hit its deadline.
 	NoticeExpired
+	// NoticeExpireOwner tells the engine to end an expired flight's owner.
 	NoticeExpireOwner
+	// NoticeStart promotes a strict-mode held flight into the admission queue.
 	NoticeStart
+	// NumNoticeKinds is the sentinel count of NoticeKind values.
 	NumNoticeKinds
 )
 
 var noticeNames = [NumNoticeKinds]string{"?", "reply", "error", "refused", "expired", "expire-owner", "start"}
 
+// String returns the canonical notice name, or "?" if out of range.
 func (k NoticeKind) String() string {
 	if k < NumNoticeKinds {
 		return noticeNames[k]
@@ -53,34 +74,46 @@ func (k NoticeKind) String() string {
 	return "?"
 }
 
+// Notice instructs the engine to act on one waiter or owner of a flight.
 type Notice struct {
 	Kind   NoticeKind
 	Flight FlightID
 	Waiter RequestID
 }
 
+// Result describes how a flight's database statement ended for Table.Finish.
 type Result struct {
 	Failed      bool
 	ErrorReply  bool
 	Unshareable bool
 }
 
+// LeaveWhy records whether a waiter departed due to a cancel request or a
+// closed/vanished client connection.
 type LeaveWhy uint8
 
 const (
+	// LeaveCancel means the client sent a CancelRequest (counted as own-error).
 	LeaveCancel LeaveWhy = iota + 1
+	// LeaveGone means the client disconnected or vanished (counted as gone).
 	LeaveGone
 )
 
+// LeftKind classifies the effect of Table.Leave on the flight.
 type LeftKind uint8
 
 const (
+	// LeftNone means the request was not on any live flight.
 	LeftNone LeftKind = iota
+	// LeftFollower means a non-owner waiter was removed; the flight continues unchanged.
 	LeftFollower
+	// LeftHandoff means the owner left and ownership passed to NewOwner.
 	LeftHandoff
+	// LeftLast means the last remaining waiter left and the flight ended; cancel DB work.
 	LeftLast
 )
 
+// Left is the result of Table.Leave.
 type Left struct {
 	Kind     LeftKind
 	Flight   FlightID
@@ -109,6 +142,8 @@ type flight struct {
 	used      bool
 }
 
+// entry tracks the live flights for one ShareKey: at most one current flight
+// (queued or running) and, in strict mode, one held flight waiting behind it.
 type entry struct {
 	key  string
 	run  int
@@ -117,6 +152,10 @@ type entry struct {
 
 const none = -1
 
+// Table is the sans-I/O coalescer flight table. Every method advances virtual
+// time first (expiring due flights and no-share entries at or before now) and
+// enqueues notices for other affected waiters; callers must drain TakeNotice
+// after every call.
 type Table struct {
 	cfg         Config
 	entries     []entry
@@ -139,6 +178,7 @@ type Table struct {
 	waiters     *obs.Histogram
 }
 
+// New constructs a validated Table with defaulted bounds.
 func New(cfg Config) (*Table, error) {
 	cfg = cfg.WithDefaults()
 	if err := cfg.Validate(); err != nil {
@@ -166,8 +206,11 @@ func New(cfg Config) (*Table, error) {
 	return t, nil
 }
 
+// Config returns the resolved configuration of t.
 func (t *Table) Config() Config { return t.cfg }
 
+// eligible checks only the classifier's precomputed flags and key presence;
+// the coalescer never inspects SQL text.
 func (t *Table) eligible(u *work.Unit) bool {
 	if u == nil || !u.HasKey {
 		return false
@@ -186,6 +229,8 @@ func (t *Table) eligible(u *work.Unit) bool {
 
 const keyLenBytes = 8
 
+// keyOf encodes (Tenant, Text) with an 8-byte big-endian tenant length prefix
+// so no two distinct pairs can collide even when either string holds 0x00.
 func keyOf(k work.ShareKey) string {
 	n := len(k.Tenant)
 	b := make([]byte, keyLenBytes, keyLenBytes+n+len(k.Text))
@@ -212,6 +257,9 @@ func splitKey(key string) (string, string) {
 	return rest[:n], rest[n:]
 }
 
+// Join offers request id with work unit u at instant now. It expires due state
+// first, then decides whether id passes unshared, leads a new flight, follows
+// an existing flight, starts a strict-mode held flight, or is refused at MaxWaiters.
 func (t *Table) Join(now Instant, id RequestID, u *work.Unit) Joined {
 	t.advance(now)
 	if !t.eligible(u) {
@@ -262,6 +310,9 @@ func (t *Table) Join(now Instant, id RequestID, u *work.Unit) Joined {
 	return Joined{Verdict: VerdictFollow, Flight: f.id}
 }
 
+// joinTarget returns the flight slot an arrival for entry ei may follow: in
+// strict mode a running flight is skipped so arrivals follow (or create) e.hold;
+// a detached flight is never joined in either mode.
 func (t *Table) joinTarget(ei int) int {
 	e := t.entries[ei]
 	if e.run != none {
@@ -302,6 +353,9 @@ func (t *Table) newFlight(ei int, owner RequestID, st flightState) int {
 	followers := t.flights[fi].followers[:0]
 	t.flights[fi] = flight{id: t.nextID, entry: ei, owner: owner, followers: followers, state: st,
 		deadline: after(t.now, t.cfg.Deadline), prev: t.tail, next: none, used: true}
+	// Append to the creation-ordered doubly linked list. Because every flight
+	// uses the same Config.Deadline duration, t.head always has the earliest
+	// deadline, making Next() and advance() O(1) per expiry.
 	if t.tail != none {
 		t.flights[t.tail].next = fi
 	} else {
@@ -325,6 +379,8 @@ func (t *Table) flightIndex(id FlightID) (int, bool) {
 	return fi, ok
 }
 
+// Started marks flight id as running on the database once its query is written.
+// In strict mode, later arrivals for the same key will no longer join id.
 func (t *Table) Started(now Instant, id FlightID) {
 	t.advance(now)
 	fi, ok := t.flightIndex(id)
@@ -336,6 +392,10 @@ func (t *Table) Started(now Instant, id FlightID) {
 	t.snap.Sent++
 }
 
+// Stored accounts for n additional reply bytes buffered for flight id. It
+// returns false if the flight is gone, already detached, or just exceeded
+// MaxReplyBytes (in which case followers receive NoticeRefused and the key is
+// placed on the no-share list).
 func (t *Table) Stored(now Instant, id FlightID, n int) bool {
 	t.advance(now)
 	fi, ok := t.flightIndex(id)
@@ -381,6 +441,9 @@ func (t *Table) addNoShare(key string) {
 	t.snap.NoShare.Set(int64(t.noShare.n))
 }
 
+// Finish completes or fails flight id, enqueues reply or error notices for all
+// remaining followers, removes the flight, and promotes any strict-mode held
+// flight behind it via NoticeStart.
 func (t *Table) Finish(now Instant, id FlightID, r Result) {
 	t.advance(now)
 	fi, ok := t.flightIndex(id)
@@ -473,6 +536,9 @@ func (t *Table) endFlight(fi int) {
 	}
 }
 
+// Leave removes request id from its flight. A non-owner departs quietly; an
+// owner with followers hands ownership to the newest follower in O(1); the last
+// remaining member ends the flight (LeftLast) so the engine cancels DB work.
 func (t *Table) Leave(now Instant, id RequestID, why LeaveWhy) Left {
 	t.advance(now)
 	fi, ok := t.members[id]
@@ -524,8 +590,11 @@ func removeID(ids []RequestID, id RequestID) []RequestID {
 	return ids
 }
 
+// Sweep advances virtual time to now and expires any due flights and no-share entries.
 func (t *Table) Sweep(now Instant) { t.advance(now) }
 
+// advance enforces time-passes-before-event: flights and no-share entries due
+// at or before now expire before the triggering operation runs.
 func (t *Table) advance(now Instant) {
 	if now > t.now {
 		t.now = now
@@ -566,6 +635,8 @@ func (t *Table) notify(k NoticeKind, f FlightID, w RequestID) {
 	t.notices = append(t.notices, Notice{Kind: k, Flight: f, Waiter: w})
 }
 
+// TakeNotice pops the next pending Notice in FIFO order, or returns false when
+// all notices have been drained.
 func (t *Table) TakeNotice() (Notice, bool) {
 	if t.noticeHead >= len(t.notices) {
 		t.notices = t.notices[:0]
@@ -577,6 +648,8 @@ func (t *Table) TakeNotice() (Notice, bool) {
 	return n, true
 }
 
+// Next returns the earliest upcoming flight deadline or no-share expiry, or 0
+// if no timer needs to be armed.
 func (t *Table) Next() Instant {
 	next := Instant(0)
 	if t.head != none {
@@ -588,6 +661,8 @@ func (t *Table) Next() Instant {
 	return next
 }
 
+// Shutdown expires every remaining flight and clears the no-share list so
+// Quiesce succeeds after draining notices.
 func (t *Table) Shutdown(now Instant) {
 	t.advance(now)
 	for t.head != none {
@@ -600,6 +675,7 @@ func (t *Table) Shutdown(now Instant) {
 	t.snap.NoShare.Set(0)
 }
 
+// Owner returns the current owner request ID of flight id, or false if id is gone.
 func (t *Table) Owner(id FlightID) (RequestID, bool) {
 	fi, ok := t.flightIndex(id)
 	if !ok {
@@ -608,6 +684,7 @@ func (t *Table) Owner(id FlightID) (RequestID, bool) {
 	return t.flights[fi].owner, true
 }
 
+// Followers returns the number of non-owner waiters on flight id, or 0 if gone.
 func (t *Table) Followers(id FlightID) int {
 	fi, ok := t.flightIndex(id)
 	if !ok {
@@ -616,6 +693,7 @@ func (t *Table) Followers(id FlightID) int {
 	return len(t.flights[fi].followers)
 }
 
+// Member returns the flight ID that request id belongs to, or false if none.
 func (t *Table) Member(id RequestID) (FlightID, bool) {
 	fi, ok := t.members[id]
 	if !ok {
@@ -624,6 +702,8 @@ func (t *Table) Member(id RequestID) (FlightID, bool) {
 	return t.flights[fi].id, true
 }
 
+// Running returns how many non-detached flights owned by t for key are
+// currently running on the database (at most 1).
 func (t *Table) Running(key work.ShareKey) int {
 	ei, ok := t.byKey[keyOf(key)]
 	if !ok {

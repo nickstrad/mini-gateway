@@ -18,6 +18,8 @@ func ownedRunning(t *testing.T, tb *Table, text string) {
 	}
 }
 
+// TestACancelledReadNoLongerOwnedLetsTheNextReadStartAndIsCounted proves a
+// flight ended by LeftLast is counted as cancelled and lets the next read lead.
 func TestACancelledReadNoLongerOwnedLetsTheNextReadStartAndIsCounted(t *testing.T) {
 	tb := narrowedTable(t, 8)
 	f := tb.Join(0, 1, read("a", "k"))
@@ -36,6 +38,8 @@ func TestACancelledReadNoLongerOwnedLetsTheNextReadStartAndIsCounted(t *testing.
 	ownedRunning(t, tb, "k")
 }
 
+// TestAKeyOnTheNoShareListPassesUnsharedAndIsCounted proves a listed key passes
+// unshared under PassedNoShare while keeping owned Running(key) <= 1.
 func TestAKeyOnTheNoShareListPassesUnsharedAndIsCounted(t *testing.T) {
 	tb := narrowedTable(t, 8)
 	f := tb.Join(0, 1, read("a", "k"))
@@ -50,6 +54,8 @@ func TestAKeyOnTheNoShareListPassesUnsharedAndIsCounted(t *testing.T) {
 	ownedRunning(t, tb, "k")
 }
 
+// TestARequestArrivingAtAFullTablePassesUnsharedAndIsCounted proves arrivals
+// at MaxFlights pass unshared and increment PassedFull and Overflows[CapFlights].
 func TestARequestArrivingAtAFullTablePassesUnsharedAndIsCounted(t *testing.T) {
 	tb := narrowedTable(t, 1)
 	tb.Join(0, 1, read("a", "occupier"))
@@ -64,6 +70,9 @@ func TestARequestArrivingAtAFullTablePassesUnsharedAndIsCounted(t *testing.T) {
 	ownedRunning(t, tb, "other")
 }
 
+// TestAtOneInstantTheOrderOfEventsDecidesWhatALeaverGets proves same-instant
+// Finish-then-Leave delivers the reply (LeftUnknown++) while Leave-then-Finish
+// withholds it (WaiterOwnError++).
 func TestAtOneInstantTheOrderOfEventsDecidesWhatALeaverGets(t *testing.T) {
 	for _, resultFirst := range []bool{true, false} {
 		tb := narrowedTable(t, 8)

@@ -12,6 +12,9 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// TestBinaryDefaultRunsTheCoalescerTheFairDispatcherAndTheRetryPolicyOff proves
+// the default binary config wires auto/strict coalescing, fairness, and retry off,
+// and also accepts all three enabled together.
 func TestBinaryDefaultRunsTheCoalescerTheFairDispatcherAndTheRetryPolicyOff(t *testing.T) {
 	f, err := parseEdited(t, nil)
 	if err != nil {
@@ -53,6 +56,8 @@ func TestBinaryDefaultRunsTheCoalescerTheFairDispatcherAndTheRetryPolicyOff(t *t
 	}
 }
 
+// TestCoalesceRetryAndFairnessKeysAreValidatedTogether proves one Validate pass
+// joins errors from coalesce, retry, fairness, and queue keys together.
 func TestCoalesceRetryAndFairnessKeysAreValidatedTogether(t *testing.T) {
 	_, err := parseEdited(t, map[string]any{"coalesce.mode": "always", "coalesce.max_waiters": 1, "retry.policy": "everything",
 		"fairness.default_weight": -2, "queue.rule": "fifo"})
@@ -66,6 +71,8 @@ func TestCoalesceRetryAndFairnessKeysAreValidatedTogether(t *testing.T) {
 	}
 }
 
+// TestTheOnSwitchRefusalAppliesOnlyWhenCoalescingIsOnWhateverTheRetryAndFairnessKeys
+// proves the on-switch + all-tenants refusal holds regardless of retry/fairness settings.
 func TestTheOnSwitchRefusalAppliesOnlyWhenCoalescingIsOnWhateverTheRetryAndFairnessKeys(t *testing.T) {
 	others := map[string]any{"retry.policy": "pre-forward-once", "fairness.default_weight": 3}
 	with := func(edits map[string]any) map[string]any {

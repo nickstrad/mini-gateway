@@ -30,6 +30,8 @@ func notices(t *testing.T, tb *Table) []Notice {
 	return ns
 }
 
+// TestStrictJoinsTheNextFlightRelaxedJoinsTheRunningOne proves strict holds
+// arrivals behind a running read while relaxed joins the running flight.
 func TestStrictJoinsTheNextFlightRelaxedJoinsTheRunningOne(t *testing.T) {
 	for _, join := range []JoinMode{JoinStrict, JoinRelaxed} {
 		tb := mustTable(t, Config{Mode: ModeAuto, Join: join})
@@ -66,6 +68,8 @@ func TestStrictJoinsTheNextFlightRelaxedJoinsTheRunningOne(t *testing.T) {
 	}
 }
 
+// TestOnlyShareableUnitsJoinUnderAutoAndOnlyHintedUnderHinted proves eligibility
+// depends strictly on Unit.Shareable (auto), Unit.Hinted (hinted), or never (off).
 func TestOnlyShareableUnitsJoinUnderAutoAndOnlyHintedUnderHinted(t *testing.T) {
 	inTx := &work.Unit{Class: work.ClassContinueLease, SafeRead: true, HasKey: true, Key: work.ShareKey{Text: []byte("SELECT 1")}}
 	write := &work.Unit{Class: work.ClassStartLease}
@@ -88,6 +92,8 @@ func TestOnlyShareableUnitsJoinUnderAutoAndOnlyHintedUnderHinted(t *testing.T) {
 	}
 }
 
+// TestResultAtTheFlightDeadlineIsLate proves a Finish arriving at exact
+// deadline equality finds the flight already expired.
 func TestResultAtTheFlightDeadlineIsLate(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto, Deadline: 100 * Millisecond})
 	lead := tb.Join(0, 1, read("", "SELECT 1"))
@@ -109,6 +115,8 @@ func TestResultAtTheFlightDeadlineIsLate(t *testing.T) {
 	}
 }
 
+// TestJoinAtTheInstantAFlightCompletesStartsANewFlight proves a Join at the
+// completion instant after Finish starts a fresh flight.
 func TestJoinAtTheInstantAFlightCompletesStartsANewFlight(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto, Join: JoinRelaxed})
 	lead := tb.Join(0, 1, read("", "SELECT 1"))
@@ -120,6 +128,8 @@ func TestJoinAtTheInstantAFlightCompletesStartsANewFlight(t *testing.T) {
 	}
 }
 
+// TestLeaveAtTheInstantTheResultArrivesGetsOnlyTheLeaversOwnError proves a
+// Leave applied before Finish at the same instant excludes the leaver from the reply.
 func TestLeaveAtTheInstantTheResultArrivesGetsOnlyTheLeaversOwnError(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto})
 	lead := tb.Join(0, 1, read("", "SELECT 1"))
@@ -139,6 +149,8 @@ func TestLeaveAtTheInstantTheResultArrivesGetsOnlyTheLeaversOwnError(t *testing.
 	}
 }
 
+// TestNinetyNineLeaveAndTheLastGetsTheReply proves owner handoffs keep a flight
+// alive across 99 cancellations so the 100th waiter receives the reply.
 func TestNinetyNineLeaveAndTheLastGetsTheReply(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto})
 	lead := tb.Join(0, 1, read("", "SELECT 1"))
@@ -169,6 +181,8 @@ func TestNinetyNineLeaveAndTheLastGetsTheReply(t *testing.T) {
 	}
 }
 
+// TestTheLastLeaverCancelsTheFlight proves departing when no waiters remain
+// returns LeftLast, cancels the flight, and quiesces cleanly.
 func TestTheLastLeaverCancelsTheFlight(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto})
 	lead := tb.Join(0, 1, read("", "SELECT 1"))
@@ -188,6 +202,7 @@ func TestTheLastLeaverCancelsTheFlight(t *testing.T) {
 	}
 }
 
+// TestWaiterCapRefuses proves arrivals past MaxWaiters receive VerdictRefuse.
 func TestWaiterCapRefuses(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto, MaxWaiters: 3})
 	tb.Join(0, 1, read("", "SELECT 1"))
@@ -201,6 +216,9 @@ func TestWaiterCapRefuses(t *testing.T) {
 	}
 }
 
+// TestReplyCapRefusesFollowersAndListsTheKeyForAWhile proves exceeding
+// MaxReplyBytes detaches followers, lists the key for NoShareFor, and re-enables
+// sharing at exact expiry equality.
 func TestReplyCapRefusesFollowersAndListsTheKeyForAWhile(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto, MaxReplyBytes: 100, NoShareFor: Second})
 	lead := tb.Join(0, 1, read("", "SELECT 1"))
@@ -229,6 +247,8 @@ func TestReplyCapRefusesFollowersAndListsTheKeyForAWhile(t *testing.T) {
 	}
 }
 
+// TestNoShareListIsBoundedAndEvictsTheOldest proves the no-share ring stays at
+// NoShareMax by evicting the oldest entry.
 func TestNoShareListIsBoundedAndEvictsTheOldest(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto, MaxReplyBytes: 1, NoShareMax: 2})
 	for i, k := range []string{"SELECT 1", "SELECT 2", "SELECT 3"} {
@@ -247,6 +267,8 @@ func TestNoShareListIsBoundedAndEvictsTheOldest(t *testing.T) {
 	}
 }
 
+// TestUnshareableEndRefusesFollowers proves a non-idle completion status
+// detaches followers with NoticeRefused and adds the key to the no-share list.
 func TestUnshareableEndRefusesFollowers(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeHinted})
 	u := &work.Unit{Hinted: true, HasKey: true, Key: work.ShareKey{Text: []byte("/* mg:share */ BEGIN")}}
@@ -262,6 +284,8 @@ func TestUnshareableEndRefusesFollowers(t *testing.T) {
 	}
 }
 
+// TestFailedFlightSharesItsErrorOnce proves Finish(Failed) sends one
+// NoticeError per follower and counts one shared error.
 func TestFailedFlightSharesItsErrorOnce(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto})
 	lead := tb.Join(0, 1, read("", "SELECT 1"))
@@ -283,6 +307,8 @@ func TestFailedFlightSharesItsErrorOnce(t *testing.T) {
 	}
 }
 
+// TestFlightTableCapPassesUnshared proves new keys pass unshared at MaxFlights
+// and increment CapFlights overflows.
 func TestFlightTableCapPassesUnshared(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto, MaxFlights: 1})
 	tb.Join(0, 1, read("", "SELECT 1"))
@@ -294,6 +320,8 @@ func TestFlightTableCapPassesUnshared(t *testing.T) {
 	}
 }
 
+// TestTenantScopeKeysDoNotMeet proves identical SQL text with distinct tenant
+// keys starts separate flights.
 func TestTenantScopeKeysDoNotMeet(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto})
 	a := read("a", "SELECT 1")
@@ -305,6 +333,8 @@ func TestTenantScopeKeysDoNotMeet(t *testing.T) {
 	}
 }
 
+// TestHitsAreCountedPerTenantAndHotKeysAreOptIn proves per-tenant hit counting
+// and that opt-in hot-key tracking is empty by default.
 func TestHitsAreCountedPerTenantAndHotKeysAreOptIn(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto, HotKeys: 2})
 	tb.Join(0, 1, read("a", "SELECT 1"))
@@ -325,6 +355,8 @@ func TestHitsAreCountedPerTenantAndHotKeysAreOptIn(t *testing.T) {
 	}
 }
 
+// TestConfigValidation proves valid defaults pass and out-of-range fields fail
+// closed wrapping ErrConfig.
 func TestConfigValidation(t *testing.T) {
 	if err := (Config{}).WithDefaults().Validate(); err != nil {
 		t.Fatal(err)
@@ -342,6 +374,8 @@ func TestConfigValidation(t *testing.T) {
 	}
 }
 
+// TestShutdownEmptiesTheTable proves Shutdown clears all flights, waiters,
+// no-share entries, and timers so Quiesce and Snapshot.Check pass.
 func TestShutdownEmptiesTheTable(t *testing.T) {
 	tb := mustTable(t, Config{Mode: ModeAuto, MaxReplyBytes: 1})
 	j := tb.Join(0, 1, read("", "SELECT 1"))

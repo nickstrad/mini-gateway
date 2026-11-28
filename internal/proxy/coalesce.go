@@ -10,6 +10,9 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// FlightTable extends the pass-through Coalescer seam with flight lifecycle,
+// stored-reply accounting, departure handling, and notice-queue methods used
+// by Engine when coalescing is active.
 type FlightTable interface {
 	Coalescer
 	Admit(now Instant, id RequestID, u *work.Unit) coalesce.Joined
@@ -30,8 +33,10 @@ type FlightTable interface {
 	Counters() coalesce.Snapshot
 }
 
+// CoreCoalescer adapts coalesce.Table to the Engine's FlightTable seam.
 type CoreCoalescer struct{ t *coalesce.Table }
 
+// NewCoreCoalescer constructs a CoreCoalescer backed by a validated coalesce.Table.
 func NewCoreCoalescer(cfg coalesce.Config) (*CoreCoalescer, error) {
 	t, err := coalesce.New(cfg)
 	if err != nil {
@@ -40,59 +45,78 @@ func NewCoreCoalescer(cfg coalesce.Config) (*CoreCoalescer, error) {
 	return &CoreCoalescer{t: t}, nil
 }
 
+// Table returns the underlying coalesce.Table.
 func (c *CoreCoalescer) Table() *coalesce.Table { return c.t }
 
+// Join implements the minimal Coalescer seam by reporting whether Admit holds or follows.
 func (c *CoreCoalescer) Join(now Instant, id RequestID, u *work.Unit) bool {
 	return c.Admit(now, id, u).Verdict.Waits()
 }
 
+// Leave implements the minimal Coalescer seam as a client disconnect.
 func (c *CoreCoalescer) Leave(now Instant, id RequestID) { c.Depart(now, id, coalesce.LeaveGone) }
 
+// Admit forwards Join to the underlying coalesce.Table.
 func (c *CoreCoalescer) Admit(now Instant, id RequestID, u *work.Unit) coalesce.Joined {
 	return c.t.Join(coalesce.Instant(now), coalesce.RequestID(id), u)
 }
 
+// Started marks flight f as running on the database.
 func (c *CoreCoalescer) Started(now Instant, f coalesce.FlightID) {
 	c.t.Started(coalesce.Instant(now), f)
 }
 
+// Stored accounts for n buffered reply bytes on flight f and reports whether sharing continues.
 func (c *CoreCoalescer) Stored(now Instant, f coalesce.FlightID, n int) bool {
 	return c.t.Stored(coalesce.Instant(now), f, n)
 }
 
+// Finish completes or fails flight f and enqueues notices for its waiters.
 func (c *CoreCoalescer) Finish(now Instant, f coalesce.FlightID, r coalesce.Result) {
 	c.t.Finish(coalesce.Instant(now), f, r)
 }
 
+// Depart removes request id from its flight for reason why.
 func (c *CoreCoalescer) Depart(now Instant, id RequestID, why coalesce.LeaveWhy) coalesce.Left {
 	return c.t.Leave(coalesce.Instant(now), coalesce.RequestID(id), why)
 }
 
+// Followers returns the number of non-owner waiters currently on flight f.
 func (c *CoreCoalescer) Followers(f coalesce.FlightID) int { return c.t.Followers(f) }
 
+// Sweep expires due flights and no-share entries at or before now.
 func (c *CoreCoalescer) Sweep(now Instant) { c.t.Sweep(coalesce.Instant(now)) }
 
+// TakeNotice pops the next pending coalescer notice.
 func (c *CoreCoalescer) TakeNotice() (coalesce.Notice, bool) { return c.t.TakeNotice() }
 
+// Next returns the next coalescer deadline or no-share expiry instant, or 0.
 func (c *CoreCoalescer) Next() Instant { return Instant(c.t.Next()) }
 
+// Shutdown expires all remaining flights and clears the no-share list.
 func (c *CoreCoalescer) Shutdown(now Instant) { c.t.Shutdown(coalesce.Instant(now)) }
 
+// Check verifies internal coalescer table invariants.
 func (c *CoreCoalescer) Check() error { return c.t.Check() }
 
+// Quiesce verifies that no coalescer state or undrained notices remain.
 func (c *CoreCoalescer) Quiesce() error { return c.t.Quiesce() }
 
+// Owner returns the current owner request ID of flight f.
 func (c *CoreCoalescer) Owner(f coalesce.FlightID) (RequestID, bool) {
 	id, ok := c.t.Owner(f)
 	return RequestID(id), ok
 }
 
+// Member returns the flight ID that request id currently belongs to.
 func (c *CoreCoalescer) Member(id RequestID) (coalesce.FlightID, bool) {
 	return c.t.Member(coalesce.RequestID(id))
 }
 
+// Snapshot returns a full observability snapshot of the flight table.
 func (c *CoreCoalescer) Snapshot() coalesce.Snapshot { return c.t.Snapshot() }
 
+// Counters returns scalar counters and gauges without cloning slices or histograms.
 func (c *CoreCoalescer) Counters() coalesce.Snapshot { return c.t.Counters() }
 
 type flightEnd struct {
@@ -145,6 +169,8 @@ func (e *Engine) initCoalesce() error {
 	return nil
 }
 
+// CoalesceSnapshot returns the flight table's current observability snapshot,
+// or the zero Snapshot when coalescing is inactive.
 func (e *Engine) CoalesceSnapshot() coalesce.Snapshot {
 	if e.coal == nil {
 		return coalesce.Snapshot{}
@@ -204,6 +230,10 @@ func (e *Engine) coalUnfollow(c *client) {
 	c.fl, c.wid = 0, 0
 }
 
+// coalNotices drains notices iteratively; noticeBusy guards against re-entrant
+// drains when handling a notice (such as NoticeStart -> enqueue -> shed ->
+// coalFailed) produces more notices. Flight payloads in e.ends are cleared in
+// insertion order only after the outer drain completes.
 func (e *Engine) coalNotices() {
 	if e.coal == nil || e.noticeBusy {
 		return
@@ -271,6 +301,11 @@ func (e *Engine) expireQueued(id RequestID) {
 	e.seams.Queue.Remove(id)
 }
 
+// coalStart promotes a strict-mode held flight when the read ahead of it ends.
+// It refuses promotion while shutting down (so Shutdown never writes new SQL)
+// or while the breaker is open/half-open (so promoted flights never bypass
+// breaker flushing or half-open trial limits), and updates enq for queue-wait
+// measurement while leaving arrived untouched to bound retries.
 func (e *Engine) coalStart(c *client, f coalesce.FlightID) {
 	if c.phase != cpCoalesced || c.req == nil || e.stopping {
 		return
@@ -324,6 +359,8 @@ func (e *Engine) coalExpireOwner(c *client, f coalesce.FlightID) {
 		e.coalUnfollow(c)
 		req := c.req
 		req.fl, req.store, req.stored = 0, false, nil
+		// Use expireQueued (Expire, counted as a deadline shed) rather than
+		// unqueue (RemoveAt) so admission.Queues.ShedCount stays equal to Engine.Shed.
 		e.expireQueued(req.id)
 		delete(e.waiting, req.id)
 		e.t.cancel(&c.queueT)
@@ -362,6 +399,8 @@ func (e *Engine) coalAnswer(c *client, n coalesce.Notice) {
 	case coalesce.NoticeReply:
 		e.snap.Completed++
 		e.snap.CoalesceReplies++
+		// Write the single shared message-byte slice and a fresh ReadyForQuery 'I'
+		// per follower so each client gets a complete wire reply with one copy stored.
 		e.writeClient(c, end.reply)
 		ready, _ := pgwire.ReplyReady(nil, pgwire.StatusIdle)
 		e.writeClient(c, ready)
@@ -395,6 +434,10 @@ func (e *Engine) coalSawError(c *client) {
 	}
 }
 
+// coalStoring buffers reply segments while sharing is active. Once Stored
+// reports the reply cap was passed, the flight detaches: followers receive
+// 53M04 via notices, and the buffered prefix streams to the owner under normal
+// back pressure (marking req.relayed > 0 so a later failure cannot retry).
 func (e *Engine) coalStoring(c *client, seg []byte) bool {
 	req := c.req
 	if e.coal == nil || req == nil || !req.store {
@@ -489,6 +532,9 @@ func (e *Engine) coalLeave(c *client, why coalesce.LeaveWhy) bool {
 	l := e.coal.Depart(e.now, c.wid, why)
 	e.coalUnfollow(c)
 	if wasFollower {
+		// A strict-mode held owner also has phase cpCoalesced and skips
+		// coalHandoff; copy its original arrived timestamp to the successor so
+		// retries after promotion remain bounded by the original leader's arrival.
 		if l.Kind == coalesce.LeftHandoff {
 			if nc := e.members[RequestID(l.NewOwner)]; nc != nil && nc.req != nil && c.req != nil {
 				nc.req.arrived = c.req.arrived
@@ -515,6 +561,9 @@ func (e *Engine) coalLeave(c *client, why coalesce.LeaveWhy) bool {
 	return false
 }
 
+// coalHandoff moves the active or queued request (including its original
+// arrived instant, retry attempt, and queued-under tenant) onto the new owner
+// without opening a new queue slot or changing the tenant charged on the lease.
 func (e *Engine) coalHandoff(old, nc *client) {
 	req := old.req
 	if nc == nil || req == nil {

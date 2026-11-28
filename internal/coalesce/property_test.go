@@ -31,6 +31,8 @@ func randomInput(seed uint64, n int) []byte {
 	return b
 }
 
+// TestFlightTableAgreesWithReferenceModel proves Table matches the reference
+// model across 400 random operation sequences and exercises every major counter.
 func TestFlightTableAgreesWithReferenceModel(t *testing.T) {
 	seeds := propertySeeds
 	if testing.Short() {
@@ -78,6 +80,8 @@ func plantFound(plant Plant, seeds int) (int, error) {
 	return -1, nil
 }
 
+// TestPlantedBugsAreCaughtByThePropertyTest proves each of the six planted
+// invariant violations is caught by the reference-model property test.
 func TestPlantedBugsAreCaughtByThePropertyTest(t *testing.T) {
 	for _, p := range []struct {
 		name  string
@@ -100,6 +104,8 @@ func TestPlantedBugsAreCaughtByThePropertyTest(t *testing.T) {
 	}
 }
 
+// TestReplayIsBitIdentical proves two independent runs of the same operation
+// sequence produce identical snapshots.
 func TestReplayIsBitIdentical(t *testing.T) {
 	for seed := range 50 {
 		ops := decodeOps(randomInput(uint64(seed), propertyOps))
@@ -163,6 +169,8 @@ func fuzzSeeds() [][]byte {
 	}
 }
 
+// FuzzCoalesceOps fuzzes Table against the reference model using bounded
+// 3-byte operations (supporting MG_FUZZ_PLANT=coalesce-leaver-result).
 func FuzzCoalesceOps(f *testing.F) {
 	for _, s := range fuzzSeeds() {
 		f.Add(s)
@@ -178,6 +186,8 @@ func FuzzCoalesceOps(f *testing.F) {
 	})
 }
 
+// TestFuzzDecodingIsTotalBoundedAndLocal proves decodeOps is total, caps
+// operation count and virtual time, and isolates single-byte mutations to one op.
 func TestFuzzDecodingIsTotalBoundedAndLocal(t *testing.T) {
 	long := make([]byte, 10_000)
 	for i := range long {
@@ -219,6 +229,8 @@ func TestFuzzDecodingIsTotalBoundedAndLocal(t *testing.T) {
 	}
 }
 
+// TestFuzzExecutionCostIsBounded proves a worst-case fuzz input stays within
+// fuzzMaxOps operations and table flight caps.
 func TestFuzzExecutionCostIsBounded(t *testing.T) {
 	worst := make([]byte, fuzzMaxOps*opBytes)
 	for i := 0; i < len(worst); i += opBytes {

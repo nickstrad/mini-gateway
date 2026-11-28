@@ -110,6 +110,9 @@ func (d *defaultRuleRig) drain() {
 	}
 }
 
+// TestJoinUnderTheDefaultAdmissionRuleRuleAndFullQueueShedsEndFlightsWithFollowers
+// proves default RuleTimeout and full-queue sheds (including post-handoff and
+// strict promotion during noticeBusy) answer all followers 53M01 and keep invariants.
 func TestJoinUnderTheDefaultAdmissionRuleRuleAndFullQueueShedsEndFlightsWithFollowers(t *testing.T) {
 	for _, join := range joinModes {
 		d := newDefaultRuleRig(t, join, nil)
@@ -182,6 +185,8 @@ func (d *defaultRuleRig) promoteIntoAFullQueue() {
 	}
 }
 
+// TestJoinAFlightDeadlineAndAnAdmissionDeadlineAtTheSameInstantAnswerEachWaiterOnce
+// proves simultaneous flight and admission deadlines shed once and answer each waiter once.
 func TestJoinAFlightDeadlineAndAnAdmissionDeadlineAtTheSameInstantAnswerEachWaiterOnce(t *testing.T) {
 	for _, join := range joinModes {
 		d := newDefaultRuleRig(t, join, func(c *proxy.Config) { c.Coalesce.Deadline = coalesce.Instant(admission.DefaultInterval) })

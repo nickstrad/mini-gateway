@@ -22,6 +22,8 @@ func proxyOf(t *testing.T, f *config.File) func() (coalesce.Config, work.KeyScop
 	}
 }
 
+// TestCoalesceDefaultsToAutoStrictAcrossTenants proves omitted coalesce config
+// resolves to mode auto, join strict, scope all-tenants, and statement deadline.
 func TestCoalesceDefaultsToAutoStrictAcrossTenants(t *testing.T) {
 	f, err := config.Parse([]byte(minimal))
 	if err != nil {
@@ -42,6 +44,8 @@ func TestCoalesceDefaultsToAutoStrictAcrossTenants(t *testing.T) {
 	}
 }
 
+// TestCoalesceKeysParseAndReachTheEngine proves every JSON coalesce key parses
+// and propagates into proxy.Config.
 func TestCoalesceKeysParseAndReachTheEngine(t *testing.T) {
 	f, err := parseEdited(t, map[string]any{"coalesce.mode": "hinted", "coalesce.join": "relaxed", "coalesce.key_scope": "tenant",
 		"coalesce.max_waiters": 7, "coalesce.max_reply_bytes": 4096, "coalesce.no_share_for": "3s", "coalesce.hot_keys": 4})
@@ -55,6 +59,8 @@ func TestCoalesceKeysParseAndReachTheEngine(t *testing.T) {
 	}
 }
 
+// TestCoalesceRulesFailClosedNamingTheKey proves invalid coalesce enums, bounds,
+// and the on-switch + all-tenants cross-check fail closed naming the exact key.
 func TestCoalesceRulesFailClosedNamingTheKey(t *testing.T) {
 	for _, c := range []struct {
 		edits map[string]any
@@ -83,6 +89,8 @@ func TestCoalesceRulesFailClosedNamingTheKey(t *testing.T) {
 	}
 }
 
+// TestOnSwitchIsAllowedWithCoalescingOffOrScopedToATenant proves lease.reset
+// on-switch is accepted when coalescing is off or scoped to a single tenant.
 func TestOnSwitchIsAllowedWithCoalescingOffOrScopedToATenant(t *testing.T) {
 	for _, edits := range []map[string]any{
 		{"lease.reset": "on-switch", "coalesce.mode": "off"},
@@ -94,6 +102,8 @@ func TestOnSwitchIsAllowedWithCoalescingOffOrScopedToATenant(t *testing.T) {
 	}
 }
 
+// TestCoalesceBoundsAreCheckedWhenModeIsOff proves out-of-range numeric bounds
+// fail closed with the same key names even when coalesce.mode is off.
 func TestCoalesceBoundsAreCheckedWhenModeIsOff(t *testing.T) {
 	for key, v := range map[string]any{"coalesce.max_waiters": 1, "coalesce.hot_keys": 999, "coalesce.max_flights": 99999999,
 		"coalesce.max_reply_bytes": 99999999, "coalesce.no_share_max": 99999999, "coalesce.no_share_for": "100000h"} {
@@ -109,6 +119,8 @@ func TestCoalesceBoundsAreCheckedWhenModeIsOff(t *testing.T) {
 	}
 }
 
+// TestOmittedReplyCapResolvesToTheSameConfigAsTheDefault proves omitting
+// coalesce.max_reply_bytes yields the same resolved value and fingerprint as the default.
 func TestOmittedReplyCapResolvesToTheSameConfigAsTheDefault(t *testing.T) {
 	omitted, err := parseEdited(t, map[string]any{})
 	if err != nil {

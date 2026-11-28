@@ -399,6 +399,8 @@ func (e *Engine) coreStepFailed(d *dbConn, why ResetFailure) {
 func (e *Engine) coreRelease(d *dbConn, c *client, status byte) {
 	e.snap.StagePassed[StageRelease]++
 	e.snap.LeasesEnded++
+	// Report the tenant that started the lease (d.lastTenant), not c.tenant,
+	// because a cross-tenant flight handoff can change c before release.
 	e.fairEnded(d.lastTenant)
 	d.client = nil
 	c.db = nil

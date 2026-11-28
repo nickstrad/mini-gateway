@@ -9,13 +9,19 @@ import (
 )
 
 const (
-	DefaultCoalesceMode  = "auto"
+	// DefaultCoalesceMode is the binary's default coalescing mode ("auto").
+	DefaultCoalesceMode = "auto"
+	// DefaultCoalesceScope is the default key scope ("all-tenants").
 	DefaultCoalesceScope = "all-tenants"
-	DefaultCoalesceJoin  = "strict"
-	CoalesceScopeAll     = "all-tenants"
-	CoalesceScopeTenant  = "tenant"
+	// DefaultCoalesceJoin is the default join mode ("strict").
+	DefaultCoalesceJoin = "strict"
+	// CoalesceScopeAll shares eligible reads across all tenants.
+	CoalesceScopeAll = "all-tenants"
+	// CoalesceScopeTenant isolates shared flights per tenant.
+	CoalesceScopeTenant = "tenant"
 )
 
+// Coalesce holds the JSON "coalesce" configuration block.
 type Coalesce struct {
 	Mode          string   `json:"mode"`
 	KeyScope      string   `json:"key_scope"`
@@ -77,9 +83,13 @@ func (f *File) validateCoalesce() error {
 			errs = append(errs, bad(v.key, "must be 0 (the default) or more, got %d", v.n))
 		}
 	}
+	// Validate numeric bounds even when mode is "off" so misconfigured caps fail
+	// closed at load rather than silently passing until coalescing is enabled.
 	if !f.coalesceOn() {
 		errs = append(errs, f.coalesceBoundsWhenOff()...)
 	}
+	// Refuse on-switch + all-tenants only while coalescing is active: with
+	// mode "off" no read is shared across tenants.
 	if f.coalesceOn() && f.Lease.Reset == LeaseResetOnSwitch && c.KeyScope == CoalesceScopeAll {
 		errs = append(errs, bad("coalesce.key_scope", "all-tenants cannot be used with lease.reset on-switch: a connection may still hold its last tenant's session state, and a shared read on it would hand that state to another tenant (use key_scope tenant, lease.reset always, or coalesce.mode off)"))
 	}

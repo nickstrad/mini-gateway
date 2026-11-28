@@ -14,6 +14,9 @@ import (
 
 const repairStatement = 400 * time.Millisecond
 
+// TestAQueuedFlightAtItsDeadlineIsShedThroughTheAdmissionQueue proves a queued
+// flight hitting its flight deadline expires through admission.Queues.Expire so
+// engine and admission shed counts stay equal.
 func TestAQueuedFlightAtItsDeadlineIsShedThroughTheAdmissionQueue(t *testing.T) {
 	r := newRig(t, func(c *proxy.Config) {
 		c.Admission = admission.Config{Rule: admission.RuleTimeout}
@@ -92,6 +95,8 @@ func newTwoDBRig(t *testing.T, edit func(*proxy.Config)) *twoDB {
 	return r
 }
 
+// TestShutdownSendsNothingNewToTheDatabase proves Shutdown never promotes a
+// strict-mode held flight or writes a new statement to an idle DB connection.
 func TestShutdownSendsNothingNewToTheDatabase(t *testing.T) {
 	r := newTwoDBRig(t, func(c *proxy.Config) {
 		c.Coalesce = coalesce.Config{Mode: coalesce.ModeAuto, Join: coalesce.JoinStrict}

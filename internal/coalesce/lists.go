@@ -12,6 +12,9 @@ type noShareItem struct {
 	until Instant
 }
 
+// noShareList is a fixed-capacity FIFO ring of keys temporarily barred from
+// sharing. Because every entry uses the same NoShareFor duration, ring head
+// is always the earliest expiry (O(1) next and expire).
 type noShareList struct {
 	ring  []noShareItem
 	head  int
@@ -70,6 +73,8 @@ func (l *noShareList) drop() {
 	delete(l.index, it.key)
 }
 
+// expire drops and returns the head key when its expiry is at or before now,
+// obeying the time-passes-before-event rule at equality.
 func (l *noShareList) expire(now Instant) (string, bool) {
 	if l.n == 0 || l.ring[l.head].until > now {
 		return "", false
@@ -91,6 +96,9 @@ type hotKey struct {
 	count int64
 }
 
+// hotKeys tracks up to max frequently offered keys using Space-Saving
+// replacement: when full, a new key replaces the lowest-count slot and
+// increments that slot's count.
 type hotKeys struct {
 	max  int
 	keys []hotKey
@@ -138,6 +146,8 @@ func (h *hotKeys) snapshot() []HotKey {
 	return out
 }
 
+// tenantStats counts coalesced hits per tenant up to MaxTenantStats distinct
+// tenants, folding any further tenants into OtherTenant to bound memory.
 type tenantStats struct {
 	index map[work.TenantID]int
 	hits  []TenantHits

@@ -213,6 +213,8 @@ func (h *repair) readAgain() {
 	h.everyoneGot(h.db(on, readReply("again")), readReply("again"))
 }
 
+// TestRepairARunningFlightAtItsFlightDeadlineIsNeverOfferedARetry proves a
+// running flight whose flight deadline has fired is never offered to retry.
 func TestRepairARunningFlightAtItsFlightDeadlineIsNeverOfferedARetry(t *testing.T) {
 	for _, w := range refusalTimings {
 		for _, join := range joinModes {
@@ -230,6 +232,8 @@ func TestRepairARunningFlightAtItsFlightDeadlineIsNeverOfferedARetry(t *testing.
 	}
 }
 
+// TestRepairAPromotedHeldFlightAtItsFlightDeadlineIsNeverOfferedARetry proves a
+// promoted strict-mode held flight at its flight deadline is never offered to retry.
 func TestRepairAPromotedHeldFlightAtItsFlightDeadlineIsNeverOfferedARetry(t *testing.T) {
 	for _, flight := range []time.Duration{joinStatement / 2, joinStatement} {
 		for _, w := range refusalTimings {
@@ -246,6 +250,8 @@ func TestRepairAPromotedHeldFlightAtItsFlightDeadlineIsNeverOfferedARetry(t *tes
 	}
 }
 
+// TestRepairAPromotedHeldFlightIsNeverRetriedAtOrPastItsArrivalPlusTheStatementTimeout
+// proves strict-mode hold time does not extend the retry deadline past arrived + statement.
 func TestRepairAPromotedHeldFlightIsNeverRetriedAtOrPastItsArrivalPlusTheStatementTimeout(t *testing.T) {
 	for _, flight := range []time.Duration{joinStatement / 2, joinStatement, 2 * joinStatement} {
 		for _, past := range []time.Duration{0, 50 * time.Millisecond} {
@@ -263,6 +269,8 @@ func TestRepairAPromotedHeldFlightIsNeverRetriedAtOrPastItsArrivalPlusTheStateme
 	}
 }
 
+// TestRepairARetryOfAPromotedHeldFlightEndsAtItsArrivalPlusTheStatementTimeout
+// proves a granted retry of a promoted held flight ends at arrived + statement.
 func TestRepairARetryOfAPromotedHeldFlightEndsAtItsArrivalPlusTheStatementTimeout(t *testing.T) {
 	for _, flight := range []time.Duration{joinStatement, 2 * joinStatement} {
 		h := repairRig(t, coalesce.JoinStrict, flight, nil)
@@ -286,6 +294,8 @@ func TestRepairARetryOfAPromotedHeldFlightEndsAtItsArrivalPlusTheStatementTimeou
 	}
 }
 
+// TestRepairAfterAHandoffTheLeadersArrivalBoundsTheRetrySoNoFollowerGetsAStatementSentPastItsDeadline
+// proves an active handoff retains the original leader's arrival instant to bound retries.
 func TestRepairAfterAHandoffTheLeadersArrivalBoundsTheRetrySoNoFollowerGetsAStatementSentPastItsDeadline(t *testing.T) {
 	const followerLater = 100 * time.Millisecond
 	for _, opened := range []bool{false, true} {
@@ -365,6 +375,8 @@ func (h *heldFlight) everyoneRefusedByTheBreaker(a []proxy.Action, clients ...pr
 	}
 }
 
+// TestRepairAHeldFlightPromotedBehindARetryTheCustomBreakerRefusesIsRefusedWithAllItsWaiters
+// proves coalStart refuses a promoted held flight with 53M03 when a custom breaker is open.
 func TestRepairAHeldFlightPromotedBehindARetryTheCustomBreakerRefusesIsRefusedWithAllItsWaiters(t *testing.T) {
 	for _, join := range joinModes {
 		b := &switchBreaker{}
@@ -384,6 +396,8 @@ func TestRepairAHeldFlightPromotedBehindARetryTheCustomBreakerRefusesIsRefusedWi
 	}
 }
 
+// TestRepairAHeldFlightPromotedByThePoolBreakerFlushIsRefusedAndTheFlushLeavesNothingQueued
+// proves a pool-core breaker flush refuses any held flight it promotes and leaves zero queued.
 func TestRepairAHeldFlightPromotedByThePoolBreakerFlushIsRefusedAndTheFlushLeavesNothingQueued(t *testing.T) {
 	for _, join := range joinModes {
 		h := heldRetriedFlight(t, join, func(c *proxy.Config) { c.Pool.BreakerFailures = 2 })
@@ -405,6 +419,8 @@ func TestRepairAHeldFlightPromotedByThePoolBreakerFlushIsRefusedAndTheFlushLeave
 	}
 }
 
+// TestRepairHeldHandoffsPreserveTheOriginalArrival proves single and repeated
+// held-flight handoffs (disconnect or cancel) propagate the original arrival instant.
 func TestRepairHeldHandoffsPreserveTheOriginalArrival(t *testing.T) {
 	for _, cancel := range []bool{false, true} {
 		for _, twice := range []bool{false, true} {
@@ -453,6 +469,8 @@ func TestRepairHeldHandoffsPreserveTheOriginalArrival(t *testing.T) {
 	}
 }
 
+// TestRepairRepeatedRetryHandoffsKeepTheAttemptAndTenant proves repeated queued
+// or active handoffs of a retried flight keep its queued-under tenant, lease tenant, and attempt count.
 func TestRepairRepeatedRetryHandoffsKeepTheAttemptAndTenant(t *testing.T) {
 	for _, active := range []bool{false, true} {
 		for _, cancel := range []bool{false, true} {

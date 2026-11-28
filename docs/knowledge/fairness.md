@@ -23,10 +23,10 @@ Reference notes for chunks 10, 13, and 14 before changing the dispatcher, the co
 
 ## Coalesced flights and the limit (chunk 11 join, 2026-11-28)
 
-- The limit counts leases, not answers. A coalesced flight's owner waits in its own tenant's queue and holds one lease for that tenant; followers take no queue place and no lease.
-- With `coalesce.key_scope: all-tenants` (the default), a follower of another tenant rides the owner's lease and spends none of its own share.
-- Handoff caveat: when the owner leaves (cancel or disconnect) and a follower of another tenant remains, the follower takes the flight over (`LeftHandoff`). The read keeps running, and a zero-byte refusal can re-queue and retry it, all charged to the leaving tenant's share until the lease ends (`request.tenant`, `d.lastTenant`). Without that follower the proxy would cancel the read (`LeftLast`) and free the share. So a tenant can hold database concurrency beyond its own share at the expense of a tenant that abandons shared reads.
-- `coalesce.key_scope: tenant` keeps every flight inside one tenant, which gives strict isolation. The capacity row "Leases in flight across tenants" (`fairnessCapacityRows`, `docs/capacity-table.md`) states the same.
+- The fair limit counts database leases, not client answers. A coalesced flight's owner occupies one place in its tenant's queue and holds one lease counted against that tenant; followers hold neither a queue slot nor a lease.
+- Under `coalesce.key_scope: all-tenants` (the default), a follower belonging to another tenant rides the owner's lease without spending its own tenant's share.
+- Cross-tenant handoff caveat: if the owner of a shared read leaves (cancel or disconnect) while a follower of another tenant remains, handoff (`LeftHandoff`) keeps the read running—and any zero-byte-loss retry re-queued and retried—charged to the leaving tenant's share until the lease ends (`request.tenant`, `d.lastTenant`). Without that follower, the proxy would have cancelled the read (`LeftLast`) and freed the share. A tenant can therefore hold database concurrency beyond its own share at the expense of another tenant that abandons shared reads.
+- Setting `coalesce.key_scope: tenant` keeps every flight within a single tenant for strict isolation, matching the "Leases in flight across tenants" row of `docs/capacity-table.md` (`fairnessCapacityRows`).
 
 ## Observability
 

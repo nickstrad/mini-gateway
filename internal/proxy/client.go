@@ -20,6 +20,10 @@ const (
 
 const maxClientInput = 4 * MaxRead
 
+// request holds one in-progress client query. arrived stays fixed at
+// startRequest across strict-mode promotions and handoffs to bound retries
+// (while enq moves on promotion for queue_wait); tenant stays fixed across
+// cross-tenant flight handoffs so lease starts and ends charge the same tenant.
 type request struct {
 	id      RequestID
 	msg     []byte

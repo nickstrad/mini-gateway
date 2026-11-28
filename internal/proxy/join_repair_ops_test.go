@@ -446,6 +446,9 @@ func joinLines(lines []string) string {
 	return b.String()
 }
 
+// TestRepairRandomFlightsRetriesDeadlinesAndBreakerTransitionsKeepTheInvariants
+// runs 400 randomized engine sequences (60 under -short) verifying Engine.Invariants,
+// arrival-bounded retry delivery, open-breaker promotion refusal, and Quiesce.
 func TestRepairRandomFlightsRetriesDeadlinesAndBreakerTransitionsKeepTheInvariants(t *testing.T) {
 	n := opsSequences
 	if testing.Short() {

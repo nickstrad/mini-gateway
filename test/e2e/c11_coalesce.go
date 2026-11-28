@@ -32,6 +32,8 @@ const (
 	coalQueueInterval = admission.Time(20 * time.Second)
 )
 
+// CoalesceScenario pairs a coalescer tier S Spec with its scenario verifier,
+// optional ablation mutator, and direct-arm flag.
 type CoalesceScenario struct {
 	Spec    Spec
 	Heavy   bool
@@ -83,6 +85,8 @@ func withPlant(p coalesce.Plant) func(Spec) Spec {
 	}
 }
 
+// HotKeySpec builds the 1,000-client viral hot-key scenario (50 ms read time,
+// 4 connections, recovery probe after 1 s) for join mode join.
 func HotKeySpec(join coalesce.JoinMode) Spec {
 	sp := coalBase("coalesce-hot-key-"+joinName(join), join, hotService)
 	sp.Duration = 20 * time.Second
@@ -104,6 +108,7 @@ func readsOf(r *SimRun, text string) []fakepg.StatementRecord {
 	return out
 }
 
+// MaxConcurrent computes the peak number of overlapping [Start, End) intervals in recs.
 func MaxConcurrent(recs []fakepg.StatementRecord) int {
 	type edge struct {
 		at    sim.Time
@@ -141,6 +146,7 @@ func gotValue(st []string, v string) bool {
 	return len(st) > 0 && st[len(st)-1] == "ZI" && slices.Contains(st, "D:"+v) && !HasToken(st, "E:")
 }
 
+// Percentile returns the permille (e.g. 500 for p50, 990 for p99) duration of d.
 func Percentile(d []time.Duration, permille int) time.Duration {
 	if len(d) == 0 {
 		return 0
@@ -237,6 +243,8 @@ func checkHotKey(r *SimRun) error {
 	return coalSnapOK(r)
 }
 
+// WritesSpec builds the mixed read/write/transaction scenario proving writes
+// and in-transaction reads are never coalesced under ModeAuto.
 func WritesSpec(join coalesce.JoinMode, hinted bool) Spec {
 	name := "coalesce-writes-" + joinName(join)
 	sp := coalBase(name, join, 5*time.Millisecond)
@@ -266,6 +274,8 @@ func WritesSpec(join coalesce.JoinMode, hinted bool) Spec {
 	return sp
 }
 
+// MarkedWriteSpec builds the hinted-mode scenario with identical marked writes
+// to prove the write-count check fails when writes are shared.
 func MarkedWriteSpec() Spec {
 	sp := coalBase("coalesce-marked-write-hinted", coalesce.JoinStrict, hotService)
 	sp.Coalesce.Mode = coalesce.ModeHinted
@@ -341,6 +351,8 @@ func checkWrites(r *SimRun) error {
 	return coalSnapOK(r)
 }
 
+// CoalCancelSpec builds the 100-client cancel scenario where either 99 clients
+// cancel (1 survivor gets the reply) or all 100 cancel (DB read is cancelled).
 func CoalCancelSpec(join coalesce.JoinMode, all bool) Spec {
 	name := "coalesce-cancel-99-" + joinName(join)
 	if all {
@@ -427,6 +439,8 @@ func checkCancelAll(r *SimRun) error {
 	return coalSnapOK(r)
 }
 
+// VanishSpec builds the 100-client vanish scenario where all waiters reset
+// mid-read and the connection is cleaned up via the dirty-connection table.
 func VanishSpec(join coalesce.JoinMode) Spec {
 	sp := coalBase("coalesce-vanish-all-"+joinName(join), join, slowService)
 	for i := 0; i < cancelGroup; i++ {
@@ -465,6 +479,8 @@ func checkCoalVanish(r *SimRun) error {
 	return coalSnapOK(r)
 }
 
+// RYWSpec builds the read-your-own-write scenario contrasting strict mode
+// (returns the written value) against relaxed mode (shows the stale window).
 func RYWSpec(join coalesce.JoinMode) Spec {
 	sp := coalBase("coalesce-read-your-write-"+joinName(join), join, 100*time.Millisecond)
 	sp.Service.PerKind = append(sp.Service.PerKind, fakepg.KindTime{Kind: fakepg.KindUpdate, Time: time.Millisecond})
@@ -500,6 +516,8 @@ func checkRYW(r *SimRun) error {
 	return coalSnapOK(r)
 }
 
+// SlowFollowerSpec builds the scenario with 3 stalled followers behind a 40 KiB
+// shared read to prove fast peers are not delayed.
 func SlowFollowerSpec(join coalesce.JoinMode) Spec {
 	sp := coalBase("coalesce-slow-follower-"+joinName(join), join, hotService)
 	sp.Rows = coalRows(fakepg.Row{Key: "big", Value: strings.Repeat("x", bigValueLen)})
@@ -538,6 +556,8 @@ func checkSlowFollower(r *SimRun) error {
 	return coalSnapOK(r)
 }
 
+// SharedErrorSpec builds the 100-client timeout scenario proving a failed
+// flight shares one error per waiter with no re-drive stampede.
 func SharedErrorSpec(join coalesce.JoinMode) Spec {
 	sp := coalBase("coalesce-shared-error-"+joinName(join), join, 2*time.Second)
 	sp.Duration = 8 * time.Second
@@ -585,6 +605,8 @@ func checkSharedError(r *SimRun) error {
 	return coalSnapOK(r)
 }
 
+// CapsSpec builds the scenario exercising MaxWaiters (53M04), MaxReplyBytes
+// (detach + no-share list), unshared pass-through, and no-share expiry.
 func CapsSpec(join coalesce.JoinMode) Spec {
 	sp := coalBase("coalesce-caps-"+joinName(join), join, hotService)
 	sp.Rows = coalRows(fakepg.Row{Key: "huge", Value: strings.Repeat("y", hugeValueLen)})
@@ -649,6 +671,8 @@ func checkCaps(r *SimRun) error {
 	return coalSnapOK(r)
 }
 
+// HintedSpec builds the ModeHinted scenario proving marked queries share while
+// unmarked safe-shape queries pass unshared.
 func HintedSpec() Spec {
 	sp := coalBase("coalesce-hinted", coalesce.JoinStrict, hotService)
 	sp.Coalesce.Mode = coalesce.ModeHinted
@@ -682,6 +706,8 @@ func checkHinted(r *SimRun) error {
 	return coalSnapOK(r)
 }
 
+// CoalesceResultsSpec wraps ResultsSpec behind the coalescer, admission queues,
+// and pool core to prove proxied replies equal direct execution.
 func CoalesceResultsSpec(join coalesce.JoinMode) Spec {
 	sp := ResultsSpec("coalesce-results-"+joinName(join), false)
 	sp.Timeouts = poolTimeouts()
@@ -720,6 +746,8 @@ func checkCoalesceResults(r *SimRun) error {
 	return coalSnapOK(r)
 }
 
+// TenantScopeSpec builds the ScopeTenant scenario proving 4 tenants each run
+// separate flights for identical SQL text.
 func TenantScopeSpec() Spec {
 	sp := coalBase("coalesce-tenant-scope", coalesce.JoinStrict, hotService)
 	sp.KeyScope = work.ScopeTenant
@@ -744,6 +772,8 @@ func checkTenantScope(r *SimRun) error {
 	return coalSnapOK(r)
 }
 
+// CoalesceScenarios returns all 27 tier S coalescer scenarios (23 standalone
+// plus the 4 fairness/retry join scenarios).
 func CoalesceScenarios() []CoalesceScenario {
 	var out []CoalesceScenario
 	for _, j := range []coalesce.JoinMode{coalesce.JoinStrict, coalesce.JoinRelaxed} {
@@ -774,6 +804,7 @@ func CoalesceScenarios() []CoalesceScenario {
 	return append(out, JoinCoalesceScenarios()...)
 }
 
+// String formats sc's name and ablation description for diagnostics.
 func (sc CoalesceScenario) String() string { return fmt.Sprintf("%s (%s)", sc.Spec.Name, sc.Ablated) }
 
 func coalFingerprint(sp Spec) string {
@@ -783,6 +814,8 @@ func coalFingerprint(sp Spec) string {
 	return fmt.Sprintf("-co%s-%s-s%d-w%d-x%d", sp.Coalesce.Mode, sp.Coalesce.Join, sp.KeyScope, sp.Coalesce.MaxWaiters, sp.Coalesce.Plant)
 }
 
+// AblationArm returns the coalescer-off ablation Spec when sc ablates by
+// disabling coalescing, or nil otherwise.
 func (sc CoalesceScenario) AblationArm() *Spec {
 	if sc.Ablate == nil {
 		return nil
@@ -795,11 +828,15 @@ func (sc CoalesceScenario) AblationArm() *Spec {
 }
 
 const (
-	CoalesceHeavyEnv         = "MG_C11_HEAVY"
+	// CoalesceHeavyEnv enables the 1,000-client hot-key scenarios and numbers test.
+	CoalesceHeavyEnv = "MG_C11_HEAVY"
+	// CoalesceBaselineScenario is the light coalescer baseline run by simrun.
 	CoalesceBaselineScenario = "coalesce-caps-strict"
-	CoalesceHotKeyScenario   = "coalesce-hot-key-strict"
+	// CoalesceHotKeyScenario is the hot-key baseline run by simrun outside -short.
+	CoalesceHotKeyScenario = "coalesce-hot-key-strict"
 )
 
+// CoalesceHeavyRuns reports whether the 1,000-client hot-key scenarios should run.
 func CoalesceHeavyRuns(short bool) bool {
 	return !short && (os.Getenv("RUN_DIR") != "" || os.Getenv(CoalesceHeavyEnv) == "1")
 }

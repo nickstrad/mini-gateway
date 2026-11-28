@@ -141,6 +141,8 @@ type hotArm struct {
 	clients int
 }
 
+// TestTierRCoalesceHotKey proves 1,000 concurrent identical reads against live
+// Postgres 17 trigger 1-2 database reads in strict and relaxed modes vs 1,000 off.
 func TestTierRCoalesceHotKey(t *testing.T) {
 	env := tierR(t)
 	c11Setup(t, env)
@@ -181,6 +183,8 @@ func TestTierRCoalesceHotKey(t *testing.T) {
 	}
 }
 
+// TestTierRCoalesceCancel99 proves cancelling 99 of 100 waiters on live Postgres
+// 17 delivers 57014 to the 99 and a valid reply from 1 completed read to the 100th.
 func TestTierRCoalesceCancel99(t *testing.T) {
 	env := tierR(t)
 	c11Setup(t, env)
@@ -217,6 +221,8 @@ func TestTierRCoalesceCancel99(t *testing.T) {
 	}
 }
 
+// TestTierRCoalesceAllCancel proves cancelling all 100 waiters forwards one
+// cancel to Postgres 17 so zero reads complete and the gateway recovers cleanly.
 func TestTierRCoalesceAllCancel(t *testing.T) {
 	env := tierR(t)
 	c11Setup(t, env)
@@ -255,6 +261,8 @@ func TestTierRCoalesceAllCancel(t *testing.T) {
 	}
 }
 
+// TestTierRCoalesceReadYourWrite proves strict mode returns the written value
+// on Postgres 17 while relaxed mode demonstrates the concurrent stale-read window.
 func TestTierRCoalesceReadYourWrite(t *testing.T) {
 	env := tierR(t)
 	c11Setup(t, env)
@@ -302,6 +310,8 @@ func TestTierRCoalesceReadYourWrite(t *testing.T) {
 	}
 }
 
+// TestTierRCoalesceResultsEqualDirect proves proxied replies under mode auto
+// match direct Postgres 17 execution.
 func TestTierRCoalesceResultsEqualDirect(t *testing.T) {
 	env := tierR(t)
 	spec := ResultsSpec("tierr-coalesce-results", false)
@@ -358,6 +368,8 @@ func zipfKeys() ([][]int, string) {
 		100*float64(top10)/float64(total), used)
 }
 
+// TestTierRCoalesceHeadlineZipf measures database read counts and latency
+// percentiles under Zipf s=1.100 skew on Postgres 17 across off, strict, and relaxed.
 func TestTierRCoalesceHeadlineZipf(t *testing.T) {
 	env := tierR(t)
 	c11Setup(t, env)

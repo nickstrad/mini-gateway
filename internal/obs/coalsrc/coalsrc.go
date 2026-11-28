@@ -1,3 +1,5 @@
+// Package coalsrc maps coalesce.Snapshot into component "coalescer" metrics
+// and registers the coalescer health rule.
 package coalsrc
 
 import (
@@ -13,12 +15,15 @@ const (
 	lo = obs.LabelOutcome
 	lm = obs.LabelMode
 
-	MetricWaiting  = "waiting"
+	// MetricWaiting is the gauge name read by the coalescer health rule.
+	MetricWaiting = "waiting"
+	// CheckCoalescer is the health check name registered by HealthRules.
 	CheckCoalescer = "coalescer"
 )
 
 var none = obs.Labels{}
 
+// Metrics returns every metric descriptor declared for component "coalescer".
 func Metrics() []obs.MetricDesc {
 	return []obs.MetricDesc{
 		obs.GaugeDesc("mode", lm, "1 for the coalesce mode this instance runs (mode: off, auto, hinted)."),
@@ -73,6 +78,9 @@ func b(v bool) int64 {
 	return 0
 }
 
+// Map emits all component "coalescer" metrics from s into e. Hot-key counts
+// are labelled by rank only so SQL text never leaves the snapshot; histograms
+// and per-tenant hits are emitted only when detail export is enabled.
 func Map(s coalesce.Snapshot, e *obs.Emitter) {
 	for m := coalesce.Mode(0); m < coalesce.NumModes; m++ {
 		e.Gauge("mode", obs.Labels{Mode: m.String()}, b(s.Mode == m))
@@ -143,10 +151,14 @@ func Map(s coalesce.Snapshot, e *obs.Emitter) {
 	}
 }
 
+// Source wraps snapshot into an obs.Source for component "coalescer".
 func Source(snapshot func() coalesce.Snapshot) obs.Source {
 	return obs.NewSource(obs.ComponentCoalescer, Metrics(), snapshot, Map)
 }
 
+// HealthRules returns the coalescer health check, which always reports OK:
+// cap refusals (53M04) and unshared pass-throughs are per-request outcomes
+// that do not degrade the instance.
 func HealthRules() []obs.Rule {
 	return []obs.Rule{{Name: CheckCoalescer, Check: func(s obs.InstanceSnapshot) (obs.State, string) {
 		n := s.Value(obs.ComponentCoalescer, MetricWaiting, none)

@@ -29,6 +29,8 @@ func joinWrite(c, i int) string {
 	return "UPDATE kv SET v = 'w" + itoa(i) + "' WHERE k = '" + key(c, "a") + "'"
 }
 
+// HotKeyWeightedSpec builds the 200-reader hot-key scenario behind two
+// fairness-weighted tenants (3:1) saturated by 16 concurrent writers on 4 connections.
 func HotKeyWeightedSpec(join coalesce.JoinMode) Spec {
 	sp := coalBase("coalesce-hot-key-weighted-"+joinName(join), join, hotService)
 	sp.Tenants = 2
@@ -100,6 +102,8 @@ func checkHotKeyWeighted(r *SimRun) error {
 	return coalSnapOK(r)
 }
 
+// HotKeyRetrySpec builds the 200-reader hot-key scenario with PreForwardOnce
+// enabled and all idle connections doomed just before the burst arrives.
 func HotKeyRetrySpec(join coalesce.JoinMode) Spec {
 	sp := coalBase("coalesce-hot-key-retry-"+joinName(join), join, hotService)
 	sp.Path = nil
@@ -146,6 +150,8 @@ func retryOff(sp Spec) Spec {
 	return sp
 }
 
+// JoinCoalesceScenarios returns the four tier S scenarios exercising the
+// coalescer together with fairness weights and pre-forward retries.
 func JoinCoalesceScenarios() []CoalesceScenario {
 	var out []CoalesceScenario
 	for _, j := range []coalesce.JoinMode{coalesce.JoinStrict, coalesce.JoinRelaxed} {
