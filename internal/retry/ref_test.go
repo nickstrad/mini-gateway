@@ -99,18 +99,43 @@ func (w *window) record(attempts, retries, level int64) {
 }
 
 func (w *window) check(cap, floor int64) error {
+	carried, capped := 0, 0
+	for j := range w.attempts {
+		if w.excess(j, w.levels[j]) < w.excess(carried, w.levels[carried]) {
+			carried = j
+		}
+		if w.excess(j, 0) < w.excess(capped, 0) {
+			capped = j
+		}
+		if i := carried; w.excess(j, 0) > w.excess(i, w.levels[i]) {
+			return fmt.Errorf("window %d..%d: %d retries for %d first attempts with %d tenths carried in", i, j,
+				w.retries[j]-w.retries[i], w.attempts[j]-w.attempts[i], w.levels[i])
+		}
+		if i := capped; w.excess(j, 0) > w.excess(i, cap) {
+			return fmt.Errorf("window %d..%d: %d retries above a tenth of %d first attempts plus the cap %d", i, j,
+				w.retries[j]-w.retries[i], w.attempts[j]-w.attempts[i], cap)
+		}
+		if w.retries[j]*10 > w.attempts[j]+floor {
+			return fmt.Errorf("from the start to %d: %d retries for %d first attempts and the floor %d", j, w.retries[j], w.attempts[j], floor)
+		}
+	}
+	return nil
+}
+
+func (w *window) excess(i int, credit int64) int64 {
+	return w.retries[i]*10 - w.attempts[i] + credit
+}
+
+func (w *window) checkQuadratic(cap, floor int64) error {
 	for i := range w.attempts {
 		for j := i; j < len(w.attempts); j++ {
 			da, dr := w.attempts[j]-w.attempts[i], w.retries[j]-w.retries[i]
-			if dr*10 > da+w.levels[i] {
-				return fmt.Errorf("window %d..%d: %d retries for %d first attempts with %d tenths carried in", i, j, dr, da, w.levels[i])
-			}
-			if dr*10 > da+cap {
-				return fmt.Errorf("window %d..%d: %d retries above a tenth of %d first attempts plus the cap %d", i, j, dr, da, cap)
+			if dr*10 > da+w.levels[i] || dr*10 > da+cap {
+				return fmt.Errorf("window %d..%d", i, j)
 			}
 		}
 		if w.retries[i]*10 > w.attempts[i]+floor {
-			return fmt.Errorf("from the start to %d: %d retries for %d first attempts and the floor %d", i, w.retries[i], w.attempts[i], floor)
+			return fmt.Errorf("from the start to %d", i)
 		}
 	}
 	return nil

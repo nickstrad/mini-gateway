@@ -23,6 +23,9 @@ func (f *File) applyRetryDefaults() {
 	}
 	if r.Floor == 0 {
 		r.Floor = retry.DefaultFloorTokens
+		if r.BucketCap >= 1 && r.BucketCap <= retry.MaxTokens {
+			r.Floor = min(r.Floor, r.BucketCap*int64(f.instances()))
+		}
 	}
 }
 

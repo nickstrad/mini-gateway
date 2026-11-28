@@ -131,3 +131,21 @@ func TestConfigNeverSetsARetryPlant(t *testing.T) {
 		}
 	}
 }
+
+func TestRetryOmittedFloorFollowsASmallBucketCap(t *testing.T) {
+	f, err := parseEdited(t, map[string]any{"retry.policy": "pre-forward-once", "retry.bucket_cap": 5})
+	if err != nil {
+		t.Fatalf("bucket_cap 5 with the floor omitted: %v", err)
+	}
+	if f.Retry.Floor != 5 || f.ProxyCaps().Retry.FloorTokens != 5 {
+		t.Fatalf("floor %d, per instance %d, want 5", f.Retry.Floor, f.ProxyCaps().Retry.FloorTokens)
+	}
+	f, err = parseEdited(t, map[string]any{"retry.policy": "pre-forward-once", "retry.bucket_cap": 2, "fleet.instances": 3,
+		"fleet.backend_connections": 12})
+	if err != nil {
+		t.Fatalf("bucket_cap 2 over 3 instances with the floor omitted: %v", err)
+	}
+	if c := f.ProxyCaps().Retry; c.FloorTokens < 1 || c.FloorTokens > c.CapTokens {
+		t.Fatalf("per-instance %+v", c)
+	}
+}

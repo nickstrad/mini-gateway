@@ -365,3 +365,64 @@ func TestFuzzPlantIsFoundByTheReferenceModel(t *testing.T) {
 		t.Fatal("the planted ordering bug passed the reference model")
 	}
 }
+
+func TestWindowCheckAgreesWithThePairwiseCheck(t *testing.T) {
+	r := rand.New(rand.NewPCG(12, 12))
+	failed := 0
+	for range 20_000 {
+		var w window
+		var a, rt int64
+		n := 1 + r.IntN(12)
+		for range n {
+			a += int64(r.IntN(12))
+			rt += int64(r.IntN(2))
+			w.record(a, rt, int64(r.IntN(40)))
+		}
+		cap, floor := int64(r.IntN(40)), int64(r.IntN(40))
+		fast, slow := w.check(cap, floor), w.checkQuadratic(cap, floor)
+		if (fast == nil) != (slow == nil) {
+			t.Fatalf("linear %v, pairwise %v for %+v cap %d floor %d", fast, slow, w, cap, floor)
+		}
+		if fast != nil {
+			failed++
+		}
+	}
+	if failed == 0 || failed == 20_000 {
+		t.Fatalf("%d of 20000 windows failed: the comparison exercised one side only", failed)
+	}
+}
+
+func TestStoredCreditDoesNotExpireWithTimeAndTheLargestBurstIsTheCap(t *testing.T) {
+	cfg := Config{Kind: KindPreForwardOnce, CapTokens: 20, FloorTokens: 1}
+	p, _ := New(cfg)
+	for range 1000 {
+		p.Attempt(0)
+	}
+	if s := p.Snapshot(); s.Level.Value != cfg.CapTokens*WithdrawTenths {
+		t.Fatalf("level %d, want the cap", s.Level.Value)
+	}
+	later := 3_600_000 * Millisecond
+	granted := 0
+	for range 100 {
+		if p.Decide(later, Failure{Reached: work.No, Deadline: later + Millisecond}).Retry {
+			granted++
+		}
+	}
+	s := p.Snapshot()
+	if granted != int(cfg.CapTokens) || s.Refused[RefusedBudget] == 0 {
+		t.Fatalf("after an idle hour a burst got %d retries (exhaustions %d), want the cap %d", granted, s.Refused[RefusedBudget], cfg.CapTokens)
+	}
+	if 10*s.Retries > s.Attempts+cfg.CapTokens*WithdrawTenths {
+		t.Fatalf("%d retries for %d first attempts and the cap", s.Retries, s.Attempts)
+	}
+}
+
+func TestAnOmittedFloorFollowsASmallCapAndABadCapNamesOnlyTheCap(t *testing.T) {
+	if c := (Config{Kind: KindPreForwardOnce, CapTokens: 5}).WithDefaults(); c.FloorTokens != 5 || c.Validate() != nil {
+		t.Fatalf("cap 5, floor omitted: %+v %v", c, c.Validate())
+	}
+	err := (Config{Kind: KindPreForwardOnce, CapTokens: -1}).WithDefaults().Validate()
+	if err == nil || !strings.Contains(err.Error(), "retry.bucket_cap") || strings.Contains(err.Error(), "retry.floor") {
+		t.Fatalf("cap -1, floor omitted: %v, want an error naming retry.bucket_cap only", err)
+	}
+}

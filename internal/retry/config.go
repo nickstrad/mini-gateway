@@ -68,7 +68,10 @@ func (c Config) WithDefaults() Config {
 		c.CapTokens = DefaultCapTokens
 	}
 	if c.FloorTokens == 0 {
-		c.FloorTokens = min(DefaultFloorTokens, c.CapTokens)
+		c.FloorTokens = DefaultFloorTokens
+		if c.CapTokens > 0 {
+			c.FloorTokens = min(DefaultFloorTokens, c.CapTokens)
+		}
 	}
 	return c
 }
@@ -81,12 +84,13 @@ func (c Config) Validate() error {
 	if c.Kind >= NumKinds {
 		bad("retry.policy", "must be off or pre-forward-once")
 	}
-	if c.CapTokens < 1 || c.CapTokens > MaxTokens {
+	capOK := c.CapTokens >= 1 && c.CapTokens <= MaxTokens
+	if !capOK {
 		bad("retry.bucket_cap", "must be 1 to %d tokens, got %d", MaxTokens, c.CapTokens)
 	}
 	if c.FloorTokens < 1 || c.FloorTokens > MaxTokens {
 		bad("retry.floor", "must be 1 to %d tokens, got %d", MaxTokens, c.FloorTokens)
-	} else if c.FloorTokens > c.CapTokens {
+	} else if capOK && c.FloorTokens > c.CapTokens {
 		bad("retry.floor", "%d tokens is more than retry.bucket_cap (%d)", c.FloorTokens, c.CapTokens)
 	}
 	return errors.Join(errs...)
