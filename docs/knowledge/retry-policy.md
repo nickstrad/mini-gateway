@@ -32,23 +32,36 @@ Facts a later builder needs about the proxy's own retry. Full notes, claims and 
   as open); a breaker seam without `Open()` reads as closed.
 - A granted retry is re-run at once: `c.req` is kept, the request re-enters `enqueue` (the
   admission queue is the one waiting place); it holds no connection (the failed one was closed or
-  sent to the dirty table first). Draining, breaker and rate gates are not run again.
+  sent to the dirty table first) but holds one place in its tenant's admission queue while it
+  waits. Draining and rate gates are not run again. The breaker is read again when a connection
+  could be lent to a waiting retry (`refuseRetriesBehindOpenBreaker`, top of `dispatch`): open
+  means 53M03 and retry end `breaker`; the token withdrawn at the grant is not returned. With the
+  pool core this never fires in practice: the core flushes the queue (`ActRefuseQueued`, retry end
+  `shed`) the moment the breaker opens; it guards other breaker seams.
 - The request's deadline is `arrival + timeouts.statement`; a retry's queue wait and statement
   deadline are clamped to it (`retryClamp`). First attempts are unchanged.
 - A first attempt is reported to the budget in `forward` (every first forward, statements inside
   a transaction included).
 - Engine counters: `RetryOffered`, `RetryAsked` (granted), `RetriedRequests`, `RetryPending`,
-  `RetryEnds[completed|failed|shed|gone]`, `RetryRows[row]`. Every end path of a request calls
-  `retryEnded` (reply, final failure, shed, breaker flush, queued cancel, client gone).
+  `RetryEnds[completed|failed|shed|gone|breaker]`, `RetryRows[row]`. Every end path of a request calls
+  `retryEnded` (reply, final failure, shed, breaker flush, breaker at the forward, queued cancel, client gone);
+  `Quiesce` refuses a non-zero `RetryPending`. Forwards = first attempts + retries − ends `breaker`.
 
 ## Config (`retry` section)
 
 `retry.policy` (`off` default, `pre-forward-once`), `retry.bucket_cap` (tokens, default 100),
 `retry.floor` (fleet tokens, default 10, divided by `fleet.instances`; refused below 1 per instance
 when the policy is on; a remainder is a warning). Zero or omitted means the default, negative is
-refused naming the key.
+refused naming the key. An omitted floor is `min(10, bucket_cap × fleet.instances)` (the same rule
+as `retry.Config.WithDefaults` for one instance).
 
 ## Things that are easy to get wrong
+
+- The budget bound is per window *with the carried credit*: 10 × retries ≤ first attempts in the
+  window + level carried in ≤ first attempts + cap. Stored credit does not expire with time, so
+  the largest burst after a quiet period is the cap, not the floor.
+- `MatrixRow.NotRetried` names why a row is not retried even when its error row would allow a
+  retry (deadline, breaker); exactly one matrix row is `Retried()`.
 
 - A loss of a lent connection marks every idle sibling suspect (chunk 7), so after one zero-byte
   refusal the next lends check first and absorb the other dead connections. A scenario gets at
