@@ -36,3 +36,7 @@ Functions with no side effect and no per-call or per-session result.
 ## Hint
 
 A text that begins with the exact bytes `/* mg:share */` is reported as `Hinted`. The hint never makes a text `SafeRead` or `Shareable`; in `hinted` mode the coalescer shares on the mark alone.
+
+## Limits
+
+The safe shape trusts the objects a text names. A view, a user-defined operator, a function that shadows an allow-listed name, or a row-level security policy can hide a side effect or a per-call result behind a text that fits the shape. `coalesce.mode` defaults to `auto`, so such a statement is shared like any other read: callers that arrive together get one result. On a database with such objects set `coalesce.mode` to `off`, or to `hinted` and mark only the statements that are safe to share.
