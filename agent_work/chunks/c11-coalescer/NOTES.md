@@ -109,7 +109,7 @@ write logs.
 | 5 | One caller's cancel hurts no other | core `TestNinetyNineLeaveAndTheLastGetsTheReply`; engine `TestTheOwnerLeavingHandsTheLeaseToAWaiter`; tier S `coalesce-cancel-99-*` (ablation `PlantAnyLeaveCancels` fails it); tier R `TestTierRCoalesceCancel99` |
 | 6 | A leaver gets its own error even at the result's instant | core `TestLeaveAtTheInstantTheResultArrivesGetsOnlyTheLeaversOwnError`, the driver's `cancel-at-result` op; engine `TestALeaverAtTheInstantOfTheResultIsNotAnswered`; fuzz plant `PlantLeaverGetsResult` |
 | 7 | All leave: work cancelled, dirty table, nothing leaks | core `TestTheLastLeaverCancelsTheFlight`; tier S `coalesce-vanish-all-*` (read aborted `57014` at the fake, `lease_ends{vanished-mid-statement}`, cancels sent, recovery, quiesce) and `coalesce-cancel-all-*`; tier R `TestTierRCoalesceAllCancel` (0 completed reads) |
-| 8 | Flight deadline independent, fires at equality, shared error | core `TestResultAtTheFlightDeadlineIsLate`; tier S `coalesce-shared-error-*` (every client one `08006`) |
+| 8 | Flight deadline independent, fires at equality, shared error | core `TestResultAtTheFlightDeadlineIsLate`; tier S `coalesce-shared-error-*` (every client exactly one shared error: `08006` from the read that ran, or `53M01` from a held flight that expired before it was sent) |
 | 9 | Caps, fixed memory | core `TestWaiterCapRefuses`, `TestReplyCapRefusesFollowersAndListsTheKeyForAWhile`, `TestNoShareListIsBoundedAndEvictsTheOldest`, `TestFlightTableCapPassesUnshared`, `TestFuzzExecutionCostIsBounded`; tier S `coalesce-caps-*` (ablation without caps fails); generated capacity rows |
 | 10 | Shared errors, no stampede | core `TestFailedFlightSharesItsErrorOnce`; tier S `coalesce-shared-error-*` (≤ 2 reads for 100 waiters; ablation off fails) |
 | 11 | Followers take no slot or connection; per-tenant; conservation on every path incl. Shutdown | engine `TestFollowerGetsTheSameBytesAsTheRequestThatRanTheRead` (coalesced 1, queued 0, in flight 1); `Snapshot.Check` conservation with `coalesced` (every scenario, every event via `Invariants`); `TestEngineQuiescesWithAnEmptyFlightTableAndNoTimer` (Shutdown); `coalesce-tenant-scope` and `coalsrc` tests (per-tenant hits); SQL `coalescer.sql` |
@@ -362,6 +362,17 @@ flight `cancelled`), overflows by cap. Health rule: open point 10.
 5. Flights are per instance (fleet row).
 6. Per-key hotness is opt-in and exported by rank only; the key texts are in the snapshot, not in
    metrics.
+
+## Gate runs (`GATE_BASE=6cffb0f scripts/gate.sh c11-coalescer`, build stage)
+
+| Run | Commit | Result |
+| --- | --- | --- |
+| 1 | `89b655e` | G0–G5 pass (sweep 1,847 s; fuzz 19 targets); G6 failed on chunk 6a's `TestTierRMgctlSeededModelAgainstTheRealBinary` (`/stats` read before the first publish; fixed in the test, see "Changes to earlier chunks' tests") |
+| 2 | `a97cfec` | G0–G3 pass; G4 sweep hit `sweep.sh`'s 60-minute package timeout in `test/e2e` (load average 13–19) |
+| 3 | `6158b29` (coalescer seeds capped at 10 / 1 in the sweep) | G4 timeout again, in chunk 6's `TestScenarioE2E` (every coalescer scenario had passed); load 30–45 with another agent's gate running |
+| 4, 5 | stopped / dirty tree | a stray fuzz input left by a killed `fuzz-plant.sh` made one start dirty; restarted |
+| 6, 7 | `1eccd4c`, `6fb6d76` (1,000-client tests out of G3; one coalescer baseline in simrun) | G3 failed: `internal/obs/simrun` hit its 30-minute package timeout (in chunk 3/4 tests in run 7); also chunk 7's wall-clock `TestFuzzPoolOpsCostIsBounded` under the race detector (11.9 ms against 5 ms). Load average 25–40 with three other agents' full gates (c09, c12, lease-lab-port) running at the same time |
+| final | see "Final gate" below | run after the other gates finished |
 
 ## Commands
 
