@@ -182,7 +182,7 @@ func (f *File) Warnings() []string {
 			out = append(out, "fleet.connect_rate_per_s "+strconv.Itoa(f.Fleet.ConnectRatePerS)+" leaves a remainder of "+strconv.Itoa(rem)+" over "+strconv.Itoa(n)+" instances; each takes "+strconv.Itoa(f.Fleet.ConnectRatePerS/n))
 		}
 	}
-	return out
+	return append(out, f.retryWarnings()...)
 }
 
 // KeepAlive returns the net.KeepAliveConfig for database sockets dialed by the shell.

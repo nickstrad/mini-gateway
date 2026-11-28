@@ -15,6 +15,10 @@
 #     middle of a tenant queue swaps the tail into the hole (admission.PlantRemoveSwapsTail), so
 #     the queue order no longer matches the reference model. The seed corpus does not trigger
 #     it; the fuzzer must.
+#   FuzzRetryOps (chunk 12): with MG_FUZZ_PLANT=retry-withdraw-first the retry budget withdraws a
+#     token before it checks whether the failure may be retried at all (retry.PlantWithdrawFirst),
+#     so a refused failure still costs budget and the level no longer matches the reference model.
+#     A committed seed already reaches it.
 #   FuzzFairnessOps (chunk 9): with MG_FUZZ_PLANT=fairness-unpop-turn an Unpop puts the request
 #     back but keeps its tenant's round-robin turn (admission.FairPlantUnpopKeepsTurn), so the
 #     next choice of tenant no longer matches the fairness reference model. The seed corpus
@@ -66,6 +70,7 @@ fail=0
 plant FuzzEngineOps test/e2e queued-vanish 'queue holds' queue-slot || fail=1
 plant FuzzPoolOps internal/pool reset-clears-suspect 'lent suspect' reset-clears-suspect || fail=1
 plant FuzzAdmissionOps internal/admission admission-remove-order 'position [0-9]+: core|reference' remove-order || fail=1
+plant FuzzRetryOps internal/retry retry-withdraw-first 'reference|withdrawn for' withdraw-first || fail=1
 plant FuzzFairnessOps internal/admission fairness-unpop-turn 'the model gives|rounds [0-9]+, model' unpop-turn || fail=1
 [ "$fail" = 0 ] || exit 1
 note=$(printf '%s; ' "${notes[@]}")

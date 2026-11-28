@@ -8,6 +8,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/admission"
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
 	"github.com/nickstrad/mini-gateway/internal/pool"
+	"github.com/nickstrad/mini-gateway/internal/retry"
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
@@ -228,6 +229,7 @@ type Config struct {
 	Pool           *pool.Config
 	Reseed         bool
 	Admission      admission.Config
+	Retry          retry.Config
 	Fairness       admission.FairConfig
 }
 
@@ -323,6 +325,7 @@ func (c Config) Validate() error {
 		errs = append(errs, c.admissionConfig().Validate())
 		errs = append(errs, c.fairConfig().Validate())
 	}
+	errs = append(errs, c.Retry.WithDefaults().Validate())
 	return errors.Join(errs...)
 }
 

@@ -202,6 +202,16 @@ Record: `chunks/c08-admission/` (brief, notes, gate extra).
 | `chunks/c08-admission/gate/extra.sh` | G10: `fuzz-plant.sh` and `admission-head-to-head.sh --check` | Opus | — |
 | `../docs/knowledge/admission-queues.md` | Facts for chunks 9, 10, 13, 14: the core API, the seam, plants, the dispatcher hook, scenario cost | Opus | — |
 
+## Phase 2, chunk 12 — retry policy (Opus, 2026-11-27)
+
+Record: `chunks/c12-retry/` (brief, notes, gate extra).
+
+| Path | Purpose and how to run | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `../scripts/fuzz-plant.sh` (changed) | Also plants `retry.PlantWithdrawFirst` (`MG_FUZZ_PLANT=retry-withdraw-first`) and requires `FuzzRetryOps` to find it within `FUZZ_SECONDS` | Opus | Found at once (a committed seed reaches it) |
+| `../scripts/gen-docs.d/c12-fault-matrix.sh` | Generates `docs/fault-matrix.md` from `internal/proxy/matrix.go` (`--check` diffs) | Opus | Current |
+| `chunks/c12-retry/gate/extra.sh` | G10: `fuzz-plant.sh`, the retry scenario canaries, the retry-everything arm of both retry scenarios | Opus | — |
+| `../docs/knowledge/retry-policy.md` | Facts for chunks 13 and 14: the core, the engine wiring, config keys, the suspect rule and the half-open trick for zero-byte refusals | Opus | — |
 ## Phase 2, chunk 9 — fairness (Opus, 2026-11-27)
 
 Record: `chunks/c09-fairness/` (brief, notes, gate extra).

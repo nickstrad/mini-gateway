@@ -91,7 +91,7 @@ func (e *Engine) enqueue(c *client) {
 	c.phase = cpQueued
 	e.waiting[req.id] = c
 	e.snap.Queued.Add(1)
-	e.t.arm(&c.queueT, e.after(e.cfg.Timeouts.QueueWait), tQueueWait, c, nil)
+	e.t.arm(&c.queueT, e.retryClamp(req, e.after(e.cfg.Timeouts.QueueWait)), tQueueWait, c, nil)
 	e.queueTouched()
 	if !attempted {
 		e.dispatch()
@@ -100,6 +100,7 @@ func (e *Engine) enqueue(c *client) {
 
 func (e *Engine) shed(c *client) {
 	e.snap.Shed++
+	e.retryEnded(c.req, RetryEndShed)
 	c.req = nil
 	c.phase = cpIdle
 	e.reply(c, pgwire.ErrRowShed)
@@ -124,6 +125,11 @@ func (e *Engine) queueExpired(c *client) {
 
 func (e *Engine) dispatch() {
 	for e.seams.Queue.Len() > 0 && e.seams.Pool.Idle() > 0 {
+		// Re-check the breaker before lending to any queued retry so a breaker
+		// opening after the grant cannot forward the retry on a custom seam.
+		if e.refuseRetriesBehindOpenBreaker() {
+			continue
+		}
 		id, ok := e.seams.Queue.Pop(e.now)
 		if !ok {
 			e.queueTouched()
@@ -178,8 +184,9 @@ func (e *Engine) forward(c *client) {
 	req.relayed = 0
 	d.got = 0
 	d.cycle.QuerySent()
+	e.attempted(req)
 	e.writeDB(d, req.msg)
-	e.t.arm(&d.stmtT, e.after(e.cfg.Timeouts.Statement), tDBStatement, nil, d)
+	e.t.arm(&d.stmtT, e.retryClamp(req, e.after(e.cfg.Timeouts.Statement)), tDBStatement, nil, d)
 }
 
 func (e *Engine) relay(d *dbConn, b []byte) []byte {
@@ -285,6 +292,7 @@ func (e *Engine) replyDone(d *dbConn, c *client, status byte) {
 	req := c.req
 	c.req = nil
 	e.t.cancel(&d.stmtT)
+	e.retryEnded(req, RetryEndCompleted)
 	e.snap.Completed++
 	e.snap.InFlight.Add(-1)
 	e.stmtHist.Record(int64(e.now - req.sent))
@@ -372,13 +380,18 @@ func (e *Engine) statementLost(c *client, d *dbConn) {
 	req := c.req
 	c.req = nil
 	e.snap.InFlight.Add(-1)
-	e.snap.Failed++
 	reached := reachedFor(d, req)
-	e.reached(reached)
 	row := lostRow(req, reached)
-	if e.seams.Retry.Retry(e.now, Failure{Request: req.id, Tenant: c.tenant, Reached: reached, Row: uint8(row), InTx: req.inTx}) {
-		e.snap.RetryAsked++
+	// Offer the failure before recording a client failure: a granted retry keeps
+	// the request alive for its one client reply. The failed connection was
+	// already closed or moved to the dirty table before reaching statementLost.
+	if e.offerRetry(c, req, reached, row) {
+		e.rerun(c, req)
+		return
 	}
+	e.snap.Failed++
+	e.reached(reached)
+	e.retryEnded(req, RetryEndFailed)
 	c.phase = cpIdle
 	c.status = pgwire.StatusIdle
 	e.reply(c, row)

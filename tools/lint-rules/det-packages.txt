@@ -45,3 +45,8 @@ internal/loadgen
 # Chunk 8: the admission core (per-tenant queues, the two rules, the comparison arms).
 internal/admission
 internal/obs/admsrc
+# Chunk 12: the retry core (policies, the budget) and its test-only ablation policy.
+internal/retry
+internal/retry/retrytest
+# Chunk 12: the retry snapshot mapping.
+internal/obs/retrysrc

@@ -129,9 +129,14 @@ type Failure struct {
 	Reached work.Tri
 	Row     uint8
 	InTx    bool
+
+	Attempt     int
+	BreakerOpen bool
+	Draining    bool
+	Deadline    Instant
 }
 
-// RetryPolicy decides whether a failed request may be retried (pass-through in chunk 6; chunk 12).
+// RetryPolicy decides whether a failed request may be retried.
 type RetryPolicy interface {
 	Retry(now Instant, f Failure) bool
 }

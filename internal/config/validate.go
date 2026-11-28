@@ -36,6 +36,7 @@ func (f *File) applyDefaults() {
 	f.Timeouts = timeoutsFrom(p.Timeouts)
 	f.Pool.CheckTimeout = Duration(p.Timeouts.CheckTimeout)
 	f.applyQueueDefaults(p)
+	f.applyRetryDefaults()
 	f.applyFairnessDefaults()
 	if f.Obs.PublishInterval == 0 {
 		f.Obs.PublishInterval = Duration(DefaultPublishInterval)
@@ -64,7 +65,7 @@ func (f *File) proxyCaps() proxy.Config {
 	return proxy.Config{Connections: f.Pool.Connections, QueueCap: f.Queue.Capacity, MaxClients: f.Limits.MaxClients,
 		MaxStartup: f.Limits.MaxStartup, ReplyBufferCap: f.Limits.ReplyBuffer, Timeouts: f.poolTimeouts(),
 		Reset: f.resetPolicy(), Reseed: f.Lease.Reseed == LeaseReseedOn, Pool: f.poolCore(), Admission: f.admission(),
-		Fairness: f.fairness()}
+		Fairness: f.fairness(), Retry: f.retryCore()}
 }
 
 // Proxy converts the JSON Timeouts block into proxy.Timeouts.
@@ -105,6 +106,7 @@ func (f *File) validate(base string) error {
 	add(f.validateObs())
 	add(f.validateFleet())
 	add(f.validatePool())
+	add(f.validateRetry())
 	return errors.Join(errs...)
 }
 

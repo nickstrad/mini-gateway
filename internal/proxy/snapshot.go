@@ -153,6 +153,12 @@ type Snapshot struct {
 	CancelsIgnored     int64
 	BreakerFlushed     int64
 	IdleInTxRolledBack int64
+
+	RetryOffered    int64
+	RetriedRequests int64
+	RetryPending    obs.Gauge
+	RetryEnds       [NumRetryEnds]int64
+	RetryRows       [pgwire.ErrRowCount]int64
 }
 
 // Check enforces exact counter conservation and capacity invariants on s.
@@ -200,6 +206,9 @@ func (s Snapshot) Check() error {
 	}
 	if s.Queued.Value > s.QueueCap {
 		errs = append(errs, fmt.Errorf("queue depth %d above its cap %d", s.Queued.Value, s.QueueCap))
+	}
+	if err := s.retryConserved(); err != nil {
+		errs = append(errs, err)
 	}
 	if s.RelayHighWater > s.RelayCap {
 		errs = append(errs, fmt.Errorf("relay buffer high-water %d above its cap %d", s.RelayHighWater, s.RelayCap))

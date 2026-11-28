@@ -10,7 +10,7 @@ flowchart TB
     C_ADM["Admission<br/>internal/admission"]:::planned
     C_COAL["Coalescer<br/>internal/coalesce"]:::planned
     C_POOL["Pool<br/>internal/pool"]:::built
-    C_RETRY["Retry policy<br/>internal/retry"]:::planned
+    C_RETRY["Retry policy<br/>internal/retry"]:::built
     C_OBS["Observability<br/>internal/obs"]:::planned
     C_CONFIG["Configuration<br/>internal/config"]:::planned
   end
@@ -21,7 +21,7 @@ flowchart TB
   C_ENGINE -.->|5| C_ADM
   C_ENGINE -.->|6| C_COAL
   C_ENGINE -->|7| C_POOL
-  C_ENGINE -.->|8| C_RETRY
+  C_ENGINE -->|8| C_RETRY
   C_SHELL -->|9| PG
   C_ENGINE -->|10| C_OBS
   C_SHELL -->|11| C_OBS
@@ -30,6 +30,7 @@ flowchart TB
   C_SHELL -->|14| C_CONFIG
   C_ADM -->|15| C_OBS
   C_POOL -->|16| C_OBS
+  C_RETRY -->|17| C_OBS
   subgraph KEY["Key"]
     KEY_BUILT["Built"]:::built
     KEY_PLANNED["Planned"]:::planned

@@ -51,6 +51,11 @@ func engineJobs(dir string) []engineRun {
 			return r.Final, nil
 		})
 	}
+	if !testing.Short() {
+		for _, j := range e2e.RetryBaselineJobs(dir) {
+			jobs = append(jobs, j)
+		}
+	}
 	return jobs
 }
 
@@ -64,6 +69,7 @@ func shortSkipped() []string {
 			out = append(out, sc.Spec.Name)
 		}
 	}
+	out = append(out, e2e.RetryScenarioNames()...)
 	return append(out, e2e.FairScenarios()...)
 }
 

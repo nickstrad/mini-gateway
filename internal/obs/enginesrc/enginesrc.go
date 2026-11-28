@@ -10,10 +10,12 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs/admsrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/clssrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/poolsrc"
+	"github.com/nickstrad/mini-gateway/internal/obs/retrysrc"
 	"github.com/nickstrad/mini-gateway/internal/obs/wiresrc"
 	"github.com/nickstrad/mini-gateway/internal/pgwire"
 	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
+	"github.com/nickstrad/mini-gateway/internal/retry"
 )
 
 const (
@@ -63,7 +65,7 @@ func Metrics() []obs.MetricDesc {
 		obs.CounterDesc("failures_reached", lo, "Failures by whether the request may have reached the database (outcome: no, yes)."),
 		obs.CounterDesc("failures_without_reply", 0, "Failures where the client was gone and no reply was possible."),
 		obs.CounterDesc("non_request_replies", 0, "Proxy-made replies not tied to a request (startup caps, violations, a loss between statements)."),
-		obs.CounterDesc("retry_asked", 0, "Failures the retry seam asked to retry (policy off: always 0)."),
+		obs.CounterDesc("retry_asked", 0, "Failures the retry policy granted a retry (policy off: always 0)."),
 		obs.HistogramDesc("statement_time", 0, obs.UnitNs, "Database statement time, from send to end of reply."),
 		obs.HistogramDesc("queue_wait", 0, obs.UnitNs, "Time a dispatched request waited in the queue."),
 		obs.GaugeDesc("queue_capacity", 0, "Capacity of the queue."),
@@ -112,6 +114,12 @@ func Metrics() []obs.MetricDesc {
 		obs.CounterDesc("client_cancels", lo, "Client cancel requests by outcome (forwarded, queued, refused, unmatched, ignored)."),
 		obs.CounterDesc("breaker_flushed", 0, "Queued requests answered 53M03 when the breaker opened with nothing usable."),
 		obs.CounterDesc("idle_in_transaction_rolled_back", 0, "Transactions left idle past timeouts.idle_in_transaction and rolled back."),
+		obs.CounterDesc("retry_offered", 0, "Failed statements offered to the retry policy."),
+		obs.CounterDesc("retried_requests", 0, "Requests run again by the proxy at least once."),
+		obs.GaugeDesc("retries_pending", 0, "Requests run again whose outcome is not known yet."),
+		obs.HighWaterDesc("retries_pending_peak", 0, "Most requests run again with no outcome yet at once."),
+		obs.CounterDesc("retry_rows", lr, "Retries granted, by the error-contract row the failure would have been answered with (reason)."),
+		obs.CounterDesc("retry_ends", lo, "Requests run again, by how they ended (outcome: completed, failed, shed, gone, breaker: refused at the forward because the breaker opened after the grant)."),
 	}
 }
 
@@ -216,6 +224,16 @@ func mapRequests(s proxy.Snapshot, e *obs.Emitter) {
 	e.Counter("failures_without_reply", none, s.FailedNoReply)
 	e.Counter("non_request_replies", none, s.NonRequestReplies)
 	e.Counter("retry_asked", none, s.RetryAsked)
+	e.Counter("retry_offered", none, s.RetryOffered)
+	e.Counter("retried_requests", none, s.RetriedRequests)
+	e.Gauge("retries_pending", none, s.RetryPending.Value)
+	e.Gauge("retries_pending_peak", none, s.RetryPending.Peak)
+	for i, v := range s.RetryRows {
+		e.Counter("retry_rows", obs.Labels{Reason: pgwire.ErrRowID(i).Row().ID}, v)
+	}
+	for i, v := range s.RetryEnds {
+		e.Counter("retry_ends", obs.Labels{Outcome: proxy.RetryEnd(i).String()}, v)
+	}
 	if e.Detail() {
 		e.Histogram("statement_time", none, s.StatementTime)
 		e.Histogram("queue_wait", none, s.QueueWait)
@@ -344,6 +362,7 @@ func Sources(e *proxy.Engine, shell func() proxy.ShellSnapshot) []obs.Source {
 			return clssrc.Snapshot{Classifier: e.ClassifierSnapshot(), Replies: e.ReplySnapshot(), Sync: e.SyncSnapshot()}
 		}),
 		admsrc.Source(e.AdmissionSnapshot),
+		retrysrc.Source(func() retry.Snapshot { s, _ := e.RetrySnapshot(); return s }),
 	}
 }
 

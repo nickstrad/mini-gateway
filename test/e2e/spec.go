@@ -11,6 +11,7 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/admission"
 	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/proxy"
+	"github.com/nickstrad/mini-gateway/internal/retry"
 	"github.com/nickstrad/mini-gateway/internal/sim"
 	"github.com/nickstrad/mini-gateway/internal/sim/fakepg"
 )
@@ -69,6 +70,7 @@ type Spec struct {
 	Path      *PathPlan
 	Flush     time.Duration
 	Admission admission.Config
+	Retry     retry.Config
 }
 
 // ClientResult records the tokenized startup messages, per-step replies, elapsed
