@@ -52,7 +52,7 @@ func engineJobs(dir string) []engineRun {
 		})
 	}
 	for _, sc := range e2e.CoalesceScenarios() {
-		if sc.Spec.Name != e2e.CoalesceBaselineScenario {
+		if !coalesceRunHere(sc.Spec.Name) {
 			continue
 		}
 		jobs = append(jobs, func() (obs.InstanceSnapshot, error) {
@@ -75,10 +75,14 @@ func engineJobs(dir string) []engineRun {
 	return jobs
 }
 
+func coalesceRunHere(name string) bool {
+	return name == e2e.CoalesceBaselineScenario || name == e2e.CoalesceHotKeyScenario && !testing.Short()
+}
+
 func shortSkipped() []string {
 	var out []string
 	for _, sc := range e2e.CoalesceScenarios() {
-		if sc.Spec.Name != e2e.CoalesceBaselineScenario {
+		if !coalesceRunHere(sc.Spec.Name) {
 			out = append(out, sc.Spec.Name)
 		}
 	}
