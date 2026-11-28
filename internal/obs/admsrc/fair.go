@@ -5,8 +5,11 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 )
 
+// Reason labels emitted on the admission.held counter.
 const (
+	// HeldLimit marks selections that lent nothing because in-flight leases reached the fair limit.
 	HeldLimit = "limit"
+	// HeldShare marks selections that held back the last free lease for an active below-share tenant.
 	HeldShare = "share"
 )
 

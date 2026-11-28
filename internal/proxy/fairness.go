@@ -7,6 +7,8 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/work"
 )
 
+// PlantFairStatementInFlight is a test-only fault bit that drops a tenant's
+// in-flight lease count between statements of an open transaction.
 const PlantFairStatementInFlight Plant = 1 << 15
 
 func (c Config) fairConfig() admission.FairConfig {
@@ -18,6 +20,8 @@ func (c Config) fairConfig() admission.FairConfig {
 	return f.WithDefaults()
 }
 
+// FairConfig returns the effective admission.FairConfig derived from c with
+// defaults applied, Limit defaulting to Connections, and MaxLeases bound to Connections.
 func (c Config) FairConfig() admission.FairConfig { return c.WithDefaults().fairConfig() }
 
 func (a *AdmissionQueue) installFair(cfg admission.FairConfig) error {
@@ -29,14 +33,17 @@ func (a *AdmissionQueue) installFair(cfg admission.FairConfig) error {
 	return nil
 }
 
+// LeaseStart records that tenant began holding one database lease at now.
 func (a *AdmissionQueue) LeaseStart(now Instant, tenant work.TenantID) bool {
 	return a.q.LeaseStart(a.at(now), string(tenant))
 }
 
+// LeaseEnd records that one database lease held by tenant ended at now.
 func (a *AdmissionQueue) LeaseEnd(now Instant, tenant work.TenantID) bool {
 	return a.q.LeaseEnd(a.at(now), string(tenant))
 }
 
+// SetLimit updates the fair dispatcher's concurrency limit at now (1..admission.MaxFairLimit).
 func (a *AdmissionQueue) SetLimit(now Instant, n int) bool { return a.q.SetLimit(a.at(now), n) }
 
 func (e *Engine) fairCore() *admission.Queues {
@@ -70,6 +77,9 @@ func (e *Engine) fairStatementStart(c *client) {
 	}
 }
 
+// fairRedispatch retries dispatch once per event while the dispatcher is
+// holding a request back, so a lease end or limit change wakes waiting work
+// without polling timers.
 func (e *Engine) fairRedispatch() {
 	q := e.fairCore()
 	if q == nil || e.stopping || !q.Held() || q.Len() == 0 || e.seams.Pool.Idle() == 0 {
@@ -78,6 +88,8 @@ func (e *Engine) fairRedispatch() {
 	e.dispatch()
 }
 
+// fairnessCheck verifies that the fair dispatcher's total and per-tenant
+// in-flight lease counts match the engine's own lent database connections.
 func (e *Engine) fairnessCheck() error {
 	q := e.fairCore()
 	if q == nil {
@@ -96,6 +108,7 @@ func (e *Engine) fairnessCheck() error {
 		}
 	}
 	tenants := 0
+	// Deduplicate tenants deterministically without iterating a map.
 	for i, d := range lent {
 		n, first := 0, true
 		for j, o := range lent {
@@ -131,6 +144,7 @@ func fairnessCapacityRows(c Config) []CapacityRow {
 	}
 }
 
+// TenantLeases returns the number of database connections currently lent to t.
 func (e *Engine) TenantLeases(t work.TenantID) int {
 	n := 0
 	for _, set := range [][]*dbConn{e.slots, e.coreConns} {
@@ -143,6 +157,7 @@ func (e *Engine) TenantLeases(t work.TenantID) int {
 	return n
 }
 
+// TenantQueued returns the number of requests currently waiting in t's admission queue.
 func (e *Engine) TenantQueued(t work.TenantID) int {
 	if q := e.admissionCore(); q != nil {
 		return q.Depth(string(t))
@@ -157,6 +172,9 @@ func (e *Engine) releasable() int {
 	return e.seams.Queue.Len()
 }
 
+// checkoutDemand returns the post-checkout demand when the fair limit sits
+// below pool.connections so Pool.Checkout does not dial past the fair limit.
+// At Limit == Connections it returns false to leave pool checkout dialing unchanged.
 func (e *Engine) checkoutDemand() (int, bool) {
 	q := e.fairCore()
 	if q == nil || q.Limit() >= e.cfg.Connections {

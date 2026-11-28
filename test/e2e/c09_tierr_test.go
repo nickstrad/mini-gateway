@@ -96,6 +96,9 @@ func tierRFairRun(t *testing.T, env *RealEnv, scenario string, flood bool) tierR
 	return out
 }
 
+// TestTierRFairNoisyNeighbour proves against live Postgres 17 that under a
+// 40-client 5 ms flood the quiet tenant keeps >99% success and p99 within 2x
+// standalone while the flooder absorbs >95% of shedding.
 func TestTierRFairNoisyNeighbour(t *testing.T) {
 	env := tierR(t)
 	alone := tierRFairRun(t, env, tierRFairScenario+"-alone", false)

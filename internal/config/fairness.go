@@ -2,11 +2,13 @@ package config
 
 import "github.com/nickstrad/mini-gateway/internal/admission"
 
+// Fairness holds the JSON "fairness" section configuring per-tenant share weights.
 type Fairness struct {
 	DefaultWeight int          `json:"default_weight"`
 	Weights       []FairWeight `json:"weights"`
 }
 
+// FairWeight configures one tenant's relative share weight in the JSON config.
 type FairWeight struct {
 	Tenant string `json:"tenant"`
 	Weight int    `json:"weight"`

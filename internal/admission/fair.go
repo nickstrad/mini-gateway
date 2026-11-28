@@ -9,26 +9,38 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/obs"
 )
 
+// Fairness configuration defaults and hard bounds validated at config load.
 const (
+	// DefaultWeight is the weight assigned to any tenant without an explicit weight.
 	DefaultWeight = 1
-	MaxWeight     = 1000
-	MaxFairLimit  = 1 << 16
-	MaxWeights    = 4096
+	// MaxWeight is the largest allowed per-tenant or default weight.
+	MaxWeight = 1000
+	// MaxFairLimit is the largest allowed concurrent-lease limit on a Fair dispatcher.
+	MaxFairLimit = 1 << 16
+	// MaxWeights is the maximum number of explicit per-tenant weight entries.
+	MaxWeights = 4096
 )
 
+// FairPlant is a bitmask of test-only fault injections used by canaries and fuzz plants.
 type FairPlant uint8
 
 const (
+	// FairPlantNoShareBound disables both below-share priority and last-slot reservation.
 	FairPlantNoShareBound FairPlant = 1 << iota
+	// FairPlantNoRoundRobinStep stops advancing tenant turn counters on pop.
 	FairPlantNoRoundRobinStep
+	// FairPlantUnpopKeepsTurn skips restoring turn and round state when a pop is undone.
 	FairPlantUnpopKeepsTurn
 )
 
+// TenantWeight pairs a tenant name with its configured relative share weight.
 type TenantWeight struct {
 	Tenant string
 	Weight int
 }
 
+// FairConfig configures a Fair dispatcher's concurrency limit, lease-state cap,
+// and per-tenant share weights.
 type FairConfig struct {
 	Limit         int
 	MaxLeases     int
@@ -37,6 +49,8 @@ type FairConfig struct {
 	Plant         FairPlant
 }
 
+// WithDefaults returns a copy of c with zero Limit, MaxLeases, and DefaultWeight
+// replaced by their defaults.
 func (c FairConfig) WithDefaults() FairConfig {
 	if c.Limit == 0 {
 		c.Limit = MaxFairLimit
@@ -50,6 +64,8 @@ func (c FairConfig) WithDefaults() FairConfig {
 	return c
 }
 
+// Validate checks every field of c and returns a joined error wrapping ErrConfig
+// that names each offending configuration key.
 func (c FairConfig) Validate() error {
 	var errs []error
 	bad := func(key, format string, args ...any) {
@@ -111,6 +127,11 @@ type fairCounters struct {
 	activePeak   int64
 }
 
+// Fair is a Dispatcher that enforces weighted per-tenant shares over a
+// settable concurrency limit. It prefers tenants below their share at every
+// lend, uses round-robin order within each group, holds back the last free
+// lease only while an active non-waiting tenant is below its share, and
+// allocates per-tenant state only for tenants holding an active lease.
 type Fair struct {
 	cfg     FairConfig
 	weights map[string]int
@@ -125,6 +146,7 @@ type Fair struct {
 	c       fairCounters
 }
 
+// NewFair validates cfg (after applying defaults) and constructs a Fair dispatcher.
 func NewFair(cfg FairConfig) (*Fair, error) {
 	cfg = cfg.WithDefaults()
 	if err := cfg.Validate(); err != nil {
@@ -139,12 +161,16 @@ func NewFair(cfg FairConfig) (*Fair, error) {
 	return f, nil
 }
 
+// Config returns the validated FairConfig with defaults applied.
 func (f *Fair) Config() FairConfig { return f.cfg }
 
+// Limit returns the current fair concurrency limit.
 func (f *Fair) Limit() int { return f.cfg.Limit }
 
+// InFlight returns the total number of leases currently in flight across all tenants.
 func (f *Fair) InFlight() int { return f.total }
 
+// TenantInFlight returns the number of leases currently held by tenant name.
 func (f *Fair) TenantInFlight(name string) int {
 	if t := f.byName[name]; t != nil {
 		return t.inFlight
@@ -152,6 +178,8 @@ func (f *Fair) TenantInFlight(name string) int {
 	return 0
 }
 
+// States returns the number of tenants currently holding at least one lease
+// (and therefore a fairTenant entry).
 func (f *Fair) States() int { return len(f.list) }
 
 func (f *Fair) weight(name string) int64 {
@@ -189,6 +217,8 @@ func (f *Fair) activeWeight() (int64, int) {
 	return sum, n
 }
 
+// ShareOf returns a tenant's integer share of limit given its weight and the
+// total weight of active tenants, using integer floor with a minimum of 1.
 func ShareOf(limit int, weight, active int64) int {
 	if active <= 0 {
 		return limit
@@ -200,6 +230,8 @@ func (f *Fair) share(name string, active int64) int {
 	return ShareOf(f.cfg.Limit, f.weight(name), active)
 }
 
+// Share returns the current share of tenant name, treating name as active even
+// if it currently has nothing queued and no leases in flight.
 func (f *Fair) Share(name string) int {
 	w, _ := f.activeWeight()
 	if !f.waiting(name) && f.byName[name] == nil {
@@ -210,6 +242,9 @@ func (f *Fair) Share(name string) int {
 
 func (f *Fair) lastSlot() bool { return f.total+1 >= f.cfg.Limit }
 
+// reserved reports whether any active tenant with nothing waiting holds fewer
+// leases than its share; only then is the last free lease held back from an
+// over-share waiter so rounding remainders never strand capacity.
 func (f *Fair) reserved(w int64) bool {
 	for _, t := range f.list {
 		if !f.waiting(t.name) && t.inFlight < f.share(t.name, w) {
@@ -219,6 +254,10 @@ func (f *Fair) reserved(w int64) bool {
 	return false
 }
 
+// releasable returns how many waiting requests successive Pick+LeaseStart calls
+// would release right now, without mutating state. Active weight and shares do
+// not change as queued items become leases, so summing below-share deficits
+// across waiting queues determines whether the last free slot would be held.
 func (f *Fair) releasable() int {
 	free := f.cfg.Limit - f.total
 	n := min(f.q.total, max(free, 0))
@@ -233,6 +272,8 @@ func (f *Fair) releasable() int {
 		}
 		deficit := max(0, f.share(t.name, w)-f.TenantInFlight(t.name))
 		absorbed += min(deficit, t.ring.len())
+		// A tenant whose deficit exceeds its waiting depth will become an
+		// active non-waiting below-share tenant once its queue drains.
 		reserved = reserved || deficit > t.ring.len()
 	}
 	if absorbed >= free || !reserved {
@@ -248,7 +289,13 @@ func (f *Fair) noteActive() {
 
 func (f *Fair) shareOn() bool { return f.cfg.Plant&FairPlantNoShareBound == 0 }
 
+// Pick selects the next non-empty tenant queue to serve, or returns -1 when
+// the fair limit is reached or the last free lease is reserved for an active
+// non-waiting tenant below its share. Waiting tenants below their share are
+// always chosen ahead of those at or above it; within each group selection is
+// round robin by Turn with ties broken by OldestSeq.
 func (f *Fair) Pick(_ Time, active []TenantView) int {
+	// Save pick count and held state so an immediate Unpop restores them exactly.
 	f.saved = fairSaved{ok: true, picks: f.c.picks, held: f.held}
 	f.held = true
 	if f.total >= f.cfg.Limit {
@@ -399,6 +446,7 @@ func (f *Fair) quiesce() error {
 	return nil
 }
 
+// Fair returns the attached *Fair dispatcher, or nil if another Dispatcher is installed.
 func (q *Queues) Fair() *Fair { return q.fair }
 
 func (q *Queues) attach(d Dispatcher) {
@@ -419,6 +467,9 @@ func (q *Queues) fairAccount(now Time) {
 	}
 }
 
+// LeaseStart advances time to now and records that tenant began holding one
+// database lease. It returns false if no Fair dispatcher is attached or
+// MaxLeases would be exceeded.
 func (q *Queues) LeaseStart(now Time, tenant string) bool {
 	q.advance(now)
 	if q.fair == nil {
@@ -427,6 +478,8 @@ func (q *Queues) LeaseStart(now Time, tenant string) bool {
 	return q.fair.start(tenant, q.statsFor)
 }
 
+// LeaseEnd advances time to now and records that one lease held by tenant ended,
+// removing tenant's dispatcher state when its in-flight count reaches zero.
 func (q *Queues) LeaseEnd(now Time, tenant string) bool {
 	q.advance(now)
 	if q.fair == nil {
@@ -435,6 +488,9 @@ func (q *Queues) LeaseEnd(now Time, tenant string) bool {
 	return q.fair.end(tenant)
 }
 
+// SetLimit advances time to now under the previous limit and updates the Fair
+// dispatcher's concurrency limit to n (1..MaxFairLimit). Lowering the limit
+// never preempts existing leases.
 func (q *Queues) SetLimit(now Time, n int) bool {
 	q.advance(now)
 	if q.fair == nil || n < 1 || n > MaxFairLimit {
@@ -444,6 +500,7 @@ func (q *Queues) SetLimit(now Time, n int) bool {
 	return true
 }
 
+// Limit returns the attached Fair dispatcher's concurrency limit, or 0 if none is attached.
 func (q *Queues) Limit() int {
 	if q.fair == nil {
 		return 0
@@ -451,6 +508,8 @@ func (q *Queues) Limit() int {
 	return q.fair.cfg.Limit
 }
 
+// Releasable returns how many queued requests the dispatcher would release
+// immediately, used to report pool demand without dialing for held-back requests.
 func (q *Queues) Releasable() int {
 	if q.fair == nil {
 		return q.total
@@ -458,8 +517,10 @@ func (q *Queues) Releasable() int {
 	return q.fair.releasable()
 }
 
+// Held reports whether the most recent Fair.Pick held a waiting request back.
 func (q *Queues) Held() bool { return q.fair != nil && q.fair.held }
 
+// InFlight returns the total leases currently tracked by the Fair dispatcher, or 0 if detached.
 func (q *Queues) InFlight() int {
 	if q.fair == nil {
 		return 0
@@ -467,6 +528,7 @@ func (q *Queues) InFlight() int {
 	return q.fair.total
 }
 
+// TenantInFlight returns the leases currently held by tenant, or 0 if detached.
 func (q *Queues) TenantInFlight(tenant string) int {
 	if q.fair == nil {
 		return 0
@@ -480,6 +542,8 @@ func (q *Queues) takeTurn(t *tenantQueue) {
 		return
 	}
 	q.round++
+	// Even turns mark served tenants; a newly created queue joins at 2*round-1
+	// so it falls behind older waiting tenants and ahead of the tenant served last.
 	t.turn = 2 * q.round
 }
 
@@ -507,6 +571,8 @@ func (q *Queues) fairQuiesce() error {
 	return q.fair.quiesce()
 }
 
+// FairSnapshot is an immutable point-in-time view of the Fair dispatcher's
+// limit, in-flight leases, state gauges, selection counters, and saturated time.
 type FairSnapshot struct {
 	On            bool
 	Limit         int64
@@ -578,6 +644,7 @@ func (q *Queues) fairSnapshot(s *Snapshot) {
 	}
 }
 
+// Depth returns the number of requests currently queued for tenant.
 func (q *Queues) Depth(tenant string) int {
 	if t := q.byName[tenant]; t != nil {
 		return t.ring.len()

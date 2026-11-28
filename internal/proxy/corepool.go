@@ -45,6 +45,8 @@ func (cp *CorePool) Snapshot() pool.Snapshot { return cp.p.Snapshot() }
 // Checkout asks the pool core for a lendable connection for tenant, buffering
 // any off-path check or switch-reset actions for corePump.
 func (cp *CorePool) Checkout(now Instant, tenant work.TenantID) (ConnID, bool) {
+	// Refresh demand before Checkout when the fair limit sits below pool.connections
+	// so the pool's own dial check does not open connections past the fair limit.
 	if cp.demand != nil {
 		if n, ok := cp.demand(); ok {
 			cp.acts = cp.p.Demand(pool.Instant(now), n, cp.acts)
@@ -149,6 +151,8 @@ func (e *Engine) coreRun(acts []pool.Action) {
 
 func (e *Engine) corePump() {
 	acts := e.core.take()
+	// Report only releasable demand so held-back requests neither dial past the
+	// fair limit nor trigger dial/idle-close cycles while waiting.
 	acts = e.core.p.Demand(e.pnow(), e.releasable(), acts)
 	e.coreRun(acts)
 	next := Instant(e.core.p.Next())

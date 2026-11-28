@@ -45,6 +45,9 @@ func runFairProperty(t *testing.T, plant FairPlant, runs int) error {
 	return nil
 }
 
+// TestFairDispatcherAgreesWithTheReferenceModelAndHoldsEveryClaim proves Fair
+// matches fmModel and upholds limit, share, work-conservation, and within-group
+// starvation bounds across random operation sequences and all three queue rules.
 func TestFairDispatcherAgreesWithTheReferenceModelAndHoldsEveryClaim(t *testing.T) {
 	runs := fairRuns
 	if testing.Short() {
@@ -55,6 +58,8 @@ func TestFairDispatcherAgreesWithTheReferenceModelAndHoldsEveryClaim(t *testing.
 	}
 }
 
+// TestPropertyRunsReachEveryFairnessSituation proves the random property driver
+// exercises held-at-share, held-at-limit, time-at-share, saturation, unpops, and tenant churn.
 func TestPropertyRunsReachEveryFairnessSituation(t *testing.T) {
 	r := rand.New(rand.NewPCG(9, 9))
 	var heldShare, heldLimit, atShare, saturated, unpops, churn int64
@@ -82,6 +87,7 @@ func TestPropertyRunsReachEveryFairnessSituation(t *testing.T) {
 	}
 }
 
+// TestCanaryNoShareBoundBreaksTheShareClaim proves disabling the share bound fails claim share.
 func TestCanaryNoShareBoundBreaksTheShareClaim(t *testing.T) {
 	err := runFairProperty(t, FairPlantNoShareBound, fairRuns)
 	if err == nil || !strings.Contains(err.Error(), "claim share") {
@@ -89,6 +95,7 @@ func TestCanaryNoShareBoundBreaksTheShareClaim(t *testing.T) {
 	}
 }
 
+// TestCanaryNoRoundRobinStepIsCaught proves freezing turn counters is caught by the reference model.
 func TestCanaryNoRoundRobinStepIsCaught(t *testing.T) {
 	err := runFairProperty(t, FairPlantNoRoundRobinStep, fairRuns)
 	if err == nil {
@@ -99,6 +106,7 @@ func TestCanaryNoRoundRobinStepIsCaught(t *testing.T) {
 	}
 }
 
+// TestCanaryUnpopKeepingTheTurnIsCaught proves skipping turn restoration on Unpop fails the model.
 func TestCanaryUnpopKeepingTheTurnIsCaught(t *testing.T) {
 	err := runFairProperty(t, FairPlantUnpopKeepsTurn, fairRuns)
 	if err == nil {
@@ -142,6 +150,8 @@ func lendNext(t *testing.T, q *Queues, now Time, owner map[int64]string) (string
 	return owner[id], true
 }
 
+// TestTheShareBindsExactlyWhenALendWouldReachTheLimit proves the last-slot share
+// hold binds at inFlight+1 == limit and releases as soon as the competing tenant leaves.
 func TestTheShareBindsExactlyWhenALendWouldReachTheLimit(t *testing.T) {
 	q, _ := fairCore(t, 4)
 	owner := map[int64]string{}
@@ -179,6 +189,8 @@ func TestTheShareBindsExactlyWhenALendWouldReachTheLimit(t *testing.T) {
 	}
 }
 
+// TestBelowTheLimitTheShareDoesNotBind proves a tenant at share can still be
+// lent below the last slot when no below-share tenant waits, while the last slot holds.
 func TestBelowTheLimitTheShareDoesNotBind(t *testing.T) {
 	q, _ := fairCore(t, 4)
 	owner := map[int64]string{1: "a", 2: "a", 3: "a", 4: "b"}
@@ -205,6 +217,8 @@ func TestBelowTheLimitTheShareDoesNotBind(t *testing.T) {
 	}
 }
 
+// TestALeaseEndingAtTheInstantOfAPickFreesItsShareFirst proves ending a lease at
+// timestamp t immediately recalculates active shares before a Pick at t.
 func TestALeaseEndingAtTheInstantOfAPickFreesItsShareFirst(t *testing.T) {
 	q, _ := fairCore(t, 2)
 	owner := map[int64]string{1: "a", 2: "b", 3: "a"}
@@ -222,6 +236,8 @@ func TestALeaseEndingAtTheInstantOfAPickFreesItsShareFirst(t *testing.T) {
 	}
 }
 
+// TestTimeAtShareAndSaturationAreMeasuredToTheInstant proves saturated_time and
+// per-tenant time_at_share accumulate exact virtual nanoseconds between events.
 func TestTimeAtShareAndSaturationAreMeasuredToTheInstant(t *testing.T) {
 	q, _ := fairCore(t, 2)
 	owner := map[int64]string{1: "a", 2: "b", 3: "a"}
@@ -244,6 +260,8 @@ func TestTimeAtShareAndSaturationAreMeasuredToTheInstant(t *testing.T) {
 	}
 }
 
+// TestWeightsDivideTheLimit proves configured tenant weights divide the limit
+// by integer floor with a minimum share of 1.
 func TestWeightsDivideTheLimit(t *testing.T) {
 	q, f := fairCore(t, 8, TenantWeight{Tenant: "a", Weight: 3})
 	owner := map[int64]string{}
@@ -271,6 +289,8 @@ func TestWeightsDivideTheLimit(t *testing.T) {
 	}
 }
 
+// TestUnpopLeavesTurnsAndCountersAsIfThePopNeverHappened proves an immediate
+// Unpop restores Fair counters, round-robin turns, and subsequent pop order.
 func TestUnpopLeavesTurnsAndCountersAsIfThePopNeverHappened(t *testing.T) {
 	a, _ := fairCore(t, 3)
 	b, _ := fairCore(t, 3)
@@ -305,6 +325,8 @@ func TestUnpopLeavesTurnsAndCountersAsIfThePopNeverHappened(t *testing.T) {
 	}
 }
 
+// TestFairStateExistsOnlyWhileATenantHasLeasesAndIsBounded proves fairTenant
+// entries are recycled on zero in-flight and never exceed MaxLeases under tenant churn.
 func TestFairStateExistsOnlyWhileATenantHasLeasesAndIsBounded(t *testing.T) {
 	q, f := fairCore(t, 16)
 	owner := map[int64]string{}
@@ -342,6 +364,8 @@ func TestFairStateExistsOnlyWhileATenantHasLeasesAndIsBounded(t *testing.T) {
 	}
 }
 
+// TestLeaseAccountingRefusesWhatCannotBeTrue proves unmatched lease ends,
+// starts past MaxLeases, and lease calls without a Fair dispatcher are rejected and flagged.
 func TestLeaseAccountingRefusesWhatCannotBeTrue(t *testing.T) {
 	q, err := New(Config{Rule: RuleFIFO})
 	if err != nil {
@@ -375,6 +399,8 @@ func TestLeaseAccountingRefusesWhatCannotBeTrue(t *testing.T) {
 	}
 }
 
+// TestSetLimitBounds proves SetLimit rejects out-of-range values without changing
+// the current limit and accepts 1..MaxFairLimit.
 func TestSetLimitBounds(t *testing.T) {
 	q, _ := fairCore(t, 4)
 	for _, n := range []int{0, -1, MaxFairLimit + 1} {
@@ -387,6 +413,8 @@ func TestSetLimitBounds(t *testing.T) {
 	}
 }
 
+// TestFairConfigFailsClosedNamingTheKey proves NewFair rejects every invalid
+// FairConfig field with ErrConfig naming the key and defaults zero weights.
 func TestFairConfigFailsClosedNamingTheKey(t *testing.T) {
 	for _, c := range []struct {
 		cfg FairConfig
@@ -430,6 +458,8 @@ func fairFuzzSeeds() [][]byte {
 	}
 }
 
+// FuzzFairnessOps decodes bounded operation sequences directly from fuzz bytes
+// and drives Fair against fmModel across all three queue rules and three variants.
 func FuzzFairnessOps(f *testing.F) {
 	for _, s := range fairFuzzSeeds() {
 		f.Add(s)
@@ -447,6 +477,8 @@ func FuzzFairnessOps(f *testing.F) {
 	})
 }
 
+// TestFairFuzzDecodingIsTotalBoundedAndLocal proves decodeFairOps caps output
+// at fairMaxOps, keeps every field in range, ignores trailing bytes, and maps one byte to one op.
 func TestFairFuzzDecodingIsTotalBoundedAndLocal(t *testing.T) {
 	long := make([]byte, 10_000)
 	for i := range long {
@@ -479,6 +511,8 @@ func TestFairFuzzDecodingIsTotalBoundedAndLocal(t *testing.T) {
 	}
 }
 
+// TestFairFuzzExecutionCostIsBounded proves worst-case decoded fuzz inputs keep
+// step counts, fair states, and live tenant queues within their bounds.
 func TestFairFuzzExecutionCostIsBounded(t *testing.T) {
 	worst := make([]byte, fairMaxOps*fairOpBytes)
 	for i := 0; i < len(worst); i += fairOpBytes {
@@ -501,6 +535,8 @@ func TestFairFuzzExecutionCostIsBounded(t *testing.T) {
 
 var unpopTurnOps = []byte{0, 0, 0, 0, 1, 0, 0, 0, 0, 7, 0, 0, 4, 0, 0}
 
+// TestPlantedUnpopTurnBugIsCaughtByTheFairnessModel proves no committed seed
+// triggers FairPlantUnpopKeepsTurn while the minimal unpop-turn sequence catches it.
 func TestPlantedUnpopTurnBugIsCaughtByTheFairnessModel(t *testing.T) {
 	for _, seed := range fairFuzzSeeds() {
 		if _, err := runFairOps(RuleFIFO, 0, FairPlantUnpopKeepsTurn, decodeFairOps(seed)); err != nil {
@@ -518,6 +554,8 @@ func TestPlantedUnpopTurnBugIsCaughtByTheFairnessModel(t *testing.T) {
 	}
 }
 
+// TestTimeAtShareChangesAtTheInstantASweepEmptiesAQueue proves time_at_share
+// stops accumulating at the exact sweep deadline that removes a competing waiter.
 func TestTimeAtShareChangesAtTheInstantASweepEmptiesAQueue(t *testing.T) {
 	q, err := New(Config{Rule: RuleTimeout, Target: 5 * Millisecond, Interval: 100 * Millisecond, LIFO: LIFOOff})
 	if err != nil {

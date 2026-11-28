@@ -145,6 +145,8 @@ func checkFairMoved(r *FairRun) error {
 	return nil
 }
 
+// TestScenarioFairNoisyNeighbour proves the quiet tenant keeps its standalone
+// outcomes and p99 within 2x under a 10x flood while the flooder takes >95% of shedding.
 func TestScenarioFairNoisyNeighbour(t *testing.T) {
 	if testing.Short() {
 		t.Skip("fairness scenarios run in the full suite and the sweep")
@@ -165,6 +167,8 @@ func TestScenarioFairNoisyNeighbour(t *testing.T) {
 	}
 }
 
+// TestScenarioFairNoisyNeighbourAblation proves replacing per-tenant fair
+// dispatching with one shared FIFO queue starves the quiet tenant (>10x p99).
 func TestScenarioFairNoisyNeighbourAblation(t *testing.T) {
 	if testing.Short() {
 		t.Skip("fairness scenarios run in the full suite and the sweep")
@@ -191,6 +195,8 @@ func TestScenarioFairNoisyNeighbourAblation(t *testing.T) {
 	}
 }
 
+// TestScenarioFairManyTenants proves all 40 quiet tenants overlap the 10x flood
+// and keep their standalone outcomes beyond the 32-tenant Prometheus label cap.
 func TestScenarioFairManyTenants(t *testing.T) {
 	if testing.Short() {
 		t.Skip("fairness scenarios run in the full suite and the sweep")
@@ -269,6 +275,8 @@ const (
 	fairSyncWithin     = 16
 )
 
+// TestScenarioFairNarrowedQuietWaitIsBoundedByOneFlooderLease proves a quiet
+// tenant's added wait under long flooder reads is bounded by one flooder lease.
 func TestScenarioFairNarrowedQuietWaitIsBoundedByOneFlooderLease(t *testing.T) {
 	if testing.Short() {
 		t.Skip("fairness scenarios run in the full suite and the sweep")
@@ -290,6 +298,8 @@ func TestScenarioFairNarrowedQuietWaitIsBoundedByOneFlooderLease(t *testing.T) {
 	}
 }
 
+// TestScenarioFairNarrowedQuietIsShedOnceAFlooderLeaseReachesTheAllowedWait
+// proves quiet requests succeed below the 100 ms queue interval and shed once flooder leases exceed it.
 func TestScenarioFairNarrowedQuietIsShedOnceAFlooderLeaseReachesTheAllowedWait(t *testing.T) {
 	if testing.Short() {
 		t.Skip("fairness scenarios run in the full suite and the sweep")
@@ -316,6 +326,8 @@ func TestScenarioFairNarrowedQuietIsShedOnceAFlooderLeaseReachesTheAllowedWait(t
 	}
 }
 
+// TestScenarioFairNarrowedSynchronizedQuietTenantsWithinCapacity proves 16
+// quiet tenants arriving simultaneously during the flood keep their outcomes.
 func TestScenarioFairNarrowedSynchronizedQuietTenantsWithinCapacity(t *testing.T) {
 	if testing.Short() {
 		t.Skip("fairness scenarios run in the full suite and the sweep")
@@ -352,6 +364,8 @@ func checkHeld(r *FairRun) error {
 	return nil
 }
 
+// TestScenarioFairHeldTransactions proves a tenant holding open transactions
+// never exceeds its share of 2 connections while the quiet tenant stays active.
 func TestScenarioFairHeldTransactions(t *testing.T) {
 	if testing.Short() {
 		t.Skip("fairness scenarios run in the full suite and the sweep")
@@ -367,6 +381,8 @@ func TestScenarioFairHeldTransactions(t *testing.T) {
 	}
 }
 
+// TestCanaryFairHeldTransactionsWithoutTheShareBound proves removing the share
+// bound allows the transaction-holding tenant to exceed its share.
 func TestCanaryFairHeldTransactionsWithoutTheShareBound(t *testing.T) {
 	arm := FairArmFair
 	arm.Name, arm.Plant = "no-share-bound", admission.FairPlantNoShareBound
@@ -379,6 +395,8 @@ func TestCanaryFairHeldTransactionsWithoutTheShareBound(t *testing.T) {
 	}
 }
 
+// TestCanaryFairHeldTransactionsNotCountedInFlight proves skipping held
+// transactions in fair lease accounting fails the engine fairness invariant.
 func TestCanaryFairHeldTransactionsNotCountedInFlight(t *testing.T) {
 	arm := FairArmFair
 	arm.Name, arm.ProxyPlant = "statement-in-flight", proxy.PlantFairStatementInFlight
@@ -388,6 +406,8 @@ func TestCanaryFairHeldTransactionsNotCountedInFlight(t *testing.T) {
 	}
 }
 
+// TestScenarioFairResultsEqualDirect proves proxied query results match direct
+// Postgres execution across all tenants with the fair dispatcher active.
 func TestScenarioFairResultsEqualDirect(t *testing.T) {
 	simtest.Sweep(t, func(t *testing.T, seed int64) {
 		runScenario(t, Scenario{Spec: FairResultsSpec(), Check: CheckFairResults}, seed)

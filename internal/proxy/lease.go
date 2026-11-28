@@ -156,6 +156,7 @@ func (e *Engine) dispatch() {
 func (e *Engine) lend(c *client, d *dbConn) {
 	e.snap.StagePassed[StageLease]++
 	e.snap.LeasesStarted++
+	// Track lease lifetime rather than statement lifetime so open transactions count against their tenant's share.
 	e.fairStarted(c.tenant)
 	e.snap.DBIdle.Add(-1)
 	e.snap.DBLent.Add(1)

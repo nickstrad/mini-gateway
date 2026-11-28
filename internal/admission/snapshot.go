@@ -27,9 +27,10 @@ type TenantSnapshot struct {
 	Load      int64
 	Shedding  bool
 	QueueWait obs.HistogramSnapshot
-	InFlight  int64
-	Share     int64
-	AtShare   int64
+	// InFlight, Share, and AtShare are populated when a Fair dispatcher is attached.
+	InFlight int64
+	Share    int64
+	AtShare  int64
 }
 
 // Snapshot is an immutable point-in-time view of all admission totals,
@@ -61,7 +62,8 @@ type Snapshot struct {
 	StepsCapped    int64
 	QueueWait      obs.HistogramSnapshot
 	PerTenant      []TenantSnapshot
-	Fair           FairSnapshot
+	// Fair holds the fair dispatcher snapshot when a Fair dispatcher is attached.
+	Fair FairSnapshot
 }
 
 // ShedTotal returns the sum of sheds across all reasons.

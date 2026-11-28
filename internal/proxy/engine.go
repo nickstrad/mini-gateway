@@ -98,6 +98,7 @@ func New(cfg Config) (*Engine, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrConfig, err)
 		}
+		// Install the fair dispatcher on every engine-constructed admission queue.
 		if err := aq.installFair(cfg.fairConfig()); err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrConfig, err)
 		}

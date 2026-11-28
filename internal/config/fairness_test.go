@@ -15,6 +15,8 @@ func weights(pairs ...any) []any {
 	return out
 }
 
+// TestFairnessKeysFailClosedNamingTheKey proves invalid fairness weights,
+// duplicates, unknown keys, and oversized tables fail closed naming the key.
 func TestFairnessKeysFailClosedNamingTheKey(t *testing.T) {
 	for _, c := range []struct {
 		key  string
@@ -55,6 +57,8 @@ func itoaTest(i int) string {
 	return s
 }
 
+// TestFairnessZeroOrOmittedMeansTheDefault proves omitted or zero fairness
+// weights resolve to the default weight and bind the limit to pool.connections.
 func TestFairnessZeroOrOmittedMeansTheDefault(t *testing.T) {
 	for _, v := range []any{nil, 0} {
 		f, err := parseWith(t, "fairness.default_weight", v)
@@ -83,6 +87,7 @@ func TestFairnessZeroOrOmittedMeansTheDefault(t *testing.T) {
 	}
 }
 
+// TestConfigNeverSetsAFairPlant proves JSON config loading can never enable a test-only fair plant.
 func TestConfigNeverSetsAFairPlant(t *testing.T) {
 	f, err := parseWith(t, "fairness.weights", weights("alice", 3))
 	if err != nil {
@@ -93,6 +98,8 @@ func TestConfigNeverSetsAFairPlant(t *testing.T) {
 	}
 }
 
+// TestFairnessAndQueueKeysAreValidatedTogether proves File.Validate joins
+// fairness errors alongside queue and pool validation errors in one pass.
 func TestFairnessAndQueueKeysAreValidatedTogether(t *testing.T) {
 	_, err := parseEdited(t, map[string]any{"queue.rule": "fifo", "fairness.default_weight": -2, "pool.max_connecting": 257})
 	if err == nil {

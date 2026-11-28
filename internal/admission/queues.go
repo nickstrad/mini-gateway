@@ -58,7 +58,8 @@ type TenantView struct {
 	OldestSeq int64
 	OldestEnq Time
 	LIFO      bool
-	Turn      int64
+	// Turn orders round-robin selection; smaller turns were served less recently.
+	Turn int64
 }
 
 // Dispatcher chooses which non-empty tenant queue Pop serves next.
@@ -205,6 +206,7 @@ func (q *Queues) advance(now Time) {
 	for range q.stepBudget() {
 		at := q.Next()
 		if at == 0 || at > now {
+			// Account fairness durations before any sweep or eviction changes who is active.
 			q.fairAccount(now)
 			q.step(now)
 			return
@@ -347,6 +349,7 @@ func (q *Queues) tenantFor(now Time, name string) *tenantQueue {
 	}
 	t.name = name
 	t.rule = newRule(q.cfg, now)
+	// Place a newly created queue behind older waiting tenants and ahead only of the tenant served last.
 	t.turn = 2*q.round - 1
 	t.emptyAt = now
 	t.lastOverload = 0

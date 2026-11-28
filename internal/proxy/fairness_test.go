@@ -59,6 +59,8 @@ func (r *coreRig) lease(client proxy.ConnID, tenant int, sql string) proxy.ConnI
 	return 0
 }
 
+// TestFairAHeldTransactionCountsAsInFlightUntilItsLeaseEnds proves a tenant
+// holding an open transaction keeps its in-flight count across statements until COMMIT.
 func TestFairAHeldTransactionCountsAsInFlightUntilItsLeaseEnds(t *testing.T) {
 	r := fairRig(t, 2, nil)
 	id := r.lease(10, 0, "BEGIN")
@@ -94,6 +96,8 @@ func shareBindingPremise(t *testing.T, plant admission.FairPlant) (*coreRig, pro
 	return r, other
 }
 
+// TestFairTheLastFreeConnectionGoesToTheTenantBelowItsShare proves a freed
+// last connection goes to the below-share tenant rather than one holding a transaction at share.
 func TestFairTheLastFreeConnectionGoesToTheTenantBelowItsShare(t *testing.T) {
 	r, conn := shareBindingPremise(t, 0)
 	a := r.db(conn, complete("DISCARD ALL", 'I'))
@@ -105,6 +109,8 @@ func TestFairTheLastFreeConnectionGoesToTheTenantBelowItsShare(t *testing.T) {
 	}
 }
 
+// TestCanaryFairWithoutTheShareBoundLendsAHeldTenantPastItsShare proves
+// disabling the share bound lets the transaction-holding tenant take the second connection.
 func TestCanaryFairWithoutTheShareBoundLendsAHeldTenantPastItsShare(t *testing.T) {
 	r, conn := shareBindingPremise(t, admission.FairPlantNoShareBound)
 	a := r.db(conn, complete("DISCARD ALL", 'I'))
@@ -113,6 +119,8 @@ func TestCanaryFairWithoutTheShareBoundLendsAHeldTenantPastItsShare(t *testing.T
 	}
 }
 
+// TestFairEngineInvariantsCatchInFlightThatSkipsHeldTransactions proves
+// Engine.Invariants detects when dispatcher in-flight count drops a held transaction.
 func TestFairEngineInvariantsCatchInFlightThatSkipsHeldTransactions(t *testing.T) {
 	r := fairRig(t, 2, func(c *proxy.Config) { c.Plant |= proxy.PlantFairStatementInFlight })
 	id := r.lease(10, 0, "BEGIN")
@@ -123,6 +131,8 @@ func TestFairEngineInvariantsCatchInFlightThatSkipsHeldTransactions(t *testing.T
 	}
 }
 
+// TestFairEveryWayALeaseEndsReturnsItsInFlight proves clean release, client
+// vanish, idle-in-transaction, DB close, statement timeout, and shutdown all report lease end.
 func TestFairEveryWayALeaseEndsReturnsItsInFlight(t *testing.T) {
 	cases := map[string]func(r *coreRig, id proxy.ConnID){
 		"release": func(r *coreRig, id proxy.ConnID) {
@@ -168,6 +178,8 @@ func TestFairEveryWayALeaseEndsReturnsItsInFlight(t *testing.T) {
 	}
 }
 
+// TestFairTheFixedSetReportsEveryLeaseEndToo proves lease start and end
+// reporting works identically on the FixedSet pool seam.
 func TestFairTheFixedSetReportsEveryLeaseEndToo(t *testing.T) {
 	r := admissionRig(t, 4, admission.Config{Rule: admission.RuleTimeout, Interval: 10 * admission.Second, Target: admission.Second, LIFO: admission.LIFOOff})
 	r.client(10)
@@ -214,6 +226,8 @@ func heldBackPremise(t *testing.T) (*coreRig, proxy.ConnID, proxy.ConnID) {
 	return r, other, spare
 }
 
+// TestFairAHeldBackRequestCostsNoPopNoUnpopAndNoDial proves holding a request
+// back across events triggers no pop, unpop, checkout, or dial and at most one selection per event.
 func TestFairAHeldBackRequestCostsNoPopNoUnpopAndNoDial(t *testing.T) {
 	r, _, _ := heldBackPremise(t)
 	_, before := r.agree()
@@ -231,6 +245,8 @@ func TestFairAHeldBackRequestCostsNoPopNoUnpopAndNoDial(t *testing.T) {
 	}
 }
 
+// TestFairAHeldBackRequestCausesNoDialAfterTheIdleConnectionCloses proves an
+// idle-closed spare connection is never redialled while only a held-back request waits.
 func TestFairAHeldBackRequestCausesNoDialAfterTheIdleConnectionCloses(t *testing.T) {
 	r, _, _ := heldBackPremise(t)
 	dials := len(r.dbs)
@@ -250,6 +266,8 @@ func TestFairAHeldBackRequestCausesNoDialAfterTheIdleConnectionCloses(t *testing
 	}
 }
 
+// TestFairAHeldBackRequestIsLentAtTheEventThatMakesItEligible proves
+// fairRedispatch immediately lends a held-back request once the blocking tenant's lease ends.
 func TestFairAHeldBackRequestIsLentAtTheEventThatMakesItEligible(t *testing.T) {
 	r, other, spare := heldBackPremise(t)
 	a := r.run(r.ev(proxy.EvDBClosed, other, nil, 0))
@@ -264,6 +282,8 @@ func TestFairAHeldBackRequestIsLentAtTheEventThatMakesItEligible(t *testing.T) {
 	}
 }
 
+// TestFairAHeldBackRequestIsDialledForWhenItBecomesEligibleAfterTheIdleClose
+// proves the pool dials a connection as soon as a previously held-back request becomes releasable.
 func TestFairAHeldBackRequestIsDialledForWhenItBecomesEligibleAfterTheIdleClose(t *testing.T) {
 	r, other, _ := heldBackPremise(t)
 	for range 4 {
@@ -292,6 +312,8 @@ func TestFairAHeldBackRequestIsDialledForWhenItBecomesEligibleAfterTheIdleClose(
 	}
 }
 
+// TestFairNoDialPastTheFairLimitWhileConnectionsOpen proves checkout demand
+// refresh prevents opening a third connection when the fair limit is below pool.connections.
 func TestFairNoDialPastTheFairLimitWhileConnectionsOpen(t *testing.T) {
 	r := fairRig(t, 4, func(c *proxy.Config) { c.Fairness.Limit = 2 })
 	for i := range proxy.ConnID(4) {
@@ -317,6 +339,8 @@ func TestFairNoDialPastTheFairLimitWhileConnectionsOpen(t *testing.T) {
 	}
 }
 
+// TestFairNoDialPastTheFairLimit proves waiting requests held at limit < pool.connections
+// never dial additional backend connections.
 func TestFairNoDialPastTheFairLimit(t *testing.T) {
 	r := fairRig(t, 4, func(c *proxy.Config) { c.Fairness.Limit = 1 })
 	r.lease(10, 0, "SELECT pg_sleep(1)")
@@ -335,6 +359,8 @@ func TestFairNoDialPastTheFairLimit(t *testing.T) {
 	}
 }
 
+// TestFairTheBinaryLimitIsThePoolSize proves FairConfig defaults Limit and
+// MaxLeases to Connections and proxy.New refuses invalid fairness weights.
 func TestFairTheBinaryLimitIsThePoolSize(t *testing.T) {
 	c := proxy.Config{Connections: 7}
 	if f := c.FairConfig(); f.Limit != 7 || f.MaxLeases != 7 || f.DefaultWeight != admission.DefaultWeight {
@@ -356,6 +382,8 @@ func TestFairTheBinaryLimitIsThePoolSize(t *testing.T) {
 	}
 }
 
+// TestFairOneTenantSeesNoChangeFromTheFairDispatcher proves a lone active
+// tenant uses the full pool size without restriction.
 func TestFairOneTenantSeesNoChangeFromTheFairDispatcher(t *testing.T) {
 	r := fairRig(t, 2, func(c *proxy.Config) { c.Pool = &pool.Config{RatePerSec: 1000, NoJitter: true} })
 	a := r.lease(10, 0, "SELECT 1")

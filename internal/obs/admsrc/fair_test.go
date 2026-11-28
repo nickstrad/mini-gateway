@@ -33,6 +33,8 @@ func fairBusy(t *testing.T) *admission.Queues {
 	return q
 }
 
+// TestFairCountersMoveAndConserveThroughTheMapping proves fairness gauges,
+// counters, durations, and per-tenant detail rows emit and conserve through admsrc.
 func TestFairCountersMoveAndConserveThroughTheMapping(t *testing.T) {
 	q := fairBusy(t)
 	if err := q.Snapshot().Check(); err != nil {

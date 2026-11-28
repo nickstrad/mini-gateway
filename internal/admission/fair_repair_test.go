@@ -18,6 +18,9 @@ func floodTenants(t *testing.T, q *Queues, owner map[int64]string, tenants, each
 	}
 }
 
+// TestRoundingRemaindersNeverIdleALeaseWhileEqualTenantsWait proves that when
+// integer-floor shares sum below the limit and no active tenant is below share,
+// every lease up to the limit is lent by round robin.
 func TestRoundingRemaindersNeverIdleALeaseWhileEqualTenantsWait(t *testing.T) {
 	for _, c := range []struct{ limit, tenants int }{{3, 2}, {4, 3}, {5, 2}, {7, 3}, {5, 3}} {
 		t.Run(fmt.Sprintf("limit-%d-tenants-%d", c.limit, c.tenants), func(t *testing.T) {
@@ -43,6 +46,8 @@ func TestRoundingRemaindersNeverIdleALeaseWhileEqualTenantsWait(t *testing.T) {
 	}
 }
 
+// TestTheLastLeaseIsHeldOnlyForAnActiveTenantBelowItsShare proves the last free
+// lease is held while an active non-waiting tenant is below share and released once that tenant leaves.
 func TestTheLastLeaseIsHeldOnlyForAnActiveTenantBelowItsShare(t *testing.T) {
 	q, _ := fairCore(t, 4)
 	owner := map[int64]string{1: "a", 2: "a", 3: "a", 4: "b"}
@@ -71,6 +76,8 @@ func TestTheLastLeaseIsHeldOnlyForAnActiveTenantBelowItsShare(t *testing.T) {
 	}
 }
 
+// TestReleasableCountsOnlyWhatTheDispatcherWouldLend proves Releasable accounts
+// for the fair limit, reserved last slots, and fallback to queue length when detached.
 func TestReleasableCountsOnlyWhatTheDispatcherWouldLend(t *testing.T) {
 	q, _ := fairCore(t, 4)
 	owner := map[int64]string{}
@@ -125,6 +132,8 @@ func TestReleasableCountsOnlyWhatTheDispatcherWouldLend(t *testing.T) {
 	}
 }
 
+// TestReleasableMatchesRepeatedPicksOnRandomStates exhaustively proves
+// Releasable equals the exact count of successive Pick+LeaseStart pairs.
 func TestReleasableMatchesRepeatedPicksOnRandomStates(t *testing.T) {
 	for limit := 1; limit <= 6; limit++ {
 		for held := 0; held < 1<<6; held++ {
@@ -161,6 +170,8 @@ func TestReleasableMatchesRepeatedPicksOnRandomStates(t *testing.T) {
 	}
 }
 
+// TestActiveTenantsPeakCountsPushesAndNeverFalls proves active_tenants_peak
+// updates on Push and remains monotonically non-decreasing after removals.
 func TestActiveTenantsPeakCountsPushesAndNeverFalls(t *testing.T) {
 	q, _ := fairCore(t, 4)
 	for i := range 5 {
@@ -188,6 +199,7 @@ func TestActiveTenantsPeakCountsPushesAndNeverFalls(t *testing.T) {
 	}
 }
 
+// TestUnpopRestoresTheHeldFlag proves Unpop restores Fair.held to its pre-pop value.
 func TestUnpopRestoresTheHeldFlag(t *testing.T) {
 	q, _ := fairCore(t, 4)
 	owner := map[int64]string{1: "a", 2: "a", 3: "a", 4: "b", 5: "b"}
@@ -214,6 +226,9 @@ func TestUnpopRestoresTheHeldFlag(t *testing.T) {
 	}
 }
 
+// TestATenantAtItsShareWaitsWhileBelowShareTenantsArriveUntilItsOwnLeaseEnds
+// proves round-robin fairness is bounded within a group and an at-share tenant
+// moves to the below-share group once one of its own leases ends.
 func TestATenantAtItsShareWaitsWhileBelowShareTenantsArriveUntilItsOwnLeaseEnds(t *testing.T) {
 	q, _ := fairCore(t, 4)
 	owner := map[int64]string{1: "a", 2: "a", 3: "a", 4: "b"}
@@ -247,6 +262,8 @@ func TestATenantAtItsShareWaitsWhileBelowShareTenantsArriveUntilItsOwnLeaseEnds(
 	}
 }
 
+// TestTheShareBoundsNewLendsAndPreemptsNothing proves share changes and limit
+// reductions never revoke open leases and only constrain subsequent lends.
 func TestTheShareBoundsNewLendsAndPreemptsNothing(t *testing.T) {
 	q, f := fairCore(t, 6)
 	owner := map[int64]string{}

@@ -86,6 +86,9 @@ type fmTenant struct {
 	atShare  Time
 }
 
+// fmModel is a slice-based reference model of the Fair dispatcher used by
+// property tests and FuzzFairnessOps to verify exact selection order, share
+// math, unpop restoration, and time accounting.
 type fmModel struct {
 	limit     int
 	maxLeases int
