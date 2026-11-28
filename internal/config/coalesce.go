@@ -77,8 +77,26 @@ func (f *File) validateCoalesce() error {
 			errs = append(errs, bad(v.key, "must be 0 (the default) or more, got %d", v.n))
 		}
 	}
+	if !f.coalesceOn() {
+		errs = append(errs, f.coalesceBoundsWhenOff()...)
+	}
 	if f.coalesceOn() && f.Lease.Reset == LeaseResetOnSwitch && c.KeyScope == CoalesceScopeAll {
 		errs = append(errs, bad("coalesce.key_scope", "all-tenants cannot be used with lease.reset on-switch: a connection may still hold its last tenant's session state, and a shared read on it would hand that state to another tenant (use key_scope tenant, lease.reset always, or coalesce.mode off)"))
 	}
 	return errors.Join(errs...)
+}
+
+func (f *File) coalesceBoundsWhenOff() []error {
+	cc := f.coalesce()
+	cc.Mode = coalesce.ModeOff
+	cc.Deadline = coalesce.DefaultDeadline
+	cc = cc.WithDefaults()
+	var errs []error
+	if err := cc.Validate(); err != nil {
+		errs = append(errs, err)
+	}
+	if half := int64(f.Limits.ReplyBuffer) / 2; f.Limits.ReplyBuffer > 0 && cc.MaxReplyBytes > half {
+		errs = append(errs, bad("coalesce.max_reply_bytes", "%d is more than half of limits.reply_buffer (%d)", cc.MaxReplyBytes, f.Limits.ReplyBuffer))
+	}
+	return errs
 }

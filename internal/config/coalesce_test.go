@@ -93,3 +93,35 @@ func TestOnSwitchIsAllowedWithCoalescingOffOrScopedToATenant(t *testing.T) {
 		}
 	}
 }
+
+func TestCoalesceBoundsAreCheckedWhenModeIsOff(t *testing.T) {
+	for key, v := range map[string]any{"coalesce.max_waiters": 1, "coalesce.hot_keys": 999, "coalesce.max_flights": 99999999,
+		"coalesce.max_reply_bytes": 99999999, "coalesce.no_share_max": 99999999, "coalesce.no_share_for": "100000h"} {
+		_, err := parseEdited(t, map[string]any{"coalesce.mode": "off", key: v})
+		if err == nil || !strings.Contains(err.Error(), key) {
+			t.Fatalf("mode off, %s = %v: %v, want an error naming the key", key, v, err)
+		}
+		off := strings.Count(err.Error(), key)
+		_, err = parseEdited(t, map[string]any{"coalesce.mode": "auto", key: v})
+		if err == nil || strings.Count(err.Error(), key) != off {
+			t.Fatalf("mode auto, %s = %v: %v, want the same errors as mode off", key, v, err)
+		}
+	}
+}
+
+func TestOmittedReplyCapResolvesToTheSameConfigAsTheDefault(t *testing.T) {
+	omitted, err := parseEdited(t, map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if omitted.Coalesce.MaxReplyBytes != coalesce.DefaultMaxReplyBytes {
+		t.Fatalf("resolved max_reply_bytes %d", omitted.Coalesce.MaxReplyBytes)
+	}
+	explicit, err := parseEdited(t, map[string]any{"coalesce.max_reply_bytes": coalesce.DefaultMaxReplyBytes})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if omitted.Fingerprint() != explicit.Fingerprint() {
+		t.Fatalf("fingerprints differ: omitted %s explicit %s", omitted.Fingerprint(), explicit.Fingerprint())
+	}
+}
