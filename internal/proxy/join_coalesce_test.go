@@ -11,7 +11,10 @@ import (
 	"github.com/nickstrad/mini-gateway/internal/proxy/proxysim"
 )
 
-const joinStatement = 400 * time.Millisecond
+const (
+	joinStatement   = 400 * time.Millisecond
+	commitAndFlight = 2
+)
 
 var joinModes = []coalesce.JoinMode{coalesce.JoinStrict, coalesce.JoinRelaxed}
 
@@ -90,9 +93,33 @@ func (h *heldFlight) noRead(a []proxy.Action) {
 	}
 }
 
+func (h *heldFlight) runHoldingTheRead(a []proxy.Action) []proxy.Action {
+	h.t.Helper()
+	all := a
+	for _, x := range a {
+		switch {
+		case x.Kind == proxy.ActDBWrite && bytes.Contains(x.Data, query(sharedRead)):
+		case x.Kind == proxy.ActClientWrite:
+			all = append(all, h.runHoldingTheRead(h.ev(proxy.EvClientWrote, x.Conn, nil, len(x.Data)))...)
+		case x.Kind == proxy.ActDBWrite:
+			all = append(all, h.runHoldingTheRead(h.ev(proxy.EvDBWrote, x.Conn, nil, len(x.Data)))...)
+		case x.Kind == proxy.ActDBOpen:
+			h.dbs = append(h.dbs, x.Conn)
+		case x.Kind == proxy.ActDBCancel:
+			h.cancels = append(h.cancels, x.Conn)
+		}
+	}
+	return all
+}
+
 func (h *heldFlight) release() (proxy.ConnID, []proxy.Action) {
 	h.t.Helper()
-	a := h.commit(12, h.other)
+	a := h.runHoldingTheRead(h.ev(proxy.EvClientData, 12, query("COMMIT"), 0))
+	a = append(a, h.runHoldingTheRead(h.ev(proxy.EvDBData, h.other, complete("COMMIT", 'I'), 0))...)
+	a = append(a, h.runHoldingTheRead(h.ev(proxy.EvDBData, h.other, complete("DISCARD ALL", 'I'), 0))...)
+	if bytes.HasSuffix(written(a, proxy.ActDBWrite, h.other), query("")) {
+		a = append(a, h.runHoldingTheRead(h.ev(proxy.EvDBData, h.other, emptyReply(), 0))...)
+	}
 	on := h.reads(a)
 	if len(on) != 1 {
 		h.t.Fatalf("tenant 1's lease ended: the flight must be sent once, sent on %v", on)
@@ -230,6 +257,253 @@ func TestJoinAFlightHeldBackByTheDispatcherEndsAtItsDeadlineWithOneSharedError(t
 		h.noRead(h.commit(12, h.other))
 		if h.dials() != h.dialsAtPremise {
 			t.Fatalf("%v: %d dials for an expired flight", join, h.dials()-h.dialsAtPremise)
+		}
+	}
+}
+
+func (h *heldFlight) untilRead(a []proxy.Action) (proxy.ConnID, []proxy.Action) {
+	h.t.Helper()
+	all := a
+	opened := map[proxy.ConnID]bool{}
+	for range 20 {
+		if on := h.reads(a); len(on) == 1 {
+			return on[0], all
+		} else if len(on) > 1 {
+			h.t.Fatalf("the read was sent on %v", on)
+		}
+		var next []proxy.Action
+		for _, x := range a {
+			switch {
+			case x.Kind == proxy.ActDBWrite && bytes.Equal(x.Data, query("")):
+				next = append(next, h.db(x.Conn, emptyReply())...)
+			case x.Kind == proxy.ActDBOpen && !opened[x.Conn]:
+				opened[x.Conn] = true
+				next = append(next, h.open(x.Conn)...)
+			}
+		}
+		if len(next) == 0 {
+			next = h.tick(2 * time.Millisecond)
+		}
+		all = append(all, next...)
+		a = next
+	}
+	h.t.Fatal("the read was never sent")
+	return 0, nil
+}
+
+func (h *heldFlight) silent(a []proxy.Action) {
+	h.t.Helper()
+	for _, c := range []proxy.ConnID{h.owner, h.follower, h.rider} {
+		if got := written(a, proxy.ActClientWrite, c); c != 0 && len(got) != 0 {
+			h.t.Fatalf("client %d was answered before the flight ended: %q", c, got)
+		}
+	}
+}
+
+func TestJoinALeaderRefusedWithNothingReachedIsRetriedOnceForTheWholeFlight(t *testing.T) {
+	for _, join := range joinModes {
+		h := heldFlightPremise(t, join, retryOn)
+		attempts, sent := h.retrySnap().Attempts, h.e.CoalesceSnapshot().Sent
+		on, _ := h.release()
+		if got := h.retrySnap().Attempts - attempts; got != commitAndFlight {
+			t.Fatalf("%v: the COMMIT and a flight with three waiters deposited %d first attempts, want %d", join, got, commitAndFlight)
+		}
+		attempts += commitAndFlight
+		a := h.refuseAndClose(on)
+		h.silent(a)
+		s, _ := h.agree()
+		if s.RetryOffered != 1 || s.RetryAsked != 1 || s.RetryPending.Value != 1 || s.Coalesced.Value != 2 {
+			t.Fatalf("%v: offered %d asked %d pending %d coalesced %d", join, s.RetryOffered, s.RetryAsked, s.RetryPending.Value, s.Coalesced.Value)
+		}
+		again, b := h.untilRead(a)
+		h.silent(b)
+		if got := h.retrySnap(); got.Attempts != attempts || got.Retries != 1 || got.Offered != 1 {
+			t.Fatalf("%v: after the retry was sent: attempts %d retries %d offered %d", join, got.Attempts-attempts, got.Retries, got.Offered)
+		}
+		if tenantInFlight(h.coreRig, 0) != 3 {
+			t.Fatalf("%v: the retried flight's lease: tenant 0 in flight %d", join, tenantInFlight(h.coreRig, 0))
+		}
+		h.agree()
+		a = h.db(again, readReply("y"))
+		h.everyoneGot(a, readReply("y"))
+		h.finishReset(again)
+		s, _ = h.agree()
+		cs := h.e.CoalesceSnapshot()
+		if s.RetryEnds[proxy.RetryEndCompleted] != 1 || s.RetryPending.Value != 0 || s.CoalesceReplies != 2 || s.CoalesceErrors != 0 || cs.Sent-sent != 1 {
+			t.Fatalf("%v: ends %v pending %d replies %d errors %d sent %d", join, s.RetryEnds, s.RetryPending.Value, s.CoalesceReplies, s.CoalesceErrors, cs.Sent-sent)
+		}
+	}
+}
+
+func TestJoinARetriedFlightLostAgainIsAnsweredOnceWithOneSharedError(t *testing.T) {
+	for _, join := range joinModes {
+		h := heldFlightPremise(t, join, retryOn)
+		on, _ := h.release()
+		again, _ := h.untilRead(h.refuseAndClose(on))
+		a := h.refuseAndClose(again)
+		var first []byte
+		for _, c := range []proxy.ConnID{h.owner, h.follower, h.rider} {
+			got := written(a, proxy.ActClientWrite, c)
+			if first == nil {
+				first = got
+			}
+			if !bytes.Equal(got, first) || bytes.Count(got, readyIdle) != 1 || len(got) == 0 {
+				t.Fatalf("%v: client %d got %q, the owner %q", join, c, got, first)
+			}
+		}
+		s, _ := h.agree()
+		if s.RetryOffered != 2 || s.RetryAsked != 1 || s.RetryEnds[proxy.RetryEndFailed] != 1 || s.CoalesceErrors != 2 || s.Coalesced.Value != 0 {
+			t.Fatalf("%v: offered %d asked %d ends %v errors %d coalesced %d", join, s.RetryOffered, s.RetryAsked, s.RetryEnds, s.CoalesceErrors, s.Coalesced.Value)
+		}
+		h.noRead(h.tick(10 * time.Millisecond))
+	}
+}
+
+func TestJoinWithTheRetryPolicyOffALeaderRefusedSharesItsErrorAtOnce(t *testing.T) {
+	for _, join := range joinModes {
+		h := heldFlightPremise(t, join, nil)
+		on, _ := h.release()
+		a := h.refuseAndClose(on)
+		owner := written(a, proxy.ActClientWrite, h.owner)
+		if len(owner) == 0 {
+			t.Fatalf("%v: the owner was not answered", join)
+		}
+		h.everyoneGot(a, owner)
+		if s, _ := h.agree(); s.RetryAsked != 0 || s.RetryOffered != 1 || s.CoalesceErrors != 2 {
+			t.Fatalf("%v: asked %d offered %d errors %d", join, s.RetryAsked, s.RetryOffered, s.CoalesceErrors)
+		}
+	}
+}
+
+func heldRetriedFlight(t *testing.T, join coalesce.JoinMode, edit func(*proxy.Config)) *heldFlight {
+	t.Helper()
+	h := heldFlightPremise(t, join, func(c *proxy.Config) {
+		retryOn(c)
+		if edit != nil {
+			edit(c)
+		}
+	})
+	on, _ := h.release()
+	h.other = h.heldTx(17, 1)
+	a := h.refuseAndClose(on)
+	h.noRead(a)
+	h.silent(a)
+	s, as := h.agree()
+	if s.RetryPending.Value != 1 || h.queuedOf(0) != 1 || s.Coalesced.Value != 2 || h.q.Releasable() != 0 || as.Fair.HeldShare == 0 {
+		t.Fatalf("premise: pending %d queued %d coalesced %d releasable %d held %d", s.RetryPending.Value, h.queuedOf(0), s.Coalesced.Value,
+			h.q.Releasable(), as.Fair.HeldShare)
+	}
+	if tenantInFlight(h.coreRig, 0) != 2 || tenantInFlight(h.coreRig, 1) != 1 {
+		t.Fatalf("premise: in flight %d / %d", tenantInFlight(h.coreRig, 0), tenantInFlight(h.coreRig, 1))
+	}
+	return h
+}
+
+func TestJoinARetriedFlightOwnerHeldInTheQueueEndsAtTheEarlierOfTheFlightAndRequestDeadlines(t *testing.T) {
+	for _, arm := range []struct {
+		name   string
+		flight time.Duration
+		ends   time.Duration
+	}{
+		{"flight deadline first", joinStatement / 2, joinStatement / 2},
+		{"request deadline first", 2 * joinStatement, joinStatement},
+	} {
+		for _, join := range joinModes {
+			h := heldRetriedFlight(t, join, func(c *proxy.Config) { c.Coalesce.Deadline = coalesce.Instant(arm.flight) })
+			end := h.arrived + proxy.Instant(arm.ends)
+			if h.now >= end {
+				t.Fatalf("%s %v: premise ran past the deadline", arm.name, join)
+			}
+			h.now = end - 1
+			a := h.run(h.ev(proxy.EvTimer, 0, nil, 0))
+			h.noRead(a)
+			h.silent(a)
+			h.now = end
+			a = h.run(h.ev(proxy.EvTimer, 0, nil, 0))
+			h.noRead(a)
+			h.everyoneShed(a)
+			s, as := h.agree()
+			if s.RetryEnds[proxy.RetryEndShed] != 1 || s.RetryPending.Value != 0 || s.Coalesced.Value != 0 || h.queuedOf(0) != 0 {
+				t.Fatalf("%s %v: ends %v pending %d coalesced %d queued %d", arm.name, join, s.RetryEnds, s.RetryPending.Value, s.Coalesced.Value, h.queuedOf(0))
+			}
+			if as.Shed[admission.ReasonDeadline] != 1 || s.Shed != 1 {
+				t.Fatalf("%s %v: admission sheds %v engine %d", arm.name, join, as.Shed, s.Shed)
+			}
+			h.silent(h.noReadAfter(h.commit(17, h.other)))
+		}
+	}
+}
+
+func (h *heldFlight) noReadAfter(a []proxy.Action) []proxy.Action {
+	h.t.Helper()
+	h.noRead(a)
+	return a
+}
+
+func TestJoinTheBreakerReCheckRunsForARetriedFlightOwnerAtTheLendThatWouldTakeIt(t *testing.T) {
+	for _, open := range []bool{false, true} {
+		for _, join := range joinModes {
+			b := &switchBreaker{}
+			h := heldRetriedFlight(t, join, func(c *proxy.Config) { c.Seams.Breaker = b })
+			b.open = open
+			a := h.commit(17, h.other)
+			if !open {
+				on, all := h.untilRead(a)
+				h.silent(all)
+				a = h.db(on, readReply("z"))
+				h.everyoneGot(a, readReply("z"))
+				if s, _ := h.agree(); s.RetryEnds[proxy.RetryEndCompleted] != 1 || s.RetryPending.Value != 0 {
+					t.Fatalf("closed %v: ends %v pending %d", join, s.RetryEnds, s.RetryPending.Value)
+				}
+				continue
+			}
+			h.noRead(a)
+			for _, c := range []proxy.ConnID{h.owner, h.follower, h.rider} {
+				if got := written(a, proxy.ActClientWrite, c); !bytes.Contains(got, []byte("53M03")) || bytes.Count(got, readyIdle) != 1 {
+					t.Fatalf("open %v: client %d got %q, want one 53M03", join, c, got)
+				}
+			}
+			s, _ := h.agree()
+			if s.RetryEnds[proxy.RetryEndBreaker] != 1 || s.RetryPending.Value != 0 || s.Coalesced.Value != 0 || s.CoalesceErrors != 2 {
+				t.Fatalf("open %v: ends %v pending %d coalesced %d errors %d", join, s.RetryEnds, s.RetryPending.Value, s.Coalesced.Value, s.CoalesceErrors)
+			}
+			h.noRead(h.tick(10 * time.Millisecond))
+		}
+	}
+}
+
+func TestJoinShutdownWithARetryPendingAndFlightsHeldSendsNothingNewToTheDatabase(t *testing.T) {
+	for _, join := range joinModes {
+		h := heldRetriedFlight(t, join, nil)
+		h.login(18, 2)
+		h.noRead(h.coreRig.q(18, sharedRead))
+		cs := h.e.CoalesceSnapshot()
+		if join == coalesce.JoinStrict && cs.Held != 1 {
+			t.Fatalf("strict: a read arriving behind the retried flight was not held: held %d", cs.Held)
+		}
+		h.agree()
+		for _, x := range h.e.Shutdown(h.now, nil) {
+			if x.Kind == proxy.ActDBWrite && !bytes.Equal(x.Data, query("ROLLBACK")) {
+				t.Fatalf("%v: shutdown sent a statement to database %d: %q", join, x.Conn, x.Data)
+			}
+		}
+		s, as := h.e.Snapshot(), h.e.AdmissionSnapshot()
+		if s.RetryEnds[proxy.RetryEndGone] != 1 || s.RetryPending.Value != 0 || s.Coalesced.Value != 0 || s.Queued.Value != 0 || s.InFlight.Value != 0 {
+			t.Fatalf("%v: after shutdown: ends %v pending %d coalesced %d queued %d in flight %d", join, s.RetryEnds, s.RetryPending.Value,
+				s.Coalesced.Value, s.Queued.Value, s.InFlight.Value)
+		}
+		if as.Fair.InFlight.Value != 0 || as.Fair.LeaseStarts != s.LeasesStarted || as.Fair.LeaseEnds != s.LeasesEnded {
+			t.Fatalf("%v: fair in flight %d starts %d/%d ends %d/%d", join, as.Fair.InFlight.Value, as.Fair.LeaseStarts, s.LeasesStarted,
+				as.Fair.LeaseEnds, s.LeasesEnded)
+		}
+		if err := h.e.Invariants(); err != nil {
+			t.Fatalf("%v: %v", join, err)
+		}
+		if err := as.Check(); err != nil {
+			t.Fatalf("%v: %v", join, err)
+		}
+		if err := h.e.Quiesce(); err != nil {
+			t.Fatalf("%v: %v", join, err)
 		}
 	}
 }
