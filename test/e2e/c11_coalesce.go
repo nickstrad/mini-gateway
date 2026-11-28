@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nickstrad/mini-gateway/internal/admission"
 	"github.com/nickstrad/mini-gateway/internal/coalesce"
 	"github.com/nickstrad/mini-gateway/internal/pool"
 	"github.com/nickstrad/mini-gateway/internal/sim"
@@ -26,6 +27,9 @@ const (
 	bigValueLen  = 40 << 10
 	hugeValueLen = 100 << 10
 	recoveryGap  = time.Second
+
+	coalQueueTarget   = admission.Time(15 * time.Second)
+	coalQueueInterval = admission.Time(20 * time.Second)
 )
 
 type CoalesceScenario struct {
@@ -59,7 +63,12 @@ func coalBase(name string, join coalesce.JoinMode, service time.Duration) Spec {
 	sp := Spec{Name: name, Tenants: 4, Conns: 4, QueueCap: 1024, Rows: coalRows(), Timeouts: poolTimeouts(),
 		Duration: 10 * time.Second, Service: readService(service), Coalesce: coalesceAuto(join)}
 	sp.Timeouts.QueueWait = 20 * time.Second
+	sp.Admission = coalAdmission()
 	return withCore(sp, name, func(c *pool.Config) { c.RatePerSec = 1000; c.MaxConnecting = 4 })
+}
+
+func coalAdmission() admission.Config {
+	return admission.Config{Rule: admission.RuleTimeout, Target: coalQueueTarget, Interval: coalQueueInterval, TenantCapacity: 1024}
 }
 
 func coalesceOff(sp Spec) Spec {
@@ -165,6 +174,22 @@ func coalSnapOK(r *SimRun) error {
 	}
 	if r.Engine.Coalesced.Value != 0 {
 		return failf("%d requests still waiting on flights", r.Engine.Coalesced.Value)
+	}
+	return coalAdmissionOK(r)
+}
+
+func coalAdmissionOK(r *SimRun) error {
+	if r.Spec.Admission.Rule == 0 {
+		return nil
+	}
+	a := r.World.Proxy.Engine.AdmissionSnapshot()
+	shed := int64(0)
+	for _, n := range a.Shed {
+		shed += n
+	}
+	if a.Pushes == 0 || shed != r.Engine.Shed || a.Queued.Value != 0 {
+		return failf("admission queue beside the coalescer: %d pushes, %d shed against the engine's %d, %d still queued",
+			a.Pushes, shed, r.Engine.Shed, a.Queued.Value)
 	}
 	return nil
 }
@@ -767,6 +792,7 @@ func (sc CoalesceScenario) AblationArm() *Spec {
 const (
 	CoalesceHeavyEnv         = "MG_C11_HEAVY"
 	CoalesceBaselineScenario = "coalesce-caps-strict"
+	CoalesceHotKeyScenario   = "coalesce-hot-key-strict"
 )
 
 func CoalesceHeavyRuns(short bool) bool {

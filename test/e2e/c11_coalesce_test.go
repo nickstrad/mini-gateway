@@ -13,7 +13,7 @@ import (
 const (
 	coalFullSweepEnv = "MG_C11_FULL_SWEEP"
 	coalSweepSeeds   = 10
-	coalHeavySeeds   = 1
+	coalHeavySeeds   = 3
 )
 
 func coalReplay(name string, seed int64) string {
