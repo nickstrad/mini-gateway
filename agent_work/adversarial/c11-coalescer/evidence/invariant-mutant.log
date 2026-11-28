@@ -1,0 +1,9 @@
+--- FAIL: TestAdv_16_CoreCheckMustBeCalled (0.00s)
+    engine_test.go:177: core corruption invisible: <nil>
+--- FAIL: TestAdv_16_WaiterGaugeMismatchMustBeCaught (0.00s)
+    engine_test.go:182: phantom waiting gauge invisible to engine
+--- FAIL: TestAdv_16_OrphanFlightMustBeCaught (0.00s)
+    engine_test.go:187: live core flight without engine owner invisible
+FAIL
+FAIL	github.com/nickstrad/mini-gateway/agent_work/adversarial/c11-coalescer	0.017s
+FAIL
