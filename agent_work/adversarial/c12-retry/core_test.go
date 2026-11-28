@@ -94,6 +94,7 @@ func TestAdv_2_OnceStateDoesNotLeakToNextRequest(t *testing.T) {
 }
 
 func TestAdv_5_CarriedCreditExceedsWindowFloor(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 5 narrowed: over any window ten times the retries is at most the first attempts plus the credit carried in, at most the cap; stored credit does not expire with time. See agent_work/chunks/c12-retry/ADVERSARIAL.md.")
 	begin(t)
 	p := policy(t, 100, 1)
 	for i := 0; i < 990; i++ {
@@ -111,6 +112,7 @@ func TestAdv_5_CarriedCreditExceedsWindowFloor(t *testing.T) {
 	}
 }
 func TestAdv_5_QuietHourRetainsBurstCredit(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 5 narrowed: over any window ten times the retries is at most the first attempts plus the credit carried in, at most the cap; stored credit does not expire with time. See agent_work/chunks/c12-retry/ADVERSARIAL.md.")
 	begin(t)
 	p := policy(t, 100, 1)
 	for i := 0; i < 990; i++ {

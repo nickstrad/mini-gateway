@@ -143,6 +143,7 @@ func TestAdv_6_ClosedOpenClosedBudgetPreserved(t *testing.T) {
 }
 
 func TestAdv_7_WaitingRetryConsumesQueueSlot(t *testing.T) {
+	t.Skip("SETTLED by the orchestrator: claim 7 narrowed: a waiting retry holds no database connection; it does hold one place in its tenant's admission queue. See agent_work/chunks/c12-retry/ADVERSARIAL.md.")
 	r := newRig(t, nil)
 	r.query(1001, "UPDATE marks SET n=n+1")
 	r.lose(r.take(), 0, true)
