@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -279,48 +280,195 @@ func dirtyCheck(t *testing.T) string {
 	return string(b)
 }
 
-var hostileCalls = []string{"SELECT public.hide_set()", "SELECT public.make_temp()", "SELECT public.take_lock()", "SELECT public.do_prepare()", "SELECT public.do_listen()"}
+const (
+	secretMarker  = "LEASE_SECRET"
+	secretSetting = "mg_hostile.secret"
+)
 
-func sessionRun(t *testing.T, env *RealEnv, g *Gateway) int {
+var hostileCalls = []string{"SELECT public.hide_set()", "SELECT public.make_temp()", "SELECT public.take_lock()", "SELECT public.do_prepare()", "SELECT public.do_listen()",
+	"SELECT public.do_cursor()", "SELECT public.do_role()", "SELECT public.do_custom('" + secretMarker + "')"}
+
+var dirtyColumnName = regexp.MustCompile(`(?m)\bAS\s+(\w+)\s*[,;]?\s*$`)
+
+// dirtyColumns parses the AS <name> aliases from dirty-check.sql so any column
+// added to the oracle file is covered by the ablation guard without editing the test.
+func dirtyColumns(t *testing.T) []string {
+	t.Helper()
+	var names []string
+	for _, m := range dirtyColumnName.FindAllStringSubmatch(dirtyCheck(t), -1) {
+		names = append(names, m[1])
+	}
+	if len(names) == 0 {
+		t.Fatal("dirty-check.sql: no column names")
+	}
+	return names
+}
+
+func hostileLease(call string, lease int) (string, string) {
+	if !strings.Contains(call, secretMarker) {
+		return call, ""
+	}
+	secret := fmt.Sprintf("secret-%d-%d", time.Now().UnixNano(), lease)
+	return strings.ReplaceAll(call, secretMarker, secret), secret
+}
+
+// secretReadBack queries mg_hostile.secret directly because Postgres omits custom
+// placeholder settings from pg_settings, making dirty-check.sql blind to them.
+func secretReadBack(c *RealClient, secret string) bool {
+	if secret == "" {
+		return false
+	}
+	return slices.Contains(c.Query("SELECT current_setting('"+secretSetting+"', true)"), "D:"+secret)
+}
+
+func cleanReply(got []string) bool {
+	return !HasToken(got, "E:") && !HasToken(got, "closed:") && HasToken(got, "Z")
+}
+
+// hostileFailed treats errors, abrupt closes, missing ReadyForQuery markers, and
+// empty replies as failures so a silent drop cannot masquerade as planted state.
+func hostileFailed(got []string) bool {
+	return !cleanReply(got) || !HasToken(got, "D:")
+}
+
+type leaseObservation struct {
+	secret  bool
+	catalog []string
+	path    []string
+	broken  bool
+}
+
+// observeOneLease wraps the secret read-back, dirty-check.sql, and SHOW search_path
+// in a single transaction so all three run on the lease immediately after the hostile
+// call with no intervening DISCARD ALL.
+func observeOneLease(c *RealClient, check, secret string) leaseObservation {
+	var l leaseObservation
+	opened := c.Query("BEGIN")
+	l.secret = secretReadBack(c, secret)
+	l.catalog = c.Query(check)
+	l.path = c.Query("SHOW search_path")
+	closed := c.Query("COMMIT")
+	l.broken = !cleanReply(opened) || !cleanReply(l.catalog) || !cleanReply(l.path) || !cleanReply(closed)
+	return l
+}
+
+func dataRow(got []string) []string {
+	for _, tk := range got {
+		if v, ok := strings.CutPrefix(tk, "D:"); ok {
+			return strings.Split(v, "|")
+		}
+	}
+	return nil
+}
+
+type sessionResult struct {
+	dirty      int
+	secrets    int
+	unreadable int
+	columns    []string
+	moved      []int
+}
+
+func (r sessionResult) String() string {
+	parts := make([]string, 0, len(r.columns)+1)
+	for i, name := range r.columns {
+		parts = append(parts, fmt.Sprintf("%s %d", name, r.moved[i]))
+	}
+	parts = append(parts, fmt.Sprintf("secret read back %d", r.secrets), fmt.Sprintf("unreadable checks %d", r.unreadable))
+	return strings.Join(parts, ", ")
+}
+
+func completeRow(got []string, width int) []string {
+	if !cleanReply(got) {
+		return nil
+	}
+	row := dataRow(got)
+	if len(row) != width {
+		return nil
+	}
+	return row
+}
+
+// observe credits a column only when completeRow returns a clean, full-width row
+// differing from clean; errored, closed, or truncated replies count as unreadable
+// instead so a broken check cannot satisfy the ablation guard.
+func (r *sessionResult) observe(clean, got []string) {
+	row := completeRow(got, len(r.moved))
+	if row == nil || len(clean) != len(r.moved) {
+		r.unreadable++
+		return
+	}
+	for i := range r.moved {
+		if row[i] != clean[i] {
+			r.moved[i]++
+		}
+	}
+}
+
+func sessionRun(t *testing.T, env *RealEnv, g *Gateway) sessionResult {
 	t.Helper()
 	check := dirtyCheck(t)
+	r := sessionResult{columns: dirtyColumns(t)}
+	r.moved = make([]int, len(r.columns))
 	checker, err := env.Dial(g, 1, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer checker.Close()
-	clean := checker.Query(check)
-	if !HasToken(clean, "D:") {
-		t.Fatalf("dirty-check: %v", clean)
+	baseline := observeOneLease(checker, check, "")
+	cleanRow := completeRow(baseline.catalog, len(r.columns))
+	if baseline.broken || cleanRow == nil {
+		t.Fatalf("dirty-check: %v, want %d columns %v", baseline.catalog, len(r.columns), r.columns)
 	}
-	dirty := 0
+	lastSecret := ""
 	for round := 0; round < 3; round++ {
 		for i, call := range hostileCalls {
+			sql, secret := hostileLease(call, round*len(hostileCalls)+i)
+			if secret != "" {
+				lastSecret = secret
+			}
 			h, err := env.Dial(g, 2+(i%2), false)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := h.Query(call); HasToken(got, "E:") {
-				dirty++
+			if hostileFailed(h.Query(sql)) {
+				r.dirty++
 			}
 			h.Close()
-			if got := checker.Query(check); !slices.Equal(got, clean) {
-				dirty++
-			}
-			if got := checker.Query("SHOW search_path"); !slices.Contains(got, `D:"$user", public`) {
-				dirty++
-			}
+			r.record(observeOneLease(checker, check, lastSecret), baseline.catalog, cleanRow)
 		}
 	}
-	return dirty
+	return r
 }
 
-// TestTierRSessionStateNeverCrossesClients proves DISCARD ALL clears hidden function-driven SET, temp table, lock, PREPARE, and LISTEN state against dirty-check.sql.
+func (r *sessionResult) record(l leaseObservation, clean, cleanRow []string) {
+	if l.broken {
+		r.dirty++
+		r.unreadable++
+		return
+	}
+	if !slices.Equal(l.catalog, clean) {
+		r.dirty++
+		r.observe(cleanRow, l.catalog)
+	}
+	if !slices.Contains(l.path, `D:"$user", public`) {
+		r.dirty++
+	}
+	if l.secret {
+		r.dirty++
+		r.secrets++
+	}
+}
+
+// TestTierRSessionStateNeverCrossesClients proves DISCARD ALL clears all eight hidden
+// function-driven session states (SET, temp table, advisory lock, PREPARE, LISTEN,
+// held cursor, role change, and custom placeholder setting) against dirty-check.sql,
+// SHOW search_path, and secret read-back.
 func TestTierRSessionStateNeverCrossesClients(t *testing.T) {
 	env := tierR(t)
 	g := gateway(t, env, GatewayOpts{Scenario: "tierr-session-state", Conns: 1})
-	if n := sessionRun(t, env, g); n != 0 {
-		t.Fatalf("%d dirty observations through the proxy", n)
+	if r := sessionRun(t, env, g); r.dirty != 0 {
+		t.Fatalf("%d dirty observations through the proxy (%s)", r.dirty, r)
 	}
 	final := stopAndRead(t, env, g, "tierr-session-state")
 	c, e := ev(final, "resets_completed", obs.Labels{}), ev(final, "leases_ended", obs.Labels{})
@@ -331,15 +479,28 @@ func TestTierRSessionStateNeverCrossesClients(t *testing.T) {
 	t.Logf("tier R: 0 dirty observations over %d hostile leases", 3*len(hostileCalls))
 }
 
-// TestTierRSessionAblationWithoutResetCrosses proves disabling DISCARD ALL via PlantNoReset leaves dirty rows on real Postgres 17.
+// TestTierRSessionAblationWithoutResetCrosses proves disabling DISCARD ALL via PlantNoReset
+// moves every column of dirty-check.sql at least once, exposes the custom placeholder secret
+// on read-back, and completes with zero unreadable checks on real Postgres 17.
 func TestTierRSessionAblationWithoutResetCrosses(t *testing.T) {
 	env := tierR(t)
 	g := startInProcess(t, env, GatewayOpts{Scenario: "tierr-session-ablation", Conns: 1}, true)
-	if n := sessionRun(t, env, g); n == 0 {
+	r := sessionRun(t, env, g)
+	if r.dirty == 0 {
 		t.Fatal("no dirty observation with the reset switched off: the scenario cannot fail")
-	} else {
-		t.Logf("tier R ablation: %d dirty observations without the reset", n)
 	}
+	if r.unreadable != 0 {
+		t.Errorf("%d dirty-check observations were unreadable with the reset switched off: an unread column proves nothing", r.unreadable)
+	}
+	for i, name := range r.columns {
+		if r.moved[i] == 0 {
+			t.Errorf("dirty-check column %s never differed from its clean value with the reset switched off: the hostile set leaves it blind", name)
+		}
+	}
+	if r.secrets == 0 {
+		t.Errorf("the custom setting %s was never read back with the reset switched off: the read-back cannot fail", secretSetting)
+	}
+	t.Logf("tier R ablation: %d dirty observations without the reset (%s)", r.dirty, r)
 }
 
 // TestTierRClientVanishes proves an abruptly reset real client causes its database connection to be closed and never reused dirty.

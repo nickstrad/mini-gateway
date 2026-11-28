@@ -211,3 +211,12 @@ Record: `chunks/c09-fairness/` (brief, notes, gate extra).
 | `../scripts/fuzz-plant.sh` (changed) | Also plants `admission.FairPlantUnpopKeepsTurn` (`MG_FUZZ_PLANT=fairness-unpop-turn`) and requires `FuzzFairnessOps` to find it within `FUZZ_SECONDS`; no committed seed finds it on its own | Opus | Found after 2 s of 20 s (empty cache) |
 | `chunks/c09-fairness/gate/extra.sh` | G10: `fuzz-plant.sh`, then the fairness canaries in `internal/admission`, `internal/proxy` and `test/e2e` on their own | Opus | — |
 | `../docs/knowledge/fairness.md` | Facts for chunks 10, 13, 14: the fair rule as built, where chunk 10 sets the limit (`Queues.SetLimit`, `AdmissionQueue.SetLimit`), the metrics, scenario cost | Opus | — |
+## Lease-lab port — the keepers of `exp/lease-lab` (Opus, 2026-11-27)
+
+Notes: `chunks/lease-lab-port/NOTES.md`; evaluation: `chunks/lease-lab-port/EVALUATION.md`.
+
+| Path | Purpose | Author seat | What it proved / last result |
+| --- | --- | --- | --- |
+| `chunks/c05-classifier/lease-exp/report-sql/` | The lease lab's report SQL kept as a record (tables 00–10, `views.sql`, `params.sql`, `empty/` sentinels, `conservation.sql`) and its runner `lease-report.sh` (defaults: SQL in its own folder, `../calibration.json`). Run: `PATH=$PATH:/root/.local/bin agent_work/chunks/c05-classifier/lease-exp/report-sql/lease-report.sh <campaign-dir> <out-dir> [name=value ...]`; needs DuckDB 1.5.x. No test or gate stage reads it | Opus (copied from the lab branch) | 2026-11-27 over main's r6 runs (`e7/tier-r-per-run.tar.gz`, `1-r6/`): exit 1, table 01 byte-identical to `e7/r6/tables/01-calibration.csv`, table 00's 8 runner rows equal main's; the other tables need `metrics.csv` and `histograms.csv`, which main does not hold |
+| `chunks/c05-classifier/lease-exp/e7/isolation/e4.sql` | The E4 isolation oracle check. Run: `duckdb -bail -c "SET VARIABLE e4_root='<dir>';" -f e4.sql` over the unpacked `per-run.tar.gz` | Opus (copied from the lab branch) | 2026-11-27: output identical to `e4-oracle-check.txt` |
+| `../docs/knowledge/lease-experiment-method.md` | Method facts from the lease experiment for chunk 14: bridge address against the published port, the CPU-bound connect ceiling, reset cost by backend history, `pg_sleep` overshoot, the A/A floor, the corrected capacity formula | Opus | — |
