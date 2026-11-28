@@ -489,6 +489,11 @@ func (e *Engine) coalLeave(c *client, why coalesce.LeaveWhy) bool {
 	l := e.coal.Depart(e.now, c.wid, why)
 	e.coalUnfollow(c)
 	if wasFollower {
+		if l.Kind == coalesce.LeftHandoff {
+			if nc := e.members[RequestID(l.NewOwner)]; nc != nil && nc.req != nil && c.req != nil {
+				nc.req.arrived = c.req.arrived
+			}
+		}
 		e.coalNotices()
 		return true
 	}

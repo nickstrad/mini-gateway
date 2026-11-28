@@ -452,3 +452,44 @@ func TestRepairHeldHandoffsPreserveTheOriginalArrival(t *testing.T) {
 		}
 	}
 }
+
+func TestRepairRepeatedRetryHandoffsKeepTheAttemptAndTenant(t *testing.T) {
+	for _, active := range []bool{false, true} {
+		for _, cancel := range []bool{false, true} {
+			t.Run(fmt.Sprintf("active=%v/cancel=%v", active, cancel), func(t *testing.T) {
+				h := repairRig(t, coalesce.JoinStrict, 2*joinStatement, nil)
+				on := h.runningFlight()
+				a := h.refuseAndClose(on)
+				var again proxy.ConnID
+				if active {
+					again, _ = h.untilHeldRead(a)
+				}
+				for i, id := range []proxy.ConnID{10, 12} {
+					if cancel {
+						h.cancelFrom(proxy.ConnID(100+i), h.clientKey(id))
+					} else {
+						h.run(h.ev(proxy.EvClientClosed, id, nil, 0))
+					}
+					h.agree()
+				}
+				if !active {
+					if h.queuedOf(0) != 1 || h.queuedOf(1) != 0 || h.queuedOf(2) != 0 {
+						t.Fatal("retry changed its queued-under tenant")
+					}
+					again, _ = h.untilHeldRead(nil)
+				}
+				if tenantInFlight(h.coreRig, 0) != 1 || tenantInFlight(h.coreRig, 1) != 0 || tenantInFlight(h.coreRig, 2) != 0 {
+					t.Fatal("retry changed its lease tenant")
+				}
+				a = h.refuseAndClose(again)
+				if s, _ := h.agree(); s.RetryAsked != 1 || s.RetryPending.Value != 0 {
+					t.Fatalf("handoff reset retry attempt: asked %d pending %d", s.RetryAsked, s.RetryPending.Value)
+				}
+				h.noRead(a)
+				if got := written(a, proxy.ActClientWrite, 11); !bytes.Contains(got, []byte("08006")) {
+					t.Fatalf("remaining follower got %q", got)
+				}
+			})
+		}
+	}
+}
