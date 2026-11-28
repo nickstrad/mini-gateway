@@ -3,7 +3,6 @@ package e2e
 import (
 	"cmp"
 	"fmt"
-	"slices"
 	"time"
 
 	"github.com/nickstrad/mini-gateway/internal/admission"
@@ -45,6 +44,9 @@ const (
 	retryFloor      = 4
 	stormCapTokens  = 1
 	retryClientGap  = 25 * time.Millisecond
+	stormSpendAt    = 700 * time.Millisecond
+	stormSpendFor   = 20 * time.Millisecond
+	stormExhaustAt  = 850 * time.Millisecond
 	retryWriteTime  = 2 * time.Millisecond
 	fastBreakerBest = 5 * time.Millisecond
 	fastShedBound   = 110 * time.Millisecond
@@ -64,7 +66,7 @@ type RetrySpec struct {
 	Plant    retry.Plant
 	Cap      int64
 	Floor    int64
-	Exhausts []int64
+	Exhausts bool
 	Weights  []admission.TenantWeight
 }
 
@@ -102,15 +104,16 @@ func SweepPattern(n int64) (KillPoint, bool) {
 
 func RetryStormSpec() RetrySpec {
 	return RetrySpec{Name: "retry-storm", Clients: 8, Tenants: 4, Conns: 4, Duration: 4 * time.Second,
-		Phases:  []Phase{{0, 450 * time.Millisecond}, {700 * time.Millisecond, 3500 * time.Millisecond}},
-		Relay:   RelayPlan{From: 700 * time.Millisecond, Until: 1700 * time.Millisecond, DoomAllAt: 600 * time.Millisecond, Pattern: StormPattern},
-		Breaker: 3, Recovery: 3200 * time.Millisecond, Cap: stormCapTokens, Floor: stormCapTokens, Exhausts: []int64{1, 3, 5}}
+		Phases: []Phase{{0, 450 * time.Millisecond}, {stormSpendAt, stormSpendAt + stormSpendFor}, {stormExhaustAt, 3500 * time.Millisecond}},
+		Relay: RelayPlan{From: stormExhaustAt, Until: stormExhaustAt + time.Second, Pattern: StormPattern,
+			DoomAllAt: []time.Duration{stormSpendAt - 100*time.Millisecond, stormExhaustAt - 50*time.Millisecond}},
+		Breaker: 3, Recovery: 3200 * time.Millisecond, Cap: stormCapTokens, Floor: stormCapTokens, Exhausts: true}
 }
 
 func RetrySweepSpec() RetrySpec {
 	return RetrySpec{Name: "retry-no-double-apply", Clients: 6, Tenants: 2, Conns: 4, Duration: 3 * time.Second,
 		Phases:  []Phase{{0, 250 * time.Millisecond}, {400 * time.Millisecond, 2500 * time.Millisecond}},
-		Relay:   RelayPlan{From: 400 * time.Millisecond, Until: 1200 * time.Millisecond, DoomAllAt: 300 * time.Millisecond, Pattern: SweepPattern},
+		Relay:   RelayPlan{From: 400 * time.Millisecond, Until: 1200 * time.Millisecond, DoomAllAt: []time.Duration{300 * time.Millisecond}, Pattern: SweepPattern},
 		Breaker: pool.MaxBreakerFailures, Recovery: 1700 * time.Millisecond}
 }
 
@@ -299,7 +302,7 @@ func (r *RetryRun) checkBudget() error {
 	if p.Retries == 0 || e.RetriedRequests == 0 {
 		return failf("no retry with the policy on: %+v", p)
 	}
-	if slices.Contains(r.Spec.Exhausts, r.Seed) && p.Refused[retry.RefusedBudget] == 0 {
+	if r.Spec.Exhausts && p.Refused[retry.RefusedBudget] == 0 {
 		return failf("seed %d: the budget was never exhausted (cap %d tokens): %+v", r.Seed, p.Cap/retry.WithdrawTenths, p)
 	}
 	if p.Retries*retry.WithdrawTenths > p.Attempts*retry.DepositTenths+p.Floor {

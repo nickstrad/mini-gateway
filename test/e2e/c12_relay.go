@@ -43,7 +43,7 @@ func (k KillPoint) String() string {
 
 type RelayPlan struct {
 	From, Until time.Duration
-	DoomAllAt   time.Duration
+	DoomAllAt   []time.Duration
 	Pattern     func(n int64) (KillPoint, bool)
 }
 
@@ -101,8 +101,8 @@ func (r *retryRelay) listen(net *simnet.Net, srv *fakepg.Server) error {
 	if _, err := net.Listen(retryAddr, r.accept); err != nil {
 		return err
 	}
-	if r.plan.DoomAllAt > 0 {
-		r.s.After(r.plan.DoomAllAt, r.doomAll)
+	for _, at := range r.plan.DoomAllAt {
+		r.s.After(at, r.doomAll)
 	}
 	return nil
 }

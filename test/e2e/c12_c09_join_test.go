@@ -12,7 +12,6 @@ func RetryStormWeightedSpec() RetrySpec {
 	sp := RetryStormSpec()
 	sp.Name = "retry-storm-weighted"
 	sp.Tenants = 2
-	sp.Exhausts = nil
 	sp.Weights = []admission.TenantWeight{{Tenant: proxysim.TenantName(0), Weight: 3}, {Tenant: proxysim.TenantName(1), Weight: 1}}
 	return sp
 }
