@@ -230,6 +230,7 @@ type Config struct {
 	Reseed         bool
 	Admission      admission.Config
 	Retry          retry.Config
+	Fairness       admission.FairConfig
 }
 
 func (c Config) admissionConfig() admission.Config {
@@ -322,6 +323,7 @@ func (c Config) Validate() error {
 	errs = append(errs, c.Timeouts.Validate()...)
 	if c.Admission.Rule != 0 {
 		errs = append(errs, c.admissionConfig().Validate())
+		errs = append(errs, c.fairConfig().Validate())
 	}
 	errs = append(errs, c.Retry.WithDefaults().Validate())
 	return errors.Join(errs...)

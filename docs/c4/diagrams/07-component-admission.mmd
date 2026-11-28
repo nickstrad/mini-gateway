@@ -10,13 +10,13 @@ flowchart TB
     A_RULE_TIMEOUT["Timeout rule"]:::built
     A_RULE_LAW["Control-law rule"]:::built
     A_ARMS["Comparison arms"]:::built
-    A_DISPATCH["Dispatcher"]:::planned
+    A_DISPATCH["Dispatcher"]:::built
     A_LIMIT["Adaptive limit (AIMD)"]:::planned
     A_SNAP["Admission snapshot"]:::planned
   end
   N_ENGINE -.->|1| A_GATE
   N_ENGINE -->|2| A_QUEUES
-  N_ENGINE -.->|3| A_DISPATCH
+  N_ENGINE -->|3| A_DISPATCH
   N_ENGINE -.->|4| A_LIMIT
   N_ENGINE -->|5| A_SNAP
   A_QUEUES -->|6| A_RULE
@@ -25,7 +25,7 @@ flowchart TB
   A_ARMS -->|9 implements| A_RULE
   A_QUEUES -->|10| A_DISPATCH
   A_DISPATCH -.->|11| A_LIMIT
-  A_DISPATCH -.->|12| A_TENANTS
+  A_DISPATCH -->|12| A_TENANTS
   A_GATE -.->|13| A_TENANTS
   A_QUEUES -->|14| A_TENANTS
   A_DISPATCH -.->|15| N_WORK

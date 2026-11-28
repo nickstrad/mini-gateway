@@ -1,0 +1,1 @@
+lease,tenant,prev_tenant,conn,backend_pid,backend_start_ns,prev_taint,taint,prepared,cursors,listens,advisory_locks,settings_changed,temp_relations,role_changed,reset_between,canary_kind,canary_read,probe_seed_inherited,probe_custom_name,note

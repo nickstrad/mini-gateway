@@ -117,8 +117,11 @@ touched; items 1 and 2 were observed as predicted.
 
 ## Where the rest is
 
-Branch `exp/lease-lab` at `04cd947`, local to vm-1 and not merged or pushed
-(worktree `/root/Software/mini-gateway-work/lease-lab`): the probe `cmd/mgcalib`,
-`scripts/lease-calib.sh`, six run directories with the raw rows under
-`agent_work/chunks/c05-classifier/lease-exp/runs/`, the builder's `NOTES.md` (method per
-measurement, reproduce commands) and `REVIEW-1.md`, `REVIEW-2.md`.
+The probe `cmd/mgcalib`, `scripts/lease-calib.sh` and the six run directories with the raw
+rows (`runs/r0-*`) were on the local branch `exp/lease-lab` and were not kept; the branch was
+deleted after the port of `agent_work/chunks/lease-lab-port/`. `calibration.json` beside this
+note is the summary of those runs. The builder's notes (method per measurement, reproduce
+commands, and the `calibration.json` schema in section 4) are
+[lab-records/NOTES-E0.md](lab-records/NOTES-E0.md), and the reviews are
+[lab-records/REVIEW-1.md](lab-records/REVIEW-1.md) and
+[lab-records/REVIEW-2.md](lab-records/REVIEW-2.md).

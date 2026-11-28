@@ -58,6 +58,8 @@ type TenantView struct {
 	OldestSeq int64
 	OldestEnq Time
 	LIFO      bool
+	// Turn orders round-robin selection; smaller turns were served less recently.
+	Turn int64
 }
 
 // Dispatcher chooses which non-empty tenant queue Pop serves next.
@@ -89,6 +91,8 @@ type popped struct {
 	emptied bool
 	emptyAt Time
 	rule    ruleState
+	turn    int64
+	round   int64
 }
 
 // Queues manages per-tenant fixed-capacity admission rings, shedding rules,
@@ -112,6 +116,8 @@ type Queues struct {
 	hist       *obs.Histogram
 	lastPop    popped
 	c          counters
+	round      int64
+	fair       *Fair
 }
 
 type counters struct {
@@ -146,6 +152,7 @@ func (q *Queues) SetDispatcher(d Dispatcher) {
 		d = OldestFirst{}
 	}
 	q.dispatcher = d
+	q.attach(d)
 }
 
 // Len returns the total number of requests currently queued across all tenants.
@@ -199,12 +206,16 @@ func (q *Queues) advance(now Time) {
 	for range q.stepBudget() {
 		at := q.Next()
 		if at == 0 || at > now {
+			// Account fairness durations before any sweep or eviction changes who is active.
+			q.fairAccount(now)
 			q.step(now)
 			return
 		}
+		q.fairAccount(at)
 		q.step(at)
 	}
 	q.c.capped++
+	q.fairAccount(now)
 	q.step(now)
 }
 
@@ -338,6 +349,8 @@ func (q *Queues) tenantFor(now Time, name string) *tenantQueue {
 	}
 	t.name = name
 	t.rule = newRule(q.cfg, now)
+	// Place a newly created queue behind older waiting tenants and ahead only of the tenant served last.
+	t.turn = 2*q.round - 1
 	t.emptyAt = now
 	t.lastOverload = 0
 	t.gauge = loadGauge{target: q.cfg.Target, interval: q.cfg.Interval, intervalEnd: now + q.cfg.Interval, reset: true}
@@ -405,6 +418,9 @@ func (q *Queues) Push(now Time, tenant string, id int64) bool {
 	q.c.queuedPeak = max(q.c.queuedPeak, int64(q.total))
 	t.rule.Pushed(now, wasEmpty)
 	t.observeLIFO(now, &q.cfg)
+	if wasEmpty && q.fair != nil {
+		q.fair.noteActive()
+	}
 	return true
 }
 
@@ -460,6 +476,7 @@ func (q *Queues) Pop(now Time) (int64, bool) {
 		}
 		t.gauge.observe(now, wait)
 		q.lastPop = popped{t: t, e: e, back: back, ok: true}
+		q.takeTurn(t)
 		// Save pre-empty rule state so an immediate Unpop restores the original deadline.
 		if t.empty() {
 			q.lastPop.emptied, q.lastPop.emptyAt, q.lastPop.rule = true, t.emptyAt, saveRule(t.rule)
@@ -476,7 +493,7 @@ func (q *Queues) pick(now Time) *tenantQueue {
 			continue
 		}
 		f := t.ring.front()
-		q.views = append(q.views, TenantView{Index: i, Name: t.name, Depth: t.ring.len(), OldestSeq: f.seq, OldestEnq: f.enq, LIFO: t.lifo})
+		q.views = append(q.views, TenantView{Index: i, Name: t.name, Depth: t.ring.len(), OldestSeq: f.seq, OldestEnq: f.enq, LIFO: t.lifo, Turn: t.turn})
 	}
 	if len(q.views) == 0 {
 		return nil
@@ -511,6 +528,7 @@ func (q *Queues) Unpop() bool {
 	q.c.served--
 	p.t.stats.served--
 	q.c.unpops++
+	q.untakeTurn(p)
 	return true
 }
 
@@ -623,6 +641,9 @@ func (q *Queues) Check() error {
 	if len(q.list) > q.cfg.MaxTenants {
 		return fmt.Errorf("admission: %d tenant queues, cap %d", len(q.list), q.cfg.MaxTenants)
 	}
+	if err := q.fairCheck(); err != nil {
+		return err
+	}
 	return q.light().Check()
 }
 
@@ -635,5 +656,5 @@ func (q *Queues) Quiesce() error {
 	if at := q.Next(); at != 0 {
 		return fmt.Errorf("admission: a deadline is still armed at %d", at)
 	}
-	return nil
+	return q.fairQuiesce()
 }

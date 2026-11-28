@@ -1,0 +1,189 @@
+{
+  "chunk": "lease-lab-port",
+  "sha": "fa8a1648d6b80ae6a6b5419792128b222ab9f12b",
+  "dirty_tree": false,
+  "stage": "final",
+  "partial": false,
+  "only": "",
+  "overall": "pass",
+  "counts_for_landing": true,
+  "go_version": "go version go1.26.8 linux/amd64",
+  "duckdb_version": "v1.5.5 (Variegata) d8cdaa33fd",
+  "started": "2026-11-28T02:17:20Z",
+  "finished": "2026-11-28T04:20:50Z",
+  "seconds": 7410,
+  "comment_baseline": "none",
+  "preprose_commit": "9e83fd8f45e995cf0a6cf09f58d175113b5fc0e5",
+  "short": false,
+  "sweep_seeds": 200,
+  "fuzz_seconds": 20,
+  "fuzz_rate_floor": 100,
+  "fuzz_max_retries": 2,
+  "fuzz_targets": 18,
+  "fuzz_seed_sweeps": 1,
+  "fuzz_retries": 0,
+  "skip_not_built": [],
+  "checks": [
+    {
+      "gate": "G0",
+      "check": "tools",
+      "status": "pass",
+      "seconds": 5,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "gofmt",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "build",
+      "status": "pass",
+      "seconds": 6,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "vet",
+      "status": "pass",
+      "seconds": 2,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tools-vet",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tools-test",
+      "status": "pass",
+      "seconds": 10,
+      "note": ""
+    },
+    {
+      "gate": "G0",
+      "check": "tidy",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "detlint",
+      "status": "pass",
+      "seconds": 8,
+      "note": "27 package patterns"
+    },
+    {
+      "gate": "G1",
+      "check": "importlint",
+      "status": "pass",
+      "seconds": 0,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "boundlint",
+      "status": "pass",
+      "seconds": 10,
+      "note": ""
+    },
+    {
+      "gate": "G1",
+      "check": "paniccheck",
+      "status": "pass",
+      "seconds": 1,
+      "note": ""
+    },
+    {
+      "gate": "G2",
+      "check": "astdiff",
+      "status": "pass",
+      "seconds": 2,
+      "note": "code compared with pre-prose commit 9e83fd8f45e995cf0a6cf09f58d175113b5fc0e5"
+    },
+    {
+      "gate": "G3",
+      "check": "unit",
+      "status": "pass",
+      "seconds": 1142,
+      "note": ""
+    },
+    {
+      "gate": "G3",
+      "check": "counted",
+      "status": "pass",
+      "seconds": 2,
+      "note": "-tags clscount -run Linearly: 5 tests passed"
+    },
+    {
+      "gate": "G3",
+      "check": "race",
+      "status": "pass",
+      "seconds": 89,
+      "note": "6 package patterns under the race detector"
+    },
+    {
+      "gate": "G4",
+      "check": "markers",
+      "status": "pass",
+      "seconds": 1,
+      "note": "4 not-built markers, compared with baseline b009253c9382bb213cd0921a8d75f7d56f935ed4 and the history of HEAD"
+    },
+    {
+      "gate": "G4",
+      "check": "sweep",
+      "status": "pass",
+      "seconds": 1379,
+      "note": "200 seeds per scenario from 1, tests matching ^TestScenario"
+    },
+    {
+      "gate": "G5",
+      "check": "fuzz",
+      "status": "pass",
+      "seconds": 405,
+      "note": "18 fuzz targets, 20s each: 17 fuzz, 1 seed-sweep (floor 100/s), 0 without a rate, 0 unclassified, 0 retried"
+    },
+    {
+      "gate": "G6",
+      "check": "tier-r",
+      "status": "pass",
+      "seconds": 281,
+      "note": "Postgres 17.11 (Debian 17.11-1.pgdg13+2) in mg-tier-r-101775-main (127.0.0.1:46089), mg-tier-r-101775-burst (127.0.0.1:57419) and mg-tier-r-101775-scram (127.0.0.1:43791)"
+    },
+    {
+      "gate": "G7",
+      "check": "csv",
+      "status": "pass",
+      "seconds": 4050,
+      "note": "v1.5.5 (Variegata) d8cdaa33fd; 5071 run directories; 88 scenarios with SQL files"
+    },
+    {
+      "gate": "G8",
+      "check": "gen-docs",
+      "status": "pass",
+      "seconds": 9,
+      "note": "docs/csv-schema.md is current"
+    },
+    {
+      "gate": "G9",
+      "check": "site",
+      "status": "pass",
+      "seconds": 6,
+      "note": ""
+    },
+    {
+      "gate": "G10",
+      "check": "extra",
+      "status": "skip-none",
+      "seconds": 0,
+      "note": "the chunk has no gate/extra.sh"
+    }
+  ]
+}

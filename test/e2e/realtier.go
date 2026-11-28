@@ -374,7 +374,7 @@ const TierRPrefix = "tierr-"
 func TierRScenarios() []string {
 	return []string{"tierr-results", "tierr-fragment", "tierr-tx-integrity", "tierr-reject-list", "tierr-session-state",
 		"tierr-client-vanish", "tierr-db-killed", "tierr-slow-reader", "tierr-queue-full", "tierr-silent-db", "tierr-tls",
-		"tierr-backend-tls", "tierr-smoke", "tierr-admission-overload", "tierr-retry-storm"}
+		"tierr-backend-tls", "tierr-smoke", "tierr-admission-overload", "tierr-fair-noisy", "tierr-retry-storm"}
 }
 
 func (env *RealEnv) poolConfig(o GatewayOpts, cfg map[string]any) {

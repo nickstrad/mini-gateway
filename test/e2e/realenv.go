@@ -26,6 +26,7 @@ const (
 	certValidity   = 24 * time.Hour
 	pgMaxConns     = "200"
 	containerLabel = "c06"
+	hostileRole    = "mg_hostile_role"
 )
 
 type testCA struct {
@@ -216,7 +217,17 @@ func setupSQL() []string {
 		`CREATE FUNCTION take_lock() RETURNS text LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_lock(4242); RETURN 'lock'; END $$`,
 		`CREATE FUNCTION do_prepare() RETURNS text LANGUAGE plpgsql AS $$ BEGIN EXECUTE 'PREPARE hostile_plan AS SELECT 1'; RETURN 'prepare'; END $$`,
 		`CREATE FUNCTION do_listen() RETURNS text LANGUAGE plpgsql AS $$ BEGIN EXECUTE 'LISTEN hostile_channel'; RETURN 'listen'; END $$`,
-		"GRANT EXECUTE ON FUNCTION hide_set(), make_temp(), take_lock(), do_prepare(), do_listen() TO " + RealBackendUser,
+		// Held cursors, role switches, and placeholder settings require CLOSE ALL,
+		// RESET ROLE, and RESET ALL respectively. do_role uses set_config on a NOLOGIN
+		// role so current_user stays different from session_user after the function returns;
+		// do_custom writes a placeholder setting that pg_settings omits, so tests check it
+		// with an explicit current_setting read-back.
+		"CREATE ROLE " + hostileRole + " NOLOGIN",
+		"GRANT " + hostileRole + " TO " + RealBackendUser,
+		`CREATE FUNCTION do_cursor() RETURNS text LANGUAGE plpgsql AS $$ BEGIN EXECUTE 'DECLARE hostile_cursor CURSOR WITH HOLD FOR SELECT 1'; RETURN 'cursor'; END $$`,
+		`CREATE FUNCTION do_role() RETURNS text LANGUAGE plpgsql AS $$ BEGIN PERFORM set_config('role', '` + hostileRole + `', false); RETURN 'role'; END $$`,
+		`CREATE FUNCTION do_custom(secret text) RETURNS text LANGUAGE plpgsql AS $$ BEGIN PERFORM set_config('mg_hostile.secret', secret, false); RETURN 'custom'; END $$`,
+		"GRANT EXECUTE ON FUNCTION hide_set(), make_temp(), take_lock(), do_prepare(), do_listen(), do_cursor(), do_role(), do_custom(text) TO " + RealBackendUser,
 		"GRANT CREATE, TEMPORARY ON DATABASE " + RealDatabase + " TO " + RealBackendUser,
 	}
 }

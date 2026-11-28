@@ -98,6 +98,10 @@ func New(cfg Config) (*Engine, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrConfig, err)
 		}
+		// Install the fair dispatcher on every engine-constructed admission queue.
+		if err := aq.installFair(cfg.fairConfig()); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrConfig, err)
+		}
 		e.seams.Queue = aq
 	}
 	if e.seams.Queue == nil {
@@ -239,6 +243,7 @@ func (e *Engine) begin(now Instant, out []Action) {
 }
 
 func (e *Engine) finish() []Action {
+	e.fairRedispatch()
 	e.fireTimers()
 	if e.core != nil && !e.stopping {
 		e.corePump()
@@ -416,6 +421,9 @@ func (e *Engine) Invariants() error {
 		return e.wire.Snapshot().Check()
 	}
 	if err := e.admissionCheck(); err != nil {
+		return err
+	}
+	if err := e.fairnessCheck(); err != nil {
 		return err
 	}
 	if err := e.retryCheck(); err != nil {
