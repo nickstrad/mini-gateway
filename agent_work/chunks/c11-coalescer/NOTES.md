@@ -236,7 +236,36 @@ The first run left M1, M15 and M18 alive; the three tests named "added" were wri
 
 ### Results
 
-RESULTS-PENDING
+All on 2026-11-28, load average 3–8 on 4 cores (other sessions' runs beside these):
+
+| Check | Result |
+| --- | --- |
+| `gofmt -l`, `go build ./... && go vet ./...` | pass, nothing listed |
+| `go test -count=1 -timeout 40m ./internal/...` (at `5e6a99f`'s parent, `b71e24a`) | all pass |
+| `go test -count=1 -timeout 60m ./test/... ./scripts/ ./cmd/...` | all pass except `cmd/loadgen` `TestTheSeedIsPrintedFirstAndAServedRunExitsZero` once: exit 3, `SHORTFALL: achieved 48.0/s of target 50/s: 5 late` (a wall-clock rate test of an earlier chunk at load average 8; it passed three times out of three alone directly after, and in the gate's G3 below). `test/e2e` 443 s |
+| `./agent_work/adversarial/c09-fairness/...`, `.../c11-coalescer/...`, `.../c12-retry/...` | all three pass unchanged (no file under `agent_work/adversarial/` edited) |
+| `scripts/gen-docs.sh --check` | pass (all generators current; `docs/fault-matrix.md` changed by the join's two matrix edits) |
+| Gate extras `agent_work/chunks/{c09-fairness,c11-coalescer,c12-retry}/gate/extra.sh` | all three pass (every fuzz plant found, the fairness canaries, the coalescer core, engine and join tests, the 1,000-client hot key on seeds 1–3, the retry canaries and the `everything` arm) |
+| 5-seed sweep: `DST_SEEDS=5 RUN_DIR=<dir> MG_C11_FULL_SWEEP=1 go test -run '^(TestScenarioCoalesce\|TestScenarioRetry\|TestScenarioRetryStormTwoTenantsOfUnequalWeight\|TestScenarioFairNoisyNeighbour\|TestScenarioFairNoisyNeighbourAblation\|TestScenarioFairManyTenants\|TestScenarioFairHeldTransactions\|TestScenarioFairResultsEqualDirect)$' ./test/e2e/` | pass (478 s): 33 scenarios × seeds 1–5 (the 27 coalescer scenarios with replay and ablation, the 1,000-client ones included; 4 fairness; 2 retry × 3 arms; the weighted storm) |
+| `scripts/csv-assert.sh <dir>/<scenario> test/analysis/<scenario>/*.sql` per scenario | 0 failures in each of the 33 (DuckDB v1.5.5) |
+| `GATE_ONLY=G0,G1,G2,G3 scripts/gate.sh c11-coalescer` at `2bae3ba`, clean tree | **overall pass** (`counts_for_landing` false by `GATE_ONLY`): G0 all, G1 detlint (32 patterns), importlint, boundlint, paniccheck, G2 comments (baseline `2e725b1`, main), G3 unit (970 s, every package including the adversarial ones), G3 counted, G3 race (109 s). The rewritten evidence logs under `agent_work/adversarial/lease-lab-port/` were restored with `git checkout`; `gate/result.json` and the gate logs removed |
+
+No scenario's required behaviour is pinned to a seed: the join scenarios hold by construction
+(the relay dooms every idle connection before the burst; 16 writers on 4 connections keep the
+shares binding), and the 10-seed run of both passed.
+
+Size of the join: product Go +193 lines after the merge commit (`request.tenant` and the lease
+ends, the matrix rows, the tier S plumbing and the 158-line `c11_join.go`), tests +896 lines
+(`internal/proxy/join_coalesce_test.go`, `join_coalesce_shed_test.go`, the export helper,
+`internal/config/join_coalesce_test.go`).
+
+Commands:
+
+```
+go test -count=1 -run 'TestJoin' ./internal/proxy/            # every join test of chunks 9, 11, 12
+go test -count=1 -run 'Coalesc|OnSwitch' ./internal/config/
+DST_SEEDS=10 go test -count=1 -run 'TestScenarioCoalesce/coalesce-hot-key-(weighted|retry)' ./test/e2e/
+```
 
 ### Stated limits added by the join
 
