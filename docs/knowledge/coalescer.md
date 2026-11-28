@@ -106,3 +106,27 @@ coalesce stage or the coalescer scenarios. Full record: `agent_work/chunks/c11-c
   the fake (set `Path` to nil: both use `BeforeProxy`). Doom every idle connection (`DoomAllAt`)
   a little before a burst and the first write of the burst is refused with zero bytes by
   construction (connections idle under `pool.check_after_idle` are lent without a check).
+
+## Arrival and ownership across strict holds
+
+A held flight's owner has phase `cpCoalesced`, the same phase as its followers.
+Its departure therefore does not use `coalHandoff`. When `Depart` returns
+`LeftHandoff`, `coalLeave` must copy the old owner's `request.arrived` to the
+successor before processing notices. Repeating the handoff must preserve that
+same original instant. Promotion changes `enq` for queue-wait measurement but
+must not change `arrived`, which bounds retries. Otherwise, with a flight deadline
+longer than the statement timeout, selecting the newest follower can permit a
+retry after an earlier follower's deadline.
+
+A held flight has no queued-under tenant or prior attempt: promotion enters the
+surviving owner's tenant queue for the first time. Queued and active handoffs
+instead transfer the entire request, preserving its original arrival, charged
+tenant and retry attempt. The connection's `lastTenant` remains the charge used
+at lease end. See `TestRepairHeldHandoffsPreserveTheOriginalArrival` and
+`TestRepairRepeatedRetryHandoffsKeepTheAttemptAndTenant` for repeated disconnect
+and cancel regressions, and the chunk's `ARBITRATION-1.md` for the ownership audit.
+
+In the randomized engine harness, assert that every promotion while the custom
+breaker is open is refused in the same event. A coverage count alone does not
+establish this property, and a blanket assertion against all writes wrongly
+includes ordinary first attempts admitted before that custom breaker opened.
