@@ -169,3 +169,12 @@ func (c Config) Validate() error {
 	}
 	return errors.Join(errs...)
 }
+
+const maxInstant = Instant(1<<63 - 1)
+
+func after(now, d Instant) Instant {
+	if d > maxInstant-now {
+		return maxInstant
+	}
+	return now + d
+}

@@ -62,3 +62,41 @@ func TestTenantAndTextWithAZeroByteStartTwoFlights(t *testing.T) {
 		t.Fatalf("a different key joined the first flight: %s", v)
 	}
 }
+
+func TestADeadlineNearTheLargestInstantSaturates(t *testing.T) {
+	tb := mustTable(t, Config{Mode: ModeAuto, Deadline: Second, NoShareFor: Second, MaxReplyBytes: 1})
+	now := Instant(maxInstant - 100)
+	j := tb.Join(now, 1, read("", "x"))
+	if next := tb.Next(); next < now {
+		t.Fatalf("the deadline wrapped: now %d next %d", now, next)
+	}
+	tb.Sweep(now)
+	if s := tb.Snapshot(); s.Expired != 0 {
+		t.Fatalf("expired %d", s.Expired)
+	}
+	tb.Started(now, j.Flight)
+	if tb.Stored(now, j.Flight, 2) {
+		t.Fatal("the reply cap did not detach")
+	}
+	if at, ok := tb.noShare.next(); !ok || at < now {
+		t.Fatalf("the no-share expiry wrapped: now %d at %d", now, at)
+	}
+	tb.Sweep(now + 50)
+	if s := tb.Snapshot(); s.Expired != 0 || s.NoShareExpired != 0 {
+		t.Fatalf("expired %d no-share expired %d", s.Expired, s.NoShareExpired)
+	}
+}
+
+func TestSaturatingAdd(t *testing.T) {
+	for _, c := range []struct{ a, b, want Instant }{
+		{1, 2, 3},
+		{maxInstant - 1, 1, maxInstant},
+		{maxInstant - 1, 2, maxInstant},
+		{maxInstant, maxInstant, maxInstant},
+		{0, maxInstant, maxInstant},
+	} {
+		if got := after(c.a, c.b); got != c.want {
+			t.Fatalf("after(%d, %d) = %d, want %d", c.a, c.b, got, c.want)
+		}
+	}
+}

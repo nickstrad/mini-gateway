@@ -301,7 +301,7 @@ func (t *Table) newFlight(ei int, owner RequestID, st flightState) int {
 	t.nextID++
 	followers := t.flights[fi].followers[:0]
 	t.flights[fi] = flight{id: t.nextID, entry: ei, owner: owner, followers: followers, state: st,
-		deadline: t.now + t.cfg.Deadline, prev: t.tail, next: none, used: true}
+		deadline: after(t.now, t.cfg.Deadline), prev: t.tail, next: none, used: true}
 	if t.tail != none {
 		t.flights[t.tail].next = fi
 	} else {
@@ -370,7 +370,7 @@ func (t *Table) detach(fi int, c Cap) {
 }
 
 func (t *Table) addNoShare(key string) {
-	evicted, renewed := t.noShare.add(key, t.now+t.cfg.NoShareFor)
+	evicted, renewed := t.noShare.add(key, after(t.now, t.cfg.NoShareFor))
 	if evicted {
 		t.snap.NoShareEvicted++
 	}
